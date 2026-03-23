@@ -22,9 +22,8 @@
   },
   "documentationUrl": "https://docs.unity3d.com/Packages/com.unity.ai.assistant@2.1/manual/index.html",
   "repository": {
-    "url": "https://github.cds.internal.unity3d.com/unity/muse-editor.git",
-    "type": "git",
-    "revision": "28af3327cb9c7d0b23e6a7508c124df358fc3c15"
+    "url": "https://github.com/becool3000/unity-ai-assistant-patch.git",
+    "type": "git"
   },
   "_fingerprint": "d940ec41569d3b4dbc7e7ce12276d775e0cdc3da"
 }
