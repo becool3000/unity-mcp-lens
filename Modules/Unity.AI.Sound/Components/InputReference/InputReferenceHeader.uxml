@@ -1,0 +1,5 @@
+<UXML xmlns="UnityEngine.UIElements">
+    <Style src="./InputReferenceHeader.uss" />
+    <Label name="header-title" class="font-bold p-4" text="Input Reference" tooltip="Useful to variate an asset you already have." />
+    <Button name="delete-input-reference" />
+</UXML>

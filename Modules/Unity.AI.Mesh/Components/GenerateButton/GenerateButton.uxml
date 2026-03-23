@@ -1,0 +1,8 @@
+<UXML xmlns="UnityEngine.UIElements">
+    <Style src="./GenerateButton.uss"/>
+    <Button class="height-24px flex-no-shrink flex-row-justify-center">
+        <Image class="size-16px m-2"/>
+        <Label text="Generate"/>
+        <Label name="points-indicator" text="5" class="rounded-2px border-1px color-tabs bg-dark border-color-medium-gray right-4px pl-2 pr-2 mt-2 font-size-11px min-width-16px" tooltip="Estimated points cost for the generation. Multiplies by number of requested generations"/>
+    </Button>
+</UXML>

@@ -1,0 +1,4 @@
+<UXML xmlns="UnityEngine.UIElements">
+    <Style src="./Spinner.uss" />
+    <Image class="spinner stopped"/>
+</UXML>

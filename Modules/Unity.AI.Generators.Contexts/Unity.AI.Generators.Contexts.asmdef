@@ -1,0 +1,16 @@
+{
+    "name": "Unity.AI.Generators.Contexts",
+    "rootNamespace": "Unity.AI.Generators.Contexts",
+    "references": [],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

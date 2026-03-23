@@ -1,0 +1,42 @@
+using System;
+
+namespace Unity.AI.Assistant.Editor.Backend.Socket.Tools
+{
+    static class ConsoleNoiseFilter
+    {
+        static readonly string[] KnownNoisePatterns =
+        {
+            "[MCP]",
+            "[UnityMCPBridge]",
+            "[MCP Approval]",
+            "[RelayService]",
+            "connection.state_change",
+            "Connection validation is DISABLED",
+            "Editor never reached a stable state for relay startup",
+            "MCP Bridge V2 started",
+            "Saved connection info to",
+            "Client connected:",
+            "Client disconnected:",
+            "Sending tools response with",
+            "Tools changed:",
+            "Unity.AI.Tracing.ConsoleSink",
+            "Unity.AI.Tracing.TraceWriter",
+            "C:/UnityAIAssistantPatch/Editor/Assistant/Relay/RelayService.cs"
+        };
+
+        public static bool ShouldExclude(string message, string stackTrace = null)
+        {
+            if (string.IsNullOrWhiteSpace(message) && string.IsNullOrWhiteSpace(stackTrace))
+                return false;
+
+            var combined = string.Concat(message ?? string.Empty, "\n", stackTrace ?? string.Empty);
+            foreach (var pattern in KnownNoisePatterns)
+            {
+                if (combined.IndexOf(pattern, StringComparison.OrdinalIgnoreCase) >= 0)
+                    return true;
+            }
+
+            return false;
+        }
+    }
+}

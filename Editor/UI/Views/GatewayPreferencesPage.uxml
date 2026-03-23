@@ -1,0 +1,38 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" xmlns:assistant="Unity.AI.Assistant.UI.Editor.Scripts.Components">
+    <ui:VisualElement class="gateway-settings-page">
+        <ui:Label text="Gateway" name="gatewaySettingsHeader" class="gateway-settings-header" />
+        <ui:ScrollView class="gateway-settings-scroll">
+            <ui:VisualElement name="gateway-settings-content" class="gateway-settings-content">
+                <ui:Label name="error-message"/>
+
+                <!-- Agent Type Selection -->
+                <ui:VisualElement class="gateway-settings-row">
+                    <ui:Label text="Agent Type" class="gateway-settings-label" />
+                    <ui:VisualElement class="gateway-dropdown-with-version">
+                        <ui:DropdownField name="agent-type-dropdown" class="gateway-settings-dropdown" />
+                        <ui:Label name="agent-version-label" class="gateway-version-label" />
+                    </ui:VisualElement>
+                </ui:VisualElement>
+
+                <!-- Help Text with Add Required Variable Button and Login Button -->
+                <ui:VisualElement name="help-text-row" class="gateway-help-row">
+                    <ui:Label name="agent-help-text" class="gateway-help-text" />
+                    <ui:Button name="add-required-env-var-button" text="Add" class="gateway-add-required-button" />
+                    <ui:Button name="login-button" text="Login" class="gateway-login-button" />
+                </ui:VisualElement>
+
+                <!-- CLI Path (optional override)
+                <ui:VisualElement name="cli-path-container" class="gateway-settings-row gateway-cli-path-container">
+                    <ui:Label name="cli-path-label" text="CLI Path (optional)" class="gateway-settings-label" />
+                    <ui:VisualElement class="gateway-path-row">
+                        <ui:TextField name="cli-path-field" class="gateway-cli-path-field" />
+                        <ui:Button name="cli-path-browse-button" text="Browse..." class="gateway-browse-button" />
+                    </ui:VisualElement>
+                </ui:VisualElement>
+                -->
+
+                <assistant:ProviderEnvironmentariablesUI name="agent-environment-ui"/>
+            </ui:VisualElement>
+        </ui:ScrollView>
+    </ui:VisualElement>
+</ui:UXML>

@@ -1,0 +1,111 @@
+/* Root Container */
+.umcp-connection-details-root {
+    flex-direction: column;
+    flex-grow: 1;
+}
+
+/* Tier Warning */
+.umcp-tier-warning {
+    margin-bottom: 10px;
+}
+
+/* Summary Box */
+.umcp-summary-box {
+    background-color: var(--unity-colors-inspector_titlebar-background);
+    border-width: 1px;
+    border-color: var(--unity-colors-inspector_titlebar-border);
+    border-radius: 4px;
+    padding: 8px 10px;
+    margin-bottom: 5px;
+}
+
+.umcp-summary-app-name {
+    -unity-font-style: bold;
+    margin-bottom: 2px;
+}
+
+.umcp-summary-publisher {
+    opacity: 0.6;
+    margin-top: 2px;
+    white-space: normal;
+}
+
+.umcp-summary-path {
+    opacity: 0.6;
+    margin-top: 2px;
+    white-space: normal;
+}
+
+.umcp-summary-previous {
+    color: var(--mcp-color-success);
+    margin-top: 4px;
+}
+
+/* Permissions Warning */
+.umcp-permissions-warning {
+    margin-top: 10px;
+    margin-bottom: 10px;
+}
+
+/* Details Foldout */
+.umcp-details-foldout {
+    margin-top: 5px;
+}
+
+/* Sections */
+.umcp-section {
+    margin-top: 10px;
+    margin-bottom: 10px;
+}
+
+.umcp-section-header {
+    -unity-font-style: bold;
+    margin-top: 5px;
+    margin-bottom: 2px;
+}
+
+.umcp-separator {
+    height: 1px;
+    background-color: var(--unity-colors-inspector_titlebar-border);
+    margin-top: 2px;
+    margin-bottom: 5px;
+}
+
+/* Info Rows */
+.umcp-info-row {
+    flex-direction: row;
+    margin-bottom: 2px;
+}
+
+.umcp-info-label {
+    width: 150px;
+    flex-shrink: 0;
+}
+
+.umcp-info-value {
+    flex-grow: 1;
+    white-space: normal;
+}
+
+/* Signing Info */
+.umcp-signing-info {
+    flex-direction: column;
+}
+
+/* Color Classes for Dynamic Styling */
+.umcp-info-value.green {
+    color: rgb(0, 255, 0);
+}
+
+.umcp-info-value.red {
+    color: rgb(255, 0, 0);
+}
+
+.umcp-info-value.yellow {
+    color: rgb(255, 255, 0);
+}
+
+/* Hidden Elements */
+.umcp-hidden {
+    display: none;
+}

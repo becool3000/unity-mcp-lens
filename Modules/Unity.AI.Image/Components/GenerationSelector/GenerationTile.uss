@@ -1,0 +1,25 @@
+.generation-tile.is-selected .border-selectable {
+    border-color: var(--aitk-colors-selected);
+}
+
+.image-scale-to-fit {
+    -unity-background-scale-mode: scale-to-fit;
+}
+
+.image-scale-initial {
+    -unity-background-scale-mode: initial;
+    background-position: center;
+    background-repeat: no-repeat;
+    background-size: auto;
+}
+
+.badge-upper-left-label {
+    position: absolute;
+    left: 4px;
+    top: 4px;
+    width: auto;
+    height: auto;
+    transform-origin: center;
+    -unity-text-align: upper-left;
+    background-color: rgba(50, 50, 50, 0.5);
+}

@@ -1,0 +1,8 @@
+<UXML class="model-title-card flex-row flex-grow" xmlns="UnityEngine.UIElements">
+    <Style src="./ModelTitleCard.uss"/>
+    <VisualElement class="flex-grow-100pct flex-column">
+        <Label class="model-title-card-label font-bold text-ellipsis pt-4 pl-5"/>
+        <Label class="model-title-card-tags color-dark-gray text-wrap height-32px pt-1 pl-5"/>
+    </VisualElement>
+    <VisualElement class="model-title-card-info size-20px m-8 hide"/>
+</UXML>

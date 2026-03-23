@@ -1,0 +1,90 @@
+<UXML
+        class="color-tab-background flex-grow"
+        xmlns="UnityEngine.UIElements"
+        xmlns:editorui="UnityEditor.UIElements"
+        xmlns:ui="Unity.AI.Image.Components"
+        xmlns:aitk="Unity.AI.Generators.UI"
+        xmlns:uipanel="Unity.AI.Image.Panel">>
+    <Style src="../../../Unity.AI.Generators.UI/StyleSheets/FlexUtilities.uss" />
+    <Style src="./DoodleView.uss" />
+    <VisualElement class="flex-grow">
+        <editorui:Toolbar>
+            <!-- Tools -->
+            <ToggleButtonGroup
+                    name="toolGroup"
+                    allow-empty-selection="true"
+                    is-multiple-selection="false"
+                    class="m-0">
+                <Button
+                        name="brushToggleButton"
+                        tooltip="Paint on the canvas"><Image/></Button>
+                <Button
+                        name="eraserToggleButton"
+                        tooltip="Erase parts of the canvas"><Image/></Button>
+                <Button
+                        name="fillToggleButton"
+                        tooltip="Fill the canvas with a color"><Image/></Button>
+            </ToggleButtonGroup>
+
+            <!-- Tool Settings -->
+            <VisualElement name="brushSettingsToolbar" class="flex-row items-center flex-no-shrink flex-grow hide">
+                <editorui:ColorField name="brushColorField" style="width: 72px;" value="#FFFFFFFF" />
+                <Label
+                        name="brushSizeLabel"
+                        text="Size "
+                        tooltip="The size of the brush or eraser"
+                        class="text-align-middle-center pl-2" />
+                <SliderInt name="brushSizeSlider" value="10" low-value="3" high-value="50" class="flex-grow" show-input-field="true" style="max-width: 150px;"/>
+            </VisualElement>
+
+            <!-- Base Image -->
+            <editorui:ToolbarSpacer class="flex-grow flex-shrink" />
+            <editorui:ToolbarToggle text="Show Base Image" name="showBaseImageToggle" />
+            <SliderInt name="baseImageOpacitySlider" enabled="false" value="10" low-value="10" high-value="100" class="flex-grow" show-input-field="true" style="max-width: 100px;"/>
+
+            <!-- Actions -->
+            <editorui:ToolbarButton
+                name="clearButton"
+                tooltip="Clear the whole canvas"><Image/></editorui:ToolbarButton>
+            <editorui:ToolbarButton
+                    name="saveButton"
+                    tooltip="Save the current canvas and apply it"><Image/></editorui:ToolbarButton>
+        </editorui:Toolbar>
+
+        <!-- <TwoPaneSplitView fixed-pane-index="1" fixed-pane-initial-dimension="200" class="flex-grow"> -->
+            <VisualElement name="canvas" class="canvas overflow-hidden flex-grow">
+
+                <VisualElement class="items-stretch justify-center flex-grow">
+                    <ui:DoodlePad name="doodlePad" />
+                </VisualElement>
+
+                <VisualElement name="guides" class="guides" picking-mode="Ignore"/>
+
+            </VisualElement>
+            <!-- <VisualElement name="inspector" class="overflow-hidden" style="min-width: 200px;"> -->
+            <!--     <Label text="Layers" class="text-align-middle-center p-8" picking-mode="Ignore"/> -->
+            <!-- -->
+            <!--     <editorui:Toolbar > -->
+            <!--         <Label text="Blending Mode" class="text-align-middle-center plr-9" picking-mode="Ignore"/> -->
+            <!--         <editorui:ToolbarMenu name="blendingModeMenu" text="Normal"  class="flex-grow"/> -->
+            <!--     </editorui:Toolbar> -->
+            <!-- -->
+            <!--     <ScrollView name="layerList" class="flex-grow"> -->
+            <!-- -->
+            <!--         <VisualElement name="layerItem" focusable="true" class="layer-item flex-row items-center p-4"> -->
+            <!--             <Toggle name="layerVisibilityToggle" value="true" /> -->
+            <!--             <Image name="layerThumbnail" /> -->
+            <!--             <TextField name="layerNameTextField" value="Layer #" /> -->
+            <!--         </VisualElement> -->
+            <!--     </ScrollView> -->
+            <!-- -->
+            <!--     <editorui:Toolbar> -->
+            <!--         <editorui:ToolbarSpacer class="flex-grow flex-shrink" /> -->
+            <!--         <editorui:ToolbarButton name="addLayerButton" text="Add Layer" /> -->
+            <!--         <editorui:ToolbarButton name="removeLayerButton" text="Remove Layer" /> -->
+            <!--     </editorui:Toolbar> -->
+            <!-- -->
+            <!-- </VisualElement> -->
+        <!-- </TwoPaneSplitView> -->
+    </VisualElement>
+</UXML>

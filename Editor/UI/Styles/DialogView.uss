@@ -1,0 +1,19 @@
+.dialogview__element-root {
+    flex-grow: 1;
+    justify-content: center;
+}
+
+.dialogview__element {
+    width: 100%;
+}
+
+#contentContainer {
+    padding: 6px;
+}
+
+#contentContainer .permissionelement__element {
+    margin-bottom: 0;
+    width: 100%;
+
+}
+

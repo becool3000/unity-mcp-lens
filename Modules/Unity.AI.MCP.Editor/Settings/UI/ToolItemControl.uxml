@@ -1,0 +1,14 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" xsi="http://www.w3.org/2001/XMLSchema-instance" engine="UnityEngine.UIElements" editor="UnityEditor.UIElements" noNamespaceSchemaLocation="../../UIElementsSchema/UIElements.xsd" editor-extension-mode="True">
+    <Style src="ToolItemControl.uss" />
+    <ui:VisualElement name="toolItem">
+        <ui:VisualElement name="toolItemHeader">
+            <ui:Toggle name="toolItemCheckbox" />
+            <ui:Label name="toolItemName" />
+            <ui:Label name="toolItemBadge" class="umcp-tool-badge" />
+            <ui:Button name="showDetailsButton" text="Show Details" />
+        </ui:VisualElement>
+        <ui:VisualElement name="toolItemDetails" style="display: none;">
+            <ui:Label name="toolItemDescription" />
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>

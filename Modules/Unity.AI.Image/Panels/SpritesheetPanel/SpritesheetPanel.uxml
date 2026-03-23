@@ -1,0 +1,42 @@
+<!-- GenerateUI.uxml -->
+<UXML xmlns="UnityEngine.UIElements" xmlns:ui="Unity.AI.Image.Components" xmlns:aitk-account="Unity.AI.Toolkit.Accounts.Components">
+    <Style src="./SpritesheetPanel.uss" />
+    <Style src="../../../Unity.AI.Generators.UI/StyleSheets/FlexUtilities.uss" />
+    <Style src="../../../Unity.AI.Generators.UI/StyleSheets/SessionStatusBannerClasses.uss" />
+    <!-- Authoring -->
+    <VisualElement name="authoring-section">
+        <ui:SpritesheetTrim />
+    </VisualElement>
+    <!-- Generation -->
+    <VisualElement name="generating-section">
+        <ScrollView horizontal-scroller-visibility="Hidden">
+            <!-- Model Selector Row -->
+            <VisualElement class="flex-row items-center flex-no-shrink p-8-7-8-12 border-color-dark border-bottom-1px">
+                <ui:SelectedModelTitleCard />
+                <ui:ModelSelectorButton />
+            </VisualElement>
+            <!-- Prompt Section -->
+            <VisualElement class="flex-no-shrink p-8-7-8-8 border-color-dark border-bottom-1px">
+                <ui:Prompt />
+            </VisualElement>
+            <!-- Generate Duration Slider -->
+            <VisualElement class="flex-no-shrink p-8-7-8-8 bg-light">
+                <Label class="font-bold p-4 pb-2" text="Options"/>
+                <ui:GenerateDurationSlider />
+            </VisualElement>
+            <!-- Image Reference: First Image Reference -->
+            <VisualElement class="flex-no-shrink bg-light">
+                <ui:FirstImageReference name="firstImage" />
+            </VisualElement>
+            <!-- Image Reference: Last Image Reference -->
+            <VisualElement class="flex-no-shrink bg-light">
+                <ui:LastImageReference name="lastImage" />
+            </VisualElement>
+        </ScrollView>
+        <VisualElement class="flex-no-shrink p-8-7-8-8 border-color-dark border-bottom-1px border-top-1px">
+            <!-- Session Status Banner -->
+            <aitk-account:GeneratorsSessionStatusBanner />
+            <ui:GenerateButton quote-monitor="false" text="Spritesheet" />
+        </VisualElement>
+    </VisualElement>
+</UXML>

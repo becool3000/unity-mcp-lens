@@ -1,0 +1,17 @@
+<UXML
+        xmlns="UnityEngine.UIElements"
+        xmlns:editorui="UnityEditor.UIElements"
+        xmlns:ui="Unity.AI.Image.Components">
+    <Style src="./ImageReference.uss" />
+    <VisualElement class="image-reference border-color-dark border-top-1px p-8-7-8-8">
+        <editorui:Template src="./ImageReferenceHeader.uxml" name="ImageReferenceHeader" />
+        <editorui:Template src="./ImageReferenceObjectField.uxml" name="ImageReferenceObjectField" />
+        <editorui:Template src="./ImageReferenceStrength.uxml" name="ImageReferenceStrength" />
+
+        <Instance template="ImageReferenceHeader">
+            <AttributeOverrides element-name="header-title" text="Feature Reference" tooltip="Extracts visual features from a reference image and applies them to the generated result." />
+        </Instance>
+        <Instance template="ImageReferenceObjectField" class="p-4-2"/>
+        <Instance template="ImageReferenceStrength" />
+    </VisualElement>
+</UXML>

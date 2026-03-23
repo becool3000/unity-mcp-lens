@@ -1,0 +1,95 @@
+.mui-whats-new-page-root {
+    flex-grow: 1;
+}
+
+.mui-whats-new-page-section {
+    flex-grow: 1;
+}
+
+.mui-whats-new-page-controls {
+    flex-direction: row;
+}
+
+.mui-whats-new-page-control-button {
+    height: 26px;
+    min-width: 60px;
+}
+
+.mui-whats-new-page-control-label {
+    flex-grow: 1;
+    align-self: center;
+    -unity-text-align: middle-center;
+    -unity-font-style: bold;
+}
+
+.mui-whats-new-page-video-element {
+    background-color: var(--muse-chat-backgrounds-50);
+    height: 230px;
+    margin-top: 16px;
+    margin-bottom: 16px;
+}
+
+.mui-whats-new-page-header {
+    white-space: normal;
+    font-size: 20px;
+    -unity-font-style: bold;
+    margin-top: 8px;
+    margin-bottom: 8px;
+}
+
+.mui-whats-new-page-text {
+    white-space: normal;
+}
+
+.mui-whats-new-page-text-header {
+    -unity-font-style: bold;
+    white-space: normal;
+    margin-bottom: 10px;
+}
+
+.mui-whats-new-page-bullet {
+    padding-left: 8px;
+    -unity-font-style: normal;
+}
+
+.mui-whats-new-page-sample-text {
+    white-space: normal;
+    border-radius: 6px;
+    border-width: 1px;
+    border-color: var(--muse-chat-primary-500);
+    padding: 8px;
+    margin-bottom: 12px;
+}
+
+.mui-whats-new-page-list {
+    margin-top: 16px;
+    justify-content: space-evenly;
+    min-height: 100px;
+}
+
+.mui-whats-new-page-paragraph {
+    height: 16px;
+}
+
+.mui-whats-new-page-paragraph-flex {
+    flex-grow: 1;
+}
+
+.mui-whats-new-page-list-entry {
+}
+
+.mui-whats-new-page-footer {
+    -unity-text-align: lower-left;
+    margin-bottom: 8px;
+    margin-top: auto;
+}
+
+.mui-whats-new-page-action-button {
+    flex-direction: row;
+    align-self: flex-start;
+    height: 30px;
+    min-width: 160px;
+    align-items: center;
+    justify-content: center;
+    margin-top: 8px;
+}

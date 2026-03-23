@@ -1,0 +1,14 @@
+<UXML xmlns="UnityEngine.UIElements" xmlns:ui="Unity.AI.Sound.Components">
+    <Toggle name="record" label="Record"/>
+    <VisualElement name="state-manager">
+        <VisualElement class="flex-no-shrink">
+            <VisualElement class="flex-row">
+                <Button name="select" text="View In Inspector"/>
+            </VisualElement>
+            <ui:TimelineControls name="timeline"/>
+        </VisualElement>
+        <ScrollView class="state">
+            <ui:GenericInspector name="inspector"/>
+        </ScrollView>
+    </VisualElement>
+</UXML>

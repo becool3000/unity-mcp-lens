@@ -1,0 +1,5 @@
+.chatelementwrapper__element {
+    margin-bottom: 18px;
+    min-height: 40px; /* Needed to ensure only a limited number of items is created when a conversation is opened, otherwise items have 0 height */
+}
+

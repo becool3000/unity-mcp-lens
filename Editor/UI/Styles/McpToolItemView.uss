@@ -1,0 +1,26 @@
+.mcp-tool-item {
+    flex-direction: column;
+    padding: 6px 8px;
+    margin-bottom: 4px;
+    background-color: var(--unity-colors-alternated_rows-background);
+    border-radius: 3px;
+}
+
+.mcp-tool-item-name {
+    font-size: 11px;
+    -unity-font-style: bold;
+    margin-bottom: 2px;
+}
+
+.mcp-tool-item-parameters {
+    font-size: 10px;
+    -unity-font-style: italic;
+    opacity: 0.8;
+    margin-bottom: 4px;
+}
+
+.mcp-tool-item-description {
+    font-size: 10px;
+    opacity: 0.7;
+    white-space: normal;
+}

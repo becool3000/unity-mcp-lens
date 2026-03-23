@@ -1,0 +1,17 @@
+{
+  "name": "Unity.AI.Toolkit.Asset",
+  "rootNamespace": "Unity.AI.Toolkit.Asset",
+  "references": [
+    "GUID:5a241fc381813534d9cc6d07eb989239"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": false,
+  "defineConstraints": [],
+  "noEngineReferences": false
+}

@@ -1,0 +1,12 @@
+.mui-chat-plan-container {
+    background-color: var(--muse-chat-backgrounds-100);
+    border-radius: 4px;
+    padding: 5px 8px;
+}
+
+.mui-chat-plan-entry {
+    color: var(--muse-chat-text-answers);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}

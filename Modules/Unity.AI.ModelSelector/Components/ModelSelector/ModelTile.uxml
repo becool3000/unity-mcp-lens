@@ -1,0 +1,13 @@
+<UXML xmlns="UnityEngine.UIElements" xmlns:ui="Unity.AI.ModelSelector.Components" xmlns:toolkit="Unity.AI.Toolkit.Accounts.Components">
+<Style src="./ModelTile.uss"/>
+<VisualElement class="model-tile border-2px border-selectable rounded-12px p-4">
+    <ui:ModelTileCarousel>
+        <Button class="right-4px top-4px hide model-tile-favorite-button p-2-3">
+            <Image />
+            <toolkit:Spinner name="favorite-spinner"/>
+        </Button>
+    </ui:ModelTileCarousel>
+    <ui:ModelTitleCard/>
+    <Image class="model-tile-icon absolute size-16px rounded-4px hide"/>
+</VisualElement>
+</UXML>

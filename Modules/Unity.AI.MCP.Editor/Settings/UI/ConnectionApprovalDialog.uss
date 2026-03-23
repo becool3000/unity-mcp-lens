@@ -1,0 +1,22 @@
+/* Root Container */
+.umcp-dialog-root {
+    flex-direction: column;
+    padding: 10px;
+    flex-grow: 1;
+}
+
+/* Header */
+.umcp-dialog-header {
+    -unity-font-style: bold;
+    margin-bottom: 10px;
+}
+
+/* Scrollable Content */
+.umcp-dialog-scroll {
+    flex-grow: 1;
+    margin-bottom: 10px;
+}
+
+#actionsContainer {
+    flex-shrink: 0;
+}

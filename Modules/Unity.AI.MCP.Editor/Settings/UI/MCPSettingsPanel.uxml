@@ -1,0 +1,81 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" xsi="http://www.w3.org/2001/XMLSchema-instance" engine="UnityEngine.UIElements" editor="UnityEditor.UIElements" noNamespaceSchemaLocation="../../UIElementsSchema/UIElements.xsd" editor-extension-mode="True">
+    <Style src="MCPSettings.tss" />
+    <ui:ScrollView class="umcp-root-scroll">
+        <ui:VisualElement name="header">
+            <ui:Label text="Unity MCP" name="title" />
+        </ui:VisualElement>
+
+        <ui:VisualElement name="generalSection" class="umcp-section">
+            <ui:Label text="General Settings" class="umcp-section-header" />
+            <ui:VisualElement class="umcp-section-content">
+                <ui:VisualElement class="umcp-setting-row">
+                    <ui:Label text="Show Debug Logs" class="umcp-setting-label" />
+                    <ui:Toggle name="debugLogsToggle" class="umcp-setting-control" />
+                </ui:VisualElement>
+                <ui:VisualElement class="umcp-setting-row">
+                    <ui:Label text="Validation Level" class="umcp-setting-label" />
+                    <ui:DropdownField name="validationLevelField" class="umcp-setting-control" />
+                </ui:VisualElement>
+                <ui:VisualElement class="umcp-setting-row umcp-description-row">
+                    <ui:Label class="umcp-setting-label" />
+                    <ui:Label name="validationDescription" />
+                </ui:VisualElement>
+            </ui:VisualElement>
+        </ui:VisualElement>
+
+        <ui:VisualElement name="bridgeSection" class="umcp-section">
+            <ui:Label text="Unity Bridge" class="umcp-section-header" />
+            <ui:VisualElement class="umcp-section-content">
+                <ui:VisualElement class="umcp-setting-row">
+                    <ui:Label text="Status" class="umcp-setting-label" />
+                    <ui:VisualElement class="umcp-setting-value-group">
+                        <ui:VisualElement class="umcp-bridge-status-group">
+                            <ui:VisualElement name="bridgeStatusIndicator" class="umcp-status-indicator" />
+                            <ui:Label name="bridgeStatusLabel" text="Checking..." />
+                        </ui:VisualElement>
+                        <ui:Button name="toggleBridgeButton" text="Start" class="umcp-primary-button umcp-toggle-button" />
+                    </ui:VisualElement>
+                </ui:VisualElement>
+            </ui:VisualElement>
+        </ui:VisualElement>
+
+        <ui:VisualElement name="connectedClientsSection" class="umcp-section">
+            <ui:Label text="Connected Clients" class="umcp-section-header" />
+            <ui:VisualElement class="umcp-section-content">
+                <ui:Label name="connectionPolicyLabel" class="umcp-connection-policy-label" />
+                <ui:ScrollView name="connectedClientsList" />
+            </ui:VisualElement>
+        </ui:VisualElement>
+
+        <ui:VisualElement name="pendingConnectionsSection" class="umcp-section">
+            <ui:Label text="Pending Connections" class="umcp-section-header" />
+            <ui:VisualElement class="umcp-section-content">
+                <ui:ScrollView name="pendingConnectionsList" />
+            </ui:VisualElement>
+        </ui:VisualElement>
+
+        <ui:VisualElement name="otherConnectionsSection" class="umcp-section">
+            <ui:Foldout name="otherConnectionsFoldout" text="Other Connections" class="umcp-section-foldout">
+                <ui:ScrollView name="otherConnectionsList" />
+            </ui:Foldout>
+        </ui:VisualElement>
+
+        <ui:VisualElement name="toolsSection" class="umcp-section">
+            <ui:Foldout name="toolsFoldout" text="Tools" class="umcp-section-foldout">
+                <ui:ScrollView name="toolsList" />
+                <ui:VisualElement class="umcp-setting-row">
+                    <ui:Button name="resetToolsButton" text="Reset to Defaults" class="umcp-reset-button" />
+                </ui:VisualElement>
+            </ui:Foldout>
+        </ui:VisualElement>
+
+        <ui:VisualElement name="clientsSection" class="umcp-section">
+            <ui:Foldout name="clientsFoldout" text="Integrations" class="umcp-section-foldout">
+                <ui:VisualElement name="clientList" />
+            </ui:Foldout>
+            <ui:VisualElement class="umcp-setting-row">
+                <ui:Button name="locateServer" text="Locate Server"/>
+            </ui:VisualElement>
+        </ui:VisualElement>
+    </ui:ScrollView>
+</ui:UXML>

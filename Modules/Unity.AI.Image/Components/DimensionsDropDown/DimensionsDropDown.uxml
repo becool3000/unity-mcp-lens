@@ -1,0 +1,9 @@
+<UXML xmlns="UnityEngine.UIElements" xmlns:ui="Unity.AI.Image.Components">
+    <Toggle name="custom-resolution-toggle" label="Custom Dimensions" class="pt-4" />
+    <VisualElement name="custom-resolution-fields" class="hide flex-row">
+        <IntegerField name="custom-width-field" label="Dimensions" />
+        <Label text="x" class="pt-2" />
+        <IntegerField name="custom-height-field" />
+    </VisualElement>
+    <DropdownField label="Dimensions" name="dimensions-dropdown" tooltip="Choose the output resolution. Higher values increase quality but also processing time."/>
+</UXML>

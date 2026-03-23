@@ -1,0 +1,9 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements">
+    <ui:VisualElement class="mcp-settings-section-option">
+        <ui:VisualElement class="mcp-settings-section-option-label mcp-server-entry-option-label" >
+            <ui:VisualElement name="statusIndicator" tooltip="Indicates the status of the server connection. This will be green when the server connects successfully" class="mcp-server-status-indicator" />
+            <ui:Label name="serverNameLabel" class="mcp-server-name-label" />
+        </ui:VisualElement>
+        <ui:Button name="inspectButton" text="Inspect" tooltip="View server details and available tools" class="mcp-settings-section-option-value" />
+    </ui:VisualElement>
+</ui:UXML>

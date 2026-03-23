@@ -1,0 +1,7 @@
+<UXML xmlns="UnityEngine.UIElements">
+    <Label name="header-title" class="font-bold p-4" text="Record" tooltip="Record a new audio clip to use as a Sound Reference" />
+    <Toggle name="overwrite-asset" label="Overwrite Sound Reference asset"
+            tooltip="Replace the existing sound reference asset with the newly generated one. This action cannot be undone." />
+    <DropdownField name="microphones-dropdown"/>
+    <Button text="Start Recording" name="record" />
+</UXML>

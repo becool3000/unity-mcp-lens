@@ -1,0 +1,26 @@
+<UXML xmlns:ui="UnityEngine.UIElements">
+    <ui:VisualElement name="settingsPopupRoot" class="settings-popup">
+        <ui:Button name="openPreferencesButton" class="settings-popup-item settings-popup-button">
+            <ui:Label text="Open Assistant Settings" picking-mode="Ignore" />
+        </ui:Button>
+        <ui:Button name="refreshProjectOverviewButton" class="settings-popup-item settings-popup-button setting-popup-refresh-project-overview" tooltip="Refresh your project overview file after major changes to keep Assistant’s knowledge up to date.">
+            <ui:VisualElement name="loadingSpinnerContainer" class="setting-popup-spinner-container"/>
+            <ui:Label text="Refresh Project Overview" picking-mode="Ignore" />
+        </ui:Button>
+        <ui:VisualElement class="settings-popup-separator" />
+        <ui:VisualElement name="autoRunRow" tooltip="Autorun bypasses permissions, so Assistant will not ask for confirmation" class="settings-popup-item settings-popup-checkbox-row">
+            <ui:Toggle name="autoRunToggle" />
+            <ui:Label text="Autorun" picking-mode="Ignore" class="settings-popup-label" />
+        </ui:VisualElement>
+        <ui:VisualElement name="collapseReasoningRow" class="settings-popup-item settings-popup-checkbox-row">
+            <ui:Toggle name="collapseReasoningToggle" />
+            <ui:Label text="Collapse Reasoning when complete" picking-mode="Ignore" class="settings-popup-label" />
+        </ui:VisualElement>
+        <ui:VisualElement name="overridesSeparator" class="settings-popup-separator" />
+        <ui:VisualElement name="sessionOverridesRow" class="settings-popup-item settings-popup-foldout-row">
+            <ui:Foldout name="sessionOverridesFoldout" text="" class="settings-popup-foldout" />
+            <ui:Label text="Permission Overrides" tooltip="Permission Overrides reset with a new Chat. You can also revoke them here." class="session-override-label" />
+        </ui:VisualElement>
+        <ui:ScrollView name="sessionOverridesContent" class="settings-popup-foldout-content" mode="Vertical" />
+    </ui:VisualElement>
+</UXML>

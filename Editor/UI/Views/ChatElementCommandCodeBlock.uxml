@@ -1,0 +1,20 @@
+<UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" xmlns="UnityEngine.UIElements" editor-extension-mode="False">
+     <ui:VisualElement name="warningBlock">
+        <ui:VisualElement name="taskBlockHeader" class="mui-task-block-buttons">
+            <ui:VisualElement name="taskBlockInner" class="mui-task-block-inner">
+                <ui:VisualElement name="taskWarningTitle" class="mui-task-block-toggle-label">
+                    <ui:Image name="taskWarningIcon" class="mui-task-warning-image mui-icon-warn" />
+                    <ui:Label name="taskMessage" class="mui-action-button-label" text="Unable to generate code"/>
+                </ui:VisualElement>
+            </ui:VisualElement>
+        </ui:VisualElement>
+
+        <ui:VisualElement name="warningContainer" class="notification-warning-content">
+            <ui:Label name="warningText"/>
+        </ui:VisualElement>
+        <ui:VisualElement name="previewItems"/>
+    </ui:VisualElement>
+
+    <ui:VisualElement name="commandCodeBlockRoot">
+    </ui:VisualElement>
+</UXML>

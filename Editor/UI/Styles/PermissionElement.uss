@@ -1,0 +1,157 @@
+.permissionelement__element {
+    margin-bottom: 12px;
+    background-color: var(--muse-chat-backgrounds-100);
+    border-radius: var(--muse-chat-border-radius);
+    padding: 8px 12px;
+}
+
+#questionContainer {
+    flex-direction: row;
+}
+
+#preActionLabel {
+    margin-top: 3px;
+    margin-bottom: 3px;
+}
+
+#actionLabel {
+    margin-top: 3px;
+    margin-bottom: 3px;
+    -unity-font-style: bold;
+    flex-grow: 1;
+    flex-shrink: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+#questionLabel {
+    margin-top: 4px;
+    margin-bottom: 4px;
+    text-overflow: ellipsis;
+    overflow: hidden;
+}
+
+#buttonContainer {
+    flex-direction: row;
+    margin-top: 3px;
+    margin-bottom: 3px;
+    flex-wrap: nowrap;
+    align-items: center;
+}
+
+#noButton {
+}
+
+#buttonSpacer {
+    flex-grow: 1;
+    min-width: 8px;
+}
+
+#buttonContainer .mui-action-button {
+    flex-grow: 0;
+    flex-shrink: 1;
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+}
+
+#yesLabel,
+#yesAlwaysLabel,
+#noLabel {
+    flex-grow: 1;
+    flex-shrink: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+#buttonContainer Image {
+    width: 16px;
+    height: 16px;
+    align-self: center;
+    flex-shrink: 0;
+}
+
+#permissionAnswer {
+    margin-top: 3px;
+    margin-bottom: 3px;
+}
+
+#answerLine {
+    flex-direction: row;
+    align-items: center;
+}
+
+#answerLabel {
+    color: var(--muse-chat-text-thoughts);
+    margin-right: 3px;
+    padding-left: 0;
+}
+
+#answerActionLabel {
+    color: var(--muse-chat-text-secondary);
+    flex-grow: 1;
+    flex-shrink: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+#sessionMessageLabel {
+    color: var(--muse-chat-text-thoughts);
+    margin-top: 4px;
+    margin-left: 23px;
+    padding-left: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+#permissionAnswer .mui-icon-checkmark {
+    -unity-background-image-tint-color: var(--muse-chat-icon-success-color);
+}
+
+#permissionAnswer .mui-icon-close {
+    --unity-image-tint-color: var(--muse-chat-icon-error-color);
+}
+
+#yesButton {
+    margin-left: 0;
+}
+
+#noButton {
+    margin-right: 0;
+}
+
+#pointCountLabel {
+    padding: 0 2px;
+    -unity-text-align: middle-center;
+}
+
+/* Reduce the button padding when there is a badge so that the top padding and side padding looks the same */
+#yesButton.has-badge, #yesAlwaysButton.has-badge {
+    padding-right: 5px;
+}
+
+.point-count-badge {
+    flex-shrink: 0;
+    color: var(--unity-colors-window-text);
+    background-color: var(--muse-chat-backgrounds-175);
+    border-color: var(--unity-colors-button-border);
+    border-width: 1px;
+    border-radius: 3px;
+    height: 15px;
+    min-width: 16px;
+    padding: 0 1px;
+    margin-left: 8px;
+    align-self: center;
+    font-size: 11px;
+}
+
+.point-count-badge #sparkleIconPermission {
+    width: 12px;
+    height: 12px;
+    align-self: center;
+}

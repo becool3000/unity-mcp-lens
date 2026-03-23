@@ -1,0 +1,4 @@
+<UXML xmlns="UnityEngine.UIElements">
+    <!-- For some models a high-value of 99 causes errors -->
+    <SliderInt show-input-field="true" label="Strength" class="image-reference-strength-slider" low-value="2" high-value="98" page-size="1" value="20" tooltip="Adjust how strongly the reference image influences the generated result."/>
+</UXML>

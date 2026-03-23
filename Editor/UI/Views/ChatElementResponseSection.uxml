@@ -1,0 +1,16 @@
+<UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" xmlns="UnityEngine.UIElements" xmlns:assistant="Unity.AI.Assistant.UI.Editor.Scripts.Components" editor-extension-mode="False">
+    <ui:VisualElement class="mui-chat-response-section">
+        <!-- Reasoning section which can be folded -->
+        <ui:VisualElement name="reasoningContainer" class="mui-chat-element-text-area">
+            <ui:VisualElement name="reasoningTitle">
+                <ui:Foldout name="reasoningFoldout" text="" class="reasoning-foldout"/>
+                <ui:VisualElement name="reasoningLoadingSpinnerContainer" class="reasoning-spinner-container"/>
+                <ui:Label text="Reasoning" class="mui-chat-response-reasoning-label"/>
+            </ui:VisualElement>
+            <ui:VisualElement name="reasoningContent" class="mui-chat-element-text-area"/>
+        </ui:VisualElement>
+
+        <!-- Answer section -->
+        <ui:VisualElement name="answerContent" class="mui-chat-element-text-area"/>
+    </ui:VisualElement>
+</UXML>

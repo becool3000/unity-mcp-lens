@@ -1,0 +1,9 @@
+<UXML xmlns="UnityEngine.UIElements" xmlns:toolkit="Unity.AI.Toolkit.Accounts.Components">
+    <Style src="./AIDropdown.uss" />
+    <Style src="../AIDropdownRoot/AIDropdownRoot.uss" />
+
+    <VisualElement class="dropdown-item-with-margin aligned-row text-menu-item">
+        <Label name="manage-account" class="label-button link" text="Manage Account"/>
+        <Label name="data-sharing"/>
+    </VisualElement>
+</UXML>

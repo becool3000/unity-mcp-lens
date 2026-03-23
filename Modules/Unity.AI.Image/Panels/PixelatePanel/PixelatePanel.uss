@@ -1,0 +1,36 @@
+PixelatePanel {
+    flex-grow: 1;
+}
+
+.vertical-layout vertical-layout-flex-grow {
+    flex-grow: 1;
+}
+
+.horizontal-layout-flex,
+.vertical-layout-flex {
+    display: none;
+}
+
+.horizontal-layout .horizontal-layout-flex {
+    display: flex;
+}
+
+.vertical-layout .vertical-layout-flex {
+    display: flex;
+}
+
+
+.horizontal-layout .left-stack {
+    min-width: 280px;
+}
+
+.image-reference {
+    padding: 8px 12px 8px 9px;
+    border-top-color: #141414;
+    border-top-width: 1px;
+}
+
+.pixelate-pixel-block-size .pixelate-keep-image-size-toggle Label {
+    padding-top: 2px;
+    height: 16px;
+}

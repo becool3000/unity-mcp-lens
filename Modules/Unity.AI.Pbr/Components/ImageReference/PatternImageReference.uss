@@ -1,0 +1,7 @@
+.image-reference {
+    margin-bottom: 8px;
+}
+
+#delete-image-reference {
+    display: none;
+}

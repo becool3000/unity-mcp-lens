@@ -1,0 +1,129 @@
+:root {
+    --muse-chat-small-font-size: 10px;
+    --muse-chat-default-font-size: 12px;
+    --muse-chat-header-font-size: 14px;
+    --muse-chat-title-font-size: 16px;
+    --muse-chat-border-radius: 8px;
+}
+
+.unity-text-element {
+    /* define default font size to ensure it's consistent across Unity versions */
+    font-size: var(--muse-chat-default-font-size);
+}
+
+.mui-action-cursor {
+    cursor: link;
+}
+
+.-muse-chat-button {
+    cursor: arrow;
+}
+
+.mui-action-button {
+    flex-direction: row;
+    height: 24px;
+    border-radius: 3px;
+}
+
+.mui-action-button-active {
+    background-color: var(--muse-chat-button-active);
+}
+
+.mui-action-button-image {
+    width: 12px;
+    height: 12px;
+    margin: 2px;
+    --unity-image-size: scale-to-fit;
+    flex-shrink: 0;
+}
+
+.mui-action-button-image-large {
+    width: 16px;
+    height: 16px;
+    margin: 1px;
+    --unity-image-size: scale-to-fit;
+    flex-shrink: 0;
+}
+
+.mui-action-button-label-header {
+    font-size: var(--muse-chat-default-font-size);
+    padding-left: 2px;
+}
+
+.mui-action-button-label {
+    font-size: var(--muse-chat-default-font-size);
+    padding-left: 3px;
+}
+
+.mui-chat-label {
+    -unity-text-align: middle-left;
+    padding-left: 0;
+    padding-right: 0;
+}
+
+.mui-chat-foldout {
+    cursor: link;
+}
+
+.mui-chat-foldout .unity-foldout__text {
+    -unity-font-style: bold;
+    cursor: link;
+    -unity-text-align: middle-left;
+}
+
+.mui-chat-foldout .unity-foldout__content {
+    margin-left: 0;
+}
+
+.mui-chat-foldout .unity-foldout__toggle {
+    min-height: 24px;
+}
+
+.mui-popup-shadow {
+    position: absolute;
+    top: -2px;
+    bottom: -2px;
+    left: -2px;
+    right: -2px;
+    background-color: rgba(0, 0, 0, .15);
+    border-radius: 4px;
+}
+
+.unity-scroller {
+    margin-right: 3px;
+    background-color: transparent;
+    border-color: transparent;
+}
+
+#unity-slider {
+    margin: 4px 0;
+}
+
+.function-call-content-scroll #unity-dragger {
+    width: 8px;
+    border-radius: 4px;
+}
+
+.preview-size-slider #unity-dragger {
+    width: 10px;
+    border-radius: 5px;
+}
+
+.mui-chat-context-spacer {
+    flex-grow: 1;
+}
+
+.adaptive-list-scroller {
+    border-width: 0;
+    margin-right: 3px;
+}
+.adaptive-list-scroller .unity-slider {
+    margin:2px;
+}
+
+.unity-repeat-button {
+    display:none;
+}
+
+
+

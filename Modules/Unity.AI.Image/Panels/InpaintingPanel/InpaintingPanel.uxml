@@ -1,0 +1,39 @@
+<!-- GenerateUI.uxml -->
+<UXML xmlns="UnityEngine.UIElements" xmlns:ui="Unity.AI.Image.Components" xmlns:aitk-account="Unity.AI.Toolkit.Accounts.Components">
+    <Style src="./InpaintingPanel.uss" />
+    <Style src="../../../Unity.AI.Generators.UI/StyleSheets/FlexUtilities.uss" />
+    <Style src="../../../Unity.AI.Generators.UI/StyleSheets/SessionStatusBannerClasses.uss" />
+    <ScrollView horizontal-scroller-visibility="Hidden">
+        <!-- Model Selector Row -->
+        <VisualElement class="flex-no-shrink p-8-7-8-8 border-color-dark border-bottom-1px">
+            <VisualElement class="flex-row items-center flex-no-shrink pb-6 pl-5">
+                <ui:SelectedModelTitleCard />
+                <ui:ModelSelectorButton />
+            </VisualElement>
+        </VisualElement>
+        <!-- Prompt Section -->
+        <VisualElement class="flex-no-shrink p-8-7-8-8 border-color-dark border-bottom-1px">
+            <ui:Prompt />
+        </VisualElement>
+        <!-- Generate Variations Slider -->
+        <VisualElement class="flex-no-shrink p-8-7-8-8 bg-light">
+            <Label class="font-bold p-4 pb-8" text="Options"/>
+            <ui:GenerateVariationsSlider />
+            <ui:GenerationOptions class="pt-8" />
+        </VisualElement>
+        <!-- Base Image -->
+        <VisualElement class="flex-no-shrink bg-light">
+            <ui:BaseImageReference name="baseImage" />
+        </VisualElement>
+        <!-- Image Reference: Image Reference -->
+        <VisualElement class="flex-no-shrink bg-light">
+            <ui:InpaintMaskImageReference name="inPaintMask" />
+        </VisualElement>
+    </ScrollView>
+    <!-- Generate Button -->
+    <VisualElement class="flex-no-shrink p-8-7-8-8 border-color-dark border-bottom-1px border-top-1px">
+        <!-- Session Status Banner -->
+        <aitk-account:GeneratorsSessionStatusBanner />
+        <ui:GenerateButton quote-monitor="false" text="Generate" />
+    </VisualElement>
+</UXML>

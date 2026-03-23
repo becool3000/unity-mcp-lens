@@ -1,0 +1,58 @@
+.contextdropdown__element {
+    position: absolute;
+    left: 16px;
+    right: 16px;
+    background-color: var(--muse-chat-foregrounds-300);
+    display: flex;
+    flex-shrink: 0;
+    flex-grow: 1;
+    width: 160px;
+}
+
+.mui-context-dropdown-toggle {
+    background-color: var(--muse-chat-foregrounds-300);
+    display: flex;
+    justify-content: space-between;
+    flex-direction: row;
+    width: 160px;
+    padding: 2px 4px;
+    align-items: center;
+    border-radius: 3px;
+    border-width: 1px;
+    border-color: var(--muse-chat-foregrounds-300);
+}
+
+.mui-context-dropdown-adaptive-list-view-container {
+    display: flex;
+    flex-grow: 1;
+    flex-shrink: 0;
+    justify-content: center;
+    align-items: center;
+}
+
+.mui-context-dropdown-adaptive-list-view-container .adaptive-list-view {
+    flex-grow: 1;
+    flex-shrink: 0;
+    width: 160px;
+    border-width: 1px;
+    border-color: var(--muse-chat-primary-500);
+    max-height: 144px;
+}
+
+.mui-icon-caret-down {
+    height: 12px;
+    width: 12px;
+}
+
+.mui-context-item-entry-dark #contextRow {
+    background-color: var(--muse-chat-backgrounds-150)
+}
+
+.mui-context-item-list-entry-light #contextRow {
+    background-color: var(--muse-chat-backgrounds-250)
+}
+
+.mui-context-dropdown-toggle.mui-context-dropdown-toggle-focused {
+    border-width: 1px;
+    border-color: var(--muse-chat-accent-100);
+}

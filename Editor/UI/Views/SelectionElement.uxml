@@ -1,0 +1,22 @@
+<UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" xmlns="UnityEngine.UIElements" editor-extension-mode="False">
+    <ui:VisualElement class="mui-selection-element-root">
+
+        <ui:VisualElement class="mui-selection-element-row">
+            <ui:VisualElement class="mui-selection-element-container">
+                <ui:Image name="mui-selection-element-checkmark" class="mui-icon-checkmark mui-selection-element-check-icon"/>
+            </ui:VisualElement>
+            <ui:VisualElement class="mui-selection-element-details">
+                <ui:Image name="selectionElementPreview" class="mui-selection-element-details-preview"/>
+                <ui:Image name="selectionElementLogTypeIcon" class="mui-selection-element-details-preview"/>
+                <ui:VisualElement>
+                    <ui:Label name="selectionElementText" class="mui-chat-label mui-selection-element-text"/>
+                    <ui:Label name="selectionElementPath" class="mui-chat-label mui-selection-element-path"/>
+                </ui:VisualElement>
+            </ui:VisualElement>
+            <ui:VisualElement class="mui-selection-element-spacer"/>
+            <ui:Button name="selectionElementFindButton" class="mui-selection-element-find-button" text="Find" />
+
+        </ui:VisualElement>
+
+    </ui:VisualElement>
+</UXML>

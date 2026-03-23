@@ -1,0 +1,172 @@
+/* Gateway Project Settings Page Styles */
+
+.gateway-settings-page {
+    margin-top: 1px;
+    margin-left: 9px;
+    flex-shrink: 1;
+    flex-grow: 1;
+}
+
+.gateway-settings-header {
+    -unity-font-style: bold;
+    font-size: 19px;
+    margin-bottom: 8px;
+}
+
+.gateway-settings-scroll {
+    flex-grow: 1;
+}
+
+.gateway-settings-content {
+    margin-top: 6px;
+    margin-left: 4px;
+    margin-right: 14px;
+}
+
+.gateway-settings-row {
+    flex-direction: row;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.gateway-settings-label {
+    width: 150px;
+    flex-shrink: 0;
+}
+
+.gateway-settings-dropdown {
+    flex-grow: 0;
+    flex-shrink: 0;
+    width: 200px;
+}
+
+.gateway-dropdown-with-version {
+    flex-direction: row;
+    align-items: center;
+    flex-grow: 1;
+}
+
+.gateway-version-label {
+    font-size: 11px;
+    margin-left: 8px;
+    opacity: 0.5;
+}
+
+.gateway-help-row {
+    flex-direction: row;
+    align-items: center;
+    margin-bottom: 12px;
+    margin-left: 154px;
+    min-height: 20px;
+}
+
+.gateway-help-text {
+    color: #888888;
+    font-size: 11px;
+    white-space: normal;
+    margin-left: 0;
+    margin-bottom: 0;
+    -unity-text-align: middle-left;
+}
+
+.gateway-add-required-button {
+    margin-left: 8px;
+    font-size: 11px;
+    padding: 2px 8px;
+}
+
+.gateway-login-button {
+    margin-left: 8px;
+    font-size: 11px;
+    padding: 2px 8px;
+}
+
+/* CLI Path Section */
+.gateway-cli-path-container {
+    flex-direction: row;
+    align-items: center;
+}
+
+.gateway-path-row {
+    flex-direction: row;
+    flex-grow: 1;
+    flex-shrink: 1;
+    align-items: center;
+}
+
+.gateway-cli-path-field {
+    flex-grow: 1;
+    flex-shrink: 1;
+    min-width: 100px;
+    margin-right: 8px;
+}
+
+.gateway-browse-button {
+    width: 80px;
+    min-width: 80px;
+    flex-shrink: 0;
+}
+
+/* Environment Variables Section */
+.gateway-env-vars-foldout {
+    margin-top: 12px;
+    margin-bottom: 8px;
+}
+
+.gateway-env-vars-container {
+    margin-bottom: 8px;
+}
+
+.gateway-env-var-row {
+    flex-direction: row;
+    align-items: center;
+    margin-bottom: 4px;
+    flex-wrap: nowrap;
+}
+
+.gateway-env-var-lock {
+    width: 20px;
+    margin-right: 4px;
+    -unity-text-align: middle-center;
+}
+
+.gateway-env-var-name {
+    flex-grow: 0;
+    flex-shrink: 0;
+    width: 180px;
+    min-width: 180px;
+    margin-right: 8px;
+}
+
+.gateway-env-var-value {
+    flex-grow: 1;
+    flex-shrink: 1;
+    min-width: 100px;
+    margin-right: 4px;
+}
+
+.gateway-env-var-visibility-button {
+    width: 38px;
+    height: 24px;
+    margin-right: 4px;
+}
+
+.gateway-env-var-remove-button {
+    width: 24px;
+    min-width: 24px;
+    height: 24px;
+    padding: 0;
+    -unity-text-align: middle-center;
+    flex-shrink: 0;
+    flex-grow: 0;
+}
+
+.gateway-add-button {
+    align-self: flex-start;
+    margin-top: 4px;
+}
+
+.gateway-settings-content .error-message {
+    color: #c03333;
+    -unity-font-style: bold;
+}

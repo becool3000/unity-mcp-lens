@@ -1,0 +1,65 @@
+/*
+* Algorithm's @author Morten Mikkelsen
+* Contact: mortenm@unity3d.com
+*/
+
+// Each #kernel tells which function to compile; you can have many kernels
+#pragma kernel CSMain
+
+/// Texture to sample from
+Texture2D<float4> _InputTexture;
+float _Width;
+float _Height;
+
+// Result buffer to store the sum
+RWStructuredBuffer<float> _ResultBuffer;
+
+[numthreads(1, 1, 1)]
+void CSMain (uint3 id : SV_DispatchThreadID)
+{
+    const int height = _Height;
+    const int width = _Width;
+    
+    float dAvgSqDeriv = 0;
+    for(int y=1; y<(height-1); y++)
+    {
+        for(int x=1; x<(width-1); x++)
+        {
+            float dHdx = 0, dHdy = 0;
+            for (int j = 0; j < 3; j++)
+            {
+                for(int i=0; i<3; i++)
+                {
+                    float4 pixel = _InputTexture.Load(int3(x + i - 1, y + j - 1, 0));
+                    const float fH = pixel.r;//Mathematics.math.unlerp(0f, 255f, pfHeightMap[(y + j - 1) * width + (x + i - 1)][1]); //[1] == red channel since the heightmap is encoded as ARGB32 and we unlerp since Color32 [0, 255]
+
+                    const int iWeightU = (i-1)*((j&1)+1);
+                    const int iWeightV = (1-j)*((i&1)+1);
+                        
+                    dHdx += iWeightU*fH;
+                    dHdy += iWeightV*fH;
+                } 
+            }
+                    
+            dHdx /= 8; dHdy /= 8;
+                    
+            dAvgSqDeriv += dHdx*dHdx;
+            dAvgSqDeriv += dHdy*dHdy;
+        }
+    }
+            
+    dAvgSqDeriv /= (2*(width-1)*(height-1));
+    float sigma = (float) sqrt(dAvgSqDeriv);
+
+    float scale = 1;
+    if(sigma> 0.0)
+    {
+        // the value 0.38 represents the sigma associated with
+        // the derivative map resulting from a set of normal maps made by artists
+        // The value "scale" is thus chosen such that when this height map is scaled by it
+        // we get a similar perceptual amount of color saturation when viewed as a normal map
+        // that is the value: 0.5 + 0.5*normalize( float3(-dHdx, -dHdy, 1.0) ) 
+        scale = (float)(0.38 / (sigma));
+    }
+    _ResultBuffer[0] = scale;
+}

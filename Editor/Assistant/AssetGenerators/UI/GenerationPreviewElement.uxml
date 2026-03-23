@@ -1,0 +1,15 @@
+﻿<UXML xmlns="UnityEngine.UIElements"
+      xmlns:animate="Unity.AI.Animate.Components"
+      xmlns:image="Unity.AI.Image.Components"
+      xmlns:pbr="Unity.AI.Pbr.Components"
+      xmlns:mesh="Unity.AI.Mesh.Components"
+      xmlns:sound="Unity.AI.Sound.Components">
+    <Style src="./GenerationSelector.uss" />
+
+    <animate:GenerationSelector name="animation-selector" style="display: none;" />
+    <image:GenerationSelector name="image-selector" style="display: none;" />
+    <pbr:GenerationSelector name="material-selector" style="display: none;" />
+    <mesh:GenerationSelector name="mesh-selector" style="display: none;" />
+    <sound:GenerationSelector name="sound-selector" style="display: none;" />
+
+</UXML>

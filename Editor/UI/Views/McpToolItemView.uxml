@@ -1,0 +1,7 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements">
+    <ui:VisualElement class="mcp-tool-item">
+        <ui:Label name="toolNameLabel" class="mcp-tool-item-name" />
+        <ui:Label name="toolParametersLabel" class="mcp-tool-item-parameters" />
+        <ui:Label name="toolDescriptionLabel" class="mcp-tool-item-description" />
+    </ui:VisualElement>
+</ui:UXML>

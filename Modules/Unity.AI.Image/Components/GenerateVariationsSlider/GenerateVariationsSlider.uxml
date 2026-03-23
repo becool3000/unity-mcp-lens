@@ -1,0 +1,4 @@
+<UXML xmlns="UnityEngine.UIElements">
+    <Label class="hide font-bold p-4" text="Count"/>
+    <SliderInt class="flex-grow" label="Count" show-input-field="true" low-value="1" high-value="9" value="4" tooltip="Number of images to be generated."/>
+</UXML>

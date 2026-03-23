@@ -1,0 +1,182 @@
+.image-reference-object-field {
+    flex-shrink: 0;
+    background-color: var(--unity-colors-object_field-background);
+}
+
+.image-reference-object-field__input-field {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    padding: 0;
+    margin: 0;
+}
+
+.image-reference-object-field.doodle .image-reference-object-field__input-field .unity-image {
+    opacity: 0;
+}
+
+.image-reference-object-field__doodle-pad {
+    position: absolute;
+    top: 1px;
+    left: 1px;
+    bottom: 1px;
+    right: 1px;
+    background-color: rgba(0,0,0,0);
+}
+
+.image-reference-object-field.asset .image-reference-object-field__doodle-pad {
+    opacity: 0;
+}
+
+.image-reference-object-field__doodle-pad:disabled {
+    opacity: 1;
+}
+
+.image-reference-object-field__overlay {
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-end;
+    position: absolute;
+    top: 4px;
+    right: 1px;
+}
+
+#image-reference-settings-button {
+    width: 19px;
+    height: 19px;
+    padding: 0;
+}
+
+#image-reference-settings-button > .unity-image {
+    --unity-image: url("project:/Packages/com.unity.ai.assistant/Modules/Unity.AI.Image/Icons/Settings.png");
+    opacity: 1;
+}
+
+.button-spacer {
+    width: 20px;
+}
+
+#edit-image-reference {
+    width: 19px;
+    height: 19px;
+    padding: 2px;
+    margin-right: 0;
+}
+
+#edit-image-reference > .unity-image {
+    --unity-image: url("project:/Packages/com.unity.ai.assistant/Modules/Unity.AI.Image/Icons/Edit.png");
+    opacity: 1;
+}
+
+.is-selected #edit-image-reference {
+    background-color: var(--unity-colors-button-background-pressed);
+}
+
+.is-selected #edit-image-reference:hover {
+    background-color: var(--unity-colors-button-background-hover_pressed);
+}
+
+.unity-object-field__input {
+    background-color: transparent;
+}
+
+.is-selected .unity-object-field__input {
+    border-color: var(--unity-colors-object_field-border-focus);
+}
+
+.unity-object-field__selector {
+    position: absolute;
+    top: 4px;
+    right: 24px;
+    width: 19px;
+    height: 19px;
+    border-width: 1px;
+    border-radius: 3px;
+    border-color: var(--unity-colors-button-border);
+    border-bottom-color: var(--unity-colors-button-border_accent);
+    background-color: var(--unity-colors-button-background);
+    -unity-background-scale-mode: scale-to-fit;
+}
+
+.unity-object-field__selector:hover {
+    background-color: var(--unity-colors-button-background-hover);
+}
+
+.unity-object-field__selector:focus {
+    border-color: var(--unity-colors-button-border-focus);
+    background-color: var(--unity-colors-button-background-focus);
+}
+
+.unity-object-field__selector:active {
+    border-color: var(--unity-colors-button-border-pressed);
+    background-color: var(--unity-colors-button-background-pressed);
+}
+
+.unity-object-field-display {
+    position: absolute;
+    margin: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    border-radius: 5px;
+    justify-content: center;
+}
+
+.unity-object-field__label,
+.unity-object-field-display__label {
+    display: none;
+}
+
+.unity-object-field-display__icon {
+    position: absolute;
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    max-width: none;
+    max-height: none;
+    overflow: hidden;
+}
+
+.warning-icon-container {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    justify-content: center;
+}
+
+#warning-background {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    justify-content: center;
+}
+
+#warning-icon {
+    --unity-image: url("../../../Unity.AI.Generators.UI/Icons/Warning.png");
+    width: 50%;
+    height: 50%;
+    align-self: center;
+}
+
+.hidden {
+    display: none;
+}
+
+.light-warning-icon {
+    --unity-image-tint-color: #555555;
+}
+
+.light-warning-background {
+    background-color: rgba(235, 235, 235, 0.6);
+}
+
+.dark-warning-icon {
+    --unity-image-tint-color: #C4C4C4;
+}
+
+.dark-warning-background {
+    background-color: rgba(96, 96, 96, 0.6);
+}

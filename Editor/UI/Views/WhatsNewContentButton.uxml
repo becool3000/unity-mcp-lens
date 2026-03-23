@@ -1,0 +1,15 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements"
+         xmlns:chat="Unity.AI.Assistant.Editor.SessionBanner"
+         xmlns="UnityEngine.UIElements" editor-extension-mode="False">
+    <ui:VisualElement class="mui-whats-new-button-root">
+        <ui:VisualElement class="mui-whats-new-button-row">
+            <ui:VisualElement>
+                <ui:Label name="whatsNewPageHeader"/>
+                <ui:Label name="whatsNewPageDescription"/>
+            </ui:VisualElement>
+            <ui:VisualElement class="mui-whats-new-button-image-container">
+                <ui:Image picking-mode="ignore" class="mui-action-button-image-large mui-icon-arrow-right mui-whats-new-button-image"/>
+            </ui:VisualElement>
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>

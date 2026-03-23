@@ -1,0 +1,26 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" xsi="http://www.w3.org/2001/XMLSchema-instance" engine="UnityEngine.UIElements" editor="UnityEditor.UIElements" noNamespaceSchemaLocation="../../UIElementsSchema/UIElements.xsd" editor-extension-mode="True">
+    <ui:VisualElement class="umcp-connection-item">
+        <!-- Collapsed header view -->
+        <ui:VisualElement name="connectionHeader" class="umcp-connection-header">
+            <ui:VisualElement class="umcp-connection-header-left">
+                <ui:VisualElement name="statusIndicator" class="umcp-status-indicator" />
+                <ui:Label name="connectionTitle" text="Connection Title" class="umcp-connection-title" />
+                <ui:Label name="connectionProcessInfo" text="process info" class="umcp-connection-process-info" />
+                <ui:Label name="connectionTimestamp" text="2024-01-01 12:00:00" class="umcp-connection-timestamp" />
+            </ui:VisualElement>
+            <ui:VisualElement class="umcp-connection-header-right">
+                <ui:Label name="connectionStatus" text="Pending" class="umcp-connection-status-label" />
+                <ui:Button name="toggleDetailsButton" text="▶" class="umcp-connection-expand-button" />
+            </ui:VisualElement>
+        </ui:VisualElement>
+
+        <!-- Expanded details view (hidden by default) -->
+        <ui:VisualElement name="connectionDetails" class="umcp-connection-details">
+            <!-- Connection details will be populated by ConnectionDetailsView component in code -->
+            <ui:VisualElement name="detailsContainer" />
+
+            <!-- Action Buttons (populated in code with ConnectionActionsView and Revoke button) -->
+            <ui:VisualElement name="actionButtonsContainer" />
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>

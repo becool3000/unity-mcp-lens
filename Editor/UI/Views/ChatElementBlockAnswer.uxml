@@ -1,0 +1,12 @@
+<UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" xmlns="UnityEngine.UIElements" editor-extension-mode="False">
+    <ui:VisualElement class="mui-chat-root mui-chat-response">
+        <ui:VisualElement name="textFieldRoot" class="mui-chat-element-text-area">
+        </ui:VisualElement>
+    </ui:VisualElement>
+    <ui:VisualElement>
+        <ui:Foldout name="sourcesFoldout" class="mui-chat-foldout mui-chat-sources-foldout" text="Sources">
+            <ui:VisualElement name="sourcesContent">
+            </ui:VisualElement>
+        </ui:Foldout>
+    </ui:VisualElement>
+</UXML>

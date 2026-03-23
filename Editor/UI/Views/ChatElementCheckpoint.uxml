@@ -1,0 +1,10 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" xmlns="UnityEngine.UIElements" xmlns:assistant="Unity.AI.Assistant.UI.Editor.Scripts.Components" editor-extension-mode="False">
+    <ui:VisualElement name="checkpointElementSection" class="mui-chat-checkpoint">
+        <ui:Button name="checkpointButton" tooltip="Restore this checkpoint" class="mui-action-button mui-chat-checkpoint-button">
+            <ui:Image name="checkpointButtonImage" class="mui-action-button-image-large mui-icon-checkpoint" />
+        </ui:Button>
+        <ui:VisualElement name="checkpointTextSection" class="mui-checkpoint-text-root">
+            <ui:Label picking-mode="ignore" name="checkpointText" text="Checkpoint created" />
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>

@@ -1,0 +1,44 @@
+<UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" xmlns="UnityEngine.UIElements" editor-extension-mode="False">
+    <ui:VisualElement class="mui-popup-shadow" picking-mode="Ignore">
+    </ui:VisualElement>
+
+    <ui:VisualElement name="popupRoot" class="mui-selection-popup-root">
+        <VisualElement name="attachItemSearchFieldRoot" class="mui-selection-search-bar-row">
+            <VisualElement name="searchFieldContainer" class="mui-search-field-container">
+            </VisualElement>
+            <ui:Button name="annotateButton" size="s" class="mui-action-button mui-selection-popup-action-button" tooltip="Capture and annotate a screenshot with drawing tools">
+                <ui:Image picking-mode="ignore" class="mui-action-button-image-large mui-icon-pen"/>
+            </ui:Button>
+            <ui:Button name="takeScreenshotButton" size="s" class="mui-action-button mui-selection-popup-action-button" tooltip="Take and attach a screenshot of your open Editor windows">
+                <ui:Image picking-mode="ignore" class="mui-action-button-image-large mui-icon-context-virtual"/>
+            </ui:Button>
+            <ui:Button name="uploadCustomButton" size="s" class="mui-action-button mui-selection-popup-action-button">
+                <ui:Image picking-mode="ignore" class="mui-action-button-image-large mui-icon-pick"/>
+            </ui:Button>
+        </VisualElement>
+        <TabView name="selectionTabView" class="mui-selection-tab-view" />
+
+        <VisualElement name="initialSelectionPopupMessage" class="mui-selection-popup-initial">
+            <VisualElement name="noResultsMessage" class="mui-selection-popup-no-results-message">
+                <Label text="No results found for"/>
+                <Label name="noResultsSearchDisplay" class="mui-selection-popup-search-string" />
+            </VisualElement>
+            <Label name="instruction1Message" class="mui-selection-popup-search-message mui-selection-popup-light" text="Search sources inside of Unity and attach them your prompt for additional context." />
+            <Label name="instruction2Message" class="mui-selection-popup-search-message mui-selection-popup-light" text="Or drag and drop them directly below."/>
+        </VisualElement>
+
+        <VisualElement name="loadingIndicator" class="mui-selection-popup-loading">
+            <Label class="mui-selection-popup-light" text="Loading results..." />
+        </VisualElement>
+
+        <ui:VisualElement name="listViewContainer" class="mui-selection-popup-list-container"/>
+        <VisualElement name="pagingContainerSpacer" />
+        <VisualElement name="pagingContainer" class="mui-selection-popup-paging">
+            <Label name="pagingLabel" class="mui-selection-popup-light mui-selection-popup-paging-text" text="Showing" />
+            <VisualElement name="pagingSpacer" />
+            <Button name="previousPageButton" class="mui-selection-popup-paging-button" />
+            <Button name="nextPageButton" class="mui-selection-popup-paging-button" />
+        </VisualElement>
+
+    </ui:VisualElement>
+</UXML>

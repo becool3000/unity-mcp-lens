@@ -1,0 +1,8 @@
+.model-title-card-info {
+    background-image: resource("Packages/com.unity.ai.assistant/Modules/Unity.AI.Generators.UI/Icons/Info.png");
+    -unity-background-scale-mode: scale-to-fit;
+}
+
+.model-title-card:hover .model-title-card-info {
+    display: flex;
+}

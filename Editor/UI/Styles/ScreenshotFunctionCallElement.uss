@@ -1,0 +1,11 @@
+.screenshot-preview-image {
+    max-width: 100%;
+    max-height: 180px;
+}
+
+.screenshot-preview-loading {
+    color: var(--muse-chat-foregrounds-50);
+    font-size: 11px;
+    -unity-font-style: italic;
+    padding: 20px;
+}

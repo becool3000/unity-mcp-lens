@@ -1,0 +1,5 @@
+<UXML xmlns="UnityEngine.UIElements" xmlns:toolkit="Unity.AI.Toolkit.Accounts.Components">
+    <Style src="./DropdownLoading.uss" />
+    <toolkit:Spinner/>
+    <Label name="message"/>
+</UXML>

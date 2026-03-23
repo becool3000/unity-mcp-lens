@@ -1,0 +1,28 @@
+{
+    "name": "Unity.AI.Assistant.AssetGenerators.Editor",
+    "rootNamespace": "",
+    "references": [
+        "GUID:54873ba724a78469988c8aafb2abf4e2",
+        "GUID:aa454c0a07d2f4c6d8e03da09405270b",
+        "GUID:e3051e6249837eb4aa4eeeb16fa62de2",
+        "GUID:014b346a84d6445cad431c8b47c25633",
+        "GUID:1395b03e142ba0a44a7e77b3d90f334b"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": true,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "System.Runtime.CompilerServices.Unsafe.dll",
+        "Newtonsoft.Json.dll",
+        "Microsoft.CodeAnalysis.dll",
+        "Microsoft.CodeAnalysis.CSharp.dll",
+        "System.Collections.Immutable.dll"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

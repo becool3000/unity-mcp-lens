@@ -1,0 +1,13 @@
+﻿TexturePropertyField .unity-label {
+    min-width: 50px;
+    width: 150px;
+    flex-shrink: 1;
+}
+
+TexturePropertyField .unity-base-field__input {
+    min-width: 160px;
+}
+
+TexturePropertyField PopupTextElement {
+    text-overflow: ellipsis;
+}

@@ -1,0 +1,3 @@
+.hide-input-reference {
+    display: none;
+}

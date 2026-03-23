@@ -1,0 +1,37 @@
+<UXML xmlns="UnityEngine.UIElements">
+    <Style src="../../../Unity.AI.Generators.UI/StyleSheets/FlexUtilities.uss" />
+
+    <VisualElement class="spritesheet-settings-container flex-grow p-12 pb-0">
+        <!-- Tile Configuration Section -->
+        <VisualElement class="spritesheet-settings-section pb-2">
+            <Label class="spritesheet-settings-section-title font-bold pb-6" text="Tile Configuration"/>
+            <VisualElement class="spritesheet-settings-row flex-row items-center pb-2">
+                <Label class="spritesheet-settings-label width-72px flex-no-shrink" text="Columns"/>
+                <IntegerField name="tile-columns-field" class="spritesheet-settings-field width-72px" value="4"/>
+            </VisualElement>
+            <VisualElement class="spritesheet-settings-row flex-row items-center pb-2">
+                <Label class="spritesheet-settings-label width-72px flex-no-shrink" text="Rows"/>
+                <IntegerField name="tile-rows-field" class="spritesheet-settings-field width-72px" value="4"/>
+            </VisualElement>
+        </VisualElement>
+
+        <!-- Output Resolution Section -->
+        <VisualElement class="spritesheet-settings-section mb-6 pt-12">
+            <Label class="spritesheet-settings-section-title font-bold pb-6" text="Output Resolution"/>
+            <VisualElement class="spritesheet-settings-row flex-row items-center pb-2">
+                <Label class="spritesheet-settings-label width-72px flex-no-shrink" text="Width"/>
+                <IntegerField name="output-width-field" class="spritesheet-settings-field width-72px" value="1024"/>
+            </VisualElement>
+            <VisualElement class="spritesheet-settings-row flex-row items-center pb-2">
+                <Label class="spritesheet-settings-label width-72px flex-no-shrink" text="Height"/>
+                <IntegerField name="output-height-field" class="spritesheet-settings-field width-72px" value="1024"/>
+            </VisualElement>
+        </VisualElement>
+    </VisualElement>
+
+    <!-- Buttons -->
+    <VisualElement class="spritesheet-settings-buttons flex-row justify-end border-top-1px border-color-dark flex-no-grow flex-shrink">
+        <Button name="cancel-button" text="Cancel"/>
+        <Button name="ok-button" text="OK"/>
+    </VisualElement>
+</UXML>

@@ -1,0 +1,18 @@
+<UXML class="height-128px" xmlns="UnityEngine.UIElements" xmlns:editorui="UnityEditor.UIElements">
+    <Style src="./ImageReferenceObjectField.uss" />
+    <VisualElement name="image-reference-object-field" class="image-reference-object-field height-128px" focusable="true">
+        <editorui:ObjectField
+            name="image-reference-object-field__input-field"
+            class="flex-grow-100pct p-0 m-0 image-reference-object-field__input-field"
+            type="UnityEngine.Texture2D, UnityEngine.CoreModule"
+            label="Select an object:">
+            <VisualElement name="image-reference-object-field__overlay" class="image-reference-object-field__overlay" picking-mode="Ignore">
+                <Button name="image-reference-search-button" text="Patterns" tooltip="Search pattern library" />
+                <VisualElement class="button-spacer" />
+                <Button name="image-reference-settings-button" tooltip="More">
+                    <Image class="unity-button__image"/>
+                </Button>
+            </VisualElement>
+        </editorui:ObjectField>
+    </VisualElement>
+</UXML>

@@ -1,0 +1,109 @@
+.settingspopup__element {
+    position: absolute;
+    background-color: var(--muse-chat-backgrounds-200);
+    border-radius: 4px;
+    border-width: 1px;
+    border-color: var(--muse-chat-backgrounds-100);
+    padding: 4px 0;
+    min-width: 240px;
+}
+
+.settings-popup-item {
+    padding: 2px 6px;
+    margin: 0;
+}
+
+.settings-popup-item.settings-popup-button {
+    background-color: rgba(0, 0, 0, 0);
+    border-width: 0;
+    color: var(--muse-chat-text-primary);
+    -unity-text-align: middle-left;
+    border-radius: 0;
+}
+
+.settings-popup-item.settings-popup-button:hover {
+    background-color: var(--muse-chat-popup-hover);
+}
+
+.setting-popup-refresh-project-overview {
+    flex-direction: row;
+}
+
+.settings-popup-separator {
+    height: 1px;
+    background-color: var(--muse-chat-separator-line);
+    margin: 4px 6px;
+}
+
+.settings-popup-checkbox-row {
+    flex-direction: row;
+    align-items: center;
+}
+
+.settings-popup-checkbox-row:hover {
+    background-color: var(--muse-chat-popup-hover);
+}
+
+.settings-popup-checkbox-row .unity-toggle {
+    margin: 0;
+    padding: 0;
+    flex-shrink: 0;
+}
+
+.settings-popup-label {
+    margin-left: 8px;
+    flex-grow: 1;
+    color: var(--muse-chat-text-primary);
+}
+
+.session-override-label {
+    flex-grow: 1;
+    color: var(--muse-chat-text-primary);
+}
+
+.settings-popup-foldout-row {
+    flex-direction: row;
+}
+
+.settings-popup-foldout-row:hover {
+    background-color: var(--muse-chat-popup-hover);
+}
+
+.settings-popup-foldout > .unity-toggle {
+    margin: 0;
+    padding: 0;
+}
+
+.settings-popup-foldout-content {
+    display: none;
+    max-height: 150px;
+}
+
+.settings-popup-override-item {
+    padding: 2px 6px;
+    margin-left: 25px;
+    flex-direction: row;
+}
+
+.settings-popup-override-label {
+    flex-grow: 1;
+    color: var(--muse-chat-text-primary);
+}
+
+.settings-popup-override-remove {
+    width: 16px;
+    height: 16px;
+    padding: 1px;
+}
+
+.settings-popup-override-remove:hover {
+    background-color: var(--muse-chat-popup-hover);
+}
+
+.settings-popup-label.disabled {
+    color: var(--muse-chat-text-secondary);
+}
+
+.setting-popup-spinner-container{
+    align-self: center;
+}

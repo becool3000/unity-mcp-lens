@@ -1,0 +1,10 @@
+<UXML class="flex-row flex-grow" xmlns="UnityEngine.UIElements">
+    <Image class="model-title-card-image flex-no-shrink rounded-6px size-40px"/>
+    <VisualElement class="flex-grow-100pct flex-column">
+        <VisualElement class="flex-row">
+            <Image class="model-title-card-provider-icon size-12px self-center mt-4 ml-5" />
+            <Label class="model-title-card-label font-bold text-ellipsis pt-4 pl-5"/>
+        </VisualElement>
+        <Label class="model-title-card-tags color-dark-gray text-ellipsis height-16px pt-1 pl-5"/>
+    </VisualElement>
+</UXML>

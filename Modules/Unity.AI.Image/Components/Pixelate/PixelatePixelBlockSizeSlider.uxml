@@ -1,0 +1,4 @@
+<UXML xmlns="UnityEngine.UIElements">
+    <SliderInt tooltip="Number of neighboring pixels sampled for Pixelation"
+               show-input-field="true" label="Sampling Size" low-value="1" high-value="16"/>
+</UXML>

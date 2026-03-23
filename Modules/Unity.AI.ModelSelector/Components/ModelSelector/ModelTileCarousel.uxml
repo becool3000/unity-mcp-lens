@@ -1,0 +1,6 @@
+<UXML class="width-100pct height-168px" xmlns="UnityEngine.UIElements" xmlns:uitk="Unity.AI.Generators.UI">
+    <Style src="./ModelTileCarousel.uss"/>
+    <uitk:CarouselView class="rounded-12px relative items-stretch justify-start width-100pct height-168px"/>
+    <Button class="caret-left absolute hide border-none width-24px height-24px"/>
+    <Button class="caret-right absolute hide border-none width-24px height-24px"/>
+</UXML>

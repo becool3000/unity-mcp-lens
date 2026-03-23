@@ -1,0 +1,400 @@
+.assistantview__element-root {
+    flex-grow: 1;
+}
+
+#root-main {
+    flex-grow: 1;
+}
+
+.mui-header {
+    flex-shrink: 0;
+}
+
+.mui-header-row {
+    flex-direction: row;
+    align-items: flex-start;
+    background-color: var(--muse-chat-backgrounds-200);
+    border-bottom-color: var(--muse-chat-backgrounds-75);
+    border-bottom-width: 1px;
+}
+
+.mui-header-button {
+    margin: 8px;
+    margin-right: 0;
+    height: 22px;
+    min-height: 22px;
+    min-width: 20px;
+    padding-left: 2px;
+    padding-right: 2px;
+    align-items: center;
+}
+
+.mui-header-label.mui-compact {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.mui-header-label {
+    left: auto;
+    right: auto;
+    flex-grow: 1;
+    flex-shrink: 1;
+    align-self: center;
+    -unity-text-align: middle-center;
+    -unity-font-style: bold;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-left: 50px;
+}
+
+#historyButton {
+    right: 8px;
+}
+
+.mui-chat-history-open {
+    background-color: var(--muse-chat-button-pressed);
+}
+
+.mui-header-dropdown {
+    position: absolute;
+    right: 8px;
+    top: 8px;
+
+    min-width: 15px;
+    height: 24px;
+}
+
+.mui-chat-content {
+    flex-grow: 1;
+}
+
+.mui-chat-content-inner {
+    flex-grow: 1;
+    flex-direction: row;
+}
+
+.mui-footer {
+    flex-shrink: 0;
+    padding: 16px;
+    padding-top: 0;
+    flex-direction: column;
+}
+
+#chatContentRoot {
+    background-color: var(--muse-chat-backgrounds-150);
+    flex-grow: 1;
+    min-height: 150px;
+}
+
+#historyPanelRoot {
+    position: absolute;
+    right: 0;
+    top: 2px;
+    bottom: 1px;
+    border-left-width: 1px;
+    border-left-color: var(--muse-chat-backgrounds-50);
+}
+
+.mui-conversation-panel {
+    flex-grow: 1;
+}
+
+.mui-chat-empty-state {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    justify-content: center;
+    align-items: center;
+}
+
+.mui-chat-empty-state-loading {
+    justify-content: center;
+    align-items: center;
+}
+
+.mui-chat-empty-state-content {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    justify-content: center;
+    align-items: center;
+}
+
+.mui-chat-whats-new-button {
+    position: absolute;
+    top: 8px;
+    background-color: rgba(0,0,0,0);
+    min-height: 24px;
+    border-width: 0;
+}
+
+.mui-chat-whats-new-button:hover {
+    background-color: var(--muse-chat-backgrounds-75);
+}
+
+.mui-chat-disclaimer {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    -unity-text-align: middle-center;
+    max-width: 350px;
+}
+
+.mui-chat-disclaimer-text {
+    white-space: normal;
+    font-size: var(--muse-chat-default-font-size);
+    color: var(--muse-chat-text-secondary-on-background-50);
+    -unity-text-align: middle-center;
+}
+
+#chatPanelRoot {
+    flex-grow: 1;
+}
+
+#progressElementContainer {
+    flex-shrink: 0;
+    align-self: center;
+    align-items: stretch;
+    justify-content: flex-end;
+    flex-direction: column;
+    width: 100%;
+    max-width: 768px;
+    border-top-color: var(--muse-chat-backgrounds-50);
+}
+
+#chatTextFieldRoot {
+    flex-direction: column;
+    max-width: 768px;
+    width: 100%;
+    align-self: center;
+}
+
+.mui-chat-selected-context-notification {
+    max-width: 700px;
+    flex-direction: row;
+    align-self: center;
+    width: 100%;
+    padding-bottom: 8px;
+}
+
+.mui-chat-context-dropzone {
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    right: 0;
+    cursor: arrow;
+}
+
+.mui-chat-context-dropzone-container {
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    background-color: var(--muse-chat-backgrounds-50);
+    border-width: 2px;
+    border-color: var(--muse-chat-accent-50);
+    border-radius: var(--muse-chat-border-radius);
+}
+
+.mui-chat-drop-zone {
+    flex-grow: 1;
+    margin: 0 16px 16px;
+}
+
+.mui-chat-dropzone-text-title {
+    align-self: center;
+    -unity-font-style: bold;
+    font-size: var(--muse-chat-title-font-size);
+    padding-bottom: 10px;
+}
+
+.mui-chat-dropzone-text {
+    align-self: center;
+    color: var(--muse-chat-text-secondary);
+    font-size: var(--muse-chat-header-font-size);
+}
+
+.mui-chat-selected-context-labels-root{
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.mui-context-selection-text {
+    padding-right: 8px;
+}
+
+#selectionLabel.mui-compact {
+    display: none;
+}
+
+
+.mui-chat-user-context-root {
+    max-width: 768px;
+    width: 100%;
+    flex-direction: row;
+    align-self: center;
+    justify-content: space-between;
+    align-items: flex-start;
+}
+
+.mui-chat-selected-context-root {
+    display: flex;
+    justify-content: flex-start;
+    flex-direction: row;
+    flex-wrap: wrap;
+    margin-top: 8px;
+}
+
+.mui-context-dropdown-toggle {
+    margin-top: 8px;
+}
+
+
+.mui-chat-clear-context-button {
+    align-self: flex-start;
+    height: 20px;
+    border-width: 0;
+    background-color: transparent;
+    margin-top: 8px;
+}
+
+#clearContextButton:hover {
+    background-color: transparent;
+}
+
+.mui-chat-clear-context-button:disabled {
+    display: none;
+}
+
+.mui-selected-context-button-open {
+    background-color: var(--muse-chat-button-active);
+}
+
+#root-panel {
+    flex-grow: 1;
+}
+
+.mui-chat-popup-container {
+    position: absolute;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+}
+
+.mui-chat-input-root {
+    display: flex;
+    flex-direction: column;
+}
+
+#popupAnchor {
+    margin-left: 8px;
+}
+
+#session-notifications .banner {
+    border-width: 1px;
+    border-color: var(--muse-chat-backgrounds-50);
+}
+
+#session-notifications {
+    padding: 0 8px 8px 8px;
+}
+
+#session-notifications.empty {
+    padding: 0;
+}
+
+Button.banner-right-action {
+    align-self: flex-end;
+}
+
+#dropZoneOverlay {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    right: 0;
+}
+
+.mui-search-row {
+    flex-direction: row;
+    align-items: flex-start;
+    margin-right: 12px;
+    margin-top: 12px;
+    margin-left: 4px;
+}
+
+.mui-search-button {
+    padding: 0;
+    align-items: center;
+    align-self: center;
+    height: 20px;
+    width: 20px;
+    --unity-image-size: scale-to-fit;
+}
+
+.mui-search-button-image {
+    height: auto;
+    width: auto;
+}
+
+#searchPreviousButton {
+    margin-right: 2px;
+}
+
+#searchNextButton {
+    margin-left: 2px;
+    margin-right: 0;
+}
+
+#openSearchButton {
+    margin-right: 4px;
+}
+
+.mui-search-open {
+    background-color: var(--muse-chat-button-pressed);
+}
+
+.mui-search-field {
+    flex-grow: 1;
+    margin-left: 8px;
+    align-self: stretch;
+}
+
+.mui-conversation-search-bar {
+    flex-grow: 1;
+    flex-shrink: 0;
+    width: auto;
+    height: 20px;
+    margin-left: 8px;
+}
+
+#searchPlaceholderText {
+    align-items: center;
+    align-self: center;
+    margin-left: 6px;
+    cursor: text;
+    top: 4px;
+    color: var(--muse-chat-text-secondary);
+}
+
+#searchResultCount {
+    align-self: center;
+    min-width: 20px;
+}
+
+#searchPlaceholderContent {
+    margin-left: 6px;
+    cursor: text;
+    position: absolute;
+    top: 2px;
+}

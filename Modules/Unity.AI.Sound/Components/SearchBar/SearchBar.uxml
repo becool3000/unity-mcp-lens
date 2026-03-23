@@ -1,0 +1,4 @@
+﻿<UXML xmlns="UnityEngine.UIElements">
+    <Style src="./SearchBar.uss"/>
+    <TextField class="searchbar-text-field"/>
+</UXML>

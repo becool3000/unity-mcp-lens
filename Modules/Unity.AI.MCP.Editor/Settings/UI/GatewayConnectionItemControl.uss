@@ -1,0 +1,58 @@
+/* Gateway Connection Item Container */
+.umcp-gateway-connection-item {
+    flex-direction: column;
+    margin: 2px;
+    padding: 0;
+    border-color: rgba(0, 0, 0, 0.6);
+    border-width: 1px;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.umcp-gateway-connection-item:hover .umcp-gateway-connection-header {
+    background-color: rgba(128, 128, 128, 0.15);
+}
+
+/* Header */
+.umcp-gateway-connection-header {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 8px;
+    min-height: 28px;
+    background-color: rgba(128, 128, 128, 0.1);
+    border-width: 0;
+}
+
+.umcp-gateway-connection-left {
+    flex-direction: row;
+    align-items: center;
+    flex-grow: 1;
+    flex-shrink: 1;
+}
+
+.umcp-gateway-connection-right {
+    flex-direction: row;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+.umcp-gateway-provider-name {
+    margin-left: 8px;
+    flex-shrink: 1;
+    -unity-font-style: bold;
+}
+
+.umcp-gateway-timestamp {
+    opacity: 0.6;
+    margin-right: 8px;
+    flex-shrink: 0;
+}
+
+.umcp-gateway-status-label {
+    margin-right: 4px;
+    padding: 2px 6px;
+    border-radius: 3px;
+    background-color: rgba(76, 175, 80, 0.3); /* Green tint for auto-approved */
+    color: rgb(100, 200, 100);
+}

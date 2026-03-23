@@ -1,0 +1,10 @@
+<UXML xmlns="UnityEngine.UIElements" xmlns:ui="Unity.AI.Image.Components">
+    <Style src="./ImageReferenceStack.uss"/>
+    <ui:PromptImageReference name="imagePrompt" />
+    <ui:StyleImageReference name="style" />
+    <ui:CompositionImageReference name="composition" />
+    <ui:PoseImageReference name="pose" />
+    <ui:DepthImageReference name="depth" />
+    <ui:LineArtImageReference name="colorSketch" />
+    <ui:FeatureImageReference name="feature" />
+</UXML>

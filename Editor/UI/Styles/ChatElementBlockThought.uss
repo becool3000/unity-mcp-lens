@@ -1,0 +1,30 @@
+.chatelementblockthought__element-root {
+    margin-top: 8px;
+    margin-bottom: 10px;
+}
+
+.thought-container {
+    flex-direction: column;
+}
+
+.thought-title {
+    color: var(--muse-chat-text-thoughts);
+    -unity-font-style: bold;
+    margin-bottom: 4px;
+}
+
+.thought-content {
+    white-space: normal;
+    -unity-text-align: upper-left;
+    color: var(--muse-chat-text-thoughts);
+    flex-shrink: 1;
+    overflow: hidden;
+}
+
+.thought-content Label {
+    color: var(--muse-chat-text-thoughts);
+}
+
+.thought-content * {
+    color: var(--muse-chat-text-thoughts);
+}

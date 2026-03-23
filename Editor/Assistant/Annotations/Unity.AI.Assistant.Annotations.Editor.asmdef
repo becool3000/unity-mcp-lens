@@ -1,0 +1,19 @@
+{
+    "name": "Unity.AI.Assistant.Annotations.Editor",
+    "rootNamespace": "Unity.AI.Assistant.Annotations",
+    "references": [
+        "GUID:54873ba724a78469988c8aafb2abf4e2",
+        "GUID:aa454c0a07d2f4c6d8e03da09405270b"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": true,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

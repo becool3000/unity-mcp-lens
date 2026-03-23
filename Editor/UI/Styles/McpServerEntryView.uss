@@ -1,0 +1,42 @@
+.mcp-server-header {
+    flex-direction: row;
+    align-items: center;
+}
+
+.mcp-server-status-indicator {
+    width: 12px;
+    height: 12px;
+    border-radius: 6px;
+    margin-right: 8px;
+    background-color: var(--muse-chat-primary-500);
+}
+
+.mcp-server-status--entry-exists {
+    background-color: var(--muse-chat-primary-500);
+}
+
+.mcp-server-status--starting {
+    background-color: var(--muse-chat-icon-warning-color);
+}
+
+.mcp-server-status--started-successfully {
+    background-color: var(--muse-chat-icon-success-color);
+}
+
+.mcp-server-status--stopping {
+    background-color: var(--muse-chat-icon-warning-color);
+}
+
+.mcp-server-status--failed-to-start {
+    background-color: var(--muse-chat-icon-error-color);
+}
+
+.mcp-server-name-label {
+    -unity-font-style: bold;
+    flex-grow: 0;
+}
+
+.mcp-server-entry-option-label {
+    flex-direction: row;
+    align-items: center;
+}

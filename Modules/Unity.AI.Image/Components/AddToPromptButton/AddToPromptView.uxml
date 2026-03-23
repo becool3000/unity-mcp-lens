@@ -1,0 +1,44 @@
+<UXML xmlns="UnityEngine.UIElements" xmlns:ui="Unity.AI.Image.Components">
+    <Style src="../../../Unity.AI.Generators.UI/StyleSheets/FlexUtilities.uss" />
+    <Style src="./AddToPromptView.uss"/>
+    <Template src="OperatorTemplate.uxml" name="OperatorTemplate"/>
+
+    <VisualElement class="operators-container">
+        <VisualElement class="row">
+            <Instance template="OperatorTemplate" class="operator-container" name="operator-image-prompt">
+                <AttributeOverrides element-name="operator-name" text="Image Reference" />
+                <AttributeOverrides element-name="operator-description" text="Break down an image and build it back up. Great for variating on existing images. Can also be used to guide where overall shapes go in your final generation." />
+            </Instance>
+            <Instance template="OperatorTemplate" class="operator-container" name="operator-style">
+                <AttributeOverrides element-name="operator-name" text="Style Reference" />
+                <AttributeOverrides element-name="operator-description" text="Your provided image will guide the style of your generation. Higher  strength means more influence. Combine these with other image reference."/>
+            </Instance>
+            <Instance template="OperatorTemplate" class="operator-container" name="operator-composition">
+                <AttributeOverrides element-name="operator-name" text="Composition Reference" />
+                <AttributeOverrides element-name="operator-description" text="The generator will analyze the provided image, detect the edges of it and try to create the same composition. More strength means less freedom."/>
+            </Instance>
+        </VisualElement>
+        <VisualElement class="row">
+            <Instance template="OperatorTemplate" class="operator-container" name="operator-pose">
+                <AttributeOverrides element-name="operator-name" text="Pose Reference" />
+                <AttributeOverrides element-name="operator-description" text="Supply an image of a person in a certain pose, and the generation will try to adhere to the pose provided. More strength means less freedom."/>
+            </Instance>
+            <Instance template="OperatorTemplate" class="operator-container" name="operator-depth">
+                <AttributeOverrides element-name="operator-name" text="Depth Reference" />
+                <AttributeOverrides element-name="operator-description" text="Provide a depth image where black is far away and white is close by and it will guide the generation. Can be combined with other operators."/>
+            </Instance>
+            <Instance template="OperatorTemplate" class="operator-container" name="operator-line-art">
+                <AttributeOverrides element-name="operator-name" text="Line Art Reference" />
+                <AttributeOverrides element-name="operator-description" text="A black on white sketch can drive the generation much like a composition would. A great way to use your artistic skills in the generation process."/>
+            </Instance>
+            <Instance template="OperatorTemplate" class="operator-container" name="operator-feature">
+                <AttributeOverrides element-name="operator-name" text="Feature Reference" />
+                <AttributeOverrides element-name="operator-description" text="The generator will try pick up things from your image like clothing, facial characteristics and transpose them to the final generation."/>
+            </Instance>
+        </VisualElement>
+
+
+
+        </VisualElement>
+
+</UXML>

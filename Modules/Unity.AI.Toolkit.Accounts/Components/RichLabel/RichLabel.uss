@@ -1,0 +1,3 @@
+RichLabel.rich-text-link {
+    cursor: link;
+}

@@ -1,0 +1,18 @@
+<UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" xmlns="UnityEngine.UIElements" editor-extension-mode="False">
+    <ui:VisualElement class="mui-chat-root mui-chat-user-message">
+        <ui:VisualElement class="mui-chat-message-content mui-chat-message-user-content">
+            <ui:VisualElement class="mui-chat-element-text-area">
+                <ui:Label name="userCommandLabel">
+                </ui:Label>
+                <ui:VisualElement name="userMessageTextFieldRoot">
+                </ui:VisualElement>
+            </ui:VisualElement>
+            <ui:VisualElement>
+                <ui:Foldout name="contextFoldout" class="mui-chat-foldout mui-chat-context-foldout" text="Context">
+                    <ui:VisualElement name="contextContent">
+                    </ui:VisualElement>
+                </ui:Foldout>
+            </ui:VisualElement>
+        </ui:VisualElement>
+    </ui:VisualElement>
+</UXML>

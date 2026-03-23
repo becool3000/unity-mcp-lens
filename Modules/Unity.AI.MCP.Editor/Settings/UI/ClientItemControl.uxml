@@ -1,0 +1,18 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements">
+    <ui:VisualElement class="umcp-client-item">
+        <ui:VisualElement class="umcp-client-header">
+            <ui:VisualElement name="statusIndicator" class="umcp-status-indicator" />
+            <ui:Label name="clientName" />
+            <ui:VisualElement class="umcp-client-actions">
+                <ui:Button name="configureButton" text="Configure" />
+                <ui:Button name="checkButton" text="Check Status" />
+            </ui:VisualElement>
+        </ui:VisualElement>
+
+        <ui:Label name="clientStatus" />
+        <ui:VisualElement name="warningSection">
+            <ui:Label name="warningLabel"/>
+            <ui:Button name="warningHelpButton" text="Help" />
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>

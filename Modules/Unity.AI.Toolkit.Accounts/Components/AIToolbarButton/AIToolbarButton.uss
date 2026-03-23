@@ -1,0 +1,44 @@
+:root {
+    --ai-toolbar-button-notification-background-color: #FFF;
+    --ai-toolbar-button-notification-text-color: #000;
+}
+
+.unity-toolbar-button.ai-toolbar-button {
+    overflow: hidden;
+    transition-property: color;
+    transition-duration: 150ms;
+    transition-timing-function: ease-out;
+}
+
+.ai-toolbar-button-bg-overlay {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    opacity: 0;
+    transition-property: opacity;
+    transition-duration: 150ms;
+    transition-timing-function: ease-out;
+    background-color: var(--ai-toolbar-button-notification-background-color);
+}
+
+.unity-toolbar-button.ai-toolbar-button--with-points-notifications {
+    color: var(--ai-toolbar-button-notification-text-color);
+}
+
+.unity-toolbar-button.ai-toolbar-button--with-points-notifications > .ai-toolbar-button-bg-overlay {
+    opacity: 1;
+}
+
+.unity-toolbar-button.ai-toolbar-button--with-points-notifications > .unity-text-element {
+    color: var(--ai-toolbar-button-notification-text-color);
+}
+
+.unity-toolbar-button.ai-toolbar-button--with-points-notifications > .unity-image {
+    --unity-image-tint-color: var(--ai-toolbar-button-notification-text-color);
+}
+
+.unity-toolbar-button.ai-toolbar-button--with-points-notifications > .unity-icon-arrow {
+    -unity-background-image-tint-color: var(--ai-toolbar-button-notification-text-color);
+}

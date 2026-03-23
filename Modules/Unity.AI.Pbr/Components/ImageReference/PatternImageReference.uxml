@@ -1,0 +1,15 @@
+<UXML xmlns="UnityEngine.UIElements" xmlns:editorui="UnityEditor.UIElements">
+    <Style src="./ImageReference.uss" />
+    <Style src="./PatternImageReference.uss" />
+    <VisualElement class="image-reference pr-1">
+        <editorui:Template src="./ImageReferenceHeader.uxml" name="ImageReferenceHeader" />
+        <editorui:Template src="./ImageReferenceObjectField.uxml" name="ImageReferenceObjectField" />
+        <editorui:Template src="./ImageReferenceStrength.uxml" name="ImageReferenceStrength" />
+
+        <Instance template="ImageReferenceHeader" class="pl-2">
+            <AttributeOverrides element-name="header-title" text="Pattern Reference" tooltip="Use Pattern Reference to create a material from an existing image. For best results, use black-and-white or high-contrast images." />
+        </Instance>
+        <Instance template="ImageReferenceObjectField" class="p-4-2" />
+        <Instance template="ImageReferenceStrength" class="hide" />
+    </VisualElement>
+</UXML>

@@ -1,0 +1,5 @@
+<UXML xmlns="UnityEngine.UIElements">
+    <Label class="hide font-bold p-4" text="Options"/>
+    <Toggle class="generation-options-use-custom-seed" label="Custom Seed" tooltip="Use the same seed value to reproduce identical results. Leave empty for random generation."/>
+    <IntegerField class="generation-options-custom-seed hide"/>
+</UXML>

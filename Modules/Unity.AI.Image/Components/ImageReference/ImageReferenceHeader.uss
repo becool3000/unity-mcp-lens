@@ -1,0 +1,12 @@
+:root {
+    flex-direction: row;
+    align-items: center;
+}
+
+#delete-image-reference .unity-image {
+    --unity-image: url("project:/Packages/com.unity.ai.assistant/Modules/Unity.AI.Image/Icons/Close L.png");
+}
+
+.no-delete #delete-image-reference {
+    display: none;
+}

@@ -1,0 +1,5 @@
+<UXML xmlns="UnityEngine.UIElements">
+    <Style src="./InputReferenceHeader.uss" />
+    <Label name="header-title" class="font-bold" text="Image Reference" />
+    <Button name="delete-input-reference" />
+</UXML>

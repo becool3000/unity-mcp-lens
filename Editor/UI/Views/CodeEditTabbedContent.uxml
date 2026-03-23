@@ -1,0 +1,12 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" editor-extension-mode="False">
+    <ui:VisualElement name="codeEditTabContainer" class="tab-container">
+        <ui:VisualElement name="codeEditTabButtons" class="tab-buttons">
+            <ui:Button name="codeEditCodeTab" text="Code" class="tab-button tab-active" />
+            <ui:Button name="codeEditPreviewTab" text="Preview" class="tab-button" />
+        </ui:VisualElement>
+        <ui:VisualElement name="codeEditTabContent" class="tab-content">
+            <ui:VisualElement name="codeEditCodePane" class="tab-pane" />
+            <ui:VisualElement name="codeEditPreviewPane" class="tab-pane" style="display: none;" />
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>

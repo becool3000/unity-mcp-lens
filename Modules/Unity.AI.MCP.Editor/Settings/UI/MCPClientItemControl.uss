@@ -1,0 +1,97 @@
+.umcp-client-list {
+    flex-direction: column;
+}
+
+.umcp-client-item {
+    flex-direction: column;
+    padding: 8px;
+    margin-bottom: 4px;
+    background-color: var(--unity-colors-helpbox-background);
+    border-radius: 3px;
+    border-width: 1px;
+    border-color: var(--unity-colors-helpbox-border);
+}
+
+.umcp-client-header {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 4px;
+}
+
+#clientName {
+    font-size: 14px;
+    -unity-font-style: bold;
+    margin-left: 8px;
+    flex-grow: 1;
+}
+
+.umcp-client-actions {
+    flex-direction: row;
+    flex-shrink: 0;
+}
+
+.umcp-client-actions > Button {
+    font-size: 11px;
+    padding: 4px 8px;
+    margin-left: 4px;
+    width: 100px;
+}
+
+#clientStatus {
+    font-size: 12px;
+    opacity: 0.8;
+    margin-left: 20px;
+    margin-bottom: 4px;
+    white-space: normal;
+}
+
+.umcp-client-buttons {
+    flex-direction: row;
+    flex-wrap: wrap;
+    margin-top: 4px;
+}
+
+.umcp-client-buttons .unity-button {
+    width: 80px;
+    height: 20px;
+    font-size: 11px;
+    margin-right: 2px;
+    margin-bottom: 2px;
+}
+
+.umcp-config-path {
+    font-size: 10px;
+    opacity: 0.7;
+    margin-top: 2px;
+}
+
+.umcp-no-clients-message {
+    padding: 8px;
+    -unity-text-align: middle-center;
+    opacity: 0.7;
+    -unity-font-style: italic;
+}
+
+#warningSection {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 4px;
+    margin-bottom: 4px;
+    padding: 4px 0;
+}
+
+#warningLabel {
+    color: var(--mcp-color-text-accent);
+    font-size: 11px;
+    flex-grow: 1;
+    margin-right: 8px;
+}
+
+#warningHelpButton {
+    font-size: 10px;
+    padding: 2px 8px;
+    width: 80px;
+    flex-shrink: 0;
+}

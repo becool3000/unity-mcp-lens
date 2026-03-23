@@ -1,0 +1,33 @@
+.pixelate-settings-container .metadata-type {
+    min-width: 110px;
+}
+.pixelate-settings-container {
+    flex-grow: 1;
+    margin-top: 4px;
+}
+
+.pixelate-container {
+    margin-top: 4px;
+    border-color: var(--unity-colors-button-border);
+    border-top-width: 1px;
+}
+
+.pixelate-setting {
+    flex-direction: row;
+    margin-bottom: 2px;
+}
+
+.doodle-pad-canvas {
+    height: 100px;
+    flex-grow: 1;
+    white-space: normal;
+    flex-shrink: 1;
+}
+
+#doodle-pad-canvas.doodle-pad-canvas {
+    position: relative;
+}
+
+.doodles-container {
+    flex-direction: column;
+}

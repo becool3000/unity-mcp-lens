@@ -1,0 +1,7 @@
+<UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" xmlns="UnityEngine.UIElements" editor-extension-mode="False">
+    <ui:ScrollView mode="Horizontal" horizontal-scroller-visibility="Auto" vertical-scroller-visibility="Auto" mouse-wheel-scroll-size="0">
+        <ui:VisualElement name="tableRoot" class="mui-chat-root mui-chat-response-table">
+            <ui:Label text="test"/>
+        </ui:VisualElement>
+    </ui:ScrollView>
+</UXML>

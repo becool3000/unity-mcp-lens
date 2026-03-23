@@ -1,0 +1,13 @@
+.base-image-doodle-container {
+    background-color: var(--unity-colors-object_field-background);
+    border-color: var(--unity-colors-object_field-border);
+    border-width: 1px;
+}
+
+#base-image-reference {
+    -unity-background-scale-mode: scale-to-fit;
+}
+
+#header-title {
+    padding: 4px;
+}

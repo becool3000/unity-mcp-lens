@@ -1,0 +1,11 @@
+.session-status-banner
+{
+    padding-right: 3px;
+    padding-left: 3px;
+}
+
+.session-status-banner .banner{
+    border-color: var(--unity-colors-button-border);
+    border-width: 1px;
+    margin-bottom: 5px;
+}

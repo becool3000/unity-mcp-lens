@@ -1,0 +1,33 @@
+MeshGenerator {
+    flex-grow: 1;
+}
+
+.vertical-layout vertical-layout-flex-grow {
+    flex-grow: 1;
+}
+
+.horizontal-layout-flex,
+.vertical-layout-flex {
+    display: none;
+}
+
+.horizontal-layout .horizontal-layout-flex {
+    display: flex;
+}
+
+.vertical-layout .vertical-layout-flex {
+    display: flex;
+}
+
+
+.horizontal-layout .left-stack {
+    min-width: 280px;
+}
+
+.grid-view .unity-scroll-view__content-viewport--vertical {
+    margin-right: 7px;
+}
+
+.grid-view-rows {
+    flex-grow: 1;
+}

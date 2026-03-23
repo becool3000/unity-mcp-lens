@@ -1,0 +1,9 @@
+<UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" xmlns="UnityEngine.UIElements" xmlns:promptpopup="Unity.AI.Assistant.UI.Editor.Scripts.Components.PromptPopup" editor-extension-mode="False">
+    <ui:VisualElement name="promptPopupContainer">
+        <ui:TextField name="promptPopupTextField" multiline="false" />
+        <ui:VisualElement class="prompt-popup-bottom-container">
+            <ui:VisualElement name="attachments" />
+            <promptpopup:SendPromptButton name="sendButton"/>
+        </ui:VisualElement>
+    </ui:VisualElement>
+</UXML>

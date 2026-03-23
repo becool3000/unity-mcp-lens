@@ -1,0 +1,29 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements"
+         xmlns:chat="Unity.AI.Assistant.Editor.SessionBanner"
+         xmlns="UnityEngine.UIElements" editor-extension-mode="False">
+    <ui:VisualElement name="rootPanel" class="mui-whats-new-root">
+        <ui:VisualElement name="landingPage" class="mui-whats-new-landing-page">
+            <ui:Label text="See what's new in Unity AI" class="mui-whats-new-header"/>
+            <ui:Label text="The newest release of Unity AI introduces agentic infrastructure backed by orchestration and multi-agent support to handle more complex prompts with more efficient context management." class="mui-whats-new-label"/>
+            <ui:Label text="Improvements to asset generation includes skyboxes, 3D meshes and textures, and UI toolkit components. Generate directly from Assistant." class="mui-whats-new-label"/>
+
+            <ui:ScrollView name="contentButtonRoot">
+            </ui:ScrollView>
+
+            <ui:VisualElement class="mui-whats-new-grow" />
+            <ui:Label text="&lt;a href=&quot;http://discussions.unity.com/c/ai-assistant-beta/73&quot;&gt;Join the conversation in Discussions&lt;/a&gt;" class="mui-whats-new-label"/>
+            <ui:VisualElement class="mui-whats-new-control-root">
+                <ui:Button name="closeButton" text="Close" class="mui-whats-new-control-button"/>
+            </ui:VisualElement>
+        </ui:VisualElement>
+
+        <ui:VisualElement name="contentRoot" class="mui-whats-new-content">
+        </ui:VisualElement>
+
+        <ui:VisualElement name="videoFullView" class="mui-whats-new-video-full-view">
+            <ui:VisualElement name="videoFullViewContent">
+            </ui:VisualElement>
+            <ui:Image picking-mode="ignore" class="mui-whats-new-video-icon mui-icon-shrink"/>
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>

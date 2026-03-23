@@ -1,0 +1,27 @@
+<!-- GenerateUI.uxml -->
+<UXML class="flex-grow-100pct" xmlns="UnityEngine.UIElements" xmlns:ui="Unity.AI.Sound.Components" xmlns:editor="UnityEditor.UIElements">
+    <Style src="../../../Unity.AI.Generators.UI/StyleSheets/FlexUtilities.uss" />
+    <Style src="./SoundEnvelope.uss" />
+    <VisualElement class="flex-grow bg-light">
+        <VisualElement class="flex-grow bg-medium rounded-8px m-8">
+            <editor:Toolbar>
+                <editor:ToolbarButton class="play-button m-2 p-4 size-24px border-none toolbar-play" tooltip="Play/Stop"/>
+                <editor:ToolbarToggle class="loop-button m-2 p-4 size-24px border-none toolbar-loop" tooltip="Loop on/off"/>
+                <editor:ToolbarToggle class="envelope-button m-2 p-4 size-24px border-none toolbar-envelope" tooltip="Edit sound envelope"/>
+                <editor:ToolbarToggle class="trim-button m-2 p-4 size-24px border-none toolbar-trim" tooltip="Trim sound"/>
+                <VisualElement class="flex-grow" />
+                <editor:ToolbarButton class="save-button m-2 p-4 size-24px border-none toolbar-save" tooltip="Save"/>
+                <ui:SoundEnvelopeZoomButton tooltip="Zoom"/>
+            </editor:Toolbar>
+            <VisualElement class="flex-grow flex-shrink flex-row">
+                <Image class="waveform flex-grow flex-shrink" />
+            </VisualElement>
+            <VisualElement class="time-ruler flex-no-grow flex-no-shrink flex-row height-32px plr-9 pt-6 justify-between">
+                <Label class="time-ruler-start" text="00:00.000" />
+                <Label class="time-ruler-mid" text="00:00.500" />
+                <Label class="time-ruler-end" text="00:01.000" />
+            </VisualElement>
+        </VisualElement>
+    </VisualElement>
+    <Label text="1x" class="hover-value flex-absolute rounded-4px bg-light-transparent-50 p-4" />
+</UXML>

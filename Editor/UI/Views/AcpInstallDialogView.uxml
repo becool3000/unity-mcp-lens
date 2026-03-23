@@ -1,0 +1,31 @@
+<UXML xmlns:ui="UnityEngine.UIElements" xmlns="UnityEngine.UIElements" editor-extension-mode="False">
+    <Style src="../Styles/AcpInstallDialogView.uss" />
+    <ui:VisualElement class="acp-install-dialog">
+        <ui:Label name="titleLabel" class="install-title"/>
+        <ui:Label name="descriptionLabel" class="install-description"/>
+        <!-- Prerequisites section (hidden by default) -->
+        <ui:VisualElement name="prerequisitesContainer" class="prerequisites-container" style="display: none;">
+            <ui:VisualElement class="prerequisites-box">
+                <ui:Label name="prerequisitesMessageLabel" class="prerequisites-message"/>
+            </ui:VisualElement>
+            <ui:Label name="prerequisitesErrorLabel" class="prerequisites-error" style="display: none;"/>
+        </ui:VisualElement>
+        <ui:VisualElement name="commandsContainer" class="commands-container">
+            <ui:VisualElement name="commandBox" class="command-box">
+                <ui:VisualElement class="command-spacer"/>
+                <ui:Label name="commandLabel" class="command-label"/>
+                <ui:Button name="copyButton" class="command-copy-button mui-action-button mui-action-cursor" tooltip="Copy command">
+                    <ui:Image class="mui-action-button-image-large mui-icon-copy"/>
+                </ui:Button>
+            </ui:VisualElement>
+        </ui:VisualElement>
+        <ui:VisualElement name="apiKeyContainer" class="api-key-container" style="display: none;">
+            <ui:TextField name="apiKeyField" class="api-key-field" password="true"/>
+        </ui:VisualElement>
+        <ui:Label name="statusLabel" class="install-status"/>
+        <ui:VisualElement name="buttonRow" class="button-row">
+            <ui:Button name="installButton" text="Install" class="install-button"/>
+            <ui:Button name="cancelButton" text="Cancel" class="cancel-button"/>
+        </ui:VisualElement>
+    </ui:VisualElement>
+</UXML>

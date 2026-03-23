@@ -1,0 +1,20 @@
+<UXML xmlns="UnityEngine.UIElements" xmlns:editorui="UnityEditor.UIElements">
+    <Style src="./ImageReference.uss" />
+    <Style src="./PaletteImageReference.uss" />
+    <VisualElement class="flex-no-shrink flex-row bg-light">
+        <VisualElement class="image-reference flex-grow border-color-dark border-top-1px p-8-7-8-8">
+            <editorui:Template src="./ImageReferenceHeader.uxml" name="ImageReferenceHeader" />
+            <editorui:Template src="./ImageReferenceObjectField.uxml" name="ImageReferenceObjectField" />
+            <editorui:Template src="./ImageReferenceDoodle.uxml" name="ImageReferenceDoodle" />
+            <editorui:Template src="./ImageReferenceStrength.uxml" name="ImageReferenceStrength" />
+            <Instance template="ImageReferenceHeader">
+                <AttributeOverrides element-name="header-title" text="Palette Reference" tooltip="Guides recoloring by generating a color palette from a reference image or doodle. Use drag-and-drop, browse, or edit tools to add colors."/>
+            </Instance>
+            <Instance template="ImageReferenceObjectField" class="p-4-2"/>
+            <Instance template="ImageReferenceStrength" />
+        </VisualElement>
+        <Image class="palette-colors flex-no-grow" tooltip="Displays the colors used to guide the Recolor operation. These are generated from the reference image or doodle.">
+            <Label class="flex-grow white-space-normal color-helpbox m-4" text="Referenced Color Palette" />
+        </Image>
+    </VisualElement>
+</UXML>

@@ -1,0 +1,131 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements">
+    <ui:VisualElement name="serviceAwaitInitContainer">
+        <ui:HelpBox name="awaitingInitializationHelpBox"
+                    text="Awaiting service initialization"
+                    message-type="Info"
+                    class="mcp-help-box" />
+    </ui:VisualElement>
+    
+    <ui:VisualElement name="serviceUiContainer" class="mcp-service-ui-container">
+        <ui:VisualElement class="mcp-server-manager-window">
+            <ui:VisualElement class="mcp-settings-section">
+                <ui:VisualElement class="mcp-settings-section-block">
+                    <ui:Label text="General Settings" class="mcp-settings-section-heading-text" />
+                </ui:VisualElement>
+                    
+                <ui:VisualElement class="mcp-settings-section-block">
+                    <ui:VisualElement class="mcp-settings-section-option">
+                        <ui:Label text="Enable MCP Tools" tooltip="Enable or disable all MCP tool integrations" class="mcp-settings-section-option-label" />
+                        <ui:Toggle name="masterMCPToggle" tooltip="Toggle MCP tools on or off" class="mcp-settings-section-option-value" />
+                    </ui:VisualElement>
+
+                    <ui:VisualElement class="mcp-settings-section-option">
+                        <ui:Label text="Tool Call Timeout (seconds)" tooltip="Maximum time to wait for an MCP tool call to complete" class="mcp-settings-section-option-label" />
+                        <uie:IntegerField name="toolCallTimeoutField" value="30" tooltip="Timeout in seconds (must be greater than 0)" class="mcp-settings-section-option-value" />
+                    </ui:VisualElement>
+                </ui:VisualElement>
+            </ui:VisualElement>
+
+            <ui:VisualElement name="mcpContentContainer">
+            <ui:VisualElement class="mcp-settings-section">
+                <ui:VisualElement class="mcp-settings-section-block">
+                    <ui:Label text="Server Configuration" class="mcp-settings-section-heading-text" />
+                </ui:VisualElement>
+
+                <ui:VisualElement class="mcp-settings-section-block">
+                    <ui:HelpBox name="configErrorHelpBox"
+                                text=""
+                                message-type="Error"
+                                class="mcp-help-box mcp-setting-hide" />
+
+                    <ui:VisualElement class="mcp-settings-section-option">
+                        <ui:Label text="Config File" tooltip="Absolute path to the MCP configuration file" class="mcp-settings-section-option-label" />
+                        <ui:TextField name="configFilePathTextField" readonly="true" tooltip="Location of mcp.json on disk" class="mcp-config-path-text-field mcp-path-readonly" />
+                    </ui:VisualElement>
+
+                    <ui:VisualElement class="mcp-settings-section-option">
+                        <ui:Label text="Actions" tooltip="Config file actions" class="mcp-settings-section-option-label" />
+                        <ui:Button name="editConfigButton" text="Open" tooltip="Open mcp.json in your default editor" class="mcp-settings-section-option-button" />
+                        <ui:Button name="refreshConfigurationButton" text="Refresh File and Servers" tooltip="Reload config from mcp.json and restart servers" />
+                    </ui:VisualElement>
+                </ui:VisualElement>
+            </ui:VisualElement>
+
+            <ui:VisualElement class="mcp-settings-section">
+                <ui:VisualElement class="mcp-settings-section-block">
+                    <ui:Label text="Path Configuration" class="mcp-settings-section-heading-text" />
+                </ui:VisualElement>
+
+                <ui:VisualElement class="mcp-settings-section-block">
+                    <ui:Label text="The PATH available to Unity varies based on how the Editor was launched. Add your own paths in User Path if needed. Separate paths with : on macOS/Linux (e.g. /usr/bin:/opt/bin) or ; on Windows (e.g. C:\bin;D:\tools)."
+                              class="mcp-section-description" />
+
+                    <ui:VisualElement class="mcp-settings-section-option">
+                        <ui:Label text="Path Accessible by Unity" tooltip="The system PATH environment variable available to the Unity Editor" class="mcp-settings-section-option-label" />
+                        <ui:TextField name="systemPathTextField" multiline="true" readonly="true" tooltip="Read-only view of the system PATH" class="mcp-path-text-field mcp-path-readonly" />
+                    </ui:VisualElement>
+
+                    <ui:VisualElement class="mcp-settings-section-option">
+                        <ui:Label text="User Path" tooltip="Additional paths to make available to MCP servers" class="mcp-settings-section-option-label" />
+                        <ui:TextField name="userPathTextField" multiline="true" tooltip="Add custom paths here, separated by : (macOS/Linux) or ; (Windows)" class="mcp-path-text-field" />
+                    </ui:VisualElement>
+                </ui:VisualElement>
+            </ui:VisualElement>
+
+            <ui:VisualElement name="serversSection" class="mcp-settings-section">
+                <ui:VisualElement class="mcp-settings-section-block">
+                    <ui:Label text="Servers" class="mcp-settings-section-heading-text" />
+                </ui:VisualElement>
+
+                <ui:VisualElement class="mcp-settings-section-block">
+                    <ui:Label name="serversEmptyLabel"
+                              text="Active servers will display here when added to the config"
+                              tooltip="Add servers to mcp.json to see them listed here"
+                              class="mcp-servers-empty-label" />
+
+                    <ui:ScrollView name="configuredServersScroll">
+                        <ui:VisualElement name="configuredServersList"/>
+                    </ui:ScrollView>
+                </ui:VisualElement>
+            </ui:VisualElement>
+            
+            <ui:VisualElement name="serverInspectorSection" class="mcp-settings-section mcp-setting-hide">
+                <ui:VisualElement class="mcp-settings-section-block">
+                    <ui:Label text="Server Inspector" class="mcp-settings-section-heading-text" />
+                </ui:VisualElement>
+
+                <ui:VisualElement name="serverInspectorContent" class="mcp-settings-section-block">
+                    <ui:VisualElement name="inspectorErrorGuidanceContainer" class="mcp-inspector-error-guidance mcp-setting-hide">
+                        <ui:HelpBox name="inspectorErrorGuidance" text="" message-type="Error" />
+                        <ui:Label name="inspectorErrorDocsLink" text="View troubleshooting documentation" tooltip="Click to open troubleshooting documentation in your browser" class="mcp-link" />
+                    </ui:VisualElement>
+
+                    <ui:VisualElement name="serverInspectorDetails">
+                        <ui:VisualElement class="mcp-settings-section-option">
+                            <ui:Label text="Server Name" tooltip="The name of the selected MCP server" class="mcp-settings-section-option-label" />
+                            <ui:Label name="inspectorServerName" class="mcp-settings-section-option-value" />
+                        </ui:VisualElement>
+
+                        <ui:VisualElement class="mcp-settings-section-option">
+                            <ui:Label text="Server Status" tooltip="Current connection status of the server" class="mcp-settings-section-option-label" />
+                            <ui:Label name="inspectorServerStatus" class="mcp-settings-section-option-value" />
+                        </ui:VisualElement>
+
+                        <ui:VisualElement class="mcp-settings-section-option">
+                            <ui:Label text="Server Message" tooltip="Status message or error details from the server" class="mcp-settings-section-option-label" />
+                            <ui:TextField name="inspectorServerMessage" multiline="true" readonly="true" class="mcp-path-text-field mcp-path-readonly" />
+                        </ui:VisualElement>
+
+                        <ui:Foldout name="inspectorToolsFoldout" text="Tools" tooltip="Tools provided by this MCP server">
+                            <ui:ScrollView name="inspectorToolsScroll" class="mcp-inspector-tools-scroll">
+                                <ui:VisualElement name="inspectorToolsList" class="mcp-inspector-tools-list" />
+                            </ui:ScrollView>
+                        </ui:Foldout>
+                    </ui:VisualElement>
+
+                </ui:VisualElement>
+            </ui:VisualElement>
+            </ui:VisualElement>
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>

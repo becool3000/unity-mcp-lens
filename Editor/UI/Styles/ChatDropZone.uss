@@ -1,0 +1,7 @@
+.chatdropzone__element {
+    flex-grow: 1;
+}
+
+.chatdropzone__element-root {
+    flex-grow: 1;
+}

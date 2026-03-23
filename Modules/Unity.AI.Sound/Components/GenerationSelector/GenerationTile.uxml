@@ -1,0 +1,9 @@
+<UXML xmlns="UnityEngine.UIElements" class="generation-tile border-2px flex-grow">
+    <Style src="./GenerationTile.uss"/>
+    <VisualElement name="image" picking-mode="Ignore" class="flex-grow bg-medium rounded-4px justify-center items-center image-stretch-to-fill">
+        <VisualElement name="border" picking-mode="Ignore" class="flex-grow border-2px border-selectable rounded-4px" />
+        <Label name="label" text="" picking-mode="Ignore" class="hide absolute-centered-label font-size-11px font-bold bg-medium-light" />
+        <VisualElement name="progress" picking-mode="Ignore" class="progress flex-grow justify-center items-center image-scale-to-fit" />
+        <Button class="play-button flex-absolute rounded border-none size-32px hide" />
+    </VisualElement>
+</UXML>

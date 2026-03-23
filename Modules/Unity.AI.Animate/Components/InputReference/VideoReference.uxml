@@ -1,0 +1,13 @@
+<UXML xmlns="UnityEngine.UIElements" xmlns:editorui="UnityEditor.UIElements">
+    <Style src="./InputReference.uss" />
+    <Style src="./VideoReference.uss" />
+    <VisualElement class="input-reference pr-1">
+        <editorui:Template src="./InputReferenceHeader.uxml" name="InputReferenceHeader" />
+        <editorui:Template src="./InputReferenceObjectField.uxml" name="InputReferenceObjectField" />
+
+        <Instance template="InputReferenceHeader" class="pl-2">
+            <AttributeOverrides element-name="header-title" text="Video Reference" tooltip="Useful to make an animation out of a video.&#10;Tips:&#10;  - One person in frame, feet clearly visible.&#10;  - Stable camera, no cuts or zooming.&#10;  - Person starts facing camera, feet on ground."/>
+        </Instance>
+        <Instance template="InputReferenceObjectField" class="p-4-2" />
+    </VisualElement>
+</UXML>

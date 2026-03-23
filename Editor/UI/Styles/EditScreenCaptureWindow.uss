@@ -1,0 +1,5 @@
+/* Pan cursor styling - applies to entire window during panning */
+.annotation-pan-cursor,
+.annotation-pan-cursor * {
+    cursor: pan;
+}

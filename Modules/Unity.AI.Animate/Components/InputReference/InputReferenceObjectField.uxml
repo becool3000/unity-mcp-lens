@@ -1,0 +1,15 @@
+<UXML class="height-128px" xmlns="UnityEngine.UIElements" xmlns:editorui="UnityEditor.UIElements">
+    <Style src="./InputReferenceObjectField.uss" />
+    <VisualElement name="input-reference-object-field" class="input-reference-object-field height-128px" focusable="true">
+        <editorui:ObjectField
+            name="input-reference-object-field__input-field"
+            class="flex-grow-100pct p-0 m-0"
+            type="UnityEngine.Video.VideoClip, UnityEngine.VideoModule"
+            label="Select an object:">
+            <VisualElement name="input-reference-object-field__overlay" class="input-reference-object-field__overlay" picking-mode="Ignore">
+                <VisualElement class="button-spacer" />
+                <Button name="input-reference-settings-button" tooltip="More"><Image class="unity-button__image"/></Button>
+            </VisualElement>
+        </editorui:ObjectField>
+    </VisualElement>
+</UXML>

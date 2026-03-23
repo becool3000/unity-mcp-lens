@@ -1,0 +1,136 @@
+#header {
+    margin-bottom: 24px;
+}
+
+#title {
+    font-size: 18px;
+    -unity-font-style: bold;
+}
+
+.umcp-section {
+    margin-bottom: 12px;
+}
+
+.umcp-section-header {
+    font-size: 14px;
+    -unity-font-style: bold;
+    margin-bottom: 8px;
+}
+
+.umcp-section-content {
+    flex-direction: column;
+}
+
+.umcp-setting-row {
+    flex-direction: row;
+    align-items: center;
+    margin-bottom: 4px;
+    min-height: 18px;
+}
+
+.umcp-description-row {
+    margin-bottom: 4px;
+    min-height: auto;
+}
+
+.umcp-setting-label {
+    font-size: 12px;
+    width: 240px;
+    margin-right: 8px;
+    flex-shrink: 0;
+}
+
+.umcp-setting-control {
+    flex-grow: 1;
+}
+
+.umcp-setting-value-group {
+    flex-direction: row;
+    align-items: center;
+    flex-grow: 1;
+    justify-content: space-between;
+}
+
+.umcp-bridge-status-group {
+    flex-direction: row;
+    align-items: center;
+    flex-grow: 1;
+}
+
+.umcp-status-indicator {
+    width: 8px;
+    height: 8px;
+    border-radius: 4px;
+    margin-right: 6px;
+    background-color: var(--mcp-color-inactive);
+}
+
+.umcp-status-indicator.green {
+    background-color: var(--mcp-color-success);
+    opacity: 1;
+}
+
+.umcp-status-indicator.red {
+    background-color: var(--mcp-color-error);
+    opacity: 1;
+}
+
+
+#bridgePortField {
+    margin-right: 2px;
+    flex-grow: 1;
+}
+
+.umcp-toggle-button {
+    min-width: 80px;
+    height: 20px;
+    margin-right: 2px;
+}
+
+#validationDescription {
+    font-size: 11px;
+    opacity: 0.7;
+    white-space: normal;
+    flex-grow: 1;
+}
+
+#bridgeStatusLabel {
+    font-size: 12px;
+}
+
+.umcp-section-foldout {
+    margin-bottom: 8px;
+}
+
+.umcp-section-foldout > .unity-foldout__toggle {
+    font-size: 14px;
+    -unity-font-style: bold;
+    margin-left: 0;
+}
+
+.umcp-section-foldout > .unity-foldout__content {
+    margin-left: 8px;
+    margin-top: 8px;
+}
+
+#toolsList {
+    flex-direction: column;
+}
+
+#clientList {
+    flex-direction: column;
+}
+
+.umcp-connection-policy-label {
+    font-size: 11px;
+    opacity: 0.6;
+    margin-bottom: 6px;
+    -unity-font-style: italic;
+}
+
+.umcp-no-tools-message {
+    padding: 8px;
+    -unity-text-align: middle-center;
+    opacity: 0.7;
+    -unity-font-style: italic;
+}

@@ -1,0 +1,33 @@
+{
+    "name": "Unity.AI.Search.Editor",
+    "rootNamespace": "Unity.AI.Search.Editor",
+    "references": [
+        "Unity.AI.Toolkit.Async",
+        "Unity.InferenceEngine",
+        "Unity.Mathematics",
+        "HFDownloader",
+        "Unity.AI.Assistant.Runtime",
+        "Unity.AI.Assistant.Editor",
+        "Unity.AI.Toolkit.Utility"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "Newtonsoft.Json.dll",
+        "Microsoft.ML.Tokenizers.dll"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [
+        {
+            "name": "com.unity.ai.inference",
+            "expression": "",
+            "define": "SENTIS_AVAILABLE"
+        }
+    ],
+    "noEngineReferences": false
+}

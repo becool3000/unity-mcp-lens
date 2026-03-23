@@ -1,0 +1,105 @@
+.mui-ui-preview-root {
+    flex-direction: column;
+    margin: 8px 0;
+    border-radius: 4px;
+    background-color: var(--muse-chat-backgrounds-100);
+    overflow: hidden;
+}
+
+.mui-ui-preview-header {
+    flex-direction: row;
+    background-color: var(--muse-chat-backgrounds-150);
+    border-bottom-width: 1px;
+    border-bottom-color: var(--muse-chat-separator-line);
+    min-height: 32px;
+}
+
+
+.mui-ui-preview-error {
+    color: var(--muse-chat-icon-missing);
+    align-self: center;
+    -unity-text-align: middle-center;
+    white-space: normal;
+    margin: 20px;
+}
+
+.mui-ui-preview-tab {
+    background-color: transparent;
+    border-width: 0;
+    border-bottom-width: 2px;
+    border-bottom-color: transparent;
+    border-radius: 0;
+    padding: 8px 16px;
+    margin: 0;
+    color: var(--muse-chat-text-secondary-on-background-50);
+    font-size: 12px;
+    -unity-font-style: normal;
+}
+
+.mui-ui-preview-tab:hover {
+    background-color: var(--muse-chat-popup-hover);
+    color: var(--muse-chat-text-primary);
+}
+
+.mui-ui-preview-tab.mui-ui-preview-active {
+    border-bottom-color: var(--muse-chat-accent-100);
+    color: var(--muse-chat-text-primary);
+    background-color: var(--muse-chat-backgrounds-100);
+}
+
+.mui-ui-preview-container {
+    flex-grow: 1;
+    min-height: 400px;
+    position: relative;
+}
+
+.mui-ui-preview-content {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: none;
+    flex-direction: column;
+}
+
+.mui-ui-preview-content.mui-ui-preview-active {
+    display: flex;
+}
+
+.mui-ui-preview-bordered {
+    border-width: 1px;
+    border-color: var(--muse-chat-separator-line);
+    border-radius: 4px;
+    background-color: var(--muse-chat-backgrounds-75);
+}
+
+.mui-ui-preview-with-padding {
+    padding: 8px;
+}
+
+.mui-ui-preview-with-padding #unity-content-container {
+    flex-shrink: 0;
+    min-height: 100%;
+}
+
+.mui-ui-preview-with-padding .mui-ui-preview-bordered {
+    flex-shrink: 0;
+}
+
+.mui-ui-preview-tab-divider {
+    border-left-width: 1px;
+    border-left-color: var(--muse-chat-separator-line);
+}
+
+.mui-ui-preview-content .mui-code-block-root {
+    height: 100%;
+    max-height: 100%;
+    overflow: hidden;
+    margin-bottom: 0;
+}
+
+.mui-ui-preview-content .mui-code-block-content-root {
+    flex: 1;
+    min-height: 0;
+}

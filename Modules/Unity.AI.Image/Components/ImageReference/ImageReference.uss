@@ -1,0 +1,15 @@
+.unity-tab-view__header-container {
+    display: none;
+}
+
+.unity-tab-view__header-container .unity-tab__header {
+    padding: 0 10px;
+}
+
+.hide-image-reference {
+    display: none;
+}
+
+.unity-button__image {
+    --unity-image-tint-color: var(--unity-colors-label-text);
+}

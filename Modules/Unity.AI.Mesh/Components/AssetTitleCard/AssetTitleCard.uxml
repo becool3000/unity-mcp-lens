@@ -1,0 +1,4 @@
+<UXML class="flex-row justify-center" xmlns="UnityEngine.UIElements">
+    <Image class="flex-no-shrink size-16px rounded-2px border-1px"/>
+    <Label class="flex-shrink text-ellipsis pl-2 text-hover" tooltip="This is the asset name. Click to highlight it in the Project window."/>
+</UXML>

@@ -1,0 +1,64 @@
+AddToPromptView {
+    padding: 12px;
+}
+
+.row {
+    flex-direction: row;
+    padding-bottom: 12px;
+}
+
+.operator-container {
+    padding: 12px;
+    border-radius: 4px;
+}
+
+.operator-container:hover{
+    background-color: var(--unity-colors-default-background);
+}
+
+.operator-icon {
+    flex-grow: 1;
+    height: 100%;
+    --unity-image-size : scale-to-fit;
+}
+
+.operator-name {
+    -unity-font-style: bold;
+    padding: 8px 4px 4px;
+    color: var(--unity-colors-button-text);
+}
+
+.operator-description {
+    white-space: normal;
+    padding-left: 4px;
+    padding-right: 4px;
+    color: var(--unity-colors-window-text);
+}
+
+#operator-image-prompt > * > .operator-icon {
+    --unity-image: url('OperatorImages/ImageReference.png');
+}
+
+#operator-style > * > .operator-icon {
+    --unity-image: url('OperatorImages/StyleReference.png');
+}
+
+#operator-composition > * > .operator-icon {
+    --unity-image: url('OperatorImages/CompositionReference.png');
+}
+
+#operator-pose > * > .operator-icon {
+    --unity-image: url('OperatorImages/PoseReference.png');
+}
+
+#operator-depth > * > .operator-icon {
+    --unity-image: url('OperatorImages/DepthReference.png');
+}
+
+#operator-line-art > * > .operator-icon {
+    --unity-image: url('OperatorImages/LineArtReference.png');
+}
+
+#operator-feature > * > .operator-icon {
+    --unity-image: url('OperatorImages/FeatureReference.png');
+}

@@ -1,0 +1,63 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" xmlns:assistant="Unity.AI.Assistant.UI.Editor.Scripts.Components">
+    <ui:VisualElement class="assistant-settings-page">
+        <ui:Label text="Assistant" name="assistantSettingsHeader" />
+        <ui:ScrollView>
+            <ui:VisualElement class="assistant-settings-content">
+                <ui:VisualElement class="assistant-settings-horizontal-layout">
+                    <ui:Label name="promptModifierLabel" text="Use Ctrl+Return to send a prompt" class="assistant-settings-content-label"/>
+                    <ui:Toggle name="promptModifierToggle" class="assistant-settings-toggle" />
+                </ui:VisualElement>
+
+                <ui:VisualElement class="assistant-settings-horizontal-layout">
+                    <ui:Label text="Enable &lt;b&gt;Autorun&lt;/b&gt;" tooltip="When enabled, do not ask the user for permissions." class="assistant-settings-content-label"/>
+                    <ui:Toggle name="autoRunToggle" class="assistant-settings-toggle" />
+                </ui:VisualElement>
+                <ui:VisualElement class="assistant-settings-horizontal-layout">
+                    <ui:Label text="Collapse &lt;b&gt;Reasoning&lt;/b&gt; when complete" tooltip="If true, when the reasoning is completed, it'll collapse the reasoning section." class="assistant-settings-content-label"/>
+                    <ui:Toggle name="collapseReasoningToggle" class="assistant-settings-toggle" />
+                </ui:VisualElement>
+                <ui:VisualElement class="assistant-settings-horizontal-layout">
+                    <ui:Label text="Enable automatic package updates" tooltip="Automatically check for and prompt to update the Assistant package when a new version is available." class="assistant-settings-content-label"/>
+                    <ui:Toggle name="enablePackageAutoUpdateToggle" class="assistant-settings-toggle" />
+                </ui:VisualElement>
+                <ui:VisualElement class="assistant-settings-horizontal-layout">
+                    <ui:Label text="Show Annotation &lt;b&gt;Privacy Notice&lt;/b&gt;" tooltip="When enabled, the annotation privacy notice dialog will be shown when using the annotation feature." class="assistant-settings-content-label"/>
+                    <ui:Toggle name="annotationPrivacyNoticeToggle" class="assistant-settings-toggle" />
+                </ui:VisualElement>
+
+                <assistant:ConfigureDefaultPermissionsView name="configureDefaultPermissionsView" />
+
+                <assistant:ConfigureCheckpointSettingsView name="configureCheckpointSettingsView" />
+
+                <ui:VisualElement name="assetKnowledgeContainer">
+                   <ui:Label text="Asset Knowledge" name="assetKnowledgeHeader" />
+                   <ui:VisualElement class="assistant-settings-horizontal-layout">
+                       <ui:VisualElement class="assistant-settings-info-box">
+                           <ui:VisualElement class="assistant-settings-horizontal-layout">
+                               <ui:Image name="infoIcon" class="mui-icon-info" />
+                               <ui:Label
+                                   name="infoLabel"
+                                   text="The Asset Knowledge add-on uses a local image model to tag and classify project assets, improving Assistant’s responses with more context."
+                                   class="assistant-settings-info-label" />
+                           </ui:VisualElement>
+                       </ui:VisualElement>
+                   </ui:VisualElement>
+                   <ui:VisualElement name="enableAssetKnowledgeContainer" class="assistant-settings-horizontal-layout">
+                       <ui:Label text="Enable Asset Knowledge"
+                                 class="assistant-settings-content-label" />
+                       <ui:Toggle name="enableAssetKnowledge" class="assistant-settings-toggle" />
+                   </ui:VisualElement>
+                   <ui:VisualElement name="downloadAssetKnowledgeContainer" class="assistant-settings-horizontal-layout">
+                       <ui:Button name="downloadSiglip2Button" text="Install Asset Knowledge Add-on"/>
+                   </ui:VisualElement>
+                   <ui:VisualElement name="downloadingAssetKnowledgeContainer" class="assistant-settings-vertical-layout">
+                       <ui:ProgressBar name="assetKnowledgeDownloadProgressBar" class="mui-progress-bar" title="Installing Asset Knowledge..." />
+                   </ui:VisualElement>
+                   <ui:VisualElement name="removeAssetKnowledgeContainer" class="assistant-settings-horizontal-layout">
+                       <ui:Button name="removeSiglip2Button" text="Remove Asset Knowledge Add-on"/>
+                   </ui:VisualElement>
+                </ui:VisualElement>
+            </ui:VisualElement>
+        </ui:ScrollView>
+    </ui:VisualElement>
+</ui:UXML>

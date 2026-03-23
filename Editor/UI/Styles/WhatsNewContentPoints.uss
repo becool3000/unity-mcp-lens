@@ -1,0 +1,9 @@
+.mui-whats-new-bullet-row {
+    flex-direction: row;
+    align-items: flex-start;
+    margin-bottom: 8px;
+}
+
+.mui-whats-new-bullet-symbol {
+    width: 14px;
+}

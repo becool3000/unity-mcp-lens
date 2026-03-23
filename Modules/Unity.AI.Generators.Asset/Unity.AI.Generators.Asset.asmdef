@@ -1,0 +1,22 @@
+{
+    "name": "Unity.AI.Generators.Asset",
+    "rootNamespace": "Unity.AI.Generators.Asset",
+    "references": [
+        "GUID:b134e7bb2da2842348549e2fca4773e5",
+        "GUID:a38a99c5efe5445079abf3f3fbc951da",
+        "GUID:5547c4aa907443f5a88155906c8d4cdd",
+        "GUID:6faae282c16541e783ea8766fb588077",
+        "GUID:5a241fc381813534d9cc6d07eb989239"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

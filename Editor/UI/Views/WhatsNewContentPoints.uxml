@@ -1,0 +1,72 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements"
+         xmlns:chat="Unity.AI.Assistant.Editor.SessionBanner"
+         xmlns="UnityEngine.UIElements" editor-extension-mode="False">
+    <ui:VisualElement class="mui-whats-new-page-root">
+        <ui:VisualElement name="page1" class="mui-whats-new-page-section">
+            <ui:VisualElement name="page1Video" class="mui-whats-new-page-video-element"/>
+
+            <ui:Label text="Introducing Points" class="mui-whats-new-page-header"/>
+            <ui:Label text="The Points system is being introduced to support the increased demand for Unity AI’s most powerful features. Through a system of weekly refills, performance is maintained, and resources are managed effectively."
+                      class="mui-whats-new-page-text"/>
+            <ui:VisualElement class="mui-whats-new-page-paragraph"/>
+
+            <ui:Label text="A weekly allocation of points is provided to every Unity AI user for use with Assistant or Generators. Points are pooled at the Organization level, and shared among members."
+                      class="mui-whats-new-page-text"/>
+            <ui:VisualElement class="mui-whats-new-page-paragraph"/>
+            
+            <ui:Label text="While usage is limited, points are provided at no cost. This system is being utilized during the beta period to ensure optimal resource allocation and to facilitate the collection of vital user feedback."
+                      class="mui-whats-new-page-text"/>
+        </ui:VisualElement>
+        
+        <ui:VisualElement name="page2" class="mui-whats-new-page-section">
+            <ui:VisualElement name="page2Video" class="mui-whats-new-page-video-element"/>
+
+            <ui:Label text="Point Calculation &amp; Usage" class="mui-whats-new-page-header"/>
+            <ui:Label text="Point costs are generally determined by the complexity of each individual request."
+                      class="mui-whats-new-page-text"/>
+            <ui:VisualElement class="mui-whats-new-page-paragraph"/>
+            
+            <ui:Label text="Assistant" class="mui-whats-new-page-text-header"/>
+            
+            <ui:Label text="For queries, code generation, or agentic execution, costs are calculated based on the computational resources and tokens required for that interaction. The final cost is displayed upon completion for each response."
+                      class="mui-whats-new-page-text"/>
+            <ui:VisualElement class="mui-whats-new-page-paragraph"/>
+
+            <ui:Label text="This variable system ensures that costs remain proportional to the complexity of the task, allowing simple queries to remain highly economical."
+                      class="mui-whats-new-page-text"/>
+            <ui:VisualElement class="mui-whats-new-page-paragraph"/>
+            
+            <ui:Label text="Generators" class="mui-whats-new-page-text-header"/>
+            
+            <ui:Label text="For asset generation, point costs are scaled based on the specific model utilized and the complexity of the generated output."
+                      class="mui-whats-new-page-text"/>
+        </ui:VisualElement>
+        
+        <ui:VisualElement name="page3" class="mui-whats-new-page-section">
+            <ui:VisualElement name="page3Video" class="mui-whats-new-page-video-element"/>
+
+            <ui:Label text="Managing Points" class="mui-whats-new-page-header"/>
+            <ui:VisualElement class="mui-whats-new-bullet-row">
+                <ui:Label text="•" class="mui-whats-new-bullet-symbol"/>
+                <ui:Label text="&lt;b&gt;Balance Tracking:&lt;/b&gt; Current point totals can be viewed directly within the AI menu in the Unity Editor header or via the &lt;a href=&quot;https://cloud.unity.com&quot;&gt;Cloud Dashboard&lt;/a&gt;."
+                          class="mui-whats-new-page-text"/>
+            </ui:VisualElement>
+            <ui:VisualElement class="mui-whats-new-bullet-row">
+                <ui:Label text="•" class="mui-whats-new-bullet-symbol"/>
+                <ui:Label text="&lt;b&gt;Automatic Refills:&lt;/b&gt; Point balances are automatically refreshed at the start of each week."
+                          class="mui-whats-new-page-text"/>
+            </ui:VisualElement>
+            <ui:VisualElement class="mui-whats-new-bullet-row">
+                <ui:Label text="•" class="mui-whats-new-bullet-symbol"/>
+                <ui:Label text="&lt;b&gt;Request a Top-Up:&lt;/b&gt; Should a balance run low or become depleted before the weekly refresh, additional points can be requested through the Request a &lt;a href=&quot;https://create.unity.com/unity-ai-beta-points-request&quot;&gt;Request a Top-Up&lt;/a&gt; link."
+                          class="mui-whats-new-page-text"/>
+            </ui:VisualElement>
+        </ui:VisualElement>
+
+        <ui:VisualElement class="mui-whats-new-page-controls">
+            <ui:Button name="pageControlBack" class="mui-whats-new-page-control-button"/>
+            <ui:Label name="pageControlLabel" class="mui-whats-new-page-control-label"/>
+            <ui:Button name="pageControlNext" class="mui-whats-new-page-control-button"/>
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>

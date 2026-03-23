@@ -1,0 +1,16 @@
+<UXML
+        xmlns="UnityEngine.UIElements"
+        xmlns:editorui="UnityEditor.UIElements"
+        xmlns:ui="Unity.AI.Pbr.Components">
+    <Style src="./ImageReference.uss" />
+    <Style src="./BaseImageReference.uss" />
+    <VisualElement class="image-reference p-8-7-8-8">
+        <editorui:Template src="./ImageReferenceHeader.uxml" name="ImageReferenceHeader" />
+        <Instance template="ImageReferenceHeader" class="no-delete">
+            <AttributeOverrides element-name="header-title" text="Base Image" tooltip="Displays the Unity asset currently linked to this Generator window, or the selected generation result from the Generations panel."/>
+        </Instance>
+        <VisualElement class="base-image-doodle-container rounded-4px p-4-2 m-2" style="height: 96px;">
+            <VisualElement name="base-image-reference" class="flex-grow" />
+        </VisualElement>
+    </VisualElement>
+</UXML>

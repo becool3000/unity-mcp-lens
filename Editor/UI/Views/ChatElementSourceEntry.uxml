@@ -1,0 +1,12 @@
+<UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" xmlns="UnityEngine.UIElements" editor-extension-mode="False">
+    <ui:VisualElement class="mui-source-entry-root">
+        <ui:VisualElement class="mui-source-entry-button-block">
+            <ui:Button name="sourceLink">
+                <ui:Label name="sourceLinkNumber" class="mui-chat-label mui-source-entry-number"/>
+            </ui:Button>
+            <ui:Label name="sourceLinkLabel" class="mui-chat-label"/>
+        </ui:VisualElement>
+
+        <ui:Label name="sourceLinkHint" class="mui-chat-label"></ui:Label>
+    </ui:VisualElement>
+</UXML>

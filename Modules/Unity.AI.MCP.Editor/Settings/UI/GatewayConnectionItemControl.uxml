@@ -1,0 +1,14 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" xsi="http://www.w3.org/2001/XMLSchema-instance" engine="UnityEngine.UIElements" editor="UnityEditor.UIElements" noNamespaceSchemaLocation="../../UIElementsSchema/UIElements.xsd" editor-extension-mode="True">
+    <ui:VisualElement class="umcp-gateway-connection-item">
+        <ui:VisualElement class="umcp-gateway-connection-header">
+            <ui:VisualElement class="umcp-gateway-connection-left">
+                <ui:VisualElement name="statusIndicator" class="umcp-status-indicator gateway" />
+                <ui:Label name="providerName" text="Claude Code (Gateway)" class="umcp-gateway-provider-name" />
+            </ui:VisualElement>
+            <ui:VisualElement class="umcp-gateway-connection-right">
+                <ui:Label name="timestamp" text="Just now" class="umcp-gateway-timestamp" />
+                <ui:Label name="statusLabel" text="Auto-approved" class="umcp-gateway-status-label" />
+            </ui:VisualElement>
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>

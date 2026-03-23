@@ -1,0 +1,5 @@
+<UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" xmlns="UnityEngine.UIElements" editor-extension-mode="False">
+    <ui:Button name="actionButton" class="mui-action-button mui-submit-button">
+        <ui:Image name="actionButtonImage" picking-mode="ignore" class="mui-action-button-image-large mui-icon-arrow-up"/>
+    </ui:Button>
+</UXML>

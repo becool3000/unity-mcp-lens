@@ -1,0 +1,6 @@
+<UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" xmlns="UnityEngine.UIElements" editor-extension-mode="False">
+    <ui:Button name="askAssistantButton">
+        <ui:Image class="mui-action-button-image-large mui-icon-sparkle"/>
+        <ui:Label text="Ask Assistant" />
+    </ui:Button>
+</UXML>

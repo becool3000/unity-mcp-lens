@@ -1,0 +1,4 @@
+<UXML xmlns="UnityEngine.UIElements">
+    <Label class="hide font-bold p-4" text="Count"/>
+    <SliderInt class="flex-grow" label="Count" show-input-field="true" low-value="1" high-value="9" value="4" tooltip="Set the number of material reference variations to generate. These can be upgraded to full PBR materials via the PBR tab."/>
+</UXML>

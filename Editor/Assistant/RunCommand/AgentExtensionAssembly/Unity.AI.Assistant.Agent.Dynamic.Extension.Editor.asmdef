@@ -1,0 +1,22 @@
+{
+    "name": "Unity.AI.Assistant.Agent.Dynamic.Extension.Editor",
+    "rootNamespace": "Unity.AI.Assistant.Agent.Dynamic.Extension.Editor",
+    "references": [],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [
+        {
+            "name": "com.unity.ai.assistant.code-library",
+            "expression": "0",
+            "define": "CODE_LIBRARY_INSTALLED"
+        }
+    ],
+    "noEngineReferences": false
+}

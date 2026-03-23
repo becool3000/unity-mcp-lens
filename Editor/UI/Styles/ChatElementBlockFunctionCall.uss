@@ -1,0 +1,13 @@
+#functionCallRoot {
+    background-color: var(--muse-chat-backgrounds-150);
+    border-radius: var(--muse-chat-border-radius);
+    margin-left: 0;
+}
+
+#functionCallSectionTitle {
+    color: var(--muse-chat-text-secondary);
+}
+
+.function-call-text-secondary {
+    color: var(--muse-chat-text-secondary);
+}

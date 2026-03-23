@@ -1,0 +1,31 @@
+.dropdown-item-with-margin {
+    margin-bottom: 8px;
+}
+
+.label-button:hover {
+    color: var(--unity-colors-label-text-focus);
+}
+
+.label-button:hover:disabled {
+    color: var(--theme-text-color-disabled);
+}
+
+.label-button.link:hover {
+    cursor: link;
+}
+
+.label-button.link:hover:disabled {
+    cursor: initial;
+}
+
+.hidden {
+    display: none;
+}
+
+#data-sharing {
+    opacity: 0.5;
+}
+
+.shortcut {
+    opacity: 0.5;
+}

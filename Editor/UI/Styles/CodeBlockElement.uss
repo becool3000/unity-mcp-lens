@@ -1,0 +1,210 @@
+.codeblockelement__element {
+}
+
+.mui-code-block-root {
+    margin-bottom: 18px;
+    font-size: var(--muse-chat-small-font-size);
+    cursor: text;
+    justify-content: center;
+}
+
+.mui-code-block-buttons {
+    flex-direction: row;
+    align-items: center;
+    border-top-left-radius: 4px;
+    border-top-right-radius: 4px;
+    padding-right: 6px;
+    padding-top: 8px;
+    padding-bottom: 8px;
+    height: 40px;
+    background-color: var(--muse-chat-backgrounds-100);
+}
+
+.mui-code-block-buttons-collapsed {
+    border-bottom-left-radius: 4px;
+    border-bottom-right-radius: 4px;
+}
+
+#codeBlockControls.mui-code-block-visible {
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+}
+
+#codeBlockDisplayToggle {
+    align-self: center;
+    width: auto;
+    flex-grow: 1;
+    margin-left: 8px;
+}
+
+#codeBlockDisplayToggle .unity-foldout__text {
+    font-size: var(--muse-chat-header-font-size);
+    -unity-font-style: normal;
+}
+
+.mui-code-block-content-root {
+    flex-direction: row;
+    background-color: var(--muse-chat-backgrounds-100);
+    border-bottom-left-radius: 4px;
+    border-bottom-right-radius: 4px;
+}
+
+.mui-code-block-content-wrapper {
+    flex-grow: 1;
+}
+
+.mui-code-block-content-background {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    top: 10px;
+}
+
+.mui-code-block-content-foreground {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    top: 10px;
+}
+
+.mui-code-block-content {
+    flex-direction: row;
+}
+
+.mui-code-block--monospaced-text {
+    margin-left: 8px;
+    padding: 8px;
+    -unity-font-definition: resource("Fonts/RobotoMono/RobotoMono-Regular SDF.asset");
+    white-space: nowrap;
+    -unity-text-generator: Standard;
+}
+
+.mui-code-block-element-button  {
+    margin: 4px 1px 4px 1px;
+    height: 24px;
+    border-width: 0;
+    justify-content: center;
+    align-items: center;
+    background-color: rgba(0, 0, 0, 0);
+}
+
+.mui-code-block-element-button:hover {
+    background-color: var(--muse-chat-backgrounds-50);
+}
+
+#codeText {
+    -unity-text-align: upper-left;
+}
+
+/* Diff mode styling - removes margins and padding for tighter layout */
+.mui-code-block-diff-mode #lineNumberText {
+    padding-right: 0;
+    margin-right: 0;
+    border-right-width: 0;
+}
+
+.mui-code-block-diff-mode #codeText {
+    padding-left: 0;
+    margin-left: 0;
+}
+
+#codeBlockControls .mui-action-button-active {
+    background-color: var(--muse-chat-button-active);
+}
+
+.mui-code-block-marking-bg {
+    position: absolute;
+    width: 100%;
+}
+
+.mui-code-block-marking-tooltip {
+    position: absolute;
+    width: 100%;
+}
+
+.mui-code-block-marking-error {
+    background-color: var(--muse-chat-code-mark-error);
+}
+
+.mui-code-block-marking-info {
+    background-color: var(--muse-chat-code-mark-info);
+}
+
+.mui-compilation-error-image {
+    height: 16px;
+    width: 16px;
+    margin-right: 4px;
+}
+
+.mui-code-block-toggle-label {
+    display: flex;
+    flex-direction: row;
+    justify-content: center;
+    align-items: center;
+}
+
+#codeBlockTitle {
+    font-size: 12px;
+    -unity-font-style: bold;
+}
+
+.mui-action-header-container {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    width: 100%;
+}
+
+.mui-action-buttons-container {
+    flex-direction: row;
+    justify-content: flex-end;
+}
+
+.mui-execution-block-header {
+    width: 100%;
+    flex-direction: row;
+    height: 18px;
+}
+
+#executionDisplayToggle {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 18px;
+}
+
+#codeScrollView #unity-content-container {
+    width: auto;
+}
+
+.mui-code-scrollview .unity-scroller {
+    border-width: 0;
+    height: 10px;
+    border-bottom-left-radius: 4px;
+    border-bottom-right-radius: 4px;
+}
+
+.mui-code-scrollview .unity-scroller .unity-slider {
+    margin: 0 4px;
+}
+
+.mui-code-scrollview .unity-scroller .unity-base-slider__dragger {
+    height: 6px;
+    border-radius: 2px;
+    border-width: 0;
+}
+
+.mui-code-scrollview .unity-repeat-button {
+    display:none;
+}
+
+#lineNumberText {
+    -unity-text-align: upper-right;
+    padding-left: 0;
+    padding-right: 0;
+    margin-right: 0;
+    color: var(--muse-chat-text-secondary);
+    display: none;
+}

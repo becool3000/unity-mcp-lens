@@ -1,0 +1,7 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" xmlns="UnityEngine.UIElements" editor-extension-mode="False">
+    <ui:VisualElement>
+        <ui:VisualElement name="historyPanelHeaderRoot">
+            <ui:Label name="historyPanelHeaderText" text="Date" class="mui-chat-label"/>
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>

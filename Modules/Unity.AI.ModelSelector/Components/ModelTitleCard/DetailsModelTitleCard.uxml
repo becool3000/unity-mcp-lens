@@ -1,0 +1,9 @@
+<UXML class="flex-row flex-grow" xmlns="UnityEngine.UIElements">
+    <Image class="model-title-card-image flex-no-shrink rounded-12px m-8 size-184px"/>
+    <VisualElement class="flex-grow-100pct flex-column justify-evenly">
+        <Label class="model-title-card-label font-size-20px font-bold text-ellipsis pt-4 pl-5"/>
+        <Label class="model-title-card-description font-size-14px flx-grow color-dark-gray text-wrap pt-1 pl-5"/>
+        <Label class="model-title-card-tags font-size-14px color-dark-gray text-ellipsis height-16px pt-1 pl-5"/>
+        <Button class="model-title-card-select self-start" text="Select model"/>
+    </VisualElement>
+</UXML>

@@ -1,0 +1,7 @@
+<UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" xmlns="UnityEngine.UIElements" editor-extension-mode="False">
+    <ui:VisualElement class="mui-chat-root mui-chat-response-list">
+        <ui:Label name="leftElement" class="mui-chat-response-list-left-element" />
+        <ui:VisualElement class="mui-chat-response-list-spacer" />
+        <ui:VisualElement name="rightElement" class="mui-chat-response-list-right-element" />
+    </ui:VisualElement>
+</UXML>

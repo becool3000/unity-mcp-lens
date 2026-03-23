@@ -1,0 +1,252 @@
+.selectionpopup__element {
+    position: absolute;
+    left: 16px;
+    right: 16px;
+    min-width: 380px;
+    max-width: 516px;
+}
+
+.mui-selection-popup-root {
+    background-color: var(--muse-chat-backgrounds-200);
+    flex-direction: column;
+    flex-shrink: 1;
+    min-height: 260px;
+}
+
+.mui-selection-popup-title-row {
+    flex-direction: row;
+    background-color: var(--muse-chat-text-primary);
+}
+
+.mui-selection-popup-history-title {
+    flex-grow: 1;
+    padding-left: 10px;
+    padding-top: 6px;
+    padding-bottom: 6px;
+}
+
+.mui-selection-popup-empty-list-hint-text {
+    padding: 8px;
+    color: var(--muse-chat-text-secondary);
+}
+
+.mui-selection-popup-history-button {
+    background-color: rgba(0, 0, 0, 0);
+    color: var(--muse-chat-accent-50);
+    border-width: 0;
+    padding-right: 8px;
+}
+
+#addSelectionButton:hover {
+    background-color: rgba(0, 0, 0, 0);
+}
+
+.mui-selection-popup-listview {
+    flex-grow: 1;
+    background-color: black;
+    min-height: 200px;
+    min-width: 200px;
+}
+
+.mui-selection-search-bar {
+    flex-grow: 1;
+    flex-shrink: 0;
+    width: auto;
+}
+
+.mui-selection-search-bar-row {
+    padding: 8px;
+    flex-direction: row;
+    align-items: center;
+}
+
+.mui-search-field-container {
+    flex-grow: 1;
+    flex-shrink: 1;
+    height: 24px;
+}
+
+#searchFieldContainer .unity-search-field-base {
+    margin-top: 0;
+    margin-bottom: 0;
+}
+
+.mui-selection-popup-action-button {
+    margin: 0;
+    margin-left: 4px;
+    height: 24px;
+    width: 24px;
+    padding: 2px;
+    flex-shrink: 0;
+}
+
+.mui-selection-popup-list-container {
+    max-height: 200px;
+}
+
+.mui-selection-popup-selected-tab {
+    margin-left: auto;
+}
+
+.mui-selection-popup-tab {
+    flex: 0 1 100px;
+    padding: 0;
+    justify-content: center;
+    align-self: center;
+    align-content: center;
+    background-color: var(--muse-chat-backgrounds-200);
+}
+
+.mui-selection-tab-view {
+    padding: 0 8px;
+    border-top-width: 1px;
+    border-bottom-width: 1px;
+    border-color: var(--muse-chat-backgrounds-75);
+}
+
+.mui-selection-tab-view .unity-tab__header:checked {
+    border-color: var(--muse-chat-accent-50);
+}
+
+.mui-selection-tab-view .unity-tab__header:hover>.unity-tab__header-underline {
+    background-color: var(--muse-chat-popup-tab-hover);
+}
+
+.mui-selection-tab-view .unity-tab__header:checked>.unity-tab__header-underline {
+    background-color: var(--muse-chat-accent-50);
+}
+
+.mui-selection-tab-view .unity-tab__header:hover {
+    background-color: var(--muse-chat-backgrounds-200);
+}
+
+.mui-tab-results-label {
+    margin-left: 4px;
+    color: var(--muse-chat-text-secondary);
+}
+
+.mui-selected-list-entry .mui-selection-element-row {
+    background-color: var(--muse-chat-accent-50);
+}
+
+.mui-selection-popup-initial {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin: 0 80px;
+    min-height: 200px;
+    min-width: 200px;
+}
+
+.mui-selection-popup-loading {
+    flex-direction: row;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin: 0 80px;
+    min-height: 200px;
+    min-width: 200px;
+}
+
+#selectionPopupLoadingSpinner {
+    width: 24px;
+    height: 24px;
+}
+
+.mui-icon-loading {
+    background-image: resource('loading@2x');
+    width: 18px;
+    height: 18px;
+    margin-right: 4px;
+}
+
+.mui-selection-popup-no-results-message {
+    margin-bottom: 12px;
+    display: flex;
+    flex-direction: row;
+    overflow: hidden;
+}
+
+.mui-selection-popup-search-message {
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+    flex-shrink: 1;
+    white-space: normal;
+    -unity-text-align: middle-center;
+}
+
+.mui-selection-popup-light {
+    color: var(--muse-chat-text-secondary);
+}
+
+.mui-selection-popup-search-string {
+    -unity-font-style: bold;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    overflow: hidden;
+}
+
+.mui-selection-popup-loading {
+    flex-direction: row;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin: 0 80px;
+    min-height: 200px;
+    min-width: 200px;
+}
+
+.mui-icon-loading {
+    background-image: resource("Loading@2x");
+    width: 18px;
+    height: 18px;
+    margin-right: 4px;
+}
+
+.mui-selection-popup-paging {
+    flex-direction: row;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    height: 30px;
+    min-width: 100%;
+    border-top-width: 1px;
+    border-color: var(--muse-chat-backgrounds-100);
+}
+
+.mui-selection-popup-paging-text {
+    align-self: flex-start;
+    margin: 8px;
+}
+
+#pagingSpacer {
+    flex-grow: 1;
+}
+
+#pagingContainerSpacer {
+    flex-grow: 1;
+}
+
+.mui-selection-popup-paging-button {
+    border-width: 0;
+    width: 32px;
+    height: 32px;
+    background-color: rgba(0,0,0,0);
+    margin: 4px;
+}
+
+.mui-selection-popup-paging-button:hover:enabled {
+    background-color: rgba(0,0,0,0);
+}
+
+.mui-selection-popup-paging-button:focus {
+    background-color: rgba(0,0,0,0);
+}
+
+#previousPageButton {
+    background-image: resource('ArrowNavigationLeft@2x');
+}
+
+#nextPageButton {
+    background-image: resource('ArrowNavigationRight@2x');
+}

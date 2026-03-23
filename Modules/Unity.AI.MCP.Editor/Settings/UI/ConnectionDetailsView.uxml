@@ -1,0 +1,120 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" xsi="http://www.w3.org/2001/XMLSchema-instance" engine="UnityEngine.UIElements" editor="UnityEditor.UIElements" noNamespaceSchemaLocation="../../UIElementsSchema/UIElements.xsd" editor-extension-mode="True">
+    <ui:VisualElement class="umcp-connection-details-root">
+        <!-- Security Tier Warning (HelpBox created in code) -->
+        <ui:VisualElement name="tierWarningContainer" class="umcp-tier-warning" />
+
+        <!-- Connection Summary Box -->
+        <ui:VisualElement name="summaryBox" class="umcp-summary-box">
+            <ui:Label name="clientLabel" text="Application Name" class="umcp-summary-app-name" />
+            <ui:Label name="publisherLabel" class="umcp-summary-publisher" />
+            <ui:Label name="pathLabel" class="umcp-summary-path" />
+            <ui:Label name="previouslyApprovedLabel" class="umcp-summary-previous" />
+        </ui:VisualElement>
+
+        <!-- Permissions Warning (HelpBox created in code) -->
+        <ui:VisualElement name="permissionsWarningContainer" class="umcp-permissions-warning" />
+
+        <!-- Collapsible Detailed Information -->
+        <ui:Foldout name="detailsFoldout" text="Connection Details" value="false" class="umcp-details-foldout">
+            <!-- Connection Info Section -->
+            <ui:VisualElement class="umcp-section">
+                <ui:Label text="Connection Attempt" class="umcp-section-header" />
+                <ui:VisualElement class="umcp-separator" />
+                <ui:VisualElement class="umcp-info-row">
+                    <ui:Label text="Timestamp:" class="umcp-info-label" />
+                    <ui:Label name="connectionTimestamp" class="umcp-info-value" />
+                </ui:VisualElement>
+            </ui:VisualElement>
+
+            <!-- MCP Server Process Section -->
+            <ui:VisualElement class="umcp-section">
+                <ui:Label text="MCP Server Process" class="umcp-section-header" />
+                <ui:VisualElement class="umcp-separator" />
+                <ui:VisualElement class="umcp-info-row">
+                    <ui:Label text="Process Name:" class="umcp-info-label" />
+                    <ui:Label name="serverProcessName" class="umcp-info-value" />
+                </ui:VisualElement>
+                <ui:VisualElement class="umcp-info-row">
+                    <ui:Label text="Process ID:" class="umcp-info-label" />
+                    <ui:Label name="serverProcessId" class="umcp-info-value" />
+                </ui:VisualElement>
+                <ui:VisualElement class="umcp-info-row">
+                    <ui:Label text="Executable:" class="umcp-info-label" />
+                    <ui:Label name="serverExecutable" class="umcp-info-value" />
+                </ui:VisualElement>
+                <ui:VisualElement class="umcp-info-row">
+                    <ui:Label text="SHA256 Hash:" class="umcp-info-label" />
+                    <ui:Label name="serverHash" class="umcp-info-value" />
+                </ui:VisualElement>
+                <ui:VisualElement name="serverSigningInfo" class="umcp-signing-info">
+                    <ui:VisualElement class="umcp-info-row">
+                        <ui:Label text="Code Signed:" class="umcp-info-label" />
+                        <ui:Label name="serverCodeSigned" class="umcp-info-value" />
+                    </ui:VisualElement>
+                    <ui:VisualElement name="serverPublisherRow" class="umcp-info-row">
+                        <ui:Label text="Publisher:" class="umcp-info-label" />
+                        <ui:Label name="serverPublisher" class="umcp-info-value" />
+                    </ui:VisualElement>
+                    <ui:VisualElement name="serverSignatureRow" class="umcp-info-row">
+                        <ui:Label text="Signature Valid:" class="umcp-info-label" />
+                        <ui:Label name="serverSignatureValid" class="umcp-info-value" />
+                    </ui:VisualElement>
+                </ui:VisualElement>
+            </ui:VisualElement>
+
+            <!-- MCP Client Process Section -->
+            <ui:VisualElement class="umcp-section">
+                <ui:Label text="MCP Client Process" class="umcp-section-header" />
+                <ui:VisualElement class="umcp-separator" />
+                <ui:VisualElement class="umcp-info-row">
+                    <ui:Label text="Process Name:" class="umcp-info-label" />
+                    <ui:Label name="clientProcessName" class="umcp-info-value" />
+                </ui:VisualElement>
+                <ui:VisualElement class="umcp-info-row">
+                    <ui:Label text="Process ID:" class="umcp-info-label" />
+                    <ui:Label name="clientProcessId" class="umcp-info-value" />
+                </ui:VisualElement>
+                <ui:VisualElement class="umcp-info-row">
+                    <ui:Label text="Executable:" class="umcp-info-label" />
+                    <ui:Label name="clientExecutable" class="umcp-info-value" />
+                </ui:VisualElement>
+                <ui:VisualElement class="umcp-info-row">
+                    <ui:Label text="SHA256 Hash:" class="umcp-info-label" />
+                    <ui:Label name="clientHash" class="umcp-info-value" />
+                </ui:VisualElement>
+                <ui:VisualElement name="clientSigningInfo" class="umcp-signing-info">
+                    <ui:VisualElement class="umcp-info-row">
+                        <ui:Label text="Code Signed:" class="umcp-info-label" />
+                        <ui:Label name="clientCodeSigned" class="umcp-info-value" />
+                    </ui:VisualElement>
+                    <ui:VisualElement name="clientPublisherRow" class="umcp-info-row">
+                        <ui:Label text="Publisher:" class="umcp-info-label" />
+                        <ui:Label name="clientPublisher" class="umcp-info-value" />
+                    </ui:VisualElement>
+                    <ui:VisualElement name="clientSignatureRow" class="umcp-info-row">
+                        <ui:Label text="Signature Valid:" class="umcp-info-label" />
+                        <ui:Label name="clientSignatureValid" class="umcp-info-value" />
+                    </ui:VisualElement>
+                </ui:VisualElement>
+                <ui:VisualElement name="clientChainRow" class="umcp-info-row">
+                    <ui:Label text="Chain Depth:" class="umcp-info-label" />
+                    <ui:Label name="clientChainDepth" class="umcp-info-value" />
+                </ui:VisualElement>
+            </ui:VisualElement>
+
+            <!-- Validation Status Section -->
+            <ui:VisualElement class="umcp-section">
+                <ui:Label text="Validation Status" class="umcp-section-header" />
+                <ui:VisualElement class="umcp-separator" />
+                <ui:VisualElement class="umcp-info-row">
+                    <ui:Label text="Status:" class="umcp-info-label" />
+                    <ui:Label name="validationStatus" class="umcp-info-value" />
+                </ui:VisualElement>
+                <ui:VisualElement class="umcp-info-row">
+                    <ui:Label text="Reason:" class="umcp-info-label" />
+                    <ui:Label name="validationReason" class="umcp-info-value" />
+                </ui:VisualElement>
+            </ui:VisualElement>
+        </ui:Foldout>
+    </ui:VisualElement>
+</ui:UXML>

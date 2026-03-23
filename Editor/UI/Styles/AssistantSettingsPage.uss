@@ -1,0 +1,80 @@
+.assistant-settings-page {
+    margin-top: 1px;
+    margin-left: 9px;
+    flex-shrink: 1;
+}
+
+#assistantSettingsHeader {
+    -unity-font-definition: resource("UIPackageResources/Fonts/Inter/Inter-Regular SDF.asset");
+    -unity-font-style: bold;
+    font-size: 19px;
+}
+
+.assistant-settings-content {
+    margin: 6px 4px 10px;
+}
+
+.assistant-settings-content-label {
+    -unity-font-definition: resource("UIPackageResources/Fonts/Inter/Inter-Regular SDF.asset");
+    width: 230px;
+}
+
+.assistant-settings-horizontal-layout {
+    flex-direction: row;
+    align-items: center;
+    margin-top: 5px;
+}
+
+.assistant-settings-vertical-layout {
+    flex-direction: column;
+    align-items: stretch;
+}
+
+#assetKnowledgeHeader {
+    -unity-font-style: bold;
+    margin-bottom: 6px;
+    margin-top: 16px;
+}
+
+#assetKnowledgeDownloadProgressBar {
+    align-self: stretch;
+    margin-right: 14px;
+    height: 18px;
+}
+
+#assetKnowledgeDownloadProgressBar .unity-progress-bar__container {
+    height: 18px;
+    min-height: 18px;
+    max-height: 18px;
+}
+
+#assetKnowledgeDownloadProgressBar .unity-progress-bar__progress {
+    background-image: none;
+}
+
+.assistant-settings-info-box {
+    flex-direction: column;
+    align-items: stretch;
+    border-width: 1px;
+    border-radius: 4px;
+    padding: 2px;
+    border-color: var(--muse-chat-backgrounds-75);
+    background-color: var(--muse-chat-backgrounds-200);
+    margin-right: 14px;
+    padding-top: 0;
+}
+
+.assistant-settings-info-label {
+    white-space: normal;
+    flex-shrink: 1;
+}
+
+.assistant-settings-toggle {
+    margin-left: 10px;
+}
+
+#infoIcon {
+    width: 32px;
+    height: 32px;
+    flex-shrink: 0;
+}

@@ -1,0 +1,5 @@
+<UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" xmlns="UnityEngine.UIElements" editor-extension-mode="False">
+    <ui:Foldout name="reasoningFoldout" text="Thought" class="mui-reasoning-sequence-foldout">
+        <ui:VisualElement name="reasoningContent" class="mui-reasoning-sequence-content"/>
+    </ui:Foldout>
+</UXML>

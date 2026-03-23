@@ -1,0 +1,26 @@
+{
+    "name": "Unity.AI.Toolkit.GenerationObjectPicker",
+    "rootNamespace": "Unity.AI.Toolkit.GenerationObjectPicker",
+    "references": [
+        "GUID:a67048a276c1b495097ecef74afc68d2",
+        "GUID:6faae282c16541e783ea8766fb588077",
+        "GUID:5a241fc381813534d9cc6d07eb989239"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [
+        {
+            "name": "Unity",
+            "expression": "6000.2.0a8",
+            "define": "OBJECT_SELECTOR_TOOLBAR_DECORATOR"
+        }
+    ],
+    "noEngineReferences": false
+}

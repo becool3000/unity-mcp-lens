@@ -1,0 +1,4 @@
+<UXML xmlns="UnityEngine.UIElements">
+    <SliderInt tooltip="Output image size for Pixelation (Should be smaller than source image)"
+               show-input-field="true" label="Size" low-value="4" high-value="1024"/>
+</UXML>

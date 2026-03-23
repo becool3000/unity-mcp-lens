@@ -1,0 +1,10 @@
+<UXML xmlns="UnityEngine.UIElements" xmlns:toolkit="Unity.AI.Toolkit.Accounts.Components">
+    <Style src="./AIDropdown.uss" />
+    <Style src="../AIDropdownRoot/AIDropdownRoot.uss" />
+    <toolkit:SessionStatusBanner name="banner"/>
+    <VisualElement name="points-container"/>
+    <VisualElement class="separator"/>
+    <VisualElement name="menu-extensions-general"/>
+    <VisualElement name="manage-account-separator" class="separator hidden"/>
+    <VisualElement name="menu-extensions"/>
+</UXML>

@@ -1,0 +1,37 @@
+{
+    "name": "Unity.AI.Mesh",
+    "rootNamespace": "Unity.AI.Mesh",
+    "references": [
+        "GUID:a38a99c5efe5445079abf3f3fbc951da",
+        "GUID:b134e7bb2da2842348549e2fca4773e5",
+        "GUID:f5475d913b2d4f92905afa1f35f6f9e4",
+        "GUID:014b346a84d6445cad431c8b47c25633",
+        "GUID:71ed23a05af4c0548a5a7d2fe2588745",
+        "GUID:44bd0c6211084984a742675e77a87c50",
+        "GUID:1377f0e8e7a89684e8178ed49f898449",
+        "GUID:6992518de2b392c4bbeada3ba0bc0db1",
+        "GUID:a67048a276c1b495097ecef74afc68d2",
+        "GUID:869cb80e36ef2c24ea3b6347dabee597",
+        "GUID:5547c4aa907443f5a88155906c8d4cdd",
+        "GUID:f1fa13fbbfc54ae6a2b3347716b2928e",
+        "GUID:6faae282c16541e783ea8766fb588077",
+        "GUID:5a241fc381813534d9cc6d07eb989239",
+        "GUID:14a6491feb19afe40819e117acbaedfd",
+        "GUID:76676817d91ba4f44b4aa7df71867256",
+        "GUID:a42927d1d4a3b4cda9b076a7adecb9cc"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [
+        "Newtonsoft.Json.dll",
+        "AiEditorToolsSdk.dll"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

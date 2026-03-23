@@ -1,0 +1,16 @@
+.mui-chat-response-list {
+    flex-direction: row;
+}
+
+.mui-chat-response-list-left-element {
+    min-width: 15px;
+    flex-direction: column;
+}
+
+.mui-chat-response-list-spacer {
+    min-width: 2px;
+}
+
+.mui-chat-response-list-right-element {
+    flex-direction: column;
+}

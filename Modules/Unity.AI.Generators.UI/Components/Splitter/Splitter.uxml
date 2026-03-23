@@ -1,0 +1,11 @@
+<!-- GenerateUI.uxml -->
+<UXML
+        xmlns="UnityEngine.UIElements"
+        xmlns:ui="Unity.AI.Generators.UI"
+        class="aitk-splitter"
+>
+    <Style src="./Splitter.uss" />
+    <VisualElement name="zone" class="aitk-splitter__zone">
+        <VisualElement class="aitk-splitter__content" picking-mode="Ignore" />
+    </VisualElement>
+</UXML>

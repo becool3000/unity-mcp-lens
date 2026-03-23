@@ -1,0 +1,55 @@
+<!-- GenerateUI.uxml -->
+<UXML class="flex-grow color-tab-background" xmlns="UnityEngine.UIElements" xmlns:aitk="Unity.AI.Generators.UI" xmlns:ui="Unity.AI.Mesh.Components" xmlns:aitk-account="Unity.AI.Toolkit.Accounts.Components">
+    <Style src="../../../Unity.AI.Generators.UI/StyleSheets/FlexUtilities.uss" />
+    <Style src="../../../Unity.AI.Generators.UI/StyleSheets/SessionStatusBannerClasses.uss" />
+    <Style src="./MeshGenerator.uss" />
+    <VisualElement class="flex-row flex-grow bg-light">
+        <VisualElement name="pane-container" class="flex-grow left-stack">
+            <!-- Left Pane -->
+            <VisualElement name="top-pane" style="min-height: 150px;">
+                <!-- Selected Asset Title Card -->
+                <VisualElement class="p-8-7-8-8 flex-no-shrink border-color-dark border-bottom-1px">
+                    <ui:SelectedAssetTitleCard />
+                </VisualElement>
+                <!-- Refinement Mode Tabs -->
+                <ScrollView>
+                    <!-- Model Selector Row -->
+                    <VisualElement class="flex-row items-center flex-no-shrink p-8-7-8-12 border-color-dark border-bottom-1px">
+                        <ui:SelectedModelTitleCard />
+                        <ui:ModelSelectorButton />
+                    </VisualElement>
+                    <!-- Prompt Section -->
+                    <VisualElement class="text-prompt flex-no-shrink p-8-7-8-8 border-color-dark border-bottom-1px">
+                        <ui:Prompt />
+                    </VisualElement>
+                    <!-- Image Reference Section -->
+                    <VisualElement class="flex-no-shrink border-color-dark border-bottom-1px">
+                        <ui:PromptImageReference class="p-8-7-8-8" />
+                    </VisualElement>
+                    <!-- Generate Variations Slider -->
+                    <VisualElement class="flex-no-shrink p-8-7-8-8">
+                        <Label class="font-bold p-4 pb-8" text="Options"/>
+                        <ui:GenerateVariationsSlider />
+                        <ui:GenerationOptions class="pt-8" />
+                    </VisualElement>
+                </ScrollView>
+                <!-- Generate Button -->
+                <VisualElement class="flex-no-shrink p-8-7-8-8 border-color-dark border-bottom-1px border-top-1px">
+                    <!-- Session Status Banner -->
+                    <aitk-account:GeneratorsSessionStatusBanner />
+                    <ui:GenerateButton text="Generate" quote-monitor="true" />
+                </VisualElement>
+            </VisualElement>
+            <!-- Bottom Pane (Vertical Layout Only) -->
+            <VisualElement name="bottom-pane" class="pt-8 pl-9 pr-0 bg-medium-light vertical-layout-flex flex-bottom flex-left flex-right border-color-dark border-top-1px" style="min-height:200px;translate: 0 -1px;">
+                <aitk:Splitter name="vertical-splitter" />
+                <ui:GenerationSelector />
+            </VisualElement>
+        </VisualElement>
+        <!-- Right Section (Horizontal Layout Only) -->
+        <VisualElement name="right-section" class="flex-row flex-shrink flex-grow horizontal-layout-flex bg-medium-light pt-8 pl-9 pr-0" style="min-width: 150px;">
+            <aitk:Splitter name="horizontal-splitter" />
+            <ui:GenerationSelector asset-monitor="false" />
+        </VisualElement>
+    </VisualElement>
+</UXML>

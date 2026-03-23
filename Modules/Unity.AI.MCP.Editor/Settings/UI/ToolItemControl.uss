@@ -1,0 +1,66 @@
+#toolItem {
+    flex-direction: column;
+    min-height: 24px;
+    margin-left: 8px;
+    margin-right: 2px;
+}
+
+#toolItem:hover {
+    background-color: var(--unity-colors-toolbar_button-background-hover);
+}
+
+#toolItemHeader {
+    flex-direction: row;
+    align-items: center;
+}
+
+#toolItemCheckbox {
+    width: 14px;
+    height: 14px;
+    margin-right: 6px;
+    margin-bottom: 0;
+    flex-shrink: 0;
+}
+
+#toolItemName {
+    font-size: 11px;
+    -unity-font-style: bold;
+    flex-grow: 1;
+}
+
+.umcp-tool-badge {
+    font-size: 9px;
+    opacity: 0.5;
+    margin-left: 4px;
+    padding: 1px 4px;
+    flex-shrink: 0;
+    -unity-font-style: italic;
+}
+
+#showDetailsButton {
+    font-size: 10px;
+    padding: 4px 8px;
+    margin: 0;
+    border-width: 0;
+    background-color: transparent;
+    flex-shrink: 0;
+    align-self: stretch;
+    -unity-text-align: middle-center;
+}
+
+#toolItemDetails {
+    padding: 6px 8px;
+    margin: 2px 2px 6px;
+    background-color: var(--unity-colors-inspector_titlebar-background);
+    border-radius: 3px;
+    border-width: 1px;
+    border-color: var(--unity-colors-inspector_titlebar-border);
+}
+
+#toolItemDescription {
+    font-size: 10px;
+    opacity: 0.7;
+    white-space: normal;
+    margin: 0;
+    padding: 0;
+}

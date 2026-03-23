@@ -1,0 +1,6 @@
+<UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" xmlns="UnityEngine.UIElements" editor-extension-mode="False">
+    <ui:VisualElement class="mui-chat-root mui-chat-response">
+            <ui:VisualElement name="textFieldRoot">
+            </ui:VisualElement>
+    </ui:VisualElement>
+</UXML>

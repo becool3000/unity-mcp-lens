@@ -1,0 +1,24 @@
+{
+    "name": "Unity.AI.Assistant.Integrations.Sample.Editor",
+    "rootNamespace": "Unity.AI.Assistant.Integrations.Sample.Editor",
+    "references": [
+        "Unity.AI.Assistant.Editor",
+        "Unity.AI.Assistant.API.Editor",
+        "Unity.AI.Assistant.Runtime",
+        "Unity.AI.Assistant.Bridge.Editor",
+        "Unity.AI.Assistant.Tools.Editor"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [
+        "ASSISTANT_INTERNAL"
+    ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

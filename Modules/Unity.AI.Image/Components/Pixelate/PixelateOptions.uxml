@@ -1,0 +1,7 @@
+<UXML xmlns="UnityEngine.UIElements" xmlns:ui="Unity.AI.Image.Components">
+    <ui:PixelateTargetSizeSlider/>
+    <ui:PixelateKeepImageSizeToggle/>
+    <ui:PixelatePixelBlockSizeSlider/>
+    <ui:PixelateModeSelector/>
+    <ui:PixelateOutlineThicknessSlider/>
+</UXML>

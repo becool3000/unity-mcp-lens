@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ui:UXML
+    xmlns:ui="UnityEngine.UIElements"
+    xmlns:uie="UnityEditor.UIElements"
+>
+    <ui:VisualElement class="annotation-toolbar-container">
+        <!-- Row 0: Undo and Redo buttons -->
+        <ui:VisualElement class="annotation-toolbar-row" name="row-0-undo-redo" />
+
+        <!-- Row 1: Toggle group buttons for annotation tools (pause, draw, spline, arrow, rect) -->
+        <ui:VisualElement class="annotation-toolbar-row">
+            <ui:ToggleButtonGroup class="annotation-toggle-group" name="row-1-draw">
+                <ui:Button name="pause-button" class="annotation-tool-button" />
+                <ui:Button name="draw-button" class="annotation-tool-button" />
+                <ui:Button name="spline-button" class="annotation-tool-button" />
+                <ui:Button name="arrow-button" class="annotation-tool-button" />
+                <ui:Button name="rect-button" class="annotation-tool-button" />
+            </ui:ToggleButtonGroup>
+        </ui:VisualElement>
+
+        <!-- Row 2: Color buttons (6 colors) -->
+        <!-- Note: Color buttons are created dynamically in C# for click handling and state management -->
+        <ui:VisualElement class="annotation-toolbar-row" name="row-2-colors" />
+
+        <!-- Row 3: More color buttons (5 colors) -->
+        <!-- Note: Additional color buttons created dynamically in C# -->
+        <ui:VisualElement class="annotation-toolbar-row" name="row-3-colors" />
+
+        <!-- Row 4: Opacity slider with label and text input -->
+        <ui:VisualElement class="annotation-toolbar-row annotation-opacity-container" name="row-4-opacity">
+            <ui:Label text="Opacity" class="annotation-opacity-label" />
+            <ui:SliderInt name="opacity-slider" class="annotation-opacity-slider" low-value="20" high-value="100" value="100" show-input-field="false" />
+            <ui:TextField name="opacity-input" class="annotation-opacity-input" value="100" />
+        </ui:VisualElement>
+
+        <!-- Row 5: Line thickness buttons using ToggleButtonGroup -->
+        <ui:VisualElement class="annotation-toolbar-row" name="row-5-picker">
+            <ui:ToggleButtonGroup name="thickness-toggle-group" class="annotation-thickness-container">
+                <ui:Button name="thickness-small" class="annotation-thickness-button" tooltip="Small (2px)" />
+                <ui:Button name="thickness-medium" class="annotation-thickness-button" tooltip="Medium (5px)" />
+                <ui:Button name="thickness-heavy" class="annotation-thickness-button" tooltip="Heavy (10px)" />
+            </ui:ToggleButtonGroup>
+        </ui:VisualElement>
+
+        <!-- Row 6: Cancel and Done buttons -->
+        <!-- Note: Action buttons are created dynamically in C# for click handling -->
+        <ui:VisualElement class="annotation-toolbar-row" name="row-6-actions" />
+    </ui:VisualElement>
+</ui:UXML>

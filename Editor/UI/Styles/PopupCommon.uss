@@ -1,0 +1,222 @@
+/* =============================================================================
+   PopupCommon.uss - Shared styles for popup selector components
+   ============================================================================= */
+
+/* -----------------------------------------------------------------------------
+   Selector Button
+   ----------------------------------------------------------------------------- */
+
+.popupselectorbase__element {
+    flex-shrink: 0;
+}
+
+.mui-popup-selector-button {
+    flex-direction: row;
+    align-items: center;
+    padding: 4px 0 4px 6px;
+    margin: 0 4px 0 0;
+    background-color: transparent;
+    border-width: 0;
+    border-radius: 0;
+}
+
+.mui-popup-selector-button:hover {
+    background-color: transparent;
+}
+
+.mui-popup-selector-button:hover .mui-popup-selector-label {
+    opacity: 0.8;
+}
+
+.mui-popup-selector-content {
+    flex-direction: row;
+    align-items: center;
+}
+
+.mui-popup-selector-icon {
+    width: 16px;
+    height: 16px;
+    min-width: 16px;
+    min-height: 16px;
+    max-width: 16px;
+    max-height: 16px;
+    margin-right: 6px;
+    flex-shrink: 0;
+    -unity-background-scale-mode: scale-to-fit;
+}
+
+.mui-popup-selector-label {
+    margin: 0;
+    padding: 0;
+    -unity-text-align: middle-left;
+}
+
+.mui-popup-selector-caret {
+    font-size: 8px;
+    margin-left: 4px;
+    -unity-text-align: middle-center;
+    opacity: 0.6;
+}
+
+/* -----------------------------------------------------------------------------
+   Popup Entries Container
+   ----------------------------------------------------------------------------- */
+
+.mui-popup-entries {
+    flex-direction: column;
+}
+
+/* -----------------------------------------------------------------------------
+   Popup Container (shared base styles)
+   ----------------------------------------------------------------------------- */
+
+.mui-popup-container {
+    position: absolute;
+    /* Override mui-popup-shadow's stretching behavior */
+    top: auto;
+    bottom: auto;
+    left: auto;
+    right: auto;
+    height: auto;
+    background-color: var(--muse-chat-backgrounds-200);
+    flex-direction: column;
+    flex-shrink: 0;
+    flex-grow: 0;
+    align-self: auto;
+    width: auto;
+    border-radius: 4px;
+    border-width: 1px;
+    border-color: var(--muse-chat-foregrounds-310);
+    padding: 2px 0;
+}
+
+/* Provider popup specific sizing */
+.mui-provider-popup-root {
+    position: absolute;
+    top: auto;
+    bottom: auto;
+    left: auto;
+    right: auto;
+    height: auto;
+    background-color: var(--muse-chat-backgrounds-200);
+    flex-direction: column;
+    flex-shrink: 0;
+    flex-grow: 0;
+    align-self: auto;
+    width: auto;
+    min-width: 120px;
+    max-width: 200px;
+    border-radius: 4px;
+    border-width: 1px;
+    border-color: var(--muse-chat-foregrounds-310);
+    padding: 2px 0;
+}
+
+/* Command popup specific sizing */
+.mui-command-popup-root {
+    position: absolute;
+    top: auto;
+    bottom: auto;
+    left: auto;
+    right: auto;
+    height: auto;
+    background-color: var(--muse-chat-backgrounds-200);
+    flex-direction: column;
+    flex-shrink: 0;
+    flex-grow: 0;
+    align-self: auto;
+    width: auto;
+    min-width: 140px;
+    max-width: 240px;
+    border-radius: 4px;
+    border-width: 1px;
+    border-color: var(--muse-chat-foregrounds-310);
+    padding: 2px 0;
+}
+
+/* -----------------------------------------------------------------------------
+   Popup Entry
+   ----------------------------------------------------------------------------- */
+
+.mui-popup-entry {
+    display: flex;
+    flex-direction: row;
+    padding: 6px 10px 6px 4px;
+    justify-content: flex-start;
+    align-items: center;
+    min-height: 28px;
+    max-height: 28px;
+}
+
+.mui-popup-entry:hover {
+    background-color: var(--muse-chat-popup-hover);
+}
+
+.mui-popup-item-hovered {
+    background-color: var(--muse-chat-popup-hover);
+}
+
+.mui-popup-entry-content {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    flex-shrink: 1;
+    flex-grow: 1;
+    min-width: 0;
+}
+
+.mui-popup-entry-checkmark {
+    width: 12px;
+    height: 12px;
+    min-width: 12px;
+    min-height: 12px;
+    max-width: 12px;
+    max-height: 12px;
+    margin-right: 8px;
+    flex-shrink: 0;
+    background-image: resource("Packages/com.unity.ai.assistant/Editor/UI/Assets/icons/Checkmark.png");
+    -unity-background-scale-mode: scale-to-fit;
+}
+
+.mui-popup-entry-icon {
+    width: 16px;
+    height: 16px;
+    min-width: 16px;
+    min-height: 16px;
+    max-width: 16px;
+    max-height: 16px;
+    margin-right: 8px;
+    flex-shrink: 0;
+    -unity-background-scale-mode: scale-to-fit;
+}
+
+.mui-popup-entry-label {
+    -unity-font-style: normal;
+    white-space: nowrap;
+    flex-grow: 1;
+    flex-shrink: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    -unity-text-overflow-position: end;
+}
+
+/* -----------------------------------------------------------------------------
+   Separator
+   ----------------------------------------------------------------------------- */
+
+.mui-popup-separator {
+    height: 1px;
+    background-color: var(--muse-chat-separator-line);
+    margin: 4px 6px;
+}
+
+/* -----------------------------------------------------------------------------
+   First/Last Item Classes (for potential rounded corners or spacing)
+   ----------------------------------------------------------------------------- */
+
+.mui-first-popup-item {
+}
+
+.mui-last-popup-item {
+}

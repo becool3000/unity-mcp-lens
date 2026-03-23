@@ -1,0 +1,16 @@
+<UXML xmlns="UnityEngine.UIElements" xmlns:ui="Unity.AI.Mesh.Components">
+    <VisualElement class="doodle-container container">
+        <VisualElement class="doodle-data">
+            <VisualElement class="doodle-content">
+                <Label class="metadata-type" name="doodle-type" />
+                <ui:DoodlePad class="metadata rounded-4px flex-grow-100pct p-0 m-0" modifier-state="1"/>
+            </VisualElement>
+            <VisualElement class="doodle-content doodle-strength-container">
+                <Label class="metadata-type" text="Strength" />
+                <Label class="metadata" name="doodle-strength-metadata" text="test"/>
+            </VisualElement>
+        </VisualElement>
+        <Button text="Copy" class="data-button" name="copy-doodle-button"/>
+        <Button text="Use" class="data-button" name="use-doodle-button"/>
+    </VisualElement>
+</UXML>

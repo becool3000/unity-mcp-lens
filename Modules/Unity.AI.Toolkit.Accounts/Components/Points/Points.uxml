@@ -1,0 +1,11 @@
+<UXML xmlns="UnityEngine.UIElements" class="text-menu-item">
+    <Style src="./Points.uss" />
+    <Style src="../AIDropdownRoot/AIDropdownRoot.uss" />
+    <VisualElement class="points-balance-container aligned-row section-container">
+        <VisualElement class="points-balance-label-container">
+            <Label text="" class="points-label"/>
+            <Label text="Points"/>
+        </VisualElement>
+        <Button name="get-points" text="View bundles"/>
+    </VisualElement>
+</UXML>

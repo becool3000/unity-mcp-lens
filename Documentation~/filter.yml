@@ -1,0 +1,13 @@
+apiRules:
+    - exclude:
+        uidRegex: ^Unity\.AI\.Assistant\.Editor\.FunctionCalling\.ContextProviderAttribute$
+        type: Type
+    - exclude:
+        uidRegex: ^Unity\.AI\.Assistant\.Editor\.FunctionCalling\.ParameterAttribute$
+        type: Type
+    - exclude:
+        uidRegex: ^Unity\.AI\.Assistant\.Editor\.FunctionCalling\.PluginAttribute$
+        type: Type
+    - exclude:
+        uidRegex: Unity\.AI\..*
+        type: Namespace

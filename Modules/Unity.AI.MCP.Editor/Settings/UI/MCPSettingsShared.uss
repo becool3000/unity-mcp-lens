@@ -1,0 +1,84 @@
+:root {
+    /* MCP Status Colors */
+    --mcp-color-success: #4CAF50;
+    --mcp-color-error: #F44336;
+    --mcp-color-warning: #FF9800;
+    --mcp-color-inactive: #888888;
+    --mcp-color-white: #ffffff;
+
+    /* Connected Client Colors */
+    --mcp-color-client-connected: #4CAF50;
+    --mcp-color-client-error: #ff4444;
+    --mcp-color-client-partial: #ffaa44;
+    --mcp-color-client-gateway: #5B9BD5;  /* Blue for AI Gateway connections */
+
+    /* Text Colors */
+    --mcp-color-text-accent: #ff8000;
+}
+
+.umcp-root-scroll {
+    padding: 0px 8px;
+}
+
+.umcp-primary-button {
+    min-width: 80px;
+    height: 24px;
+    font-size: 12px;
+    margin-right: 4px;
+}
+
+.umcp-secondary-button {
+    min-width: 80px;
+    height: 24px;
+    font-size: 12px;
+    margin-right: 4px;
+}
+
+.umcp-status-indicator {
+    width: 12px;
+    height: 12px;
+    border-radius: 6px;
+    margin-right: 8px;
+    background-color: var(--mcp-color-inactive);
+    flex-shrink: 0;
+}
+
+.umcp-status-indicator.configured {
+    background-color: var(--mcp-color-success);
+}
+
+.umcp-status-indicator.error {
+    background-color: var(--mcp-color-error);
+}
+
+.umcp-status-indicator.not-configured {
+    background-color: var(--mcp-color-warning);
+}
+
+.umcp-status-indicator.incorrect-path {
+    background-color: var(--mcp-color-warning);
+}
+
+.umcp-status-indicator.running {
+    background-color: var(--mcp-color-success);
+}
+
+.umcp-status-indicator.stopped {
+    background-color: var(--mcp-color-error);
+}
+
+.umcp-status-indicator.green {
+    background-color: var(--mcp-color-success);
+}
+
+.umcp-status-indicator.red {
+    background-color: var(--mcp-color-error);
+}
+
+.umcp-status-indicator.yellow {
+    background-color: var(--mcp-color-warning);
+}
+
+.umcp-status-indicator.gateway {
+    background-color: var(--mcp-color-client-gateway);
+}

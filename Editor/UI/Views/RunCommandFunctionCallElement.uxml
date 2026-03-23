@@ -1,0 +1,24 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" editor-extension-mode="False">
+    <ui:VisualElement name="runCommandTabContainer" class="tab-container">
+        <ui:VisualElement name="runCommandHeaderActions" class="run-command-header-actions">
+            <ui:VisualElement class="run-command-tab-buttons">
+                <ui:Button name="runCommandOutputTab" tooltip="Output view" class="tab-button tab-active">
+                    <ui:Image class="mui-action-button-image-large mui-icon-text-asset" picking-mode="Ignore" />
+                </ui:Button>
+                <ui:Button name="runCommandCodeTab" tooltip="Code view" class="tab-button">
+                    <ui:Image class="mui-action-button-image-large mui-icon-code-block" picking-mode="Ignore" />
+                </ui:Button>
+            </ui:VisualElement>
+        </ui:VisualElement>
+        <ui:VisualElement name="runCommandTabContent" class="tab-content">
+            <ui:VisualElement name="runCommandOutputPane" class="tab-pane">
+                <ui:ScrollView name="runCommandOutputScroll" class="run-command-output-scroll" mode="Vertical" horizontal-scroller-visibility="Hidden" vertical-scroller-visibility="Auto">
+                    <ui:VisualElement class="mui-code-block-content-root mui-execution-result-container">
+                        <ui:VisualElement name="runCommandLogsContainer" />
+                    </ui:VisualElement>
+                </ui:ScrollView>
+            </ui:VisualElement>
+            <ui:VisualElement name="runCommandCodePane" class="tab-pane" style="display: none;" />
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>

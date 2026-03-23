@@ -1,0 +1,24 @@
+<UXML
+        xmlns="UnityEngine.UIElements"
+        xmlns:ui="Unity.AI.Image.Components"
+        xmlns:editorui="UnityEditor.UIElements">
+    <Style src="./ImageReferenceObjectField.uss" />
+    <VisualElement name="image-reference-object-field" class="image-reference-object-field height-128px" focusable="true">
+        <ui:DoodlePad name="image-reference-object-field__doodle-pad" class="image-reference-object-field__doodle-pad" enabled="false" picking-mode="Ignore"/>
+        <editorui:ObjectField
+            name="image-reference-object-field__input-field"
+            class="image-reference-object-field__input-field"
+            type="UnityEngine.Texture2D, UnityEngine.CoreModule"
+            label="Select an object:" >
+            <VisualElement name="image-reference-object-field__overlay" class="image-reference-object-field__overlay" picking-mode="Ignore">
+                <Button name="edit-image-reference" tooltip="Edit the reference data"><Image class="unity-button__image"/></Button>
+                <VisualElement class="button-spacer" />
+                <Button name="image-reference-settings-button" tooltip="More"><Image class="unity-button__image"/></Button>
+            </VisualElement>
+            <VisualElement name="warning-background" class="hidden" />
+        </editorui:ObjectField>
+    </VisualElement>
+    <VisualElement name="warning-icon-container" class="warning-icon-container hidden" tooltip="This control is not supported with this model. Remove by pressing X or choose a compatible model.">
+        <Image name="warning-icon"/>
+    </VisualElement>
+</UXML>

@@ -1,0 +1,7 @@
+<UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" xmlns="UnityEngine.UIElements" editor-extension-mode="False">
+    <ui:VisualElement class="mui-progress-root">
+        <ui:VisualElement name="progressIcon" class="mui-progress-icon"/>
+        <ui:Label name="progressStatus" text="Hustling..." class="mui-chat-label mui-progress-status"/>
+        <ui:Label name="progressDetail" text="(0s)" class="mui-chat-label mui-progress-detail"/>
+    </ui:VisualElement>
+</UXML>

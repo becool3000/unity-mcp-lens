@@ -1,0 +1,6 @@
+<UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" xmlns="UnityEngine.UIElements" editor-extension-mode="False">
+    <ui:VisualElement name="thoughtContainer" class="thought-container">
+        <ui:Label name="titleLabel" class="thought-title"/>
+        <ui:VisualElement name="textContent" class="thought-content"/>
+    </ui:VisualElement>
+</UXML>

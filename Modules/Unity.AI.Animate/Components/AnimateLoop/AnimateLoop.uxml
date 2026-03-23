@@ -1,0 +1,29 @@
+<!-- GenerateUI.uxml -->
+<UXML class="flex-grow color-tab-background" xmlns="UnityEngine.UIElements" xmlns:ui="Unity.AI.Animate.Components" xmlns:aitk="Unity.AI.Generators.UI">
+    <Style src="../../../Unity.AI.Generators.UI/StyleSheets/FlexUtilities.uss" />
+    <Style src="../../../Unity.AI.Generators.UI/StyleSheets/SessionStatusBannerClasses.uss" />
+    <Style src="./AnimateLoop.uss" />
+    <VisualElement class="flex-row flex-grow bg-light">
+        <VisualElement name="pane-container" class="flex-grow left-stack">
+            <!-- Left Pane -->
+            <ScrollView>
+                <VisualElement name="top-pane" >
+                    <VisualElement class="flex-no-shrink p-8-7-8-8">
+                        <!-- Moved controls from LoopOptions -->
+                        <Label class="font-bold p-4 pb-8" text="Options"/>
+                        <Toggle label="Root Motion" name="loop-options-root-motion" value="false" tooltip="Uncheck to create a stationary looping animation by removing root motion. Perfect for animations that should play in place within a game environment."/>
+                        <Toggle class="mt-2" label="Best Loop" name="loop-options-best-loop" value="true" tooltip="When enabled, automatically finds the best possible loop points. For a truly seamless result, you must also enable the 'Loop Pose' option in the Animation Clip's Inspector settings. When disabled, the loop is created using your custom start and end markers."/>
+                        <Slider show-input-field="true" label="Minimum Duration" name="loop-options-duration-coverage" low-value="0.01" high-value="1.0" value="0.25" tooltip="Sets how long a loop must be (in seconds) to be considered valid. Higher values create smoother, more natural loops but may limit options."/>
+                    </VisualElement>
+                </VisualElement>
+                <VisualElement class="flex-no-shrink p-8-7-8-8 border-color-dark border-top-1px">
+                    <ui:LoopPreview is-playing="false" style="min-height: 240px;" />
+                    <aitk:MultiSlider tooltip="Drag the markers to define the loop's start and end points.&#10;&#10;When 'Best Loop' is ON, these markers define a search area. A colored bar will appear showing the optimal loop found within that area.&#10;The bar's color indicates quality: Green = Excellent, Yellow = Good, Red = Poor.&#10;&#10;When 'Best Loop' is OFF, the markers define the exact loop points." />
+                </VisualElement>
+            </ScrollView>
+            <VisualElement name="ButtonsContainer" class="flex-row flex-no-shrink p-8-7-8-8 border-color-dark border-bottom-1px border-top-1px">
+                <Button name="Apply" text="Trim" class="flex-grow height-24px"/>
+            </VisualElement>
+        </VisualElement>
+    </VisualElement>
+</UXML>

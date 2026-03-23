@@ -1,0 +1,5 @@
+.base-image-doodle-container {
+    background-color: var(--unity-colors-object_field-background);
+    border-color: var(--unity-colors-object_field-border);
+    border-width: 1px;
+}

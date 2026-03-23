@@ -1,0 +1,9 @@
+<UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" xmlns="UnityEngine.UIElements" xmlns:assistant="Unity.AI.Assistant.UI.Editor.Scripts.Components" editor-extension-mode="False">
+    <ui:VisualElement class="mui-chat-root mui-chat-response">
+        <!-- Response section containing reasoning and answer -->
+        <VisualElement name="responsesContainer"/>
+
+        <!-- Footer section for copy/feedback buttons -->
+        <assistant:ChatElementFeedback/>
+    </ui:VisualElement>
+</UXML>

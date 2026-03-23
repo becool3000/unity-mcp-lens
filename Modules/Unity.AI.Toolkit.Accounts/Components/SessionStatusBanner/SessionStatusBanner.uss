@@ -1,0 +1,32 @@
+.banner {
+    background-color: rgba(255,255,255, 0.08);
+    padding: 4px;
+    border-radius: 4px;
+    max-height: 150px;
+}
+
+.banner-content {
+    flex-direction: row;
+    align-items: center;
+}
+
+.banner .unity-label {
+    flex-grow: 1;
+    flex-shrink: 1;
+    white-space: normal;
+}
+
+.light .banner {
+    background-color: rgba(0,0,0, 0.08);
+}
+
+.banner-content-button {
+    flex-direction: column;
+    align-items: center;
+    padding: 4px;
+}
+
+.banner-content-button Button {
+    margin-top: 8px;
+    width: 100%;
+}

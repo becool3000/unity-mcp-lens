@@ -1,0 +1,5 @@
+<UXML xmlns:ui="UnityEngine.UIElements" xmlns="UnityEngine.UIElements" editor-extension-mode="False">
+    <ui:VisualElement class="dialogview__element">
+        <ui:VisualElement name="contentContainer"/>
+    </ui:VisualElement>
+</UXML>

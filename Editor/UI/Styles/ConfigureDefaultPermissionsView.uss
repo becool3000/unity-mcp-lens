@@ -1,0 +1,55 @@
+.configure-default-permissions-view {
+    flex-grow: 1;
+}
+
+.permissions-title {
+    -unity-font-style: bold;
+    margin-bottom: 6px;
+    margin-top: 16px;
+}
+
+.permissions-container {
+    border-width: 1px;
+    border-color: var(--muse-chat-backgrounds-75);
+    border-radius: var(--muse-chat-border-radius);
+    overflow: hidden;
+}
+
+.permissions-section-label {
+    -unity-font-style: bold;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex-shrink: 1;
+}
+
+.permissions-row {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    padding: 4px 4px;
+    background-color: var(--muse-chat-backgrounds-200);
+}
+
+.permissions-row-bg-highlight {
+    background-color: var(--muse-chat-backgrounds-175);
+}
+
+.permissions-row-label {
+    flex-grow: 1;
+    flex-shrink: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.permissions-row-label-indented {
+    margin-left: 10px;
+}
+
+.permissions-dropdown {
+    width: 120px;
+}
+
+.permissions-separator {
+    border-bottom-width: 1px;
+    border-bottom-color: var(--muse-chat-backgrounds-75);
+}

@@ -1,0 +1,4 @@
+<UXML xmlns="UnityEngine.UIElements">
+    <Style src="./AIDropdownRoot.uss" />
+    <VisualElement name="content"/>
+</UXML>

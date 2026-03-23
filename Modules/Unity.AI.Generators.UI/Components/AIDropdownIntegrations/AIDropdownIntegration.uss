@@ -1,0 +1,15 @@
+.sub-menu {
+    padding: 8px;
+}
+
+.label-button:hover .chevron {
+    --unity-image-tint-color: var(--unity-colors-label-text-focus);
+}
+
+.label-button .chevron {
+    --unity-image-tint-color: var(--unity-colors-dropdown-text);
+}
+
+.label-button .chevron {
+    opacity: 0.5;
+}

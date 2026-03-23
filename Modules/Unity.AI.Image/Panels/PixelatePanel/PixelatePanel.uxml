@@ -1,0 +1,20 @@
+<!-- GenerateUI.uxml -->
+<UXML xmlns="UnityEngine.UIElements" xmlns:ui="Unity.AI.Image.Components" xmlns:aitk-account="Unity.AI.Toolkit.Accounts.Components">
+    <Style src="./PixelatePanel.uss" />
+    <Style src="../../../Unity.AI.Generators.UI/StyleSheets/FlexUtilities.uss" />
+    <Style src="../../../Unity.AI.Generators.UI/StyleSheets/SessionStatusBannerClasses.uss" />
+    <ScrollView horizontal-scroller-visibility="Hidden">
+        <VisualElement class="flex-no-shrink p-8-7-8-8">
+            <ui:PixelateOptions/>
+        </VisualElement>
+        <!-- Base Image -->
+        <VisualElement class="flex-no-shrink bg-light">
+            <ui:BaseImageReference name="baseImage" />
+        </VisualElement>
+    </ScrollView>
+    <VisualElement class="flex-no-shrink p-8-7-8-8 border-color-dark border-bottom-1px border-top-1px">
+        <!-- Session Status Banner -->
+        <aitk-account:GeneratorsSessionStatusBanner />
+        <ui:GenerateButton quote-monitor="false" text="Pixelate" />
+    </VisualElement>
+</UXML>

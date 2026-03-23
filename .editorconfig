@@ -1,0 +1,4 @@
+root = true
+
+[*.asmdef]
+scrape_api = true

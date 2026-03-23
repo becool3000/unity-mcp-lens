@@ -1,0 +1,11 @@
+.points-balance-label-container {
+    flex-direction: row;
+}
+
+.points-label {
+    -unity-font-style: bold;
+}
+
+.points-free-beta {
+    opacity: 0.5;
+}

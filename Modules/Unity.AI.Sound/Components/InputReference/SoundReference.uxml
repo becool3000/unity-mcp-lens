@@ -1,0 +1,20 @@
+<UXML
+    xmlns="UnityEngine.UIElements"
+    xmlns:editorui="UnityEditor.UIElements"
+    class="flex-no-shrink p-8-7-8-8 border-top-1px border-color-dark"
+>
+    <Style src="./SoundReference.uss" />
+    <VisualElement>
+        <editorui:Template src="./InputReferenceHeader.uxml" name="InputReferenceHeader" />
+        <editorui:Template src="./InputReferenceObjectField.uxml" name="InputReferenceObjectField" />
+        <editorui:Template src="./InputReferenceStrength.uxml" name="InputReferenceStrength" />
+        <editorui:Template src="./SoundReferenceRecord.uxml" name="SoundReferenceRecord" />
+
+        <Instance template="InputReferenceHeader">
+            <AttributeOverrides element-name="header-title" text="Sound Reference" />
+        </Instance>
+        <Instance template="InputReferenceObjectField" />
+        <Instance template="InputReferenceStrength" />
+        <Instance template="SoundReferenceRecord" />
+    </VisualElement>
+</UXML>

@@ -1,0 +1,22 @@
+{
+    "name": "Unity.AI.Assistant.Tools.Editor",
+    "rootNamespace": "Unity.AI.Assistant.Tools.Editor",
+    "references": [
+        "Unity.AI.Assistant.Editor",
+        "Unity.AI.Assistant.Runtime",
+        "Unity.Serialization",
+        "Unity.AI.Toolkit.Compliance",
+        "Unity.AI.Search.Editor"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

@@ -1,0 +1,9 @@
+<UXML xmlns="UnityEngine.UIElements" xmlns:ui="Unity.AI.Image.Components">
+    <Style src="../../../Unity.AI.Generators.UI/StyleSheets/FlexUtilities.uss" />
+    <Style src="./AddToPromptView.uss"/>
+    <VisualElement class="operator-reference">
+        <Image name="operator-icon" class="operator-icon" />
+        <Label name="operator-name" class="operator-name" text="Image Reference"/>
+        <Label name="operator-description" class="operator-description" text=""/>
+    </VisualElement>
+</UXML>

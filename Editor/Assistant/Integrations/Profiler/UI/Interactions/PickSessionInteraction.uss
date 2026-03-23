@@ -1,0 +1,50 @@
+.pick-session-interaction {
+    flex-direction: column;
+    padding-top: 2px;
+    padding-bottom: 2px;
+    background-color: rgb(40, 40, 40);
+    border-radius: 4px;
+}
+
+.pick-session-interaction__header-row {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 8px;
+}
+
+.pick-session-interaction__header-title {
+    -unity-font-style: bold;
+}
+
+.pick-session-interaction__open-profiler-button {
+    margin: 0;
+    padding: 0 14px;
+}
+
+.pick-session-interaction__row {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 8px;
+}
+
+.pick-session-separator {
+    border-top-width: 1px;
+    border-top-color: rgba(0, 0, 0, 0.35);
+}
+
+.pick-session-interaction__row-left {
+    flex-direction: row;
+    align-items: center;
+    flex-grow: 1;
+}
+
+.pick-session-interaction__label {
+    color: rgb(230, 230, 230);
+}
+
+.pick-session-interaction__analyze-button {
+    margin: 0;
+    padding: 0 14px;
+}

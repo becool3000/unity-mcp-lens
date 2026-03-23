@@ -1,0 +1,21 @@
+<UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" xmlns="UnityEngine.UIElements" editor-extension-mode="False">
+    <ui:VisualElement class="mui-context-view-element-root">
+
+        <ui:VisualElement name="contextRow" class="mui-context-view-element-row">
+
+            <ui:Button name="removeContextElementButton" class="mui-context-view-element-remove-button mui-context-dropdown-list-remove">
+                <ui:Image class="mui-action-button-image mui-icon-close"/>
+            </ui:Button>
+            <ui:VisualElement class="mui-context-view-element-icon-root">
+                <ui:Image name="contextIcon" size="s" class="mui-context-view-element-icon"/>
+                <ui:Image name="contextIconMissingOverlay"/>
+            </ui:VisualElement>
+            <ui:Label name="contextText" />
+            <ui:Button name="removeButton" class="mui-context-view-element-remove-button">
+                <ui:Image class="mui-action-button-image mui-icon-close"/>
+            </ui:Button>
+
+        </ui:VisualElement>
+
+    </ui:VisualElement>
+</UXML>

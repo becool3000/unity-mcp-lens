@@ -1,0 +1,7 @@
+<UXML xmlns="UnityEngine.UIElements" class="aitk-multi-slider">
+    <Style src="./MultiSlider.uss" />
+    <VisualElement class="aitk-multi-slider__container">
+        <VisualElement class="aitk-multi-slider__ruler" />
+        <VisualElement class="aitk-multi-slider__ruler-highlight" />
+    </VisualElement>
+</UXML>

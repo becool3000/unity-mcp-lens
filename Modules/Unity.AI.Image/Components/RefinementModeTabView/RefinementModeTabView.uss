@@ -1,0 +1,32 @@
+.refinement-mode-tabview .unity-tab__header-underline {
+    display: none;
+}
+
+.refinement-mode-tabview .unity-tab__header,
+.refinement-mode-tabview .unity-repeat-button {
+    background-color: var(--unity-colors-tab-background-checked);
+}
+
+.refinement-mode-tabview > .unity-tab-view__content-viewport {
+    flex-shrink: 0;
+    background-color: var(--unity-colors-tab-background-checked);
+}
+
+.refinement-mode-tabview > .unity-tab-view__header-container {
+    justify-content: space-around;
+    flex-shrink: 0;
+}
+
+.refinement-mode-tabview > .unity-tab-view__header-container .unity-tab-view__content-container,
+.refinement-mode-tabview > .unity-tab-view__header-container .unity-tab__content-container {
+    flex-grow: 1;
+}
+
+.refinement-mode-tabview > .unity-tab-view__header-container .unity-tab__header-label {
+    -unity-text-align: upper-center;
+}
+
+.refinement-mode-tabview .unity-tab__header {
+    padding-left: 12px;
+    padding-right: 12px;
+}

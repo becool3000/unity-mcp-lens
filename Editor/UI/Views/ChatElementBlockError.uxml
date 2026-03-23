@@ -1,0 +1,6 @@
+<UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" xmlns="UnityEngine.UIElements" editor-extension-mode="False">
+    <ui:VisualElement name="errorTitle" class="mui-chat-response-error-title">
+        <ui:Image class="mui-action-button-image mui-icon-error"/>
+        <ui:Label name="errorText" text="Error"/>
+    </ui:VisualElement>
+</UXML>

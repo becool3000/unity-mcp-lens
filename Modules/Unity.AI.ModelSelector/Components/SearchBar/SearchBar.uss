@@ -1,0 +1,5 @@
+﻿ToolbarSearchField {
+    flex-grow: 1;
+    width: auto;
+    padding: 2px;
+}

@@ -1,0 +1,3 @@
+<UXML class="p-4" xmlns="UnityEngine.UIElements" xmlns:editorui="UnityEditor.UIElements">
+    <editorui:ObjectField class="p-0 m-0" type="UnityEngine.AudioClip, UnityEngine.AudioModule" />
+</UXML>

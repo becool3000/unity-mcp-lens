@@ -1,0 +1,227 @@
+.assistanttextfield__element {
+    flex-grow: 1;
+}
+
+.assistanttextfield__element-root {
+    flex-grow: 1;
+}
+
+.mui-mtf-root {
+    flex-grow: 1;
+    border-width: 1px;
+    border-radius: var(--muse-chat-border-radius);
+    border-color: var(--muse-chat-foregrounds-310);
+    background-color: var(--muse-chat-backgrounds-175);
+    cursor: text;
+    justify-content: space-between;
+    padding-left: 0;
+    padding: 11px;
+    min-height: 80px;
+}
+
+.mui-mtf-root:hover {
+    border-color: var(--muse-chat-foregrounds-320);
+}
+
+.mui-mtf-root.mui-mft-input-focused {
+    border-color: var(--muse-chat-foregrounds-320);
+}
+
+.mui-mtf-placeholder-root {
+    flex-direction: row;
+    align-items: center;
+    cursor: text;
+    position: absolute;
+}
+
+.mui-mtf-root #placeholderContent {
+    left: 0;
+    right: 0;
+    overflow: hidden;
+}
+
+.mui-mtf-root #placeholderText {
+    flex-grow: 1;
+    flex-shrink: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    -unity-text-overflow-position: end;
+}
+
+.mui-mtf-prompt-textfield {
+    -unity-text-generator: Standard;
+    max-height: 160px;
+}
+
+#placeholderText {
+    color: var(--muse-chat-foregrounds-25);
+}
+
+#input {
+    flex-shrink: 0;
+    flex-grow: 1;
+    white-space: normal;
+    margin: 0;
+    padding: 0;
+}
+
+#placeholderText {
+    color: var(--muse-chat-text-secondary);
+}
+
+#characterCount {
+    position: absolute;
+    bottom: -16px;
+    right: 0;
+    display: none;
+}
+
+#commandSelector {
+    margin-right: 4px;
+}
+
+#actionButton.mui-mft-input-hovered {
+    background-color: var(--muse-chat-backgrounds-100);
+}
+
+#actionButton.mui-mft-input-focused {
+    background-color: var(--muse-chat-accent-50);
+}
+
+.mui-mft-input-focused {
+    --unity-image-tint-color: white;
+}
+
+.mui-mtf-submit-button-icon {
+    align-self: center;
+    height: 12px;
+    width: 12px;
+}
+
+.mui-actions-row {
+    cursor: text;
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.mui-submit-button {
+    justify-content: center;
+    align-items: center;
+    opacity: 0.5;
+    min-width: 20px;
+    height: 20px;
+    border-radius: 3px;
+    padding: 3px 4px;
+    border-width: 1px;
+    margin: 0 18px 0 0;
+}
+
+.mui-left-actions {
+    display: flex;
+    flex-direction: row;
+}
+
+.mui-right-actions {
+    flex-direction: row;
+    align-items: center;
+}
+
+.mui-disableable-actions {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+}
+
+.mui-mtf-input-root {
+    display: flex;
+    flex-grow: 1;
+    flex-shrink: 0;
+    flex-direction: column;
+    margin-bottom: 8px;
+}
+
+.mui-mtf-input-root #unity-text-input {
+    border-width: 0;
+    align-self: stretch;
+    padding: 0;
+    margin: 0;
+}
+
+.mui-mtf-input-root .unity-text-element {
+    padding: 0;
+    margin: 0;
+}
+
+.mui-mtf-input-root .unity-base-text-field__input {
+    background-color: var(--muse-chat-backgrounds-175);
+    padding:0;
+    margin: 0;
+}
+
+.mui-submit-enabled {
+    opacity: 1;
+}
+
+#command-input {
+    color: var(--muse-chat-accent-50);
+    -unity-font-style: bold;
+}
+
+.mui-mtf-action-button {
+    margin: 0;
+    height: 24px;
+    width:  24px;
+    padding: 2px;
+    align-self: center;
+    justify-content: center;
+    align-items: center;
+}
+
+#settingsButton {
+    margin-left: 4px;
+}
+
+#actionButton {
+    margin: 0;
+    height: 24px;
+    min-width: 24px;
+    padding: 2px;
+}
+
+.mui-mtf-context-warning {
+    width: 20px;
+    height: 20px;
+    margin-right: 4px;
+    align-items: center;
+    background-color: var(--muse-chat-warning-background-color);
+    border-width: 1px;
+    border-radius: 3px;
+}
+
+.mui-mtf-warning-area {
+    height: 20px;
+}
+
+#contextLimitWarning .mui-context-limit-warning-icon {
+    height: 16px;
+    width: 16px;
+    margin-right: 1px;
+}
+
+.mui-mode-dropdown {
+    height: 24px;
+    margin-left: 4px;
+}
+
+.mui-mode-dropdown .unity-popup-field__input {
+    padding-left: 6px;
+    padding-right: 4px;
+}
+
+.provider-dropdown {
+    padding: 4px 4px;
+}

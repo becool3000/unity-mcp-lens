@@ -1,0 +1,18 @@
+.mui-chat-response-quote {
+    flex-direction: row;
+    margin-bottom: 12px;
+}
+
+.mui-chat-response-quote-left-element {
+    min-width: 4px;
+    flex-direction: column;
+    background-color: var(--muse-chat-backgrounds-200);
+}
+
+.mui-chat-response-quote-spacer {
+    min-width: 8px;
+}
+
+.mui-chat-response-quote-right-element {
+    flex-direction: column;
+}

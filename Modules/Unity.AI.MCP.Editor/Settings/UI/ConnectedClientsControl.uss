@@ -1,0 +1,27 @@
+#connectedClientsContainer {
+    flex-direction: column;
+}
+
+#connectedClientsList {
+    flex-direction: row;
+    flex-wrap: wrap;
+    max-height: 500px;
+}
+
+.umcp-connected-client-pill {
+    flex-direction: row;
+    align-items: center;
+    background-color: rgba(128, 128, 128, 0.1);
+    border-color: rgba(0, 0, 0, 0.6);
+    border-width: 1px;
+    border-radius: 4px;
+    padding: 6px 8px;
+    margin: 2px;
+    min-height: 18px;
+}
+
+.umcp-connected-client-name {
+    font-size: 12px;
+    margin-left: 4px;
+}
+

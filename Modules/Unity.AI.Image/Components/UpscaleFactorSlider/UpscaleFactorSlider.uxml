@@ -1,0 +1,4 @@
+<UXML xmlns="UnityEngine.UIElements">
+    <Label class="font-bold p-4" text="Scale"/>
+    <SliderInt class="flex-grow" show-input-field="true" low-value="2" high-value="6" value="2"/>
+</UXML>

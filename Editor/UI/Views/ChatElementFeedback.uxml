@@ -1,0 +1,37 @@
+<UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" xmlns="UnityEngine.UIElements" xmlns:assistant="Unity.AI.Assistant.UI.Editor.Scripts.Components" editor-extension-mode="False">
+    <ui:VisualElement name="optionsSection" class="mui-chat-footer">
+        <ui:VisualElement class="mui-control-section-buttons">
+            <ui:Button name="copyButton" tooltip="Copy Message" class="mui-action-button mui-chat-response-button">
+                <ui:Image class="mui-action-button-image-large" name="copyButtonImage"/>
+            </ui:Button>
+            <ui:Button name="upVoteButton" tooltip="Good Response" class="mui-action-button mui-chat-response-button">
+                <ui:Image class="mui-action-button-image-large mui-icon-upvote"/>
+            </ui:Button>
+            <ui:Button name="downVoteButton" tooltip="Bad Response" class="mui-action-button mui-chat-response-button">
+                <ui:Image class="mui-action-button-image-large mui-icon-downvote"/>
+            </ui:Button>
+            <assistant:ChatElementCheckpoint/>
+            <ui:Label name="messageCostLabel" class="mui-message-cost-label" style="display: none;" tooltip="Total points used in this prompt, excluding asset generations"/>
+        </ui:VisualElement>
+        <ui:VisualElement name="feedbackParamSection" class="mui-feedback-parameters">
+            <ui:VisualElement class="mui-feedback-comment-foldout-container">
+                <ui:Foldout name="commentFoldout" text="Add a comment &#60;color=#606060&#62;(optional)&#60;/color&#62;" class="mui-chat-foldout">
+                    <ui:ScrollView class="mui-feedback-text-scrollroot">
+                        <ui:TextField name="feedbackValueText">
+                            <VisualElement name="placeholderContent" class="mui-mtf-placeholder-root">
+                                <Label picking-mode="ignore" name="placeholderText"/>
+                            </VisualElement>
+                        </ui:TextField>
+                    </ui:ScrollView>
+                    <ui:VisualElement class="mui-feedback-comment-foldout-button-row">
+                        <ui:Toggle label="Flag as inappropriate" name="feedbackFlagCheckbox"/>
+                        <ui:Button name="feedbackSendButton" class="mui-action-button mui-mtf-action-button">
+                            <ui:Image class="mui-action-button-image-large" name="feedbackSendButtonImage"/>
+                            <ui:Label class="mui-action-button-label-header" text="Send"/>
+                        </ui:Button>
+                    </ui:VisualElement>
+                </ui:Foldout>
+            </ui:VisualElement>
+        </ui:VisualElement>
+    </ui:VisualElement>
+</UXML>

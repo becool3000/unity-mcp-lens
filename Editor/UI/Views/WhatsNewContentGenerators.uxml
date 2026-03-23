@@ -1,0 +1,86 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements"
+         xmlns:chat="Unity.AI.Assistant.Editor.SessionBanner"
+         xmlns="UnityEngine.UIElements" editor-extension-mode="False">
+    <ui:VisualElement class="mui-whats-new-page-root">
+        <ui:VisualElement name="page1" class="mui-whats-new-page-section">
+            <ui:VisualElement name="page1Video" class="mui-whats-new-page-video-element"/>
+            <ui:Label text="Embedded, richer asset generation" class="mui-whats-new-page-header"/>
+            <ui:Label text="Unity AI is your all-in-one solution for asset generation, accessible both via dedicated UI windows for granular control using the Generators package, and directly within Assistant for quick, in-line prompting."
+                      class="mui-whats-new-page-text"/>
+            <ui:VisualElement class="mui-whats-new-page-paragraph"/>
+            <ui:Label text="Unity AI’s asset generation capabilities, which already include sprites, textures, animations, audio, and materials are now expanded with powerful new tools and partners:"
+                      class="mui-whats-new-page-text"/>
+            <ui:VisualElement class="mui-whats-new-page-paragraph"/>
+            
+            <ui:Label text="• UI Toolkit layouts" class="mui-whats-new-page-text mui-whats-new-page-bullet"/>
+            <ui:Label text="• Cubemaps for skyboxes" class="mui-whats-new-page-text mui-whats-new-page-bullet"/>
+            <ui:Label text="• 3D meshes &amp; textures" class="mui-whats-new-page-text mui-whats-new-page-bullet"/>
+
+            <ui:VisualElement class="mui-whats-new-page-paragraph"/>
+            <ui:Label text="Generate a diverse range of high-quality assets seamlessly, accelerating creation directly within the Editor."
+                      class="mui-whats-new-page-text"/>
+            
+            <ui:VisualElement class="mui-whats-new-grow" />
+            <ui:Label text="&lt;a href=&quot;https://docs.unity3d.com/Packages/com.unity.ai.generators@1.0/manual/index.html&quot;&gt;Learn more in the docs&lt;/a&gt;" class="mui-whats-new-label"/>
+        </ui:VisualElement>
+
+        <ui:VisualElement name="page2" class="mui-whats-new-page-section">
+            <ui:VisualElement name="page2Video" class="mui-whats-new-page-video-element"/>
+            <ui:Label text="Accelerate UI creation" class="mui-whats-new-page-header"/>
+            <ui:Label text="You can generate UI Toolkit layouts using Assistant, enabling text-based UI creation."
+                      class="mui-whats-new-page-text"/>
+            <ui:VisualElement class="mui-whats-new-page-paragraph"/>
+            <ui:Label text="Describe the layout you need in Assistant, and Unity AI will instantly generate the complete UI Toolkit layout, including the corresponding UXML (structure) and USS (styles). Accelerate your UI design workflows and rapidly iterate with the power of AI."
+                      class="mui-whats-new-page-text"/>
+            
+            <ui:Button name="openAssistantButton" class="mui-whats-new-page-action-button">
+                <ui:Label picking-mode="ignore" class="mui-chat-label" text="Open Assistant"/>
+                <ui:Image picking-mode="ignore" class="mui-action-button-image-large mui-icon-arrow-square-in mui-whats-new-page-action-button-image"/>
+            </ui:Button>
+        </ui:VisualElement>
+
+        <ui:VisualElement name="page3" class="mui-whats-new-page-section">
+            <ui:VisualElement name="page3Video" class="mui-whats-new-page-video-element"/>
+            <ui:Label text="Text &amp; image to 3D model" class="mui-whats-new-page-header"/>
+            <ui:Label text="The 3D Model Generator empowers you to create production-ready 3D assets quickly, without needing specialized modeling skills."
+                      class="mui-whats-new-page-text"/>
+            <ui:VisualElement class="mui-whats-new-page-paragraph"/>
+            <ui:Label text="Transform a text prompt or reference image into high-quality 3D models in seconds. You can generate a wide variety of assets simultaneously, including characters, props, or environment objects."
+                      class="mui-whats-new-page-text"/>
+            
+            <ui:Button name="generateModelButton" class="mui-whats-new-page-action-button" style="display: none;">
+                <ui:Label picking-mode="ignore" class="mui-chat-label" text="Generate 3D Object"/>
+                <ui:Image picking-mode="ignore" class="mui-action-button-image-large mui-icon-arrow-square-in mui-whats-new-page-action-button-image"/>
+            </ui:Button>
+            <ui:Button name="installGeneratorsPage3" class="mui-whats-new-page-action-button" style="display: none;">
+                <ui:Label picking-mode="ignore" class="mui-chat-label" text="Install Generators"/>
+                <ui:Image picking-mode="ignore" class="mui-action-button-image-large mui-icon-arrow-square-in mui-whats-new-page-action-button-image"/>
+            </ui:Button>
+        </ui:VisualElement>
+
+        <ui:VisualElement name="page4" class="mui-whats-new-page-section">
+            <ui:VisualElement name="page4Video" class="mui-whats-new-page-video-element"/>
+            <ui:Label text="Environment creation with skybox generation" class="mui-whats-new-page-header"/>
+            <ui:Label text="The Skybox Generator allows you to create immersive 3D environments from a prompt or image."
+                      class="mui-whats-new-page-text"/>
+            <ui:VisualElement class="mui-whats-new-page-paragraph"/>
+            <ui:Label text="This tool transforms your input into high-quality cubemaps for skyboxes. You can generate custom, atmospheric environments in seconds, matching the mood and aesthetic of your game world without ever leaving the Editor."
+                      class="mui-whats-new-page-text"/>
+
+            <ui:Button name="generateCubemapButton" class="mui-whats-new-page-action-button" style="display: none;">
+                <ui:Label picking-mode="ignore" class="mui-chat-label" text="Generate Cubemap"/>
+                <ui:Image picking-mode="ignore" class="mui-action-button-image-large mui-icon-arrow-square-in mui-whats-new-page-action-button-image"/>
+            </ui:Button>
+            <ui:Button name="installGeneratorsPage4" class="mui-whats-new-page-action-button" style="display: none;">
+                <ui:Label picking-mode="ignore" class="mui-chat-label" text="Install Generators"/>
+                <ui:Image picking-mode="ignore" class="mui-action-button-image-large mui-icon-arrow-square-in mui-whats-new-page-action-button-image"/>
+            </ui:Button>
+        </ui:VisualElement>
+
+        <ui:VisualElement class="mui-whats-new-page-controls">
+            <ui:Button name="pageControlBack" class="mui-whats-new-page-control-button"/>
+            <ui:Label name="pageControlLabel" class="mui-whats-new-page-control-label"/>
+            <ui:Button name="pageControlNext" class="mui-whats-new-page-control-button"/>
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>

@@ -1,0 +1,123 @@
+/* Connection Item Container */
+.umcp-connection-item {
+    flex-direction: column;
+    margin: 2px;
+    padding: 0;
+    border-color: rgba(0, 0, 0, 0.6);
+    border-width: 1px;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.umcp-connection-item:hover #connectionHeader {
+    background-color: rgba(128, 128, 128, 0.15);
+}
+
+/* Header - Pill style similar to ConnectedClientsControl */
+#connectionHeader {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 8px;
+    cursor: link;
+    min-height: 28px;
+    background-color: rgba(128, 128, 128, 0.1);
+    border-width: 0;
+}
+
+.umcp-connection-header-left {
+    flex-direction: row;
+    align-items: center;
+    flex-grow: 1;
+    flex-shrink: 1;
+}
+
+.umcp-connection-header-right {
+    flex-direction: row;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+.umcp-connection-title {
+    margin-left: 8px;
+    flex-shrink: 1;
+    -unity-font-style: bold;
+}
+
+.umcp-connection-process-info {
+    margin-left: 4px;
+    margin-right: 8px;
+    flex-shrink: 1;
+    -unity-font-style: normal;
+    opacity: 0.85;
+}
+
+.umcp-connection-timestamp {
+    opacity: 0.6;
+    margin-right: 8px;
+    flex-shrink: 0;
+}
+
+.umcp-connection-status-label {
+    margin-right: 4px;
+    padding: 2px 6px;
+    border-radius: 3px;
+    background-color: var(--unity-colors-inspector_titlebar-background);
+}
+
+.umcp-connection-expand-button {
+    padding: 2px 6px;
+    margin: 0;
+    border-width: 0;
+    background-color: transparent;
+    min-width: 20px;
+    -unity-text-align: middle-center;
+}
+
+/* Details Section */
+#connectionDetails {
+    padding: 8px;
+    background-color: var(--unity-colors-inspector_titlebar-background);
+    border-width: 0;
+}
+
+.umcp-connection-section {
+    margin-bottom: 8px;
+}
+
+.umcp-connection-section-title {
+    -unity-font-style: bold;
+    margin-bottom: 4px;
+    padding-bottom: 2px;
+    border-bottom-width: 1px;
+    border-color: var(--unity-colors-inspector_titlebar-border);
+}
+
+.umcp-connection-info-row {
+    flex-direction: row;
+    margin-bottom: 2px;
+    min-height: 16px;
+}
+
+.umcp-connection-info-label {
+    width: 120px;
+    flex-shrink: 0;
+    opacity: 0.7;
+}
+
+.umcp-connection-info-value {
+    flex-grow: 1;
+    white-space: normal;
+}
+
+/* Status Indicator (reusing existing styles, extending with yellow) */
+.umcp-status-indicator.yellow {
+    background-color: rgb(255, 200, 0);
+}
+
+/* Empty State */
+.umcp-no-connections-message {
+    opacity: 0.6;
+    padding: 12px;
+    -unity-text-align: middle-center;
+}

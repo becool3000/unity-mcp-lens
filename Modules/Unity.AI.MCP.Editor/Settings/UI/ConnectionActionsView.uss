@@ -1,0 +1,28 @@
+ConnectionActionsView {
+    flex-shrink: 0;
+}
+
+/* Action Buttons Container */
+.umcp-connection-actions {
+    flex-direction: row;
+    justify-content: flex-end;
+    padding-top: 8px;
+    border-top-width: 1px;
+    border-color: var(--unity-colors-inspector_titlebar-border);
+    flex-shrink: 0;
+}
+
+/* Action Buttons */
+.umcp-action-button {
+    padding: 4px 12px;
+    margin-left: 4px;
+    min-width: 70px;
+}
+
+.umcp-deny-button {
+    -unity-font-style: bold;
+}
+
+.umcp-accept-button {
+    /* Default button styling */
+}

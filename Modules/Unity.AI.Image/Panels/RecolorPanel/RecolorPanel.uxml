@@ -1,0 +1,21 @@
+<!-- GenerateUI.uxml -->
+<UXML xmlns="UnityEngine.UIElements" xmlns:ui="Unity.AI.Image.Components" xmlns:aitk-account="Unity.AI.Toolkit.Accounts.Components">
+    <Style src="./RecolorPanel.uss" />
+    <Style src="../../../Unity.AI.Generators.UI/StyleSheets/FlexUtilities.uss" />
+    <Style src="../../../Unity.AI.Generators.UI/StyleSheets/SessionStatusBannerClasses.uss" />
+    <ScrollView horizontal-scroller-visibility="Hidden">
+        <!-- Base Image -->
+        <VisualElement class="flex-no-shrink bg-light border-color-dark border-bottom-1px">
+            <ui:BaseImageReference name="baseImage" />
+        </VisualElement>
+        <!-- Palette Image -->
+        <VisualElement class="flex-no-shrink bg-light">
+            <ui:PaletteImageReference name="palette" />
+        </VisualElement>
+    </ScrollView>
+    <VisualElement class="flex-no-shrink p-8-7-8-8 border-color-dark border-bottom-1px border-top-1px">
+        <!-- Session Status Banner -->
+        <aitk-account:GeneratorsSessionStatusBanner />
+        <ui:GenerateButton quote-monitor="false" text="Recolor" />
+    </VisualElement>
+</UXML>

@@ -1,0 +1,22 @@
+{
+    "name": "Unity.AI.Assistant.Bridge.Editor",
+    "rootNamespace": "Unity.AI.Assistant.Bridge.Editor",
+    "references": [],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [
+        {
+            "name": "Unity",
+            "expression": "6000.4.0a1",
+            "define": "DISABLE_SCHEMA_VALIDATION"
+        }
+    ],
+    "noEngineReferences": false
+}

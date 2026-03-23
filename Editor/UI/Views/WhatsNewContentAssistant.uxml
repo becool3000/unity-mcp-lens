@@ -1,0 +1,105 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements"
+         xmlns:chat="Unity.AI.Assistant.Editor.SessionBanner"
+         xmlns="UnityEngine.UIElements" editor-extension-mode="False">
+    <ui:VisualElement class="mui-whats-new-page-root">
+        <ui:VisualElement name="page1" class="mui-whats-new-page-section">
+            <ui:VisualElement name="page1Video" class="mui-whats-new-page-video-element"/>
+            <ui:Label text="Meet the Unity AI Assistant" class="mui-whats-new-page-header"/>
+            <ui:Label text="Assistant is designed to enhance your workflows and boost productivity. You can answer project-specific questions using &lt;b&gt;Ask&lt;/b&gt; mode, as well as automate actions using &lt;b&gt;Agent&lt;/b&gt; mode. Switch between modes using the toggle in the prompt field."
+                      class="mui-whats-new-page-text"/>
+        </ui:VisualElement>
+
+        <ui:VisualElement name="page2" class="mui-whats-new-page-section">
+            <ui:VisualElement name="page2Video" class="mui-whats-new-page-video-element"/>
+            <ui:Label text="Orchestration handles complex actions" class="mui-whats-new-page-header"/>
+            <ui:Label text="The Orchestration capability provides improved planning and reasoning, enabling Assistant to break down complex tasks into multi-step resolutions as well as intelligently route your prompts to the right tools and agents."
+                      class="mui-whats-new-page-text"/>
+            <ui:VisualElement class="mui-whats-new-page-paragraph"/>
+            <ui:Label text="Try it out: Assistant can now execute larger-scope actions, such as in-line asset or UI generation."
+                      class="mui-whats-new-page-text"/>
+        </ui:VisualElement>
+        
+        <ui:VisualElement name="page3" class="mui-whats-new-page-section">
+            <ui:VisualElement name="page3Video" class="mui-whats-new-page-video-element"/>
+            <ui:Label text="Checkpoints lets you roll back changes" class="mui-whats-new-page-header"/>
+            <ui:Label text="The new &lt;b&gt;Checkpoints&lt;/b&gt; feature provides an automated recovery system for your workflow. When you send a prompt to &lt;b&gt;Assistant&lt;/b&gt;, the system utilizes a local Git integration to create a snapshot of all open scenes and assets in a shadow repository in the /Library folder."
+                      class="mui-whats-new-page-text"/>
+            <ui:VisualElement class="mui-whats-new-page-paragraph"/>
+            <ui:Label text="Just click a &lt;b&gt;flag icon&lt;/b&gt; to restore the Editor to that state, reverting both manual edits and Assistant-driven changes. Note: restoring a checkpoint permanently archives later messages and actions in that thread; while these remain viewable, you cannot return to a point in time later than the restored snapshot."
+                      class="mui-whats-new-page-text"/>
+            <ui:VisualElement class="mui-whats-new-page-paragraph"/>
+            <ui:Label text="These snapshots persist across Editor sessions and are automatically deleted after a user-defined period of &lt;b&gt;1 or 2 weeks&lt;/b&gt;. While Checkpoints offer a safety net for rapid experimentation, they are &lt;b&gt;not a replacement for version control&lt;/b&gt;. You should continue to maintain your own VCS for primary project management and long-term history, as Checkpoints are local, temporary, and subject to automatic deletion."
+                      class="mui-whats-new-page-text"/>
+        </ui:VisualElement>
+        
+        <ui:VisualElement name="page4" class="mui-whats-new-page-section">
+            <ui:VisualElement name="page4Video" class="mui-whats-new-page-video-element"/>
+            <ui:Label text="Automate scene composition with AI" class="mui-whats-new-page-header"/>
+            <ui:Label text="The new &lt;b&gt;Scene Creator&lt;/b&gt; skill helps you set up a new 3D or 2D scene quickly. It automates asset placement by scanning the &lt;b&gt;folder&lt;/b&gt; you name, and placing assets in meaningful locations in the scene. After this initial placement, you can iterate further with &lt;b&gt;Assistant&lt;/b&gt;."
+                      class="mui-whats-new-page-text"/>
+            <ui:VisualElement class="mui-whats-new-page-paragraph"/>
+            <ui:Label text="The Scene Creator skill uses different &lt;b&gt;visual validation tools&lt;/b&gt; to guide the asset placement. These captured images are always limited to editor or scene view and never capture content outside Unity Editor."
+                      class="mui-whats-new-page-text"/>
+            <ui:VisualElement class="mui-whats-new-page-paragraph"/>
+            <ui:Label text="You can keep your prompt simple, for example: Help me create a winter cabin scene using the assets in folder Assets/Forest_Cabin. If your vision is already clear, give Assistant more detail for the desired scene! Build a 3D city scene for me. I want buildings of different heights and cars there. Also use roads, billboards and other elements that belong to a big city. Everything you need is in this folder: Assets/My_City."
+                      class="mui-whats-new-page-text"/>
+            <ui:VisualElement class="mui-whats-new-page-paragraph"/>
+            <ui:Label text="Assets used in the demo are by  &lt;b&gt;RCC Design&lt;/b&gt;. &lt;a href=&quot;https://assetstore.unity.com/packages/3d/environments/roadways/cartoon-race-track-oval-175061&quot;&gt;See details&lt;/a&gt; on the Unity Asset Store."
+                      class="mui-whats-new-page-text"/>
+        </ui:VisualElement>
+
+        <ui:VisualElement name="page5" class="mui-whats-new-page-section">
+            <ui:VisualElement name="page5Video" class="mui-whats-new-page-video-element"/>
+            <ui:Label text="MCP Client adds more capability" class="mui-whats-new-page-header"/>
+            <ui:Label text="You can now connect tools to Assistant via MCP (Model Context Protocol). These are tools written by 3rd parties that give the Assistant new capabilities. &lt;a href=&quot;https://github.com/modelcontextprotocol/servers&quot;&gt;Check out official MCP servers here&lt;/a&gt;."
+                      class="mui-whats-new-page-text"/>
+            <ui:VisualElement class="mui-whats-new-page-paragraph"/>
+            <ui:Label text="Enable MCP in the &lt;b&gt;Project Settings > AI > MCP Servers&lt;/b&gt;, and configure the &lt;b&gt;mcp.json&lt;/b&gt; file to set up servers. Back in Unity, click &lt;b&gt;Refresh File and Servers&lt;/b&gt; to pull the updates and see the list of tools included in that server, and use those tools in prompts."
+                      class="mui-whats-new-page-text"/>
+            <ui:VisualElement class="mui-whats-new-page-paragraph"/>
+            <ui:Label text="Once that happens, when you ask about the tools, the Assistant will be able to call the tools and use them to complete tasks."
+                      class="mui-whats-new-page-text"/>
+            <ui:VisualElement class="mui-whats-new-page-paragraph"/>
+            <ui:Label text="&lt;b&gt;Note:&lt;/b&gt; The only supported servers right now are those that use stdio transport. Compatibility with the http transport protocol is coming soon."
+                      class="mui-whats-new-page-text"/>
+            <ui:VisualElement class="mui-whats-new-page-paragraph"/>
+            <ui:Label text="&lt;a href=&quot;https://docs.unity3d.com/Packages/com.unity.ai.assistant@1.6/manual/mcp-landing.html&quot;&gt;Read the docs&lt;/a&gt;"
+                      class="mui-whats-new-page-text"/>
+            <ui:VisualElement class="mui-whats-new-page-paragraph"/>
+
+        </ui:VisualElement>
+
+        <ui:VisualElement name="page6" class="mui-whats-new-page-section">
+            <ui:VisualElement name="page6Video" class="mui-whats-new-page-video-element"/>
+            <ui:Label text="Additional key features" class="mui-whats-new-page-header"/>
+            <ui:Label text="Deep comprehension &amp; vision"
+                      class="mui-whats-new-page-text-header"/>
+            <ui:Label text="Assistant can now use vision models to analyze images from your scene and project, giving agents relevant context for precise answers and improved comprehension."
+                      class="mui-whats-new-page-text"/>
+            <ui:VisualElement class="mui-whats-new-page-paragraph"/>
+            <ui:Label text="Production-safe code"
+                      class="mui-whats-new-page-text-header"/>
+            <ui:Label text="Assistant now recognizes project dependencies for safer code changes. With integrated Git support and a new visual diffing tool, you maintain full control over all AI-generated code before acceptance."
+                      class="mui-whats-new-page-text"/>
+            <ui:VisualElement class="mui-whats-new-page-paragraph"/>
+            <ui:Label text="Better focused context"
+                      class="mui-whats-new-page-text-header"/>
+            <ui:Label text="Agents can index your project and classify assets to build a searchable knowledge graph. This ensures context sharing is intelligent, providing agents with only the necessary information to deliver focused answers even in complex projects."
+                      class="mui-whats-new-page-text"/>
+
+            <ui:Button name="openAssistantButton" class="mui-whats-new-page-action-button">
+                <ui:Label picking-mode="ignore" class="mui-chat-label" text="Open Assistant"/>
+                <ui:Image picking-mode="ignore" class="mui-action-button-image-large mui-icon-arrow-square-in mui-whats-new-page-action-button-image"/>
+            </ui:Button>
+            
+            <ui:VisualElement class="mui-whats-new-grow" />
+            <ui:Label text="&lt;a href=&quot;https://docs.unity3d.com/Packages/com.unity.ai.assistant@1.0/manual/index.html&quot;&gt;Learn more in the docs&lt;/a&gt;" class="mui-whats-new-label"/>
+        </ui:VisualElement>
+
+        <ui:VisualElement class="mui-whats-new-page-controls">
+            <ui:Button name="pageControlBack" class="mui-whats-new-page-control-button"/>
+            <ui:Label name="pageControlLabel" class="mui-whats-new-page-control-label"/>
+            <ui:Button name="pageControlNext" class="mui-whats-new-page-control-button"/>
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>

@@ -1,0 +1,19 @@
+<!-- GenerateUI.uxml -->
+<UXML class="flex-grow color-tab-background" xmlns="UnityEngine.UIElements" xmlns:ui="Unity.AI.Image.Components" xmlns:aitk="Unity.AI.Generators.UI">
+    <Style src="../../../Unity.AI.Generators.UI/StyleSheets/FlexUtilities.uss" />
+    <VisualElement class="flex-row flex-grow bg-light">
+        <VisualElement name="pane-container" class="flex-grow left-stack">
+            <!-- Left Pane -->
+            <ScrollView>
+                <VisualElement class="flex-no-shrink p-8-7-8-8">
+                    <!-- Assumes a VideoPreview component exists that can play VideoClips -->
+                    <ui:VideoPreview is-playing="true" style="min-height: 265px;" />
+                    <aitk:MultiSlider name="time-slider" tooltip="Drag the start and end markers to define the trim area for the video clip." />
+                </VisualElement>
+            </ScrollView>
+            <VisualElement name="ButtonsContainer" class="flex-row flex-no-shrink p-8-7-8-8 border-color-dark border-bottom-1px border-top-1px">
+                <Button name="Apply" text="Trim &amp; Create New" class="flex-grow height-24px" tooltip="Saves the trimmed video as a new asset next to the original."/>
+            </VisualElement>
+        </VisualElement>
+    </VisualElement>
+</UXML>

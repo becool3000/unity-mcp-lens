@@ -1,0 +1,5 @@
+<UXML xmlns="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements">
+    <VisualElement name="dropdownRoot" class="mui-context-dropdown-root">
+        <VisualElement name="contextDropDownViewContainer" class="mui-context-dropdown-adaptive-list-view-container"/>
+    </VisualElement>
+</UXML>

@@ -1,0 +1,17 @@
+.historypanelheaderentry__element {
+    padding-left: 8px;
+}
+
+#historyPanelHeaderRoot {
+    padding-top: 16px;
+    padding-bottom: 8px;
+}
+
+#historyPanelHeaderText {
+    color: var(--muse-chat-text-secondary);
+    -unity-font-style: bold;
+}
+
+.unity-collection-view__item.mui-history-panel-header-entry:hover {
+    background-color: rgba(0, 0, 0, 0);
+}

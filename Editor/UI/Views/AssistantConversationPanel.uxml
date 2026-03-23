@@ -1,0 +1,11 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" xmlns="UnityEngine.UIElements" editor-extension-mode="False">
+    <ui:VisualElement name="conversationRoot">
+    </ui:VisualElement>
+
+    <ui:VisualElement name="conversationOverlayElements" class="mui-conversation-overlay-elements" picking-mode="ignore">
+        <ui:Button name="conversationScrollToBottomButton" class="mui-action-button">
+            <ui:Image class="mui-action-button-image-large mui-icon-arrow-down"/>
+            <ui:Label class="mui-action-button-label-header" text="More"/>
+        </ui:Button>
+    </ui:VisualElement>
+</ui:UXML>

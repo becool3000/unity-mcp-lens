@@ -1,0 +1,7 @@
+.icon-tint-primary-color {
+    --unity-image-tint-color: #C4C4C4;
+}
+
+.icon-tint-primary-color-button > .unity-button__image {
+    --unity-image-tint-color: #C4C4C4;
+}

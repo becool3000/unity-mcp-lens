@@ -1,0 +1,4 @@
+<UXML xmlns="UnityEngine.UIElements">
+    <SliderInt tooltip="Outline Thickness for Pixelation (Sampling Size >= {samplingSize} and less than Sampling Size)"
+               show-input-field="true" label="Outline Thickness" low-value="0" high-value="15" value="0"/>
+</UXML>

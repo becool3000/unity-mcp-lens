@@ -1,0 +1,8 @@
+<UXML xmlns="UnityEngine.UIElements">
+    <Style src="./Prompt.uss"/>
+    <VisualElement class="p-4 flex-row justify-between" tooltip="Enter a natural language prompt to guide the AI in generating visual content. Refer to the model description in the picker or documentation for tips on writing effective prompts.">
+        <Label class="font-bold" text="Prompt"/>
+        <Label name="prompt-limit-indicator" class="prompt-limit-indicator" text="0/1024" tooltip="Character limit for Prompt"/>
+    </VisualElement>
+    <TextField class="white-space-normal mb-4" name="prompt" multiline="true" placeholder-text="A sci-fi crate, detailed, with glowing blue stripes"/>
+</UXML>

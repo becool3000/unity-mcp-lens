@@ -1,0 +1,10 @@
+.image-scale-to-fit {
+    -unity-background-scale-mode: scale-to-fit;
+}
+
+.image-scale-initial {
+    -unity-background-scale-mode: initial;
+    background-position: center;
+    background-repeat: no-repeat;
+    background-size: auto;
+}

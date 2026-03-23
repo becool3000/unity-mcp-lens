@@ -1,0 +1,21 @@
+{
+    "name": "Unity.AI.Assistant.Integrations.Profiler.Editor",
+    "rootNamespace": "Unity.AI.Assistant.Integrations.Profiler.Editor",
+    "references": [
+        "Unity.AI.Assistant.Editor",
+        "Unity.AI.Assistant.API.Editor",
+        "Unity.AI.Assistant.Runtime",
+        "Unity.AI.Assistant.Bridge.Editor",
+        "Unity.AI.Assistant.Tools.Editor"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "versionDefines": [],
+    "noEngineReferences": false
+}

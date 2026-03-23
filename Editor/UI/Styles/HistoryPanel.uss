@@ -1,0 +1,34 @@
+.historypanel__element {
+    flex-grow: 1;
+    border-right-width: 1px;
+    border-right-color: var(--muse-chat-backgrounds-50);
+    min-width: 230px;
+}
+
+.historypanel__element-root {
+    flex-grow: 1;
+}
+
+#sectionRoot {
+    flex-grow: 1;
+}
+
+.mui-history-panel {
+    flex-grow: 1;
+    width: 240px;
+}
+
+.mui-history-panel-root {
+    flex-grow: 1;
+}
+
+.unity-list-view__empty-label {
+    color: var(--muse-chat-text-secondary);
+}
+
+.mui-history-panel-search-bar {
+    margin-top: 6px;
+    margin-left: 6px;
+    margin-bottom: 6px;
+    width: 94%;
+}

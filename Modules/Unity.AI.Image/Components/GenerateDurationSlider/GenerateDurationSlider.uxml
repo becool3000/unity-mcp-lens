@@ -1,0 +1,4 @@
+<UXML xmlns="UnityEngine.UIElements">
+    <Label class="hide font-bold p-4" text="Duration"/>
+    <Slider class="flex-grow" label="Duration" show-input-field="true" low-value="2" high-value="12" value="5" tooltip="Set how long the generated animation should be (in seconds)."/>
+</UXML>

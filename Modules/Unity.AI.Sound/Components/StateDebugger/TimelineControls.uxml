@@ -1,0 +1,9 @@
+<UXML xmlns="UnityEngine.UIElements">
+    <VisualElement name="timeline" class="flex-row">
+        <Button name="previous" text="&#60;&#60;"/>
+        <Button name="next" text=">>"/>
+        <SliderInt name="time" class="flex-grow"/>
+        <IntegerField name="current" class="min-width-50px" text="current"/>
+        <IntegerField name="max" class="min-width-50px"/>
+    </VisualElement>
+</UXML>

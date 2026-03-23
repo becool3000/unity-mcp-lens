@@ -1,0 +1,22 @@
+#legal-text {
+    flex-grow: 1;
+    flex-wrap: wrap;
+    white-space: normal;
+}
+
+#legal-text.link {
+    cursor: link;
+}
+
+#agree-button {
+    margin-top: 8px;
+    margin-left: 0;
+    margin-right: 0;
+}
+
+
+
+
+Label.rich-text-link {
+    cursor: link;
+}

@@ -1,0 +1,61 @@
+.chatelementresponsesection__element {
+    flex-grow: 1;
+    flex-shrink: 0;
+}
+
+.chatelementresponsesection__element-root {
+    flex-grow: 1;
+}
+
+.mui-chat-response-section {
+    -unity-text-align: upper-left;
+}
+
+#reasoningContainer {
+    margin-bottom: 12px;
+}
+
+/* Hide reasoning container when empty */
+#reasoningContainer.mui-reasoning-hidden {
+    display: none;
+}
+
+#reasoningContent {
+    margin-top: 12px;
+}
+
+.mui-reasoning-separator {
+    border-bottom-width: 1px;
+    border-bottom-color: var(--muse-chat-separator-line);
+}
+
+#reasoningTitle {
+    flex-direction: row;
+}
+
+.mui-chat-response-reasoning-label{
+    color: var(--muse-chat-text-thoughts);
+    align-self: center;
+}
+
+.reasoning-spinner-container {
+    align-self: center;
+}
+
+#reasoningFoldout > .unity-toggle {
+    margin: 0 0 1px 0;
+}
+
+/* Hide the foldout's text label */
+#reasoningFoldout > .unity-foldout__text {
+    display: none;
+}
+
+/* Hide the foldout's content container since we manage visibility separately */
+#reasoningFoldout > .unity-foldout__content {
+    display: none;
+}
+
+#answerContent .mui-chat-response .unity-text-element {
+    color: var(--muse-chat-text-answers);
+}

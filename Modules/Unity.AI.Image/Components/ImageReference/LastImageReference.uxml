@@ -1,0 +1,17 @@
+<UXML
+        xmlns="UnityEngine.UIElements"
+        xmlns:editorui="UnityEditor.UIElements"
+        xmlns:ui="Unity.AI.Image.Components">
+    <Style src="./ImageReference.uss" tooltip="" />
+    <VisualElement class="image-reference border-color-dark border-top-1px p-8-7-8-8">
+        <editorui:Template src="./ImageReferenceHeader.uxml" name="ImageReferenceHeader" />
+        <editorui:Template src="./ImageReferenceObjectField.uxml" name="ImageReferenceObjectField" />
+        <editorui:Template src="./ImageReferenceDoodle.uxml" name="ImageReferenceDoodle" />
+        <editorui:Template src="./ImageReferenceStrength.uxml" name="ImageReferenceStrength" />
+
+        <Instance template="ImageReferenceHeader" class="no-delete">
+            <AttributeOverrides element-name="header-title" text="Last Frame" tooltip="Use Last Frame to define the end of the sprite animation. To create a loop, add the same image as the First Frame. If there is no image, it might not be a loop."/>
+        </Instance>
+        <Instance template="ImageReferenceObjectField" class="p-4-2"/>
+    </VisualElement>
+</UXML>

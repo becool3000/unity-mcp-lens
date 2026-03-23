@@ -1,0 +1,130 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements">
+    <ui:VisualElement class="configure-default-permissions-view">
+        <ui:Label text="Configure Default Permissions" class="permissions-title" tooltip="Choose what actions Assistant must ask permission for, vs what it can automatically do without asking" />
+        <ui:VisualElement class="permissions-container">
+            <!-- File System Section Header -->
+            <ui:VisualElement class="permissions-row">
+                <ui:Label text="File System" class="permissions-section-label" tooltip="Decide how Assistant handles directories and files like .cs, .prefab, .mat, .anim, .asset, .fbx, .obj, .dae, etc."/>
+            </ui:VisualElement>
+
+            <ui:VisualElement class="permissions-separator" />
+
+            <!-- Read Project Files -->
+            <ui:VisualElement class="permissions-row permissions-row-bg-highlight">
+                <ui:Label text="Read Project Files" class="permissions-row-label permissions-row-label-indented" />
+                <ui:DropdownField name="fileSystemReadProjectDropdown" class="permissions-dropdown" />
+            </ui:VisualElement>
+
+            <!-- Read External Files -->
+            <ui:VisualElement class="permissions-row permissions-row-bg-highlight">
+                <ui:Label text="Read External Files" class="permissions-row-label permissions-row-label-indented" />
+                <ui:DropdownField name="fileSystemReadExternalDropdown" class="permissions-dropdown" />
+            </ui:VisualElement>
+
+            <!-- Create Project Files -->
+            <ui:VisualElement class="permissions-row permissions-row-bg-highlight">
+                <ui:Label text="Create Project Files" class="permissions-row-label permissions-row-label-indented" />
+                <ui:DropdownField name="fileSystemCreateProjectDropdown" class="permissions-dropdown" />
+            </ui:VisualElement>
+
+            <!-- Modify Project Files -->
+            <ui:VisualElement class="permissions-row permissions-row-bg-highlight">
+                <ui:Label text="Modify Project Files" class="permissions-row-label permissions-row-label-indented" />
+                <ui:DropdownField name="fileSystemModifyProjectDropdown" class="permissions-dropdown" />
+            </ui:VisualElement>
+
+            <!-- Delete Project Files -->
+            <ui:VisualElement class="permissions-row permissions-row-bg-highlight">
+                <ui:Label text="Delete Project Files" class="permissions-row-label permissions-row-label-indented" />
+                <ui:DropdownField name="fileSystemDeleteProjectDropdown" class="permissions-dropdown" />
+            </ui:VisualElement>
+
+            <ui:VisualElement class="permissions-separator" />
+
+            <!-- Unity Objects Section Header -->
+            <ui:VisualElement class="permissions-row">
+                <ui:Label text="Unity Objects" class="permissions-section-label" tooltip="Decide how Assistant handles Assets, Scene files like GameObjects, Components, ScriptableObjects, etc."/>
+            </ui:VisualElement>
+
+            <ui:VisualElement class="permissions-separator" />
+
+            <!-- Read Objects -->
+            <ui:VisualElement class="permissions-row permissions-row-bg-highlight">
+                <ui:Label text="Read Objects" class="permissions-row-label permissions-row-label-indented" />
+                <ui:DropdownField name="unityObjectsReadDropdown" class="permissions-dropdown" />
+            </ui:VisualElement>
+
+            <!-- Create Objects -->
+            <ui:VisualElement class="permissions-row permissions-row-bg-highlight">
+                <ui:Label text="Create Objects" class="permissions-row-label permissions-row-label-indented" />
+                <ui:DropdownField name="unityObjectsCreateDropdown" class="permissions-dropdown" />
+            </ui:VisualElement>
+
+            <!-- Modify Objects -->
+            <ui:VisualElement class="permissions-row permissions-row-bg-highlight">
+                <ui:Label text="Modify Objects" class="permissions-row-label permissions-row-label-indented" />
+                <ui:DropdownField name="unityObjectsModifyDropdown" class="permissions-dropdown" />
+            </ui:VisualElement>
+
+            <!-- Delete Objects -->
+            <ui:VisualElement class="permissions-row permissions-row-bg-highlight">
+                <ui:Label text="Delete Objects" class="permissions-row-label permissions-row-label-indented" />
+                <ui:DropdownField name="unityObjectsDeleteDropdown" class="permissions-dropdown" />
+            </ui:VisualElement>
+
+            <ui:VisualElement class="permissions-separator" />
+
+
+            <!-- Play Mode Section Header -->
+            <ui:VisualElement class="permissions-row">
+                <ui:Label text="Play Mode" class="permissions-section-label" tooltip="Decide how Assistant handles entering or exiting play mode."/>
+            </ui:VisualElement>
+
+            <ui:VisualElement class="permissions-separator" />
+
+            <!-- Enter Play Mode -->
+            <ui:VisualElement class="permissions-row permissions-row-bg-highlight">
+                <ui:Label text="Enter Play Mode" class="permissions-row-label permissions-row-label-indented" />
+                <ui:DropdownField name="enterPlayModeDropdown" class="permissions-dropdown" />
+            </ui:VisualElement>
+
+            <!-- Exit Play Mode -->
+            <ui:VisualElement class="permissions-row permissions-row-bg-highlight">
+                <ui:Label text="Exit Play Mode" class="permissions-row-label permissions-row-label-indented" />
+                <ui:DropdownField name="exitPlayModeDropdown" class="permissions-dropdown" />
+            </ui:VisualElement>
+
+            <ui:VisualElement class="permissions-separator" />
+
+            <!-- Take Screen Capture -->
+            <ui:VisualElement class="permissions-row">
+                <ui:Label text="Take Screen Capture" class="permissions-row-label" tooltip="Assistant can decide to take screenshots of your Editor window to give it better context to answer queries"/>
+                <ui:DropdownField name="screenCaptureDropdown" class="permissions-dropdown" />
+            </ui:VisualElement>
+
+            <ui:VisualElement class="permissions-separator" />
+
+            <!-- Execute Generated C# Code -->
+            <ui:VisualElement class="permissions-row">
+                <ui:Label text="Execute Generated C# Code" class="permissions-row-label" tooltip="Assistant can generate and then execute C# code in order to run commands where it can’t call a tool."/>
+                <ui:DropdownField name="codeExecutionDropdown" class="permissions-dropdown" />
+            </ui:VisualElement>
+
+            <ui:VisualElement class="permissions-separator" />
+
+            <!-- Generate New Assets -->
+            <ui:VisualElement class="permissions-row">
+                <ui:Label text="Generate New Assets" class="permissions-row-label" />
+                <ui:DropdownField name="assetGenerationDropdown" class="permissions-dropdown" tooltip="Assistant can generate assets in-line using Generators (Sprites, Textures, Audio, Animation, etc)" />
+            </ui:VisualElement>
+
+            <ui:VisualElement class="permissions-separator" />
+
+            <!-- Run 3rd Party Tools -->
+            <ui:VisualElement class="permissions-row">
+                <ui:Label text="Run 3rd Party Tools" class="permissions-row-label" tooltip="Assistant can run commands from MCP Servers. Configure MCP Servers in Project Settings." />
+                <ui:DropdownField name="thirdPartyToolsDropdown" class="permissions-dropdown" />
+            </ui:VisualElement>
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>

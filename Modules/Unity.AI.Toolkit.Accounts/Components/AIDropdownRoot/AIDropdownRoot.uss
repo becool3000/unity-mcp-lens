@@ -1,0 +1,57 @@
+AIDropdownRoot {
+    width: 288px;
+    min-height: 25px;
+    padding: 8px;
+}
+
+.info-icon,
+.warning-icon
+{
+    max-height: 32px;
+    max-width: 32px;
+    flex-shrink: 0;
+    margin-right: 4px;
+}
+
+.text-menu-item {
+    padding-left: 8px;
+    padding-right: 4px;
+}
+
+.aligned-row {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.separator {
+    margin: 8px 0;
+    border-color: var(--unity-colors-slider_groove-background-disabled);
+    border-top-width: 2px;
+}
+
+Button.simple {
+    align-self: flex-start;
+}
+
+#banner .banner {
+    margin-bottom: 8px;
+}
+
+.text-menu-item-row {
+    flex-direction: row;
+    justify-content: space-between;
+}
+
+.hide {
+    display: none;
+}
+
+AIAssistantMenuItem {
+    margin-bottom: 8px;
+}
+
+#points {
+    padding-top: 4px;
+    padding-bottom: 4px;
+}

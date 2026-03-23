@@ -1,0 +1,34 @@
+.mui-whats-new-button-root {
+    background-color: var(--unity-colors-alternated_rows-background);
+    border-radius: 5px;
+    margin-bottom: 16px;
+    padding: 16px 12px 12px 12px;
+    border-color: var(--unity-colors-inspector_titlebar-border);
+    border-width: 1px;
+}
+
+.mui-whats-new-button-row {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: flex-end;
+}
+
+.mui-whats-new-button-image-container {
+    position: relative;
+    min-width: 24px;
+}
+
+.mui-whats-new-button-image {
+    position: absolute;
+    bottom: 0;
+    right: 0;
+}
+
+#whatsNewPageHeader {
+    font-size: 16px;
+    -unity-font-style: bold;
+}
+
+#whatsNewPageDescription {
+    white-space: normal;
+}

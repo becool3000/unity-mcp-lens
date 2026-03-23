@@ -1,0 +1,7 @@
+<UXML xmlns="UnityEngine.UIElements" class="flex-grow">
+    <Style src="./VideoPreview.uss"/>
+    <VisualElement name="image" picking-mode="Ignore" class="flex-grow bg-medium rounded-4px image-scale-to-fit">
+        <VisualElement name="border" picking-mode="Ignore" class="flex-grow border-2px border-selectable rounded-4px" />
+        <VisualElement name="progress" picking-mode="Ignore" class="spinner hide absolute flex-grow-15pct self-center height-100pct image-scale-to-fit" />
+    </VisualElement>
+</UXML>

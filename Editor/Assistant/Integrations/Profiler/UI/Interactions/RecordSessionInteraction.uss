@@ -1,0 +1,36 @@
+.record-session-interaction {
+    flex-direction: column;
+    padding: 12px;
+    background-color: rgb(40, 40, 40);
+    border-radius: 4px;
+}
+
+.record-session-interaction__header-row {
+    flex-direction: row;
+    align-items: center;
+    margin-bottom: 6px;
+}
+
+.record-session-interaction__icon {
+    width: 16px;
+    height: 16px;
+    min-width: 16px;
+    min-height: 16px;
+    margin-right: 8px;
+}
+
+.record-session-interaction__title {
+    -unity-font-style: bold;
+}
+
+.record-session-interaction__description {
+    color: var(--muse-chat-text-thoughts);
+    white-space: normal;
+    margin-bottom: 8px;
+}
+
+.record-session-interaction__button {
+    margin: 0;
+    padding: 0 14px;
+    align-self: flex-start;
+}

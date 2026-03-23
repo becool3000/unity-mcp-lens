@@ -1,0 +1,63 @@
+﻿using System;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.Linq;
+using Unity.AI.Pbr.Components;
+using Unity.AI.Pbr.Services.Stores.Actions;
+using Unity.AI.Pbr.Services.Stores.States;
+using Unity.AI.Generators.Redux.Thunks;
+using Unity.AI.Generators.UI;
+using UnityEditor;
+using UnityEngine;
+using UnityEngine.UIElements;
+
+namespace Unity.AI.Pbr.Services.Utilities
+{
+    static class GridViewExtensions
+    {
+        public static void BindTo<T>(this GridView gridView, List<GenerationTile> itemPool, Func<bool> replaceAssetOnSelect = null) where T: MaterialResult
+        {
+            gridView.selectionType = SelectionType.Single;
+            gridView.selectOnPointerUp = true; // for drag and drop
+            gridView.makeItem = () => new GenerationTileItem();
+            gridView.bindItem = (element, i) =>
+            {
+                if (element is not GenerationTileItem tileItem)
+                    return;
+                var result = ((BindingList<T>)gridView.itemsSource)[i];
+                if (itemPool.Count > 0)
+                {
+                    var found = itemPool.FindIndex(item => item.materialResult == result);
+                    if (found < 0)
+                        found = itemPool.Count - 1;
+                    tileItem.tile = itemPool[found];
+                    itemPool.RemoveAt(found);
+                }
+                else
+                    tileItem.tile = new GenerationTile();
+                tileItem.tile.SetGeneration(result);
+                gridView.MarkDirtyRepaint(); // bind does not await so image might not have been valid in previous calls
+            };
+            gridView.unbindItem = (element, i) =>
+            {
+                if (element is not GenerationTileItem { tile: not null } tileItem)
+                    return;
+                itemPool.Add(tileItem.tile);
+                tileItem.tile = null;
+            };
+            gridView.selectedIndicesChanged += async indexes =>
+            {
+                var textures = (BindingList<T>)gridView.itemsSource;
+                var values = indexes.ToList();
+                if (gridView.GetAsset() != null && values.Count > 0 && textures.Count > values[0] && textures[values[0]] != null && textures[values[0]] is not MaterialSkeleton)
+                {
+                    var replaceAsset = replaceAssetOnSelect?.Invoke() ?? false;
+                    await gridView.Dispatch(GenerationResultsActions.selectGeneration, new(gridView.GetAsset(), textures[values[0]], replaceAsset, true));
+                    if (replaceAsset)
+                        AssetDatabase.Refresh();
+                }
+            };
+            gridView.itemsSource = new BindingList<T>();
+        }
+    }
+}

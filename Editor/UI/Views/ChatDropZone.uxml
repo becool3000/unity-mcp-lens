@@ -1,0 +1,8 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" xmlns="UnityEngine.UIElements" editor-extension-mode="False">
+    <ui:VisualElement class="mui-chat-drop-zone">
+        <ui:VisualElement name="chatDropZoneContent" class="mui-chat-context-dropzone-container">
+            <ui:Label name="chatDropZoneTextTitle" text="Attach items here" class="mui-chat-label mui-chat-dropzone-text-title "/>
+            <ui:Label name="chatDropZoneText" text="Drag and drop items to focus your question" class="mui-chat-label mui-chat-dropzone-text"/>
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>

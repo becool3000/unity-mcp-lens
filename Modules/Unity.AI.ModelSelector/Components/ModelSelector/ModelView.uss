@@ -1,0 +1,51 @@
+.models-container {
+    padding: 10px;
+    height: 100%;
+    overflow: scroll;
+}
+
+.close-button {
+    background-image: resource("Packages/com.unity.ai.assistant/Modules/Unity.AI.Generators.UI/Icons/X.png");
+    background-color: rgba(0,0,0,0);
+    -unity-background-image-tint-color: var(--unity-colors-default-text);
+}
+
+.model-filters > .unity-toggle {
+    align-self: flex-start;
+    flex-direction: row-reverse;
+    margin: 6px 0 0;
+}
+
+.model-filters .unity-label {
+    margin-left: 4px;
+}
+
+.model-filters .unity-radio-button {
+    margin: 6px 0 0;
+}
+
+.sort-radio-group {
+    margin: 0;
+}
+
+.unity-tab-view__header-container {
+    display: none;
+}
+
+.back-button-image {
+    background-image: resource("Packages/com.unity.ai.assistant/Modules/Unity.AI.ModelSelector/Icons/CaretLeft.png");
+    -unity-background-scale-mode: scale-to-fit;
+    -unity-background-image-tint-color: var(--unity-colors-button-text);
+}
+
+.model-details-grid .unity-image {
+    padding: 8px;
+}
+
+.section-title {
+    margin-bottom: 6px;
+}
+
+.section-container {
+    margin-bottom: 16px;
+}

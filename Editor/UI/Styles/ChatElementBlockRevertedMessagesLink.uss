@@ -1,0 +1,30 @@
+#revertedMessagesLinkSection {
+    margin-left: 20px;
+    margin-right: 20px;
+}
+
+#checkpointFilterSection {
+    flex-direction: row;
+    padding-left: 0;
+    padding-right: 0;
+    -unity-text-align: upper-left;
+    border-radius: 4px;
+    border-color: var(--muse-chat-foregrounds-310);
+    background-color: var(--muse-chat-backgrounds-175);
+}
+
+#checkpointFilterSection:hover {
+    background-color: var(--muse-chat-backgrounds-100);
+}
+
+.mui-checkpoint-filter-image {
+    margin: 8px;
+    width: 16px;
+    height: 16px;
+}
+
+.mui-checkpoint-filter-text-root {
+    padding: 8px;
+    padding-left: 4px;
+    flex-grow: 1;
+}

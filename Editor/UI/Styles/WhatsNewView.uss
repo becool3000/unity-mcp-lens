@@ -1,0 +1,73 @@
+.whatsnewview__element-root {
+    flex-grow: 1;
+}
+
+.mui-whats-new-root {
+    flex-grow: 1;
+    min-height: 400px;
+}
+
+.mui-whats-new-landing-page {
+    flex-grow: 1;
+    max-width: 400px;
+    align-self: center;
+    justify-content: center;
+    margin: 22px 12px;
+}
+
+.mui-whats-new-content {
+    flex-grow: 1;
+    max-width: 400px;
+    align-self: center;
+    justify-content: center;
+    margin: 22px 12px;
+}
+
+.mui-whats-new-video-element {
+    width: 100%;
+    height: 100%;
+}
+
+.mui-whats-new-video-full-view {
+    flex-grow: 1;
+    margin: 8px;
+}
+
+.mui-whats-new-video-icon {
+    width: 16px;
+    height: 16px;
+    position: absolute;
+    top: 0;
+    right: 0;
+}
+
+.mui-whats-new-grow {
+    flex-grow: 1;
+}
+
+.mui-whats-new-header {
+    font-size: 20px;
+    -unity-font-style: bold;
+    margin-top: 10px;
+    margin-bottom: 10px;
+    white-space: normal;
+}
+
+.mui-whats-new-label {
+    white-space: normal;
+    margin-bottom: 10px;
+}
+
+.mui-whats-new-control-root {
+    flex-direction: row;
+}
+
+.mui-whats-new-control-button {
+    min-height: 26px;
+    min-width: 60px;
+}
+
+#videoFullViewContent {
+    flex-grow: 1;
+    background-size: contain;
+}

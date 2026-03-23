@@ -1,0 +1,7 @@
+﻿<UXML class="flex-grow" xmlns="UnityEngine.UIElements" xmlns:ui="Unity.AI.Image.Components" xmlns:editorui="UnityEditor.UIElements">
+    <Style src="./DoodlePad.uss"/>
+    <VisualElement name="doodle-pad-background-image" class="flex-grow self-center" />
+    <Image name="doodle-pad-canvas" class="doodle-pad-canvas overflow-hidden flex-grow self-center">
+        <ui:DoodleCursorOverlay class="doodle-pad-cursor hide"/>
+    </Image>
+</UXML>

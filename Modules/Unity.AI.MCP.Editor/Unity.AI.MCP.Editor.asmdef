@@ -1,0 +1,24 @@
+{
+    "name": "Unity.AI.MCP.Editor",
+    "rootNamespace": "Unity.AI.MCP.Editor",
+    "references": [
+        "Unity.AI.MCP.Runtime",
+        "Unity.AI.Assistant.Editor",
+        "Unity.AI.Assistant.Runtime",
+        "Unity.AI.Assistant.AssetGenerators.Editor",
+        "Unity.AI.Assistant.Agent.Dynamic.Extension.Editor",
+        "Unity.AI.Tracing",
+        "Unity.ugui"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

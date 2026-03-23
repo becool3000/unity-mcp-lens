@@ -1,0 +1,21 @@
+.mui-progress-root {
+    padding: 12px 16px;
+    flex-direction: row;
+    align-items: center;
+    flex-grow: 1;
+}
+
+.mui-progress-icon {
+    width: 18px;
+    height: 18px;
+    margin-right: 2px;
+}
+
+.mui-progress-status {
+    margin-right: 8px;
+    color: var(--muse-chat-text-primary);
+}
+
+.mui-progress-detail {
+    color: var(--muse-chat-text-secondary);
+}

@@ -1,0 +1,12 @@
+.unity-button .unity-image {
+    background-image: resource("Packages/com.unity.ai.assistant/Modules/Unity.AI.Generators.UI/Icons/Enhance.png");
+    -unity-background-image-tint-color: var(--unity-colors-default-text);
+}
+
+InsufficientPointsBanner {
+    margin-left: 3px;
+    margin-right: 3px;
+    margin-bottom: 5px;
+    border-color: var(--unity-colors-button-border);
+    border-width: 1px;
+}
