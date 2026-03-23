@@ -55,7 +55,8 @@ Returns:
                 return Response.Error("Target is required.");
             }
 
-            if (parameters.Nodes == null || parameters.Nodes.Length == 0)
+            var nodeSpecs = EnumerateRootNodeSpecs(parameters.Nodes).ToList();
+            if (nodeSpecs.Count == 0)
             {
                 return Response.Error("At least one node spec is required.");
             }
@@ -71,7 +72,7 @@ Returns:
             }
 
             var resolvedNodes = new List<object>();
-            foreach (UiNamedHierarchyNodeSpec node in parameters.Nodes)
+            foreach (UiNamedHierarchyNodeSpec node in nodeSpecs)
             {
                 EnsureNode(targetRoot.transform, node, parameters.PreviewOnly, resolvedNodes, out string error);
                 if (!string.IsNullOrWhiteSpace(error))
@@ -357,6 +358,28 @@ Returns:
             }
         }
 
+        static IEnumerable<UiNamedHierarchyNodeSpec> EnumerateRootNodeSpecs(JToken nodesToken)
+        {
+            if (nodesToken is not JArray array)
+            {
+                yield break;
+            }
+
+            foreach (JToken nodeToken in array)
+            {
+                if (nodeToken == null || nodeToken.Type == JTokenType.Null)
+                {
+                    continue;
+                }
+
+                UiNamedHierarchyNodeSpec node = nodeToken.ToObject<UiNamedHierarchyNodeSpec>();
+                if (node != null)
+                {
+                    yield return node;
+                }
+            }
+        }
+
         static bool ApplyLayoutChanges(GameObject target, SetUiLayoutPropertiesParams parameters, List<object> changes, out string error)
         {
             error = null;
@@ -624,8 +647,21 @@ Returns:
             return new
             {
                 property,
-                previousValue,
-                newValue
+                previousValue = NormalizeValue(previousValue),
+                newValue = NormalizeValue(newValue)
+            };
+        }
+
+        static object NormalizeValue(object value)
+        {
+            return value switch
+            {
+                null => null,
+                Vector2 vector2 => new { x = vector2.x, y = vector2.y },
+                Vector3 vector3 => new { x = vector3.x, y = vector3.y, z = vector3.z },
+                Vector4 vector4 => new { x = vector4.x, y = vector4.y, z = vector4.z, w = vector4.w },
+                Color color => new { r = color.r, g = color.g, b = color.b, a = color.a },
+                _ => value
             };
         }
 

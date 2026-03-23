@@ -23,8 +23,8 @@ namespace Unity.AI.MCP.Editor.Tools.Parameters
         [McpDescription("How to find the target root ('by_name', 'by_id', 'by_path').", Required = false)]
         public string SearchMethod { get; set; } = "by_name";
 
-        [McpDescription("Named UI nodes to ensure under the root target.", Required = true)]
-        public UiNamedHierarchyNodeSpec[] Nodes { get; set; }
+        [McpDescription("Named UI nodes to ensure under the root target. Pass as an array of node objects.", Required = true)]
+        public JToken Nodes { get; set; }
 
         [McpDescription("Include inactive scene objects when resolving the root target.", Required = false)]
         public bool IncludeInactive { get; set; } = true;
