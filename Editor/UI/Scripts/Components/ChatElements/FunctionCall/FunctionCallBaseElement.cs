@@ -91,7 +91,7 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components.ChatElements
                     m_StatusElement.AddToClassList(k_StatusSuccessClassName);
                     m_StatusElement.AddToClassList(k_IconCheckmarkClassName);
 
-                    // This is temporary until this is fixed in UITK https://jira.unity3d.com/browse/UUM-108227
+                    // Temporary tint workaround for the current UITK icon styling behavior.
                     m_StatusElement.AddToClassList("mui-icon-tint-success");
                     break;
                 case ToolCallState.Failed:
@@ -101,7 +101,7 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components.ChatElements
                     m_StatusElement.AddToClassList(k_StatusFailedClassName);
                     m_StatusElement.AddToClassList(k_IconCloseClassName);
 
-                    // This is temporary until this is fixed in UITK https://jira.unity3d.com/browse/UUM-108227
+                    // Temporary tint workaround for the current UITK icon styling behavior.
                     m_StatusElement.AddToClassList("mui-icon-tint-error");
                     break;
                 default:

@@ -1,6 +1,5 @@
 /*
-* Algorithm's @author Morten Mikkelsen
-* Contact: mortenm@unity3d.com
+* Algorithm author: Morten Mikkelsen
 */
 
 // Each #kernel tells which function to compile; you can have many kernels

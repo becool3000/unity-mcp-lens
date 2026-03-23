@@ -2,7 +2,7 @@
 
 ## Introduction
 
-The following document introduces the steps to locally develop skills, test them, and upload them to our repository.
+The following document introduces the steps to locally develop skills, test them, and maintain them in your own repository or package workflow.
 
 * [Workflow Option #1 - Skills Added Via Filesystem](#filesystem)
 * [Workflow Option #2 - Skills Added Via C# API Calls](#csharp-api)
@@ -11,19 +11,17 @@ The following document introduces the steps to locally develop skills, test them
 
 ### Project Setup
 
-The following steps add our AI Assistant and developer frontend functionality to the Editor:
+The following steps add the package and optional development tooling needed to experiment with skills in the Editor:
 
-1. Clone our AI Assistant repository with git: https://github.cds.internal.unity3d.com/unity/muse-editor/tree/develop
-2. In the Unity project that you want to use for developing skills, **add the following packages**:
+1. Clone this repository or make the package available locally through a folder reference.
+2. In the Unity project that you want to use for developing skills, add `com.unity.ai.assistant` as a local package.
+3. If you also have access to a compatible `Unity.AI.Assistant.DeveloperTools` package, add that package as well to enable the development UI described later in this guide.
 
-* [AI Assistant](../../../../../com.unity.ai.assistant) - Cloned repository folder: `Packages/com.unity.ai.assistant`
-* [AI Assistant Developer Tools](../../../../../com.unity.ai.assistant.developer-tools) - Cloned repository folder: `Packages/com.unity.ai.assistant.developer-tools`
-
-Our repository's `TestProject` (repository folder `Projects/TestProject`) is already set up to use those packages.
+This fork does not ship a sample `TestProject`, so use your own Unity project when validating skills locally.
 
 ### Set Up Your Integration Assembly
 
-Setup of your package for internal AI Assistant namespace access.
+Setup of your package for AI Assistant namespace access.
 
 1. Configure your `.asmdef` file with appropriate name and references: Refer to `Unity.AI.Assistant.Runtime`
 2. Add internal visibility by modifying `AssemblyInfo.cs` to include your assembly in the following assembly:
@@ -88,7 +86,7 @@ Refer to the section below, [Testing Skills: Tool User Interface and Skill Activ
 <a id="csharp-api"></a>
 ## Workflow Option #2 - Skills Added Via C# API Calls
 
-Note: This way to add skills may be useful if we conditionally add skills from C# code or dynamically change any details. For most skills we probably want to develop skills with the goal to merge them into our AI Assistant skills data as described in the section above.
+Note: This way to add skills may be useful if you conditionally add skills from C# code or dynamically change any details. For most skills, filesystem-based development is simpler and easier to review.
 
 Skills can be defined and added at any time. Since we have to deal with **Domain Reloads**, we add a skill here via C# code during static initialization.
 
@@ -137,7 +135,7 @@ SkillsRegistry.RemoveByTag("Skills.TestTag");
 <a id="testing-skills"></a>
 ## Testing Skills: User Interface and Skill Activation
 
-With your project opened, access the tool with the Editor menu option: `AI Assistant > Internals > Assistant Development`
+With your project opened, access the development tool through the Editor menu option `AI Assistant > Internals > Assistant Development` if the optional developer tools package is installed.
 
 In the Assistant Development window:
 
@@ -196,27 +194,23 @@ There are subtle ways to write good and robust skills, also for example vague sk
 
 **To prepare for deployment:**
 
-For questions on details and latest status, interact with our team on Slack (#ask-unity-ai).
-
-Note: We expect mostly working with `SKILL.md` files. For testing and PRs using the C# API to add skills the process may look different in the details.
+Note: We expect most skill work to happen through `SKILL.md` files. For testing and PRs that add skills via the C# API, the review process may differ slightly.
 
 1. **Manual Testing:** Create test cases (prompts and success criteria), verify their success manually, and iterate until the skill behaves as expected.
-2. **Staging and Regression Testing:** Stage your changes and run the AIA Benchmark regression (benchmark/CI is still in development).
-3. **Merging:** If regression passes, submit a PR, review with the AI team, and merge.
-4. **Benchmarking:** Add your skill test cases to the AIA Benchmark suite.
+2. **Staging and Regression Testing:** Stage your changes and run whatever automated checks or regression prompts your team relies on.
+3. **Merging:** If validation passes, submit a PR in the repository where your skills are maintained and review it with the appropriate maintainers.
+4. **Benchmarking:** Keep a small repeatable prompt suite so you can re-check behavior when models, tools, or prompts change.
 
 ### Merging Skill Data (Git Workflow)
 
-Skills are stored in the [muse-skills](https://github.cds.internal.unity3d.com/unity/muse-skills) repository, which is installed as a Python package by the backend via Poetry.
+This fork does not prescribe a single shared skill repository or backend deployment path.
 
-1. Commit to your branch of the [muse-skills](https://github.cds.internal.unity3d.com/unity/muse-skills) repository
-2. To test locally against the backend, update `ai_assistant/pyproject.toml` to point to your branch:
-   ```toml
-   muse-skills = {git = "https://github.cds.internal.unity3d.com/unity/muse-skills.git", branch = "your-branch-name"}
-   ```
-   Then run `poetry update muse-skills` in the `ai_assistant/` directory.
-3. Start a PR in `muse-skills` with your expert reviewers and your AI team collaborators (or find a reviewer on #ask-unity-ai)
-4. Land the PR — the backend team will periodically bump the `muse-skills` tag to release skill changes
+If your environment loads skills from a separate repository or package:
+
+1. Commit the skill changes to your branch in that repository.
+2. Update your local backend or package dependency to point at that branch or local checkout.
+3. Validate the skill end to end in the target environment.
+4. Submit a PR and merge through your normal review process.
 
 ## Further references
 
@@ -226,4 +220,4 @@ It covers also:
 
 - **Tools** that can be called from skills
 - **Testing** a skill 
-- **Deployment** of new skills on our repository as a permanent part of AI Assistant
+- **Deployment** of new skills in your own repository or package workflow

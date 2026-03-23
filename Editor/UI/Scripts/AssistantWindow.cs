@@ -113,7 +113,7 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts
             m_AssistantWindowUiContainer?.Dispose();
             m_AssistantWindowUiContainer = null;
 
-            // TODO: https://jira.unity3d.com/browse/ASST-2178
+            // TODO: Revisit workflow disposal once backend lifecycle cleanup is more robust.
             m_AssistantInstance?.Backend?.ActiveWorkflow?.Dispose();
             m_AssistantInstance = null;
         }

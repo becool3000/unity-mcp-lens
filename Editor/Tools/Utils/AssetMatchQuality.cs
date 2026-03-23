@@ -12,7 +12,7 @@ namespace Unity.AI.Assistant.Tools.Editor
     internal static class AssetMatchQuality
     {
         // Similarity thresholds for categorizing match quality
-        // TODO: Tune thresholds based on feedback (JIRA: https://jira.unity3d.com/browse/ASST-1979)
+        // TODO: Tune thresholds based on user feedback.
         public const float HighQualityThreshold = 0.10f;
         public const float MediumQualityThreshold = 0.08f;
         
@@ -232,4 +232,3 @@ namespace Unity.AI.Assistant.Tools.Editor
         High
     }
 }
-
