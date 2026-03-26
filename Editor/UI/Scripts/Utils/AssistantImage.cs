@@ -14,12 +14,19 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Utils
         string m_CurrentIconClass;
         string m_OverrideIconClass;
         Image m_Image;
+        bool m_AutoHide;
 
-        public AssistantImage(Image image)
+        public AssistantImage(Image image, bool autoHide = false)
         {
             Debug.Assert(image != null, "Image cannot be null");
 
             m_Image = image;
+            m_AutoHide = autoHide;
+
+            if (m_AutoHide)
+            {
+                m_Image.SetDisplay(false);
+            }
         }
 
         public void SetTexture(Texture2D texture)
@@ -97,6 +104,12 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Utils
             }
 
             m_CurrentIconClass = fullClassName;
+
+            if (m_AutoHide)
+            {
+                m_Image.SetDisplay(!string.IsNullOrEmpty(className));
+            }
+
             if (string.IsNullOrEmpty(fullClassName))
             {
                 return;

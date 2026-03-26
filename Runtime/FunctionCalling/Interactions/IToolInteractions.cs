@@ -17,6 +17,6 @@ namespace Unity.AI.Assistant.FunctionCalling
         /// <param name="cancellationToken">A cancellation token</param>
         /// <typeparam name="TOutput">The type of interaction output</typeparam>
         /// <returns>An asynchronous task that returns the interaction result.</returns>
-        Task<TOutput> WaitForUser<TOutput>(ToolExecutionContext.CallInfo callInfo, IUserInteraction<TOutput> userInteraction, int timeoutSeconds = 30, CancellationToken cancellationToken = default);
+        Task<TOutput> WaitForUser<TOutput>(ToolExecutionContext.CallInfo callInfo, IInteractionSource<TOutput> userInteraction, int timeoutSeconds = 30, CancellationToken cancellationToken = default);
     }
 }

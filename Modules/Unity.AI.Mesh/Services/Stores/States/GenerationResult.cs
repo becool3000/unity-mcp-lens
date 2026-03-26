@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using Unity.AI.Mesh.Services.Undo;
 using Unity.AI.Mesh.Services.Utilities;
+using Unity.AI.Generators.UI.Actions;
 using Unity.AI.Generators.UI.Payloads;
 using Unity.AI.Generators.UI.Utilities;
 using Unity.AI.Toolkit.Utility;
@@ -36,6 +37,12 @@ namespace Unity.AI.Mesh.Services.Stores.States
         public bool replaceWithoutConfirmation;
         public SerializableDictionary<string, GeneratedResultSelectorSettings> generatedResultSelectorSettings = new();
         public GenerationValidationResult generationValidation = new(true, BackendServiceConstants.ErrorTypes.Unknown, 0, new List<GenerationFeedbackData>());
+
+        /// <summary>
+        /// Tracks submitted feedback for generated assets.
+        /// Key: generation URI, Value: sentiment (Positive/Negative)
+        /// </summary>
+        public SerializableDictionary<string, GenerationFeedbackSentiment> submittedFeedback = new();
     }
 
     [Serializable]

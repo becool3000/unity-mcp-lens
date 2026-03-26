@@ -18,6 +18,8 @@ namespace Unity.AI.MCP.Editor.Tools
         /// Description of the Unity.ManageShader tool for MCP clients.
         /// Provides information about shader CRUD operations including create, read, update, and delete.
         /// </summary>
+        public const string Title = "Manage shaders";
+
         public const string Description = @"Manages shader scripts in Unity (create, read, update, delete).
 
 Args:
@@ -64,7 +66,7 @@ Returns:
         /// </summary>
         /// <param name="parameters">The parameters specifying the shader action and related settings.</param>
         /// <returns>A response object containing success status, message, and optional data.</returns>
-        [McpTool("Unity.ManageShader", Description, Groups = new string[] { "assets", "scripting" })]
+        [McpTool("Unity.ManageShader", Description, Title, Groups = new string[] { "assets", "scripting" })]
         public static object HandleCommand(ManageShaderParams parameters)
         {
             var @params = parameters;

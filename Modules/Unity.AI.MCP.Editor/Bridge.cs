@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -14,6 +15,7 @@ using Unity.AI.MCP.Editor.Settings;
 using Unity.AI.MCP.Editor.ToolRegistry;
 using Unity.AI.MCP.Editor.UI;
 using Unity.AI.Assistant.Editor.Acp;
+using Unity.AI.Toolkit;
 using Unity.Relay;
 using Unity.Relay.Editor;
 using UnityEditor;
@@ -35,8 +37,10 @@ namespace Unity.AI.MCP.Editor
         readonly object clientsLock = new();
         readonly Dictionary<string, IConnectionTransport> identityToTransportMap = new(); // identity key -> transport
         readonly Dictionary<IConnectionTransport, string> transportToIdentityMap = new(); // transport -> identity key (reverse lookup)
+        readonly Dictionary<string, IConnectionTransport> displacedTransports = new(); // identity key -> previously displaced transport (for restore)
         readonly HashSet<string> gatewayIdentityKeys = new(); // identity keys for gateway fast-path connections (exempt from capacity limit)
         volatile int cachedMaxDirectConnections = -1; // thread-safe snapshot, updated on main thread
+        bool isBatchMode; // captured on main thread in Start(), safe to read from background threads
         CancellationTokenSource cts;
         Task listenerTask;
 
@@ -68,9 +72,20 @@ namespace Unity.AI.MCP.Editor
         // Security validation
         ValidationConfig validationConfig;
 
-        // Approval dialog management
-        bool isApprovalDialogShowing;
-        readonly object approvalDialogLock = new();
+        // Per-connection approval state tracking
+        enum ConnectionApprovalState
+        {
+            Unknown,           // Just connected, validation not started
+            Validating,        // Background validation in progress
+            AwaitingApproval,  // Validation done, waiting for user
+            Approved,          // Tool calls allowed
+            Denied,            // Tool calls rejected
+            GatewayApproved    // ACP fast-path, tool calls allowed
+        }
+
+        readonly Dictionary<IConnectionTransport, ConnectionApprovalState> transportApprovalState = new();
+        readonly Dictionary<IConnectionTransport, ValidationDecision> transportValidationDecisions = new();
+        readonly object approvalStateLock = new();
 
         // Pending approval tracking - one per identity
         static readonly Dictionary<string, TaskCompletionSource<bool>> pendingApprovalsByIdentity = new();
@@ -78,6 +93,10 @@ namespace Unity.AI.MCP.Editor
 
         // ACP session tokens for auto-approval - maps transport to token
         readonly Dictionary<IConnectionTransport, string> pendingAcpTokens = new();
+        // Persistent ACP token tracking per transport — survives ValidateAndApproveAsync consumption.
+        // Used by TryLateUpgradeToGateway to upgrade connections when the relay session registration
+        // arrives after the MCP server has already connected (domain reload race condition).
+        readonly Dictionary<IConnectionTransport, string> transportAcpTokens = new();
         readonly object acpTokenLock = new();
 
         // Command deduplication - request ID tracking
@@ -86,24 +105,24 @@ namespace Unity.AI.MCP.Editor
         static readonly TimeSpan ResultCacheDuration = TimeSpan.FromMinutes(5);
         double nextCacheCleanupAt;
 
-        // Write serialization — multiple async responses and heartbeats may complete concurrently
-        readonly SemaphoreSlim transportWriteLock = new(1, 1);
+        // Per-transport write serialization — a blocked client write must not stall
+        // heartbeats or responses for every other active connection.
+        readonly ConditionalWeakTable<IConnectionTransport, SemaphoreSlim> transportWriteLocks = new();
 
         /// <summary>
         /// Event fired when a client connects or disconnects.
-        /// This event is always invoked on the main thread via EditorApplication.delayCall.
+        /// This event is always invoked on the main thread via EditorTask.delayCall.
         /// </summary>
         public static event Action OnClientConnectionChanged;
 
         /// <summary>
         /// Diagnostic events for testing and observability.
         /// Most events fire immediately (synchronously) from background threads.
-        /// OnDialogShown fires on main thread via EditorApplication.delayCall.
+        /// OnDialogShown fires on main thread via EditorTask.delayCall.
         /// Event handlers should be thread-safe or marshal to main thread if needed.
         /// </summary>
         public static event Action<string> OnConnectionAttempt;  // Fired immediately when AcceptClientAsync returns (connectionId)
         public static event Action<string, ValidationStatus> OnValidationComplete;  // Fired immediately after validation (connectionId, status)
-        public static event Action<string, bool> OnDialogScheduled;  // Fired immediately when dialog decision made (connectionId, willShow)
         public static event Action<string> OnDialogShown;  // Fired on main thread after dialog opens (connectionId)
 
 
@@ -131,102 +150,6 @@ namespace Unity.AI.MCP.Editor
         public string GetClientInfo()
         {
             return ConnectionRegistry.instance.GetClientInfo(GetActiveIdentityKeys());
-        }
-
-        static void ScheduleOnMainThread(Action action)
-        {
-            EditorApplication.delayCall += () =>
-            {
-                try
-                {
-                    action();
-                }
-                catch (Exception ex)
-                {
-                    McpLog.LogDelayed($"Main-thread dispatch error: {ex.Message}", LogType.Error);
-                }
-            };
-        }
-
-        static Task RunOnMainThreadAsync(Action action)
-        {
-            var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-            EditorApplication.delayCall += () =>
-            {
-                try
-                {
-                    action();
-                    tcs.TrySetResult(true);
-                }
-                catch (Exception ex)
-                {
-                    tcs.TrySetException(ex);
-                }
-            };
-            return tcs.Task;
-        }
-
-        static Task<T> RunOnMainThreadAsync<T>(Func<T> func)
-        {
-            var tcs = new TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously);
-            EditorApplication.delayCall += () =>
-            {
-                try
-                {
-                    tcs.TrySetResult(func());
-                }
-                catch (Exception ex)
-                {
-                    tcs.TrySetException(ex);
-                }
-            };
-            return tcs.Task;
-        }
-
-        Task<ConnectionRecord> GetConnectionByIdentityAsync(string identityKey)
-        {
-            return RunOnMainThreadAsync(() => ConnectionRegistry.instance.GetConnectionByIdentity(identityKey));
-        }
-
-        Task<ConnectionRecord> FindMatchingConnectionAsync(ConnectionInfo connectionInfo)
-        {
-            return RunOnMainThreadAsync(() => ConnectionRegistry.instance.FindMatchingConnection(connectionInfo));
-        }
-
-        Task<ConnectionRecord> FindMatchingConnectionAsync(ConnectionIdentity identity)
-        {
-            return RunOnMainThreadAsync(() => ConnectionRegistry.instance.FindMatchingConnection(identity));
-        }
-
-        Task RecordConnectionAsync(ValidationDecision decision)
-        {
-            return RunOnMainThreadAsync(() => ConnectionRegistry.instance.RecordConnection(decision));
-        }
-
-        Task<bool> UpdateConnectionStatusAsync(string connectionId, ValidationStatus newStatus, string newReason = null)
-        {
-            return RunOnMainThreadAsync(() => ConnectionRegistry.instance.UpdateConnectionStatus(connectionId, newStatus, newReason));
-        }
-
-        Task<bool> WasDialogShownAsync(ConnectionInfo connectionInfo)
-        {
-            return RunOnMainThreadAsync(() => ConnectionRegistry.instance.WasDialogShown(connectionInfo));
-        }
-
-        Task<ConnectionOriginPolicy> GetConnectionPolicySnapshotAsync(bool isGateway)
-        {
-            return RunOnMainThreadAsync(() =>
-            {
-                var policy = isGateway
-                    ? MCPSettingsManager.Settings.connectionPolicies.gateway
-                    : MCPSettingsManager.Settings.connectionPolicies.direct;
-
-                return new ConnectionOriginPolicy
-                {
-                    allowed = policy?.allowed ?? false,
-                    requiresApproval = policy?.requiresApproval ?? false
-                };
-            });
         }
 
         /// <summary>
@@ -382,6 +305,7 @@ namespace Unity.AI.MCP.Editor
                     listener.Start(currentConnectionPath);
 
                     isRunning = true;
+                    isBatchMode = Application.isBatchMode;
                     string connectionType = ConnectionFactory.GetConnectionTypeName();
                     string platform = Application.platform.ToString();
                     McpLog.Log($"MCP Bridge V2 started using {connectionType} at {currentConnectionPath} (OS={platform})");
@@ -391,6 +315,9 @@ namespace Unity.AI.MCP.Editor
                     heartbeatSeq++;
                     BridgeStatusTracker.MarkReady();
                     nextHeartbeatAt = EditorApplication.timeSinceStartup + 0.5f;
+
+                    // Pre-warm tools cache so handshake can include tools immediately
+                    RefreshToolsSnapshotIfNeeded();
 
                     // Start background listener with cooperative cancellation
                     cts = new CancellationTokenSource();
@@ -429,10 +356,7 @@ namespace Unity.AI.MCP.Editor
                     ServerDiscovery.DeleteDiscoveryFiles();
 
                     // Clear all gateway connections (they're ephemeral and won't survive anyway)
-                    EditorApplication.delayCall += () =>
-                    {
-                        ConnectionRegistry.instance.ClearAllGatewayConnections();
-                    };
+                    ConnectionRegistry.instance.ClearAllGatewayConnections();
 
                     // Quiesce background listener
                     var cancel = cts;
@@ -452,14 +376,19 @@ namespace Unity.AI.MCP.Editor
                 }
             }
 
-            // Close all active clients
+            // Close all active clients (including displaced ones — their OS-level
+            // sockets must be closed so the MCP server detects the disconnect)
             IConnectionTransport[] toClose;
             lock (clientsLock)
             {
-                toClose = identityToTransportMap.Values.ToArray();
+                toClose = identityToTransportMap.Values
+                    .Concat(displacedTransports.Values)
+                    .Distinct()
+                    .ToArray();
                 identityToTransportMap.Clear();
                 transportToIdentityMap.Clear();
                 gatewayIdentityKeys.Clear();
+                displacedTransports.Clear();
             }
             McpLog.ClearOnceKeys();
             foreach (var c in toClose)
@@ -508,7 +437,6 @@ namespace Unity.AI.MCP.Editor
             try { AssemblyReloadEvents.afterAssemblyReload -= OnAfterAssemblyReload; } catch { }
             try { McpToolRegistry.ToolsChanged -= OnToolsChanged; } catch { }
             try { UnityMCPBridge.MaxDirectConnectionsPolicyChanged -= RefreshCachedMaxDirectConnections; } catch { }
-            try { transportWriteLock.Dispose(); } catch { }
         }
 
         void ScheduleInitRetry()
@@ -521,7 +449,7 @@ namespace Unity.AI.MCP.Editor
                 ensureUpdateHooked = true;
                 EditorApplication.update += EnsureStartedOnEditorIdle;
             }
-            EditorApplication.delayCall += InitializeAfterCompilation;
+            EditorTask.delayCall += InitializeAfterCompilation;
         }
 
         // Safety net: ensure the bridge starts shortly after domain reload when editor is idle
@@ -610,36 +538,155 @@ namespace Unity.AI.MCP.Editor
             }
         }
 
+        void SetApprovalState(IConnectionTransport transport, ConnectionApprovalState state)
+        {
+            lock (approvalStateLock)
+            {
+                transportApprovalState[transport] = state;
+            }
+        }
+
+        ConnectionApprovalState GetApprovalState(IConnectionTransport transport)
+        {
+            lock (approvalStateLock)
+            {
+                return transportApprovalState.TryGetValue(transport, out var state) ? state : ConnectionApprovalState.Unknown;
+            }
+        }
+
+        void UpdateIdentityMapping(IConnectionTransport transport, string newIdentityKey, bool isGateway)
+        {
+            lock (clientsLock)
+            {
+                // Remove old temporary mapping
+                if (transportToIdentityMap.TryGetValue(transport, out var oldKey))
+                {
+                    identityToTransportMap.Remove(oldKey);
+                    gatewayIdentityKeys.Remove(oldKey);
+                }
+
+                // Another transport already holds this identity key — displace it from
+                // the maps but do NOT dispose it.  The old transport's HandleClientAsync
+                // loop will finish any in-flight commands and clean up naturally when the
+                // pipe closes (using block disposes it).
+                // Track the displaced transport so it can be restored if the new one
+                // disconnects first (e.g., Codex probe servers that connect and die
+                // immediately while the real server stays alive).
+                if (identityToTransportMap.TryGetValue(newIdentityKey, out var existing) && existing != transport)
+                {
+                    McpLog.LogDelayed($"Displacing transport for identity (keeping alive for in-flight work): {newIdentityKey}");
+                    transportToIdentityMap.Remove(existing);
+
+                    // If there's already a displaced transport for this key (3+ rapid connections),
+                    // close the doubly-displaced one — it's unreachable and would leak on Stop().
+                    if (displacedTransports.TryGetValue(newIdentityKey, out var alreadyDisplaced))
+                    {
+                        try { alreadyDisplaced.Close(); } catch { }
+                    }
+                    displacedTransports[newIdentityKey] = existing;
+                }
+
+                // Set new mapping with real identity
+                identityToTransportMap[newIdentityKey] = transport;
+                transportToIdentityMap[transport] = newIdentityKey;
+                if (isGateway)
+                    gatewayIdentityKeys.Add(newIdentityKey);
+            }
+        }
+
+        /// <summary>
+        /// Send a duplicate_connection notification to a transport before closing it.
+        /// The MCP server handles this as a non-retryable error and clears its tool cache.
+        /// </summary>
+        async Task SendDuplicateNotificationAsync(IConnectionTransport transport, string reason, CancellationToken ct)
+        {
+            try
+            {
+                string message = JsonConvert.SerializeObject(new
+                {
+                    type = "duplicate_connection",
+                    reason
+                });
+                await WriteWithLockAsync(transport, message, ct);
+            }
+            catch (Exception ex)
+            {
+                McpLog.LogDelayed($"Failed to send duplicate notification: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Close all active direct (non-gateway) connections.
+        /// Called when a gateway connection registers — gateway takes precedence.
+        /// Sends a duplicate_connection notification so the relay treats this as non-retryable.
+        /// Does NOT dispose the transports — the relay closes the pipe from its side after
+        /// reading the notification, and HandleClientAsync's using block disposes naturally.
+        /// Disposing here would RST the socket, destroying the buffered notification before
+        /// the relay can read it, causing the relay to treat it as a retryable error and
+        /// reconnect in a tight loop.
+        /// </summary>
+        // TODO: Deduplication disabled — direct connections coexist with gateway.
+        // The current approach (close all direct on gateway connect) races with
+        // reconnecting MCP servers: they reconnect after CloseDirectConnections
+        // fires and end up as orphaned duplicates anyway. Needs a proper solution
+        // (e.g., scope by identity key, or continuous enforcement).
+        Task CloseDirectConnectionsAsync(CancellationToken ct) => Task.CompletedTask;
+
+#if false // Disabled — see TODO above
+        async Task CloseDirectConnectionsAsync_Dedup(CancellationToken ct)
+        {
+            IConnectionTransport[] directTransports;
+            lock (clientsLock)
+            {
+                directTransports = identityToTransportMap
+                    .Where(kvp => !gatewayIdentityKeys.Contains(kvp.Key)
+                                  && !kvp.Key.StartsWith("pending-")) // skip connections still being validated
+                    .Select(kvp => kvp.Value)
+                    .ToArray();
+            }
+
+            if (directTransports.Length == 0)
+                return;
+
+            McpLog.LogDelayed($"Closing {directTransports.Length} direct connection(s) in favor of gateway");
+
+            foreach (var transport in directTransports)
+            {
+                try
+                {
+                    await SendDuplicateNotificationAsync(transport, "Gateway connection established for this editor", ct);
+                }
+                catch { }
+            }
+        }
+#endif
+
         async Task HandleClientAsync(IConnectionTransport transport, CancellationToken token)
         {
             using (transport)
             {
+                // Per-transport CTS: cancelled in finally when this client disconnects.
+                // Linked with the listener token so it also cancels if the listener stops.
+                // Used to cancel background validation/approval for this specific transport.
+                using var transportCts = CancellationTokenSource.CreateLinkedTokenSource(token);
+                var transportToken = transportCts.Token;
+
                 // Set up disconnect handler
                 transport.OnDisconnected += () =>
                 {
-                    string disconnectedIdentityKey = null;
                     lock (clientsLock)
                     {
-                        transportToIdentityMap.TryGetValue(transport, out disconnectedIdentityKey);
+                        if (transportToIdentityMap.TryGetValue(transport, out var identityKey))
+                        {
+                            var record = ConnectionRegistry.instance.GetConnectionByIdentity(identityKey);
+                            var clientInfo = record?.Info?.ClientInfo;
+                            if (clientInfo != null)
+                            {
+                                string displayName = string.IsNullOrEmpty(clientInfo.Title) ? clientInfo.Name : clientInfo.Title;
+                                McpLog.LogDelayed($"Client disconnected: {displayName} v{clientInfo.Version}");
+                            }
+                        }
                     }
-
-                    if (string.IsNullOrEmpty(disconnectedIdentityKey))
-                        return;
-
-                    ScheduleOnMainThread(() =>
-                    {
-                        var record = ConnectionRegistry.instance.GetConnectionByIdentity(disconnectedIdentityKey);
-                        var clientInfo = record?.Info?.ClientInfo;
-                        if (clientInfo != null)
-                        {
-                            string displayName = string.IsNullOrEmpty(clientInfo.Title) ? clientInfo.Name : clientInfo.Title;
-                            McpLog.LogDelayed($"Client disconnected: {displayName} v{clientInfo.Version}");
-                        }
-                        else
-                        {
-                            McpLog.LogDelayed($"Client disconnected: {disconnectedIdentityKey}");
-                        }
-                    });
                 };
 
                 try
@@ -647,7 +694,6 @@ namespace Unity.AI.MCP.Editor
                     McpLog.LogDelayed($"Client connected: {transport.ConnectionId}");
 
                     // Track whether we can skip validation and go straight to handshake
-                    ValidationDecision decision = null;
                     bool skipValidation = false;
                     bool isGatewayFastPath = false;
 
@@ -660,10 +706,18 @@ namespace Unity.AI.MCP.Editor
                     {
                         McpLog.LogDelayed($"[ACP Token] Received approval token from client");
 
+                        // Persist token for late-upgrade: if the relay session registration arrives
+                        // after this connection (domain reload race), TryLateUpgradeToGateway can
+                        // find this transport and upgrade it to gateway status.
+                        lock (acpTokenLock)
+                        {
+                            transportAcpTokens[transport] = acpToken;
+                        }
+
                         var tokenResult = McpSessionTokenRegistry.ValidateAndConsume(acpToken);
                         if (tokenResult.IsValid)
                         {
-                            var gatewayPolicy = await GetConnectionPolicySnapshotAsync(isGateway: true);
+                            var gatewayPolicy = MCPSettingsManager.Settings.connectionPolicies.gateway;
 
                             if (gatewayPolicy.allowed && !gatewayPolicy.requiresApproval)
                             {
@@ -695,13 +749,11 @@ namespace Unity.AI.MCP.Editor
 
                                 var sessionId = tokenResult.SessionId;
                                 var provider = tokenResult.Provider;
-                                EditorApplication.delayCall += () =>
-                                {
-                                    ConnectionRegistry.instance.RecordGatewayConnection(acceptedDecision, sessionId, provider);
-                                };
+                                ConnectionRegistry.instance.RecordGatewayConnection(acceptedDecision, sessionId, provider);
 
                                 skipValidation = true;
                                 isGatewayFastPath = true;
+                                SetApprovalState(transport, ConnectionApprovalState.GatewayApproved);
                             }
                             else if (!gatewayPolicy.allowed)
                             {
@@ -738,522 +790,12 @@ namespace Unity.AI.MCP.Editor
                         }
                     }
 
-                    // Validate connection (before handshake) - skip if gateway fast path was taken
+                    // === EAGER HANDSHAKE ===
+                    // Send handshake immediately - don't block on validation or approval.
+                    // Validation and approval run in the background; tool calls are gated in ExecuteCommandAsync.
                     if (!skipValidation)
                     {
-                        // Run expensive validation (SHA256, signatures) on background thread but AWAIT completion
-                        // This ensures we don't send handshake until truly ready to accept commands
-                        if (validationConfig != null && validationConfig.Enabled && validationConfig.Mode != ValidationMode.Disabled)
-                        {
-                            try
-                            {
-                                var validationStart = DateTime.Now;
-
-                                // Run validation on background thread (doesn't block async handler)
-                                // First connection: ~250-900ms (expensive crypto)
-                                // Subsequent connections: <10ms (cache hit)
-                                decision = await Task.Run(() => ConnectionValidator.ValidateConnection(transport, validationConfig));
-                                var validationMs = (DateTime.Now - validationStart).TotalMilliseconds;
-                                McpLog.LogDelayed($"[TIMING] Validation took {validationMs:F0}ms");
-
-                                // Fire diagnostic event immediately (synchronously)
-                                OnValidationComplete?.Invoke(transport.ConnectionId, decision.Status);
-
-                                // Log comprehensive connection info
-                                LogConnectionDecision(decision);
-
-                                // Handle rejection - don't send handshake or enter message loop
-                                if (!decision.IsAccepted)
-                                {
-                                    McpLog.LogDelayed($"Connection rejected: {decision.Reason}", LogType.Warning);
-                                    return;
-                                }
-
-                                // Log warning if validation failed but connection allowed (LogOnly mode)
-                                if (decision.Status == ValidationStatus.Warning)
-                                {
-                                    McpLog.LogDelayed($"Connection allowed with warning: {decision.Reason}", LogType.Warning);
-                                }
-                            }
-                            catch (Exception ex)
-                            {
-                                McpLog.LogDelayed($"Validation exception: {ex.Message}\n{ex.StackTrace}", LogType.Error);
-
-                                // In LogOnly mode, allow connection despite error
-                                if (validationConfig.Mode != ValidationMode.Strict)
-                                {
-                                    McpLog.LogDelayed("Allowing connection despite validation error (LogOnly mode)", LogType.Warning);
-                                }
-                                else
-                                {
-                                    return; // Reject in Strict mode - don't send handshake
-                                }
-                            }
-                        }
-                        else
-                        {
-                            // Validation is disabled - log warning as this should only happen in development/testing
-                            McpLog.LogDelayed(
-                                "Connection validation is DISABLED - connections will not appear in MCP Settings UI. " +
-                                "This should only be used for automated tests. " +
-                                "Re-enable validation by re-running any test.",
-                                LogType.Warning);
-                        }
-
-                        // Determine connection origin and get applicable policy
-                        // Note: ACP token was already read at start of connection handling
-                        if (decision != null)
-                        {
-                            string storedToken = null;
-                            lock (acpTokenLock)
-                            {
-                                pendingAcpTokens.TryGetValue(transport, out storedToken);
-                            }
-
-                            var tokenResult = McpSessionTokenRegistry.ValidateAndConsume(storedToken);
-                            bool isGateway = tokenResult.IsValid;
-
-                            var policy = await GetConnectionPolicySnapshotAsync(isGateway);
-
-                            // Check if origin is allowed
-                            if (!policy.allowed)
-                            {
-                                string origin = isGateway ? "Gateway" : "Direct MCP";
-                                McpLog.LogDelayed($"Connection rejected: {origin} connections not allowed by policy", LogType.Warning);
-
-                                try
-                                {
-                                    string denialMsg = MessageProtocol.CreateApprovalDeniedMessage(
-                                        $"{origin} connections are not allowed by current policy");
-                                    byte[] denialBytes = Encoding.UTF8.GetBytes(denialMsg);
-                                    await transport.WriteAsync(denialBytes, token);
-                                }
-                                catch (Exception ex)
-                                {
-                                    McpLog.LogDelayed($"Failed to send denial message: {ex.Message}", LogType.Warning);
-                                }
-
-                                return; // Close connection
-                            }
-
-                            // Gateway auto-approve case is handled by the fast path at start of connection handling.
-                            // If we reach here with a gateway connection, it requires approval, so clean up the token.
-                            if (isGateway)
-                            {
-                                lock (acpTokenLock)
-                                {
-                                    pendingAcpTokens.Remove(transport);
-                                }
-                            }
-
-                            // Enforce capacity limit before showing approval dialog (gateway exempt)
-                            if (!isGateway && !isGatewayFastPath)
-                            {
-                                int maxDirect = GetEffectiveMaxDirectConnections();
-                                bool overCapacity;
-                                lock (clientsLock)
-                                {
-                                    int currentDirect = identityToTransportMap.Count - gatewayIdentityKeys.Count;
-                                    overCapacity = maxDirect >= 0 && currentDirect >= maxDirect;
-                                }
-
-                                if (overCapacity)
-                                {
-                                    string identityKey = ConnectionIdentity.FromConnectionInfo(decision?.Connection)?.CombinedIdentityKey
-                                        ?? transport.ConnectionId;
-                                    string displayName = decision?.Connection?.DisplayName ?? "Unknown client";
-                                    McpLog.WarningOnceDelayed(
-                                        $"capacity-denied:{identityKey}",
-                                        $"Connection from {displayName} refused: maximum direct connections ({maxDirect}) reached.");
-
-                                    if (decision != null)
-                                    {
-                                        decision.Status = ValidationStatus.CapacityLimit;
-                                        decision.Reason = $"Maximum direct connections ({maxDirect}) reached";
-                                        var capacityDecision = decision;
-                                        EditorApplication.delayCall += () =>
-                                            ConnectionRegistry.instance.RecordConnection(capacityDecision);
-                                    }
-
-                                    try
-                                    {
-                                        string denialMsg = MessageProtocol.CreateApprovalDeniedMessage(
-                                            $"Maximum direct connections ({maxDirect}) reached.");
-                                        byte[] denialBytes = Encoding.UTF8.GetBytes(denialMsg);
-                                        await transport.WriteAsync(denialBytes, token);
-                                    }
-                                    catch (Exception ex)
-                                    {
-                                        McpLog.LogDelayed($"Failed to send capacity denial: {ex.Message}", LogType.Warning);
-                                    }
-
-                                    return;
-                                }
-                            }
-
-                            // If approval is required, continue with approval flow
-                            if (policy.requiresApproval)
-                            {
-                                // Check if there's an existing connection record with this identity
-                                var existingRecord = await FindMatchingConnectionAsync(decision.Connection);
-
-                                // If connection was previously accepted (or only capacity-limited), allow through without dialog.
-                                // CapacityLimit means the user already approved this identity but the system
-                                // couldn't accommodate it at the time; honour the original approval.
-                                if (existingRecord != null && (existingRecord.Status == ValidationStatus.Accepted || existingRecord.Status == ValidationStatus.Warning || existingRecord.Status == ValidationStatus.CapacityLimit))
-                                {
-                                    McpLog.LogDelayed($"Connection auto-approved: previously accepted by user");
-
-                                    // Don't show dialog - proceed directly to handshake
-                                    // Update the existing record with new connection info
-                                    await RecordConnectionAsync(decision);
-
-                                    // Skip approval flow - continue to handshake below
-                                }
-
-                                // If connection was previously rejected, send denial and close immediately
-                                else if (existingRecord != null && existingRecord.Status == ValidationStatus.Rejected)
-                                {
-                                    McpLog.LogDelayed($"Connection rejected: previously denied by user", LogType.Warning);
-
-                                    // Send approval_denied message to server so it stops retrying
-                                    try
-                                    {
-                                        string denialMsg = MessageProtocol.CreateApprovalDeniedMessage("Connection previously denied by user");
-                                        byte[] denialBytes = Encoding.UTF8.GetBytes(denialMsg);
-                                        await transport.WriteAsync(denialBytes, token);
-                                        McpLog.LogDelayed("Sent approval_denied message to client");
-                                    }
-                                    catch (Exception ex)
-                                    {
-                                        McpLog.LogDelayed($"Failed to send approval_denied: {ex.Message}", LogType.Warning);
-                                    }
-
-                                    return; // Close connection without handshake
-                                }
-                                else
-                                {
-                                    // Status is Pending or dialog needs to be shown
-
-                                    // Get identity key for tracking pending approvals
-                                    var identity = ConnectionIdentity.FromConnectionInfo(decision.Connection);
-                                    string identityKey = identity?.CombinedIdentityKey;
-
-                                    if (string.IsNullOrEmpty(identityKey))
-                                    {
-                                        McpLog.LogDelayed("Connection rejected: unable to determine identity key", LogType.Warning);
-                                        return;
-                                    }
-
-                                    // Check if there's already a pending approval for this identity
-                                    TaskCompletionSource<bool> approvalTcs;
-                                    bool isReconnect = false;
-                                    lock (pendingApprovalsLock)
-                                    {
-                                        if (pendingApprovalsByIdentity.TryGetValue(identityKey, out approvalTcs))
-                                        {
-                                            isReconnect = true;
-                                            McpLog.LogDelayed($"Reconnected during pending approval - reusing existing approval");
-                                        }
-                                        else
-                                        {
-                                            // Create new approval TCS for first connection
-                                            approvalTcs = new TaskCompletionSource<bool>();
-                                            pendingApprovalsByIdentity[identityKey] = approvalTcs;
-                                        }
-                                    }
-
-                                    // Record connection as Pending before showing dialog
-                                    var pendingDecision = new ValidationDecision
-                                    {
-                                        Status = ValidationStatus.Pending,
-                                        Reason = "Awaiting user approval",
-                                        Connection = decision.Connection
-                                    };
-
-                                    // Record pending connection (must run on main thread - ScriptableSingleton access)
-                                    var decisionToRecord = pendingDecision;
-                                    await RecordConnectionAsync(decisionToRecord);
-
-                                    // For new connections (not reconnects), check if approval dialog is already showing
-                                    if (!isReconnect)
-                                    {
-                                        bool rejectBecauseDialogBusy = false;
-                                        lock (approvalDialogLock)
-                                        {
-                                            if (isApprovalDialogShowing)
-                                            {
-                                                rejectBecauseDialogBusy = true;
-                                            }
-                                            else
-                                            {
-                                                isApprovalDialogShowing = true;
-                                            }
-                                        }
-
-                                        if (rejectBecauseDialogBusy)
-                                        {
-                                            McpLog.LogDelayed("Connection rejected: approval dialog already showing for another connection", LogType.Warning);
-                                            await UpdateConnectionStatusAsync(
-                                                decision.Connection.ConnectionId,
-                                                ValidationStatus.Rejected,
-                                                "Connection rejected: approval dialog already showing for another connection"
-                                            );
-                                            return; // Deny this connection - another one is waiting for approval
-                                        }
-                                    }
-
-                                    var heartbeatCts = new CancellationTokenSource();
-
-                                    // Set up disconnect handler for immediate notification
-                                    Action disconnectHandler = () =>
-                                    {
-                                        // Don't auto-deny - just stop heartbeats and cleanup
-                                        // Connection stays Pending, user can decide in settings
-                                        heartbeatCts.Cancel();
-
-                                        // Remove from pending dictionary
-                                        lock (pendingApprovalsLock)
-                                        {
-                                            pendingApprovalsByIdentity.Remove(identityKey);
-                                        }
-                                    };
-
-                                    try
-                                    {
-                                        // Register disconnect handler for immediate notification
-                                        transport.OnDisconnected += disconnectHandler;
-
-                                        // Send first approval_pending message IMMEDIATELY (before dialog shows)
-                                        // This ensures client knows we're processing and doesn't timeout
-                                        try
-                                        {
-                                            // Check if transport is still connected before trying to write
-                                            if (!transport.IsConnected)
-                                            {
-                                                McpLog.LogDelayed("Connection closed before approval flow started");
-                                                transport.OnDisconnected -= disconnectHandler;
-                                                lock (approvalDialogLock) { isApprovalDialogShowing = false; }
-
-                                                lock (pendingApprovalsLock) { pendingApprovalsByIdentity.Remove(identityKey); }
-
-                                                return;
-                                            }
-
-                                            string firstHeartbeat = MessageProtocol.CreateApprovalPendingMessage();
-                                            byte[] firstHeartbeatBytes = Encoding.UTF8.GetBytes(firstHeartbeat);
-                                            await transport.WriteAsync(firstHeartbeatBytes, token);
-                                            McpLog.LogDelayed("Sent initial approval_pending message to client");
-                                        }
-                                        catch (ObjectDisposedException)
-                                        {
-                                            // Transport was disposed during write - this is a benign race condition in tests
-                                            McpLog.LogDelayed("Connection closed during approval_pending send (transport disposed)");
-                                            transport.OnDisconnected -= disconnectHandler;
-                                            lock (approvalDialogLock) { isApprovalDialogShowing = false; }
-
-                                            lock (pendingApprovalsLock) { pendingApprovalsByIdentity.Remove(identityKey); }
-
-                                            return;
-                                        }
-                                        catch (Exception ex)
-                                        {
-                                            McpLog.LogDelayed($"Failed to send initial approval_pending: {ex.Message}", LogType.Warning);
-                                            transport.OnDisconnected -= disconnectHandler;
-                                            lock (approvalDialogLock) { isApprovalDialogShowing = false; }
-
-                                            lock (pendingApprovalsLock) { pendingApprovalsByIdentity.Remove(identityKey); }
-
-                                            return;
-                                        }
-
-                                        // Show approval dialog on main thread (HandleClientAsync is on background thread)
-                                        // Only show if dialog hasn't been shown before for this identity
-                                        bool dialogAlreadyShown = await WasDialogShownAsync(decision.Connection);
-
-                                        // Fire diagnostic event immediately (synchronously)
-                                        OnDialogScheduled?.Invoke(transport.ConnectionId, !dialogAlreadyShown);
-
-                                        if (!dialogAlreadyShown)
-                                        {
-                                            var dialogScheduledAt = DateTime.Now;
-                                            var eventConnId = transport.ConnectionId;
-                                            EditorApplication.delayCall += () =>
-                                            {
-                                                try
-                                                {
-                                                    var delayMs = (DateTime.Now - dialogScheduledAt).TotalMilliseconds;
-
-                                                    if (!approvalTcs.Task.IsCompleted)
-                                                    {
-                                                        var showStart = DateTime.Now;
-
-                                                        // ShowApprovalDialog returns the dialog it created - store it directly
-                                                        CurrentApprovalDialog = ConnectionApprovalDialog.ShowApprovalDialog(decision, approvalTcs);
-                                                        var showMs = (DateTime.Now - showStart).TotalMilliseconds;
-
-                                                        // Mark dialog as shown for this connection identity
-                                                        ConnectionRegistry.instance.MarkDialogShown(decision.Connection);
-
-                                                        // Fire diagnostic event after dialog opens
-                                                        OnDialogShown?.Invoke(eventConnId);
-                                                    }
-                                                }
-                                                catch (Exception ex)
-                                                {
-                                                    McpLog.LogDelayed($"Error showing approval dialog: {ex.Message}", LogType.Error);
-                                                    approvalTcs.TrySetResult(false); // Deny on error
-                                                }
-                                            };
-                                        }
-                                        else
-                                        {
-                                            McpLog.LogDelayed("Dialog already shown for this identity - awaiting approval via settings");
-                                        }
-
-                                        // Start heartbeat loop to keep client from timing out
-                                        // Send heartbeats every 2.5 seconds after the initial one
-                                        _ = Task.Run(async () =>
-                                        {
-                                            try
-                                            {
-                                                while (!approvalTcs.Task.IsCompleted && !heartbeatCts.Token.IsCancellationRequested)
-                                                {
-                                                    await Task.Delay(2500, heartbeatCts.Token); // Send heartbeat every 2.5 seconds
-
-                                                    if (!approvalTcs.Task.IsCompleted && transport.IsConnected)
-                                                    {
-                                                        try
-                                                        {
-                                                            string heartbeatMsg = MessageProtocol.CreateApprovalPendingMessage();
-                                                            byte[] heartbeatBytes = Encoding.UTF8.GetBytes(heartbeatMsg);
-                                                            await transport.WriteAsync(heartbeatBytes, heartbeatCts.Token);
-                                                            McpLog.LogDelayed("Sent approval_pending heartbeat to client");
-                                                        }
-                                                        catch (Exception writeEx)
-                                                        {
-                                                            // Write failed - connection dropped
-                                                            // Don't cancel TCS - keep it alive so user can still decide
-                                                            McpLog.LogDelayed($"Heartbeat write failed: {writeEx.Message} - connection dropped, dialog stays open");
-                                                            break;
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                            catch (OperationCanceledException)
-                                            {
-                                                // Expected when approval completes or connection closes
-                                            }
-                                            catch (Exception ex)
-                                            {
-                                                McpLog.LogDelayed($"Heartbeat error: {ex.Message} - connection remains pending");
-
-                                                // Don't auto-deny - let the connection stay pending
-                                            }
-                                        }, heartbeatCts.Token);
-
-                                        // Await user approval (no timeout - wait indefinitely)
-                                        // TCS completes only when user clicks Accept/Deny in dialog
-                                        bool approved = await approvalTcs.Task;
-
-                                        // Clean up: stop heartbeat, unregister disconnect handler, clear dialog flag, remove from pending
-                                        heartbeatCts.Cancel();
-                                        transport.OnDisconnected -= disconnectHandler;
-                                        lock (approvalDialogLock) { isApprovalDialogShowing = false; }
-
-                                        lock (pendingApprovalsLock)
-                                        {
-                                            pendingApprovalsByIdentity.Remove(identityKey);
-                                        }
-
-                                        if (!approved)
-                                        {
-                                            McpLog.LogDelayed("Connection denied by user", LogType.Warning);
-
-                                            // Update connection status to rejected (use identity to find the right record)
-                                            var record = await FindMatchingConnectionAsync(identity);
-                                            if (record != null)
-                                            {
-                                                await UpdateConnectionStatusAsync(
-                                                    record.Info.ConnectionId,
-                                                    ValidationStatus.Rejected,
-                                                    "Denied by user"
-                                                );
-                                            }
-
-                                            // Send approval_denied message if still connected
-                                            if (transport.IsConnected)
-                                            {
-                                                try
-                                                {
-                                                    string denialMsg = MessageProtocol.CreateApprovalDeniedMessage("Connection denied by user");
-                                                    byte[] denialBytes = Encoding.UTF8.GetBytes(denialMsg);
-                                                    await transport.WriteAsync(denialBytes, token);
-                                                    McpLog.LogDelayed("Sent approval_denied message to client");
-                                                }
-                                                catch (Exception ex)
-                                                {
-                                                    McpLog.LogDelayed($"Failed to send approval_denied: {ex.Message}", LogType.Warning);
-                                                }
-                                            }
-
-                                            return; // Don't send handshake, close connection
-                                        }
-
-                                        McpLog.LogDelayed("Connection approved by user");
-
-                                        // Update connection status to accepted (use identity to find the right record)
-                                        var approvedRecord = await FindMatchingConnectionAsync(identity);
-                                        if (approvedRecord != null)
-                                        {
-                                            await UpdateConnectionStatusAsync(
-                                                approvedRecord.Info.ConnectionId,
-                                                ValidationStatus.Accepted,
-                                                "Approved by user"
-                                            );
-                                        }
-                                    }
-                                    catch (Exception ex)
-                                    {
-                                        McpLog.LogDelayed($"Approval flow exception: {ex.Message}", LogType.Error);
-                                        heartbeatCts.Cancel();
-                                        transport.OnDisconnected -= disconnectHandler;
-                                        lock (approvalDialogLock) { isApprovalDialogShowing = false; }
-
-                                        lock (pendingApprovalsLock)
-                                        {
-                                            pendingApprovalsByIdentity.Remove(identityKey);
-                                        }
-
-                                        // Update connection status to rejected on error
-                                        await UpdateConnectionStatusAsync(
-                                            decision.Connection.ConnectionId,
-                                            ValidationStatus.Rejected,
-                                            $"Approval flow exception: {ex.Message}"
-                                        );
-                                        return; // Deny on error
-                                    }
-                                }
-                            } // End of if (policy.requiresApproval)
-                            else
-                            {
-                                // Auto-approve without dialog (approval not required)
-                                var decisionToRecord = decision;
-                                EditorApplication.delayCall += () =>
-                                {
-                                    ConnectionRegistry.instance.RecordConnection(decisionToRecord);
-                                };
-                            }
-                        } // End of if (decision != null)
-                    } // End of if (!skipValidation)
-
-                    // Send handshake AFTER validation completes
-                    // Handshake signals "I'm ready to accept commands"
-                    // Check if transport is still connected before sending (validation may have taken long enough for client timeout)
-                    if (!transport.IsConnected)
-                    {
-                        McpLog.LogDelayed("Connection closed before handshake could be sent", LogType.Warning);
-                        return;
+                        SetApprovalState(transport, ConnectionApprovalState.Unknown);
                     }
 
                     try
@@ -1263,53 +805,60 @@ namespace Unity.AI.MCP.Editor
                     }
                     catch (Exception ex)
                     {
-                        McpLog.LogDelayed($"Handshake failed: {ex.Message}", LogType.Warning);
+                        // errno=32 (EPIPE) = client disconnected before handshake completed (benign race)
+                        if (ex.Message.Contains("errno=32"))
+                            McpLog.LogDelayed($"Handshake skipped: client disconnected");
+                        else
+                            McpLog.LogDelayed($"Handshake failed: {ex.Message}", LogType.Warning);
                         return;
                     }
 
-                    // Register bidirectional identity <-> transport mapping
-                    string connectionIdentityKey = null;
-                    if (decision != null && decision.Connection != null)
+                    // Register with temporary identity key (updated when validation completes)
+                    string connectionIdentityKey;
+                    if (isGatewayFastPath)
                     {
-                        var identity = ConnectionIdentity.FromConnectionInfo(decision.Connection);
-                        if (identity != null && !string.IsNullOrEmpty(identity.CombinedIdentityKey))
-                        {
-                            connectionIdentityKey = identity.CombinedIdentityKey;
-                            lock (clientsLock)
-                            {
-                                identityToTransportMap[connectionIdentityKey] = transport;
-                                transportToIdentityMap[transport] = connectionIdentityKey;
-                                if (isGatewayFastPath)
-                                    gatewayIdentityKeys.Add(connectionIdentityKey);
-                            }
-                            McpLog.LogDelayed($"Registered identity mapping: {connectionIdentityKey} -> {transport.ConnectionId}");
-                        }
+                        // Gateway fast-path: use the minimal connection info we already have
+                        connectionIdentityKey = $"gateway-{transport.ConnectionId}";
                     }
                     else
                     {
-                        // Validation disabled or no decision - use connection ID as identity
-                        // This ensures tests work when validation is disabled
-                        connectionIdentityKey = $"no-validation-{transport.ConnectionId}";
-                        lock (clientsLock)
-                        {
-                            identityToTransportMap[connectionIdentityKey] = transport;
-                            transportToIdentityMap[transport] = connectionIdentityKey;
-                            if (isGatewayFastPath)
-                                gatewayIdentityKeys.Add(connectionIdentityKey);
-                        }
-                        McpLog.LogDelayed($"Registered connection without validation: {connectionIdentityKey}");
+                        connectionIdentityKey = $"pending-{transport.ConnectionId}";
+                    }
+
+                    lock (clientsLock)
+                    {
+                        identityToTransportMap[connectionIdentityKey] = transport;
+                        transportToIdentityMap[transport] = connectionIdentityKey;
+                        if (isGatewayFastPath)
+                            gatewayIdentityKeys.Add(connectionIdentityKey);
+                    }
+
+                    // Dedup: if a gateway connection just registered, close existing direct connections
+                    // Gateway takes precedence (auto-approval, session tracking, editor targeting)
+                    if (isGatewayFastPath)
+                    {
+                        _ = Task.Run(() => CloseDirectConnectionsAsync(token));
                     }
 
                     // Notify listeners on main thread that a client connected
-                    // Fire this regardless of validation state - connection is established
-                    EditorApplication.delayCall += () => OnClientConnectionChanged?.Invoke();
+                    EditorTask.delayCall += () => OnClientConnectionChanged?.Invoke();
+
+                    // Launch background validation + approval (fire-and-forget)
+                    // This runs concurrently with the message loop below.
+                    // isBatchMode was captured on main thread in Start().
+                    if (!skipValidation)
+                    {
+                        _ = ValidateAndApproveAsync(transport, transportToken, isBatchMode);
+                    }
 
                     while (isRunning && !token.IsCancellationRequested && transport.IsConnected)
                     {
                         try
                         {
                             // Read and parse on the I/O thread (Command is a plain POCO — no Unity deps)
-                            string commandText = await MessageProtocol.ReadMessageAsync(transport);
+                            // No timeout — idle connections are normal (client sends commands sporadically).
+                            // The loop exits when the pipe closes or the listener stops.
+                            string commandText = await MessageProtocol.ReadMessageAsync(transport, timeoutMs: -1);
                             Command command;
                             try
                             {
@@ -1368,8 +917,11 @@ namespace Unity.AI.MCP.Editor
                             string msg = ex.Message ?? string.Empty;
                             bool isBenign = msg.Contains("closed", StringComparison.OrdinalIgnoreCase)
                                 || msg.Contains("timeout", StringComparison.OrdinalIgnoreCase)
-                                || msg.Contains("errno=32", StringComparison.Ordinal)
-                                || ex is TimeoutException;
+                                || msg.Contains("errno=9", StringComparison.Ordinal)  // EBADF — fd closed while reading
+                                || msg.Contains("errno=32", StringComparison.Ordinal) // EPIPE — broken pipe
+                                || msg.Contains("errno=38", StringComparison.Ordinal) // ENOTSOCK — fd closed while writing
+                                || ex is TimeoutException
+                                || ex is ObjectDisposedException;
 
                             if (isBenign)
                                 McpLog.LogDelayed($"Client handler: {msg}");
@@ -1381,6 +933,11 @@ namespace Unity.AI.MCP.Editor
                 }
                 finally
                 {
+                    McpLog.LogDelayed($"HandleClientAsync exiting for transport {transport.ConnectionId} [isConnected={transport.IsConnected}]");
+
+                    // Cancel background validation/approval for this transport
+                    try { transportCts.Cancel(); } catch { /* best-effort */ }
+
                     bool clientRemoved = false;
                     lock (clientsLock)
                     {
@@ -1390,22 +947,468 @@ namespace Unity.AI.MCP.Editor
                             transportToIdentityMap.Remove(transport);
                             gatewayIdentityKeys.Remove(identityKey);
                             clientRemoved = true;
+
+                            // Restore a previously displaced transport if it's still alive.
+                            // This handles clients (e.g., Codex) that spawn short-lived probe
+                            // servers: the probe displaces the real server from the maps, then
+                            // dies — restoring the real server so it stays tracked and visible.
+                            if (displacedTransports.TryGetValue(identityKey, out var displaced))
+                            {
+                                displacedTransports.Remove(identityKey);
+                                if (displaced.IsConnected)
+                                {
+                                    identityToTransportMap[identityKey] = displaced;
+                                    transportToIdentityMap[displaced] = identityKey;
+                                    McpLog.LogDelayed($"Restored displaced transport for identity: {identityKey}");
+                                }
+                            }
+                        }
+                        else
+                        {
+                            // This transport was itself displaced (not in maps).
+                            // Clean up its displaced entry if it's still referenced.
+                            var staleKey = displacedTransports
+                                .FirstOrDefault(kvp => kvp.Value == transport).Key;
+                            if (staleKey != null)
+                                displacedTransports.Remove(staleKey);
                         }
                     }
+
+                    // Note: we do NOT cancel or remove pendingApprovalsByIdentity TCS here.
+                    // The approval dialog may still be open, and the user can approve/deny
+                    // the identity for future connections. ValidateAndApproveAsync registers
+                    // a continuation to process the result after it detects disconnection.
 
                     // Clean up any pending ACP tokens
                     lock (acpTokenLock)
                     {
                         pendingAcpTokens.Remove(transport);
+                        transportAcpTokens.Remove(transport);
+                    }
+
+                    // Clean up approval state
+                    lock (approvalStateLock)
+                    {
+                        transportApprovalState.Remove(transport);
+                        transportValidationDecisions.Remove(transport);
                     }
 
                     // Notify listeners on main thread that a client disconnected
                     if (clientRemoved)
                     {
-                        EditorApplication.delayCall += () => OnClientConnectionChanged?.Invoke();
+                        EditorTask.delayCall += () => OnClientConnectionChanged?.Invoke();
                     }
                 }
             }
+        }
+
+        /// <summary>
+        /// Runs validation and approval in the background, concurrently with the message loop.
+        /// Updates transportApprovalState so that ExecuteCommandAsync can gate tool calls.
+        /// </summary>
+        async Task ValidateAndApproveAsync(IConnectionTransport transport, CancellationToken token, bool isBatchMode)
+        {
+            try
+            {
+                SetApprovalState(transport, ConnectionApprovalState.Validating);
+
+                ValidationDecision decision = null;
+
+                // Run expensive validation (SHA256, signatures) on background thread
+                if (validationConfig != null && validationConfig.Enabled && validationConfig.Mode != ValidationMode.Disabled)
+                {
+                    try
+                    {
+                        var validationStart = DateTime.Now;
+                        decision = await Task.Run(() => ConnectionValidator.ValidateConnection(transport, validationConfig));
+                        var validationMs = (DateTime.Now - validationStart).TotalMilliseconds;
+                        McpLog.LogDelayed($"[TIMING] Validation took {validationMs:F0}ms");
+
+                        // Exit early if transport disconnected during validation
+                        token.ThrowIfCancellationRequested();
+
+                        OnValidationComplete?.Invoke(transport.ConnectionId, decision.Status);
+                        LogConnectionDecision(decision);
+
+                        if (!decision.IsAccepted)
+                        {
+                            McpLog.LogDelayed($"Connection rejected: {decision.Reason}", LogType.Warning);
+                            SetApprovalState(transport, ConnectionApprovalState.Denied);
+                            return;
+                        }
+
+                        if (decision.Status == ValidationStatus.Warning)
+                        {
+                            McpLog.LogDelayed($"Connection allowed with warning: {decision.Reason}", LogType.Warning);
+                        }
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        // Connection closed during validation (e.g. brief probe) — nothing to do
+                        return;
+                    }
+                    catch (Exception ex)
+                    {
+                        McpLog.LogDelayed($"Validation exception: {ex.Message}\n{ex.StackTrace}", LogType.Error);
+
+                        if (validationConfig.Mode == ValidationMode.Strict)
+                        {
+                            SetApprovalState(transport, ConnectionApprovalState.Denied);
+                            return;
+                        }
+
+                        McpLog.LogDelayed("Allowing connection despite validation error (LogOnly mode)", LogType.Warning);
+                    }
+                }
+                else
+                {
+                    McpLog.LogDelayed(
+                        "Connection validation is DISABLED - connections will not appear in MCP Settings UI. " +
+                        "This should only be used for automated tests.",
+                        LogType.Warning);
+                    SetApprovalState(transport, ConnectionApprovalState.Approved);
+                    return;
+                }
+
+                if (decision == null)
+                {
+                    SetApprovalState(transport, ConnectionApprovalState.Approved);
+                    return;
+                }
+
+                // Store decision for dialog use
+                lock (approvalStateLock)
+                {
+                    transportValidationDecisions[transport] = decision;
+                }
+
+                // Update identity mapping with real identity
+                var identity = ConnectionIdentity.FromConnectionInfo(decision.Connection);
+                if (identity != null && !string.IsNullOrEmpty(identity.CombinedIdentityKey))
+                {
+                    UpdateIdentityMapping(transport, identity.CombinedIdentityKey, isGateway: false);
+                }
+
+                // Exit early if transport disconnected during identity mapping
+                token.ThrowIfCancellationRequested();
+
+                // Determine connection origin via stored ACP token
+                string storedToken = null;
+                lock (acpTokenLock)
+                {
+                    pendingAcpTokens.TryGetValue(transport, out storedToken);
+                    pendingAcpTokens.Remove(transport);
+                }
+
+                var tokenResult = McpSessionTokenRegistry.ValidateAndConsume(storedToken);
+                bool isGateway = tokenResult.IsValid;
+
+                // Check if this transport was late-upgraded to gateway while validation was running.
+                // TryLateUpgradeToGateway may fire concurrently when the relay session registration
+                // arrives after the MCP server connected (domain reload race).
+                if (GetApprovalState(transport) == ConnectionApprovalState.GatewayApproved)
+                    return;
+
+                // Note: direct connections are allowed to coexist with gateway connections.
+                // Users may have an external CLI (e.g., Claude Code) with its own MCP server
+                // alongside the AI Gateway's MCP server. Both need Unity access.
+                // CloseDirectConnectionsAsync handles one-time cleanup when a gateway first
+                // connects via the fast path; after that, new direct connections are accepted.
+
+                var policy = isGateway
+                    ? MCPSettingsManager.Settings.connectionPolicies.gateway
+                    : MCPSettingsManager.Settings.connectionPolicies.direct;
+
+                // Check if origin is allowed
+                if (!policy.allowed)
+                {
+                    string origin = isGateway ? "Gateway" : "Direct MCP";
+                    McpLog.LogDelayed($"Connection policy denied: {origin} connections not allowed", LogType.Warning);
+                    SetApprovalState(transport, ConnectionApprovalState.Denied);
+                    return;
+                }
+
+                // Enforce capacity limit (gateway exempt)
+                if (!isGateway)
+                {
+                    int maxDirect = GetEffectiveMaxDirectConnections();
+                    bool overCapacity;
+                    lock (clientsLock)
+                    {
+                        int currentDirect = identityToTransportMap.Count - gatewayIdentityKeys.Count;
+                        overCapacity = maxDirect >= 0 && currentDirect >= maxDirect;
+                    }
+
+                    if (overCapacity)
+                    {
+                        decision.Status = ValidationStatus.CapacityLimit;
+                        decision.Reason = $"Maximum direct connections ({maxDirect}) reached";
+                        var capacityDecision = decision;
+                        ConnectionRegistry.instance.RecordConnection(capacityDecision);
+                        SetApprovalState(transport, ConnectionApprovalState.Denied);
+                        return;
+                    }
+                }
+
+                // If approval not required, auto-approve
+                if (!policy.requiresApproval)
+                {
+                    var decisionToRecord = decision;
+                    ConnectionRegistry.instance.RecordConnection(decisionToRecord);
+                    SetApprovalState(transport, ConnectionApprovalState.Approved);
+                    return;
+                }
+
+                // Batch mode: auto-approve or deny based on setting (no UI available)
+                if (isBatchMode)
+                {
+                    if (MCPSettingsManager.Settings.autoApproveInBatchMode)
+                    {
+                        McpLog.LogDelayed("Batch mode: auto-approving connection");
+                        var decisionToRecord = decision;
+                        ConnectionRegistry.instance.RecordConnection(decisionToRecord);
+                        SetApprovalState(transport, ConnectionApprovalState.Approved);
+                    }
+                    else
+                    {
+                        McpLog.LogDelayed("Batch mode: auto-approve disabled, denying connection", LogType.Warning);
+                        SetApprovalState(transport, ConnectionApprovalState.Denied);
+                    }
+                    return;
+                }
+
+                // Check existing approval history
+                var existingRecord = ConnectionRegistry.instance.FindMatchingConnection(decision.Connection);
+
+                if (existingRecord != null &&
+                    (existingRecord.Status == ValidationStatus.Accepted ||
+                     existingRecord.Status == ValidationStatus.Warning ||
+                     existingRecord.Status == ValidationStatus.CapacityLimit))
+                {
+                    McpLog.LogDelayed("Connection auto-approved: previously accepted by user");
+                    var decisionToRecord = decision;
+                    ConnectionRegistry.instance.RecordConnection(decisionToRecord);
+                    SetApprovalState(transport, ConnectionApprovalState.Approved);
+                    return;
+                }
+
+                if (existingRecord != null && existingRecord.Status == ValidationStatus.Rejected)
+                {
+                    McpLog.LogDelayed("Connection denied: previously rejected by user", LogType.Warning);
+                    SetApprovalState(transport, ConnectionApprovalState.Denied);
+                    return;
+                }
+
+                // Exit early if transport disconnected before recording Pending
+                token.ThrowIfCancellationRequested();
+
+                // New connection — needs user approval
+                SetApprovalState(transport, ConnectionApprovalState.AwaitingApproval);
+
+                // Record as Pending
+                var pendingDecision = new ValidationDecision
+                {
+                    Status = ValidationStatus.Pending,
+                    Reason = "Awaiting user approval",
+                    Connection = decision.Connection
+                };
+                ConnectionRegistry.instance.RecordConnection(pendingDecision);
+
+                // Show dialog proactively
+                string identityKey = identity?.CombinedIdentityKey;
+                if (string.IsNullOrEmpty(identityKey))
+                {
+                    McpLog.LogDelayed("Unable to determine identity key for approval", LogType.Warning);
+                    SetApprovalState(transport, ConnectionApprovalState.Denied);
+                    return;
+                }
+
+                TaskCompletionSource<bool> approvalTcs;
+                lock (pendingApprovalsLock)
+                {
+                    if (!pendingApprovalsByIdentity.TryGetValue(identityKey, out approvalTcs) ||
+                        approvalTcs.Task.IsCompleted)
+                    {
+                        approvalTcs = new TaskCompletionSource<bool>();
+                        pendingApprovalsByIdentity[identityKey] = approvalTcs;
+                    }
+                }
+
+                // Check again — TryLateUpgradeToGateway may have fired concurrently
+                if (GetApprovalState(transport) == ConnectionApprovalState.GatewayApproved)
+                    return;
+
+                // Show dialog on main thread
+                ShowApprovalDialogForTransport(transport);
+
+                // Await user decision or transport disconnection
+                var cancellationTcs = new TaskCompletionSource<bool>();
+                using var reg = token.Register(() => cancellationTcs.TrySetCanceled());
+
+                var completedTask = await Task.WhenAny(approvalTcs.Task, cancellationTcs.Task);
+
+                if (completedTask == cancellationTcs.Task || token.IsCancellationRequested)
+                {
+                    // Transport disconnected while awaiting approval.
+                    // Don't cancel the TCS — the approval dialog may still be open and
+                    // the user can approve/deny the identity for future connections.
+                    McpLog.LogDelayed("Connection disconnected while awaiting approval");
+
+                    // Update registry reason so settings UI shows the disconnection
+                    EditorTask.delayCall += () =>
+                    {
+                        var disconnectedRecord = ConnectionRegistry.instance.FindMatchingConnection(identity);
+                        if (disconnectedRecord != null && disconnectedRecord.Status == ValidationStatus.Pending)
+                        {
+                            ConnectionRegistry.instance.UpdateConnectionStatus(
+                                disconnectedRecord.Info.ConnectionId,
+                                ValidationStatus.Pending,
+                                "Client disconnected \u2014 approve to allow future connections from this client");
+                        }
+                    };
+
+                    // Register continuation so the user's decision (from dialog or settings)
+                    // is processed even though this method is returning.
+                    _ = approvalTcs.Task.ContinueWith(task =>
+                    {
+                        if (!task.IsCompletedSuccessfully) return;
+                        bool userApproved = task.Result;
+
+                        EditorTask.delayCall += () =>
+                        {
+                            lock (pendingApprovalsLock)
+                            {
+                                pendingApprovalsByIdentity.Remove(identityKey);
+                            }
+
+                            var record = ConnectionRegistry.instance.FindMatchingConnection(identity);
+                            if (record == null) return;
+
+                            if (userApproved)
+                            {
+                                McpLog.Log("Connection approved by user (after disconnect)");
+                                ConnectionRegistry.instance.UpdateConnectionStatus(
+                                    record.Info.ConnectionId,
+                                    ValidationStatus.Accepted,
+                                    "Approved by user");
+                            }
+                            else
+                            {
+                                McpLog.Warning("Connection denied by user (after disconnect)");
+                                ConnectionRegistry.instance.UpdateConnectionStatus(
+                                    record.Info.ConnectionId,
+                                    ValidationStatus.Rejected,
+                                    "Denied by user");
+                            }
+                        };
+                    }, TaskScheduler.Default);
+
+                    return;
+                }
+
+                bool approved = await approvalTcs.Task; // Already completed, won't block
+
+                lock (pendingApprovalsLock)
+                {
+                    pendingApprovalsByIdentity.Remove(identityKey);
+                }
+
+                if (approved)
+                {
+                    McpLog.LogDelayed("Connection approved by user");
+                    SetApprovalState(transport, ConnectionApprovalState.Approved);
+
+                    var approvedRecord = ConnectionRegistry.instance.FindMatchingConnection(identity);
+                    if (approvedRecord != null)
+                    {
+                        ConnectionRegistry.instance.UpdateConnectionStatus(
+                            approvedRecord.Info.ConnectionId,
+                            ValidationStatus.Accepted,
+                            "Approved by user");
+                    }
+                }
+                else
+                {
+                    McpLog.LogDelayed("Connection denied by user", LogType.Warning);
+                    SetApprovalState(transport, ConnectionApprovalState.Denied);
+
+                    var rejectedRecord = ConnectionRegistry.instance.FindMatchingConnection(identity);
+                    if (rejectedRecord != null)
+                    {
+                        ConnectionRegistry.instance.UpdateConnectionStatus(
+                            rejectedRecord.Info.ConnectionId,
+                            ValidationStatus.Rejected,
+                            "Denied by user");
+                    }
+                    // Do NOT close the connection — tool calls will fail with error message
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // Transport disconnected during validation — not an error
+                McpLog.LogDelayed("Validation cancelled: client disconnected");
+            }
+            catch (Exception ex)
+            {
+                McpLog.LogDelayed($"Background validation/approval error: {ex.Message}", LogType.Error);
+                SetApprovalState(transport, ConnectionApprovalState.Denied);
+            }
+        }
+
+        /// <summary>
+        /// Show the approval dialog for a transport that hasn't been approved yet.
+        /// Called both proactively (after validation) and reactively (on tool call rejection).
+        /// Can re-show the dialog if previously dismissed without a decision.
+        /// </summary>
+        void ShowApprovalDialogForTransport(IConnectionTransport transport)
+        {
+            ValidationDecision decision;
+            lock (approvalStateLock)
+            {
+                // Can only show dialog if validation is complete
+                if (!transportValidationDecisions.TryGetValue(transport, out decision))
+                    return;
+
+                var state = transportApprovalState.TryGetValue(transport, out var s) ? s : ConnectionApprovalState.Unknown;
+                if (state != ConnectionApprovalState.AwaitingApproval)
+                    return;
+            }
+
+            var identity = ConnectionIdentity.FromConnectionInfo(decision.Connection);
+            string identityKey = identity?.CombinedIdentityKey;
+            if (string.IsNullOrEmpty(identityKey)) return;
+
+            TaskCompletionSource<bool> approvalTcs;
+            lock (pendingApprovalsLock)
+            {
+                if (!pendingApprovalsByIdentity.TryGetValue(identityKey, out approvalTcs) ||
+                    approvalTcs.Task.IsCompleted)
+                {
+                    // Create new TCS if completed (e.g. dialog was dismissed and re-triggered)
+                    approvalTcs = new TaskCompletionSource<bool>();
+                    pendingApprovalsByIdentity[identityKey] = approvalTcs;
+                }
+            }
+
+            var eventConnId = transport.ConnectionId;
+            var tcs = approvalTcs;
+            var decisionForDialog = decision;
+            EditorTask.delayCall += () =>
+            {
+                try
+                {
+                    if (!tcs.Task.IsCompleted)
+                    {
+                        CurrentApprovalDialog = ConnectionApprovalDialog.ShowApprovalDialog(decisionForDialog, tcs);
+                        OnDialogShown?.Invoke(eventConnId);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    McpLog.LogDelayed($"Error showing approval dialog: {ex.Message}", LogType.Error);
+                    tcs.TrySetResult(false);
+                }
+            };
         }
 
         void ProcessCommands()
@@ -1491,21 +1494,9 @@ namespace Unity.AI.MCP.Editor
                         {
                             string response;
                             if (t.IsFaulted)
-                            {
-                                var inner = t.Exception?.InnerException ?? t.Exception;
-                                response = JsonConvert.SerializeObject(new
-                                {
-                                    status = "error",
-                                    error = inner?.Message ?? "Unknown error",
-                                    errorType = inner?.GetType().FullName ?? "System.Exception",
-                                    stackTrace = inner?.StackTrace,
-                                    innerError = inner?.InnerException?.Message
-                                });
-                            }
+                                response = JsonConvert.SerializeObject(new { status = "error", error = t.Exception?.InnerException?.Message ?? "Unknown error" });
                             else
-                            {
                                 response = t.Result;
-                            }
 
                             tcs.SetResult(InjectRequestId(response, reqIdForResponse));
                         }, TaskScheduler.Default);
@@ -1600,6 +1591,7 @@ namespace Unity.AI.MCP.Editor
         /// </summary>
         async Task WriteWithLockAsync(IConnectionTransport transport, string message, CancellationToken ct = default)
         {
+            var transportWriteLock = transportWriteLocks.GetValue(transport, _ => new SemaphoreSlim(1, 1));
             await transportWriteLock.WaitAsync(ct);
             try
             {
@@ -1638,17 +1630,16 @@ namespace Unity.AI.MCP.Editor
                         ConnectionId = client.ConnectionId
                     };
 
-                    // Update ConnectionRegistry with client info (must run on main thread)
+                    // Update ConnectionRegistry with client info
                     string identityKey = null;
                     lock (clientsLock)
                     {
-                        if (transportToIdentityMap.TryGetValue(client, out identityKey))
-                        {
-                            EditorApplication.delayCall += () =>
-                            {
-                                ConnectionRegistry.instance.UpdateClientInfo(identityKey, clientInfo);
-                            };
-                        }
+                        transportToIdentityMap.TryGetValue(client, out identityKey);
+                    }
+
+                    if (identityKey != null)
+                    {
+                        ConnectionRegistry.instance.UpdateClientInfo(identityKey, clientInfo);
                     }
 
                     string displayName = string.IsNullOrEmpty(title) ? name : title;
@@ -1709,6 +1700,21 @@ namespace Unity.AI.MCP.Editor
                     return await HandleMcpToolApprovalAsync(command);
                 }
 
+                // Approval gate — accept-by-default policy.
+                // All commands above (set_client_info, get_available_tools,
+                // mcp/request_tool_approval, ping) are exempt.
+                // Tool calls are allowed in all states EXCEPT Denied (user explicitly revoked).
+                var approvalState = GetApprovalState(client);
+                if (approvalState == ConnectionApprovalState.Denied)
+                {
+                    return JsonConvert.SerializeObject(new
+                    {
+                        status = "error",
+                        error = "Connection revoked. Go to Unity Editor > Project Settings > AI > Unity MCP to change approval.",
+                        isError = true
+                    });
+                }
+
                 // Use JObject for parameters as the handlers expect this
                 JObject paramsObject = command.@params ?? new JObject();
 
@@ -1727,94 +1733,17 @@ namespace Unity.AI.MCP.Editor
                 {
                     status = "error",
                     error = ex.Message,
-                    errorType = ex.GetType().FullName,
-                    stackTrace = ex.StackTrace,
-                    innerError = ex.InnerException?.Message,
                     command = command?.type ?? "Unknown"
                 });
             }
         }
 
-        async Task<string> ExecuteCommandWithHeartbeatAsync(Command command, IConnectionTransport client)
+        Task<string> ExecuteCommandWithHeartbeatAsync(Command command, IConnectionTransport client)
         {
-            using var heartbeatCts = new CancellationTokenSource();
-            Task heartbeatTask = null;
-
-            try
-            {
-                // Send immediate acknowledgement that command is being processed
-                try
-                {
-                    if (client.IsConnected)
-                    {
-                        string ackMsg = MessageProtocol.CreateCommandInProgressMessage();
-                        await WriteWithLockAsync(client, ackMsg, heartbeatCts.Token);
-                    }
-                }
-                catch (Exception ackEx)
-                {
-                    McpLog.LogDelayed($"Failed to send command_in_progress acknowledgement: {ackEx.Message}");
-                    // Continue anyway - the command should still execute
-                }
-
-                // Start heartbeat loop to keep client from timing out
-                // Send heartbeats every 1.5 seconds (within 2s timeout window)
-                heartbeatTask = Task.Run(async () =>
-                {
-                    try
-                    {
-                        while (!heartbeatCts.Token.IsCancellationRequested)
-                        {
-                            await Task.Delay(1500, heartbeatCts.Token);
-
-                            if (client.IsConnected && !heartbeatCts.Token.IsCancellationRequested)
-                            {
-                                string heartbeatMsg = MessageProtocol.CreateCommandInProgressMessage();
-                                await WriteWithLockAsync(client, heartbeatMsg, heartbeatCts.Token);
-                            }
-                            else
-                            {
-                                break;
-                            }
-                        }
-                    }
-                    catch (OperationCanceledException)
-                    {
-                        // Expected when command execution completes
-                    }
-                    catch (Exception ex)
-                    {
-                        McpLog.LogDelayed($"Command heartbeat error: {ex.Message}");
-                    }
-                }, heartbeatCts.Token);
-
-                // Execute the command
-                return await ExecuteCommandAsync(command, client);
-            }
-            catch (Exception ex)
-            {
-                Debug.LogError($"Error executing command async: {ex.Message}\n{ex.StackTrace}");
-                return JsonConvert.SerializeObject(new
-                {
-                    status = "error",
-                    error = ex.Message,
-                    errorType = ex.GetType().FullName,
-                    stackTrace = ex.StackTrace,
-                    innerError = ex.InnerException?.Message,
-                    command = command?.type ?? "Unknown"
-                });
-            }
-            finally
-            {
-                // Stop heartbeat BEFORE returning to ensure no heartbeats sent after response
-                heartbeatCts.Cancel();
-
-                // Wait for heartbeat task to stop (with timeout to avoid hanging)
-                if (heartbeatTask != null)
-                {
-                    await Task.WhenAny(heartbeatTask, Task.Delay(500));
-                }
-            }
+            // The official 2.3 relay expects one terminal response per request.
+            // Sending custom "command_in_progress" frames causes compatibility issues
+            // during reconnects and can stall the caller waiting for the final result.
+            return ExecuteCommandAsync(command, client);
         }
 
         /// <summary>
@@ -2143,10 +2072,101 @@ namespace Unity.AI.MCP.Editor
         /// <summary>
         /// Handle MCP session token registration from Relay.
         /// Called when an AI Gateway session starts and pre-registers a token for auto-approval.
+        /// Also checks for late-upgrade: if an MCP server already connected with this token
+        /// (domain reload race — server reconnects before relay re-registers the session),
+        /// upgrades the existing connection to gateway status.
         /// </summary>
         void OnMcpSessionRegister(McpSessionRegistration registration)
         {
             McpSessionTokenRegistry.RegisterSession(registration);
+            TryLateUpgradeToGateway(registration);
+        }
+
+        /// <summary>
+        /// Upgrade an existing direct connection to gateway status when the relay session
+        /// registration arrives after the MCP server has already connected.
+        ///
+        /// Domain reload race condition:
+        ///   1. Domain reload clears McpSessionTokenRegistry (static, in-memory)
+        ///   2. MCP server reconnects and sends ACP token → token not found → classified as direct
+        ///   3. ~700ms later, relay sends mcp.session.register → token registered here
+        ///   4. This method finds the transport that sent that token and upgrades it to gateway
+        /// </summary>
+        void TryLateUpgradeToGateway(McpSessionRegistration registration)
+        {
+            IConnectionTransport matchingTransport = null;
+            lock (acpTokenLock)
+            {
+                foreach (var kvp in transportAcpTokens)
+                {
+                    if (kvp.Value == registration.Token)
+                    {
+                        matchingTransport = kvp.Key;
+                        break;
+                    }
+                }
+            }
+
+            if (matchingTransport == null)
+                return;
+
+            // Don't upgrade if already gateway
+            var currentState = GetApprovalState(matchingTransport);
+            if (currentState == ConnectionApprovalState.GatewayApproved)
+                return;
+
+            // Validate token (should succeed now that it's registered)
+            var tokenResult = McpSessionTokenRegistry.ValidateAndConsume(registration.Token);
+            if (!tokenResult.IsValid)
+                return;
+
+            var gatewayPolicy = MCPSettingsManager.Settings.connectionPolicies.gateway;
+            if (!gatewayPolicy.allowed || gatewayPolicy.requiresApproval)
+            {
+                McpLog.LogDelayed($"[Late Gateway Upgrade] Skipped: gateway policy does not allow auto-approve");
+                return;
+            }
+
+            McpLog.LogDelayed($"[Late Gateway Upgrade] Upgrading connection to gateway: session={tokenResult.SessionId}, provider={tokenResult.Provider ?? "unknown"}");
+
+            // Upgrade approval state
+            SetApprovalState(matchingTransport, ConnectionApprovalState.GatewayApproved);
+
+            // Update identity mapping: add current key to gatewayIdentityKeys
+            lock (clientsLock)
+            {
+                if (transportToIdentityMap.TryGetValue(matchingTransport, out var identityKey))
+                {
+                    gatewayIdentityKeys.Add(identityKey);
+                }
+            }
+
+            // Record as gateway connection
+            var minimalInfo = new ConnectionInfo
+            {
+                ConnectionId = matchingTransport.ConnectionId,
+                Timestamp = DateTime.UtcNow,
+                Server = new ProcessInfo
+                {
+                    ProcessId = matchingTransport.GetClientProcessId() ?? 0,
+                    ProcessName = "gateway-connection"
+                }
+            };
+            var acceptedDecision = new ValidationDecision
+            {
+                Status = ValidationStatus.Accepted,
+                Reason = "Auto-approved via AI Gateway (late upgrade after domain reload)",
+                Connection = minimalInfo
+            };
+            ConnectionRegistry.instance.RecordGatewayConnection(acceptedDecision, tokenResult.SessionId, tokenResult.Provider);
+
+            // Don't close existing direct connections — they may be from an external CLI
+            // (e.g., Claude Code running outside Unity) that needs Unity access alongside
+            // the gateway. CloseDirectConnectionsAsync only runs on the initial gateway
+            // fast-path connection, not on late upgrades.
+
+            // Notify UI
+            EditorTask.delayCall += () => OnClientConnectionChanged?.Invoke();
         }
 
         /// <summary>
@@ -2159,10 +2179,7 @@ namespace Unity.AI.MCP.Editor
 
             // Also clean up any gateway connections for this session
             // This removes them from the non-persisted list (for UI cleanup)
-            EditorApplication.delayCall += () =>
-            {
-                ConnectionRegistry.instance.RemoveGatewayConnectionsForSession(sessionId);
-            };
+            ConnectionRegistry.instance.RemoveGatewayConnectionsForSession(sessionId);
         }
 
         /// <summary>

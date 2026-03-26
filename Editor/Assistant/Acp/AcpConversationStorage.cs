@@ -39,7 +39,7 @@ namespace Unity.AI.Assistant.Editor.Acp
         /// <summary>
         /// Saves a conversation to disk using explicit JSON serialization.
         /// </summary>
-        public static void Save(AssistantConversation conversation)
+        public static void Save(AssistantConversation conversation, bool silent = false)
         {
             if (conversation == null || string.IsNullOrEmpty(conversation.AgentSessionId) || string.IsNullOrEmpty(conversation.ProviderId))
             {
@@ -91,10 +91,13 @@ namespace Unity.AI.Assistant.Editor.Acp
                     Debug.LogWarning($"ACP: Conversation file is large ({fileInfo.Length / (1024 * 1024)}MB): {filePath}");
                 }
 
-                // Enforce conversation limit per provider
-                EnforceLimitForProvider(conversation.ProviderId);
+                if (!silent)
+                {
+                    // Enforce conversation limit per provider
+                    EnforceLimitForProvider(conversation.ProviderId);
 
-                OnSessionSaved?.Invoke(conversation.AgentSessionId, conversation.ProviderId);
+                    OnSessionSaved?.Invoke(conversation.AgentSessionId, conversation.ProviderId);
+                }
             }
             catch (Exception ex)
             {

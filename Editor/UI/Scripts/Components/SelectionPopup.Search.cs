@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Unity.AI.Assistant.Editor.Utils;
+using Unity.AI.Toolkit;
 using UnityEditor;
 using UnityEditor.Search;
 using UnityEngine;
@@ -167,8 +168,8 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
 
         internal void ScheduleSearchRefresh()
         {
-            EditorApplication.delayCall -= PopulateSearchListView;
-            EditorApplication.delayCall += PopulateSearchListView;
+            EditorTask.delayCall -= PopulateSearchListView;
+            EditorTask.delayCall += PopulateSearchListView;
         }
 
     }

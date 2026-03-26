@@ -9,9 +9,6 @@ namespace Unity.AI.Assistant.Editor.Mcp.Manager
 {
     class McpManagedServer
     {
-        const int k_ToolDiscoveryRetryCount = 3;
-        const int k_ToolDiscoveryRetryDelayMs = 400;
-
         UnityMcpHttpClient RelayClient { get; }
         public McpServerEntry Entry { get; }
 
@@ -31,43 +28,25 @@ namespace Unity.AI.Assistant.Editor.Mcp.Manager
             {
                 StateDataMutation(
                     McpManagedServerStateData.State.Starting, 
-                    $"Starting server {Entry.Name}");
+                    "Starting server {Entry.Name}");
                 
                 var status = await RelayClient.GetServerStatusAsync(Entry);
                 
                 if (status.IsProcessRunning)
                 {
-                    var runningTools = await EnsureAvailableToolsAsync(status.AvailableTools);
-                    if (HasUsableTools(runningTools))
-                    {
-                        HandleTransitionToSuccessState(
-                            CreateManagedTools(runningTools),
-                            "Was already running when start attempted. You are now connected successfully.");
-                        return;
-                    }
-
-                    InternalLog.LogWarning(
-                        $"[MCP] Server {Entry.Name} reported as running but did not expose tools. Restarting it.",
-                        LogFilter.McpClient);
-                    await StopServerForRecoveryAsync();
+                    HandleTransitionToSuccessState(
+                        CreateManagedTools(status.AvailableTools),
+                        $"Was already running when start attempted. You are now connected successfully.");
+                    return;
                 }
 
                 var startResponse = await RelayClient.StartMcpServerAsync(Entry);
 
                 if (startResponse.Success)
                 {
-                    var startedTools = await EnsureAvailableToolsAsync(startResponse.AvailableTools);
-                    if (HasUsableTools(startedTools))
-                    {
-                        HandleTransitionToSuccessState(
-                            CreateManagedTools(startedTools),
-                            startResponse.Message);
-                        return;
-                    }
-
-                    await StopServerForRecoveryAsync();
-                    HandleTransitionToFailureState(
-                        "The MCP server process started but reported no tools. It will need a reconnect.");
+                    HandleTransitionToSuccessState(
+                        CreateManagedTools(startResponse.AvailableTools),
+                        startResponse.Message);
                     return;
                 }
                
@@ -128,60 +107,9 @@ namespace Unity.AI.Assistant.Editor.Mcp.Manager
             CurrentStateData.Mutate(state, message);
             OnStateDataChanged?.Invoke(CurrentStateData);
         }
-
-        async Task<McpTool[]> EnsureAvailableToolsAsync(McpTool[] tools)
-        {
-            if (HasUsableTools(tools))
-                return tools;
-
-            for (var attempt = 1; attempt <= k_ToolDiscoveryRetryCount; attempt++)
-            {
-                await Task.Delay(k_ToolDiscoveryRetryDelayMs * attempt);
-
-                var status = await RelayClient.GetServerStatusAsync(Entry);
-                if (!status.IsProcessRunning)
-                    return Array.Empty<McpTool>();
-
-                if (HasUsableTools(status.AvailableTools))
-                    return status.AvailableTools;
-            }
-
-            return Array.Empty<McpTool>();
-        }
-
-        async Task StopServerForRecoveryAsync()
-        {
-            try
-            {
-                await RelayClient.StopMcpServerAsync(Entry);
-            }
-            catch (Exception exception)
-            {
-                InternalLog.LogWarning(
-                    $"[MCP] Failed to stop stale server {Entry.Name} during recovery: {exception.Message}",
-                    LogFilter.McpClient);
-            }
-        }
-
-        static bool HasUsableTools(McpTool[] tools)
-        {
-            if (tools == null || tools.Length == 0)
-                return false;
-
-            foreach (var tool in tools)
-            {
-                if (!string.IsNullOrEmpty(tool?.Name))
-                    return true;
-            }
-
-            return false;
-        }
         
         McpManagedTool[] CreateManagedTools(McpTool[] tools)
         {
-            if (tools == null || tools.Length == 0)
-                return Array.Empty<McpManagedTool>();
-
             var managedTools = new McpManagedTool[tools.Length];
 
             for (var i = 0; i < tools.Length; i++)

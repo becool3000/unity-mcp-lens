@@ -4,7 +4,7 @@ using UnityEngine;
 namespace Unity.AI.Search.Editor
 {
     /// <summary>
-    /// Single piece of embedding with related asset guid.
+    /// Single piece of embedding with related asset data.
     /// </summary>
     [Serializable]
     record AssetEmbedding
@@ -13,5 +13,6 @@ namespace Unity.AI.Search.Editor
         public float[] embedding; // The embedding vector of the asset
         public Hash128 assetContentHash;
         public string version;
+        public string embeddingModelId; // Used to identify what model to use to retrieve tags.
     }
 }

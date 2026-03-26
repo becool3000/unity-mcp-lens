@@ -11,8 +11,9 @@ using UnityEngine.UIElements;
 namespace Unity.AI.MCP.Editor.UI
 {
     /// <summary>
-    /// Modal dialog for approving/denying incoming MCP connections.
-    /// Shows process information and signature details to help user make informed decision.
+    /// Dialog for new MCP connections. Connections are accepted by default;
+    /// this dialog informs the user and lets them revoke access if needed.
+    /// Shows process information and signature details.
     /// </summary>
     class ConnectionApprovalDialog : EditorWindow
     {
@@ -48,21 +49,32 @@ namespace Unity.AI.MCP.Editor.UI
             if (completionSource.Task.IsCompleted)
                 return null;
 
-            var window = GetWindow<ConnectionApprovalDialog>(true, "Connection Approval Required", true);
+            // Non-utility, no focus steal — accept-by-default means this is informational,
+            // so it should not interrupt the user's workflow or reclaim focus from their IDE.
+            var window = GetWindow<ConnectionApprovalDialog>(false, "New MCP Connection", false);
+
+            // If the window already has a pending approval for a different connection,
+            // skip this one to avoid orphaning the existing TCS.
+            // The skipped connection stays in AwaitingApproval and the dialog will
+            // re-appear on the next tool call attempt from that client.
+            if (window.completionSource != null &&
+                !window.completionSource.Task.IsCompleted &&
+                window.completionSource != completionSource)
+            {
+                return null;
+            }
+
             window.decision = decision;
             window.completionSource = completionSource;
             window.hasDecided = false;
             window.tcsCompletedAt = null;
 
             window.minSize = new Vector2(WindowWidth, WindowHeight);
-            window.maxSize = new Vector2(WindowWidth, WindowHeight);
 
             // Rebuild UI now that fields are set
             window.CreateGUI();
 
-            // Unity automatically centers utility windows - no manual positioning needed
             window.Show();
-            window.Focus();
 
             return window;
         }
@@ -108,14 +120,15 @@ namespace Unity.AI.MCP.Editor.UI
             actionsView.OnAcceptClicked += () => MakeDecision(true);
             actionsContainer.Add(actionsView);
 
-            // Focus deny button to make it default (Enter key activates it)
-            actionsView.FocusDenyButton();
+            // Focus accept button — connections are accepted by default
+            actionsView.FocusAcceptButton();
         }
 
         void Update()
         {
-            // Close dialog when user makes a decision (approved or denied)
-            // Don't close on cancellation (connection dropped) - let user decide later
+            // Close dialog when user makes a decision externally (e.g., from settings panel)
+            // Don't close on cancellation (transport disconnected) — user can still
+            // approve/deny the identity for future connections from this dialog.
             if (completionSource != null && completionSource.Task.IsCompleted && !hasDecided && !completionSource.Task.IsCanceled)
             {
                 if (!tcsCompletedAt.HasValue)
@@ -142,8 +155,8 @@ namespace Unity.AI.MCP.Editor.UI
         {
             // If window is closed without decision (e.g., user closes window or dismisses),
             // DON'T complete the TaskCompletionSource - just close the UI.
-            // The connection will continue waiting with approval_pending heartbeats.
-            // User can approve/deny later via the settings UI.
+            // Tool calls continue working (accept-by-default policy).
+            // User can revoke later via the settings UI.
         }
     }
 }

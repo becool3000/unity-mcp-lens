@@ -60,6 +60,10 @@ namespace Unity.AI.Sound.Services.Stores.Slices
                 .Add(GenerationResultsActions.setGeneratedResultVisibleCount, (state, payload) => {
                     var results = state.generationResults.Ensure(payload.asset);
                     results.generatedResultSelectorSettings.Ensure(payload.elementID).itemCountHint = payload.count;
+                })
+                .Add(FeedbackActions.setGenerationFeedbackSubmitted, (state, payload) => {
+                    var results = state.generationResults.Ensure(payload.asset);
+                    results.submittedFeedback[payload.generationUri] = payload.sentiment;
                 }),
             extraReducers => extraReducers
                 .AddCase(AppActions.init).With((state, payload) => payload.payload.generationResultsSlice with {})
@@ -85,7 +89,9 @@ namespace Unity.AI.Sound.Services.Stores.Slices
                             entry.Value.generatedResultSelectorSettings.ToDictionary(kvp => kvp.Key, kvp => kvp.Value with {
                                 itemCountHint = kvp.Value.itemCountHint
                             })),
-                        generationValidation = entry.Value.generationValidation with { }
+                        generationValidation = entry.Value.generationValidation with { },
+                        submittedFeedback = new SerializableDictionary<string, GenerationFeedbackSentiment>(
+                            entry.Value.submittedFeedback.ToDictionary(kvp => kvp.Key, kvp => kvp.Value))
                     })
                 )
             });

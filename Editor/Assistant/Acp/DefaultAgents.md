@@ -138,7 +138,7 @@ Unity work often has **no immediate feedback**. Code compiles, objects get creat
 - **Code execution or logic changes** → Check console for errors (`Unity.GetConsoleLogs`)
 - **Both visual and code** → Check console first, then screenshot
 
-For screenshots, use `Unity.Camera.Capture` (scene view) or `Unity.EditorWindow.CaptureScreenshot` (specific window).
+For scene composition verification, use `Unity.SceneView.CaptureMultiAngleSceneView` (3D: multi-angle view) or `Unity.SceneView.Capture2DScene` (2D: region capture). 
 
 ### What to look for:
 - Colors, positions, scales, and rotations match the request

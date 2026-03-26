@@ -28,6 +28,8 @@ namespace Unity.AI.MCP.Editor.Tools
         /// <summary>
         /// Human-readable description of the Unity.ManageAsset tool functionality and usage.
         /// </summary>
+        public const string Title = "Manage assets";
+
         public const string Description = @"Performs asset operations (import, create, modify, delete, etc.) in Unity.
 
 Args:
@@ -53,7 +55,7 @@ Returns:
         /// </summary>
         /// <param name="params">Parameters containing the action to perform and relevant asset information.</param>
         /// <returns>A response object indicating success or failure with relevant asset data.</returns>
-        [McpTool("Unity.ManageAsset", Description, Groups = new[] { "core", "assets" })]
+        [McpTool("Unity.ManageAsset", Description, Title, Groups = new[] { "core", "assets" })]
         public static object HandleCommand(ManageAssetParams @params)
         {
             if (@params == null)

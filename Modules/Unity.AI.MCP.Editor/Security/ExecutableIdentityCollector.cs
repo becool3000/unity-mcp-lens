@@ -5,8 +5,11 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
+using Newtonsoft.Json;
 using Unity.AI.MCP.Editor.Helpers;
 using Unity.AI.MCP.Editor.Models;
+using Unity.AI.Toolkit;
+using UnityEditor;
 using UnityEngine;
 
 namespace Unity.AI.MCP.Editor.Security
@@ -15,6 +18,7 @@ namespace Unity.AI.MCP.Editor.Security
     /// Collects cryptographic identity information for executables.
     /// Includes file hash (SHA256) and code signature information (platform-specific).
     /// Uses caching to avoid expensive re-computation for unchanged executables.
+    /// Cache is persisted to SessionState so it survives domain reloads.
     /// </summary>
     static class ExecutableIdentityCollector
     {
@@ -24,16 +28,44 @@ namespace Unity.AI.MCP.Editor.Security
         class CachedIdentity
         {
             public ExecutableIdentity Identity;
-            public DateTime CachedAt;
             public DateTime FileModTime;
         }
 
-        // Cache keyed by executable path
+        /// <summary>
+        /// Serializable DTO for persisting cache entries to SessionState.
+        /// </summary>
+        [Serializable]
+        class CachedIdentityEntry
+        {
+            public string Path;
+            public long FileModTimeTicks;
+            public string SHA256Hash;
+            public DateTime LastModified;
+            public bool IsSigned;
+            public string SignaturePublisher;
+            public string SignatureFriendlyName;
+            public string SignatureSubject;
+            public bool SignatureValid;
+        }
+
+        const string SessionStateKey = "ExecutableIdentityCollector.Cache";
+
+        // Cache keyed by executable path — persisted via SessionState across domain reloads.
+        // Invalidated only when the file's modification time changes.
         static readonly Dictionary<string, CachedIdentity> identityCache = new();
         static readonly object cacheLock = new();
 
-        // Cache entries older than this are invalidated
-        const double CacheExpirationSeconds = 60.0;
+        /// <summary>
+        /// Restore the identity cache from SessionState on domain reload.
+        /// Deferred via EditorTask.delayCall because SessionState is unavailable during
+        /// the early [InitializeOnLoadMethod] phase, and the static constructor could
+        /// be triggered from the background validation thread.
+        /// </summary>
+        [InitializeOnLoadMethod]
+        static void OnDomainReload()
+        {
+            EditorTask.delayCall += RestoreCacheFromSessionState;
+        }
 
         /// <summary>
         /// Collect full cryptographic identity for an executable (with caching)
@@ -56,11 +88,8 @@ namespace Unity.AI.MCP.Editor.Security
             {
                 if (identityCache.TryGetValue(executablePath, out var cached))
                 {
-                    // Cache hit: same file modification time and not expired
-                    bool sameFile = cached.FileModTime == fileModTime;
-                    bool notExpired = (DateTime.UtcNow - cached.CachedAt).TotalSeconds < CacheExpirationSeconds;
-
-                    if (sameFile && notExpired)
+                    // Cache hit if file hasn't been modified since last computation
+                    if (cached.FileModTime == fileModTime)
                     {
                         return cached.Identity;
                     }
@@ -84,12 +113,110 @@ namespace Unity.AI.MCP.Editor.Security
                 identityCache[executablePath] = new CachedIdentity
                 {
                     Identity = identity,
-                    CachedAt = DateTime.UtcNow,
                     FileModTime = fileModTime
                 };
             }
 
+            // Persist updated cache to SessionState (must run on main thread)
+            EditorTask.delayCall += SaveCacheToSessionState;
+
             return identity;
+        }
+
+        /// <summary>
+        /// Persist the in-memory cache to SessionState as JSON.
+        /// Called on the main thread via EditorTask.delayCall.
+        /// </summary>
+        static void SaveCacheToSessionState()
+        {
+            try
+            {
+                List<CachedIdentityEntry> entries;
+                lock (cacheLock)
+                {
+                    entries = new List<CachedIdentityEntry>(identityCache.Count);
+                    foreach (var kvp in identityCache)
+                    {
+                        var id = kvp.Value.Identity;
+                        entries.Add(new CachedIdentityEntry
+                        {
+                            Path = kvp.Key,
+                            FileModTimeTicks = kvp.Value.FileModTime.Ticks,
+                            SHA256Hash = id.SHA256Hash,
+                            LastModified = id.LastModified,
+                            IsSigned = id.IsSigned,
+                            SignaturePublisher = id.SignaturePublisher,
+                            SignatureFriendlyName = id.SignatureFriendlyName,
+                            SignatureSubject = id.SignatureSubject,
+                            SignatureValid = id.SignatureValid
+                        });
+                    }
+                }
+
+                var json = JsonConvert.SerializeObject(entries);
+                SessionState.SetString(SessionStateKey, json);
+            }
+            catch (Exception ex)
+            {
+                McpLog.Warning($"Failed to save identity cache to SessionState: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Restore cached identities from SessionState after domain reload.
+        /// Only entries whose file modification time still matches disk are restored.
+        /// </summary>
+        static void RestoreCacheFromSessionState()
+        {
+            try
+            {
+                var json = SessionState.GetString(SessionStateKey, string.Empty);
+                if (string.IsNullOrEmpty(json))
+                    return;
+
+                var entries = JsonConvert.DeserializeObject<List<CachedIdentityEntry>>(json);
+                if (entries == null)
+                    return;
+
+                int restored = 0;
+                lock (cacheLock)
+                {
+                    foreach (var entry in entries)
+                    {
+                        if (string.IsNullOrEmpty(entry.Path) || !File.Exists(entry.Path))
+                            continue;
+
+                        // Validate file hasn't changed since cache was written
+                        var currentModTime = File.GetLastWriteTime(entry.Path);
+                        if (currentModTime.Ticks != entry.FileModTimeTicks)
+                            continue;
+
+                        identityCache[entry.Path] = new CachedIdentity
+                        {
+                            FileModTime = currentModTime,
+                            Identity = new ExecutableIdentity
+                            {
+                                Path = entry.Path,
+                                SHA256Hash = entry.SHA256Hash,
+                                LastModified = entry.LastModified,
+                                IsSigned = entry.IsSigned,
+                                SignaturePublisher = entry.SignaturePublisher,
+                                SignatureFriendlyName = entry.SignatureFriendlyName,
+                                SignatureSubject = entry.SignatureSubject,
+                                SignatureValid = entry.SignatureValid
+                            }
+                        };
+                        restored++;
+                    }
+                }
+
+                if (restored > 0)
+                    McpLog.Log($"Restored {restored} identity cache entries from SessionState");
+            }
+            catch (Exception ex)
+            {
+                McpLog.Warning($"Failed to restore identity cache from SessionState: {ex.Message}");
+            }
         }
 
         /// <summary>
@@ -279,3 +406,4 @@ namespace Unity.AI.MCP.Editor.Security
         #endif
     }
 }
+

@@ -1,14 +1,12 @@
-﻿using System;
-using System.Threading.Tasks;
-
 namespace Unity.AI.Assistant.FunctionCalling
 {
-    interface IUserInteraction<TOutput>
+    interface IUserInteraction
     {
-        public event Action<TOutput> OnCompleted;
-
-        TaskCompletionSource<TOutput> TaskCompletionSource { get; }
-
-        public void CancelInteraction();
+        string Action { get; }
+        string Detail { get; }
+        string AllowLabel { get; }
+        string DenyLabel { get; }
+        bool ShowScope { get; }
+        void Respond(ToolPermissions.UserAnswer answer);
     }
 }

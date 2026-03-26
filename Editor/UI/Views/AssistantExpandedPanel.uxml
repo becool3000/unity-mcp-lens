@@ -1,0 +1,3 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns="UnityEngine.UIElements" editor-extension-mode="False">
+    <ui:ScrollView name="expandedPanelContent" class="mui-expanded-panel-content"/>
+</ui:UXML>

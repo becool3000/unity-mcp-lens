@@ -343,7 +343,9 @@ namespace Unity.AI.MCP.Editor.Connection
                     else
                     {
                         int error = Marshal.GetLastWin32Error();
-                        UnityEngine.Debug.LogWarning($"getsockopt LOCAL_PEERPID failed with error code: {error}");
+                        // 57 = ENOTCONN: peer disconnected before we could query its PID (benign race)
+                        if (error != 57)
+                            UnityEngine.Debug.LogWarning($"getsockopt LOCAL_PEERPID failed with error code: {error}");
                     }
                 }
                 finally

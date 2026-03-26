@@ -92,6 +92,21 @@ namespace Unity.AI.Assistant.Editor.Settings
             }
         }
 
+        internal async Task ResetPreferences()
+        {
+            try
+            {
+                var prefs = await Bus.CallAsync(RelayChannels.PreferencesReset, new PreferencesResetRequest());
+                Preferences.SetValueWithoutNotify(prefs);
+                MainThread.DispatchIfNeeded(() => Preferences.OnChange?.Invoke());
+            }
+            catch (Exception ex) when (ex is RelayDisconnectedException or OperationCanceledException) { }
+            catch (Exception ex)
+            {
+                InternalLog.LogError($"[GatewayPreferenceService] Error resetting preferences: {ex.Message}");
+            }
+        }
+
         async Task SetPreferences(PreferencesData payload)
         {
             try

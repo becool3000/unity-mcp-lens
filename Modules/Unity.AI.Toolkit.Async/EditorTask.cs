@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.ComponentModel;
 using System.Threading;
 using System.Threading.Tasks;
@@ -317,6 +318,68 @@ namespace Unity.AI.Toolkit
             };
             EditorApplication.update += updateCallback;
             return tcs.Task;
+        }
+
+        // Tracks pending one-shot callbacks so -= can cancel them.
+        static readonly ConcurrentDictionary<Action, EditorApplication.CallbackFunction> s_PendingDelayCallbacks = new();
+
+        /// <summary>
+        /// Event-style entry point that mirrors <c>EditorApplication.delayCall += MyMethod</c>.
+        /// Usage: <c>EditorTask.delayCall += MyMethod;</c>
+        /// Each registered callback fires exactly once on the next editor update frame
+        /// and is then automatically unregistered.
+        /// Uses <see cref="EditorApplication.update"/> internally so it works on macOS
+        /// when the editor is in the background.
+        /// Supports -= to cancel a pending callback (for debouncing and cleanup on detach).
+        /// </summary>
+        public static event Action delayCall
+        {
+            add => DelayCall(value);
+            remove => CancelDelayCall(value);
+        }
+
+        static void CancelDelayCall(Action action)
+        {
+            if (action != null && s_PendingDelayCallbacks.TryRemove(action, out var cb))
+                EditorApplication.update -= cb;
+        }
+
+        /// <summary>
+        /// Schedules an action to be invoked after a delay on the editor update loop.
+        /// This is a drop-in replacement for <see cref="EditorApplication.delayCall"/> that uses
+        /// <see cref="EditorApplication.update"/> instead, because delayCall does not fire
+        /// on macOS when the editor is in the background.
+        /// The default 150ms delay matches the native inspector tick rate that gates
+        /// <see cref="EditorApplication.delayCall"/>.
+        /// The callback is always unregistered, even if the action throws.
+        ///
+        /// Put 150ms here to match EditorApplication.delayCall's timing.
+        /// </summary>
+        /// <returns>An action that cancels the pending callback when invoked.</returns>
+        public static Action DelayCall(Action action, int millisecondsDelay = 0)
+        {
+            // Cancel any existing pending callback for the same action (implicit debounce)
+            CancelDelayCall(action);
+
+            EditorApplication.CallbackFunction updateCallback = null;
+            double endTime;
+            try { endTime = EditorApplication.timeSinceStartup + millisecondsDelay / 1000.0; }
+            catch (UnityException) { endTime = 0; }
+
+            updateCallback = () =>
+            {
+                if (EditorApplication.timeSinceStartup >= endTime)
+                {
+                    EditorApplication.update -= updateCallback;
+                    s_PendingDelayCallbacks.TryRemove(action, out _);
+                    action();
+                }
+            };
+
+            s_PendingDelayCallbacks[action] = updateCallback;
+            EditorApplication.update += updateCallback;
+
+            return () => CancelDelayCall(action);
         }
 
         /// <summary>

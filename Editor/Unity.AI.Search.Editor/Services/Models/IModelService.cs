@@ -6,6 +6,8 @@ namespace Unity.AI.Search.Editor.Services
 {
     interface IModelService : IDisposable
     {
+        int SuggestedBatchSize { get; }
+        
         string ModelId { get; }
         Task<float[]> GetEmbeddingAsync(EmbeddingQuery query);
         Task<float[][]> GetEmbeddingAsync(EmbeddingQuery[] queries);

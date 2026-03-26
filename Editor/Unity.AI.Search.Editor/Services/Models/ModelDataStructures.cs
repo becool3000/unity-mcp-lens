@@ -1,8 +1,45 @@
+using UnityEditor;
+using UnityEngine; // Required for GUID in 6000.5
+
 namespace Unity.AI.Search.Editor.Services
 {
-    record ImageMetadata(int Width, int Height, int Channels, string DataType, int ByteOffset, int ByteLength);
+    abstract class EmbeddingQuery
+    {
+        public virtual AssetEmbedding CreateEmbedding(
+            string assetGuid,
+            GUID guid,
+            float[] embeddingVector,
+            string modelId)
+        {
+            return new AssetEmbedding
+            {
+                assetGuid = assetGuid,
+                embedding = embeddingVector,
+                assetContentHash = AssetDatabase.GetAssetDependencyHash(guid),
+                embeddingModelId = modelId
+            };
+        }
+    }
 
-    record EmbeddingQuery(UnityEngine.Texture2D image = null, string text = null, ImageMetadata imageData = null);
+    class ImageEmbeddingQuery : EmbeddingQuery
+    {
+        public readonly Texture2D Image;
+
+        public ImageEmbeddingQuery(Texture2D image)
+        {
+            Image = image;
+        }
+    }
+
+    class TextEmbeddingQuery : EmbeddingQuery
+    {
+        public readonly string Text;
+
+        public TextEmbeddingQuery(string text)
+        {
+            Text = text;
+        }
+    }
 
     record TagScore(string Tag, float Similarity);
 

@@ -51,6 +51,12 @@ namespace Unity.AI.Assistant.Socket.Protocol.Models.FromClient
         [JsonProperty("mode", Required = Required.Default, NullValueHandling = NullValueHandling.Ignore)]
         public string Mode { get; set; }
 
+        /// <summary>
+        /// Optional model settings (profile or backend config name, with optional parameter overrides).
+        /// </summary>
+        [JsonProperty("model_settings", Required = Required.Default, NullValueHandling = NullValueHandling.Ignore)]
+        public ModelConfiguration ModelSettings { get; set; }
+
         public partial class AttachedContextModel
         {
             [JsonProperty("metadata", Required = Required.DisallowNull, NullValueHandling = NullValueHandling.Ignore)]

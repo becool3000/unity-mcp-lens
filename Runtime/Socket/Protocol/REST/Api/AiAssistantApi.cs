@@ -51,6 +51,11 @@ namespace Unity.Ai.Assistant.Protocol.Api
         public IGetVersionsRequestBuilder GetVersionsBuilder();
 
         /// <summary>
+        /// Build request to call /v1/assistant/models
+        /// </summary>
+        public IGetAssistantModelsV1RequestBuilder GetAssistantModelsV1Builder(int analyticsSessionCount, string analyticsSessionId, string analyticsUserId, string orgId, string projectId, string versionApiSpecification, string versionEditor, string versionPackage);
+
+        /// <summary>
         /// Build request to call /v1/assistant/conversation-info/{conversation_id}
         /// </summary>
         public IPatchAssistantConversationInfoUsingConversationIdV1RequestBuilder PatchAssistantConversationInfoUsingConversationIdV1Builder(int analyticsSessionCount, string analyticsSessionId, string analyticsUserId, Guid conversationId, string orgId, string projectId, string versionApiSpecification, string versionEditor, string versionPackage, ConversationInfoUpdateV1 requestBody);
@@ -1157,6 +1162,137 @@ namespace Unity.Ai.Assistant.Protocol.Api
             return localVarResponse;
         }
     }
+    internal interface IGetAssistantModelsV1RequestBuilder
+    {
+        IGetAssistantModelsV1RequestBuilder SetIncludeAllModels(bool? value);
+        public Task<ApiResponse<ModelConfigsResponseV1>> BuildAndSendAsync(CancellationToken cancellationToken = default, RequestInterceptionCallbacks callbacks = null);
+    }
+
+    /// <summary>
+    /// Used to build requests to call /v1/assistant/models
+    /// </summary>
+    internal class GetAssistantModelsV1RequestBuilder : IGetAssistantModelsV1RequestBuilder
+    {
+        internal readonly int AnalyticsSessionCount;
+        internal readonly string AnalyticsSessionId;
+        internal readonly string AnalyticsUserId;
+        internal readonly string OrgId;
+        internal readonly string ProjectId;
+        internal readonly string VersionApiSpecification;
+        internal readonly string VersionEditor;
+        internal readonly string VersionPackage;
+        internal bool? IncludeAllModels;
+
+        internal readonly IReadableConfiguration Configuration;
+        internal readonly IClient Client;
+
+        /// <summary>
+        /// Create builder to call /v1/assistant/models
+        /// </summary>
+        public GetAssistantModelsV1RequestBuilder(IReadableConfiguration config, IClient apiClient, int analyticsSessionCount, string analyticsSessionId, string analyticsUserId, string orgId, string projectId, string versionApiSpecification, string versionEditor, string versionPackage)
+        {
+            Configuration = config;
+            Client = apiClient;
+            AnalyticsSessionCount = analyticsSessionCount;
+            AnalyticsSessionId = analyticsSessionId;
+            AnalyticsUserId = analyticsUserId;
+            OrgId = orgId;
+            ProjectId = projectId;
+            VersionApiSpecification = versionApiSpecification;
+            VersionEditor = versionEditor;
+            VersionPackage = versionPackage;
+        }
+
+        public IGetAssistantModelsV1RequestBuilder SetIncludeAllModels(bool? value)
+        {
+            IncludeAllModels = value;
+            return this;
+        }
+
+        public GetAssistantModelsV1Request Build() => new GetAssistantModelsV1Request(this);
+
+        public async Task<ApiResponse<ModelConfigsResponseV1>> BuildAndSendAsync(CancellationToken cancellationToken = default, RequestInterceptionCallbacks callbacks = null)
+        {
+            return await Build().SendAsync(cancellationToken, callbacks);
+        }
+    }
+
+    internal interface IGetAssistantModelsV1Request
+    {
+        Task<ApiResponse<ModelConfigsResponseV1>> SendAsync(CancellationToken cancellationToken = default, RequestInterceptionCallbacks callbacks = null);
+    }
+
+    internal class GetAssistantModelsV1Request : IGetAssistantModelsV1Request
+    {
+        GetAssistantModelsV1RequestBuilder m_Builder;
+
+        public GetAssistantModelsV1Request(GetAssistantModelsV1RequestBuilder builder)
+        {
+            m_Builder = builder;
+        }
+
+        public async Task<ApiResponse<ModelConfigsResponseV1>> SendAsync(CancellationToken cancellationToken = default, RequestInterceptionCallbacks callbacks = null)
+        {
+            return await GetAssistantModelsV1Async(cancellationToken, callbacks);
+        }
+
+        /// <summary>
+        /// Get supported model configurations. Returns the available model options that can be used in the model_settings field of chat requests.
+        /// By default only profile type options are returned; use include_all_models=true to also include model type options (for development/testing).
+        /// </summary>
+        async Task<ApiResponse<ModelConfigsResponseV1>> GetAssistantModelsV1Async(CancellationToken cancellationToken = default, RequestInterceptionCallbacks callbacks = null)
+        {
+            if (m_Builder.AnalyticsSessionId == null)
+                throw new ApiException(400, "Missing required parameter 'analyticsSessionId' when calling AiAssistantApi->GetAssistantModelsV1");
+            if (m_Builder.AnalyticsUserId == null)
+                throw new ApiException(400, "Missing required parameter 'analyticsUserId' when calling AiAssistantApi->GetAssistantModelsV1");
+            if (m_Builder.OrgId == null)
+                throw new ApiException(400, "Missing required parameter 'orgId' when calling AiAssistantApi->GetAssistantModelsV1");
+            if (m_Builder.ProjectId == null)
+                throw new ApiException(400, "Missing required parameter 'projectId' when calling AiAssistantApi->GetAssistantModelsV1");
+            if (m_Builder.VersionApiSpecification == null)
+                throw new ApiException(400, "Missing required parameter 'versionApiSpecification' when calling AiAssistantApi->GetAssistantModelsV1");
+            if (m_Builder.VersionEditor == null)
+                throw new ApiException(400, "Missing required parameter 'versionEditor' when calling AiAssistantApi->GetAssistantModelsV1");
+            if (m_Builder.VersionPackage == null)
+                throw new ApiException(400, "Missing required parameter 'versionPackage' when calling AiAssistantApi->GetAssistantModelsV1");
+
+            RequestOptions localVarRequestOptions = new RequestOptions();
+
+            string[] _contentTypes = new string[] { };
+            string[] _accepts = new string[] { "application/json" };
+
+            var localVarContentType = ClientUtils.SelectHeaderContentType(_contentTypes);
+            if (localVarContentType != null) localVarRequestOptions.HeaderParameters.Add("Content-Type", localVarContentType);
+            var localVarAccept = ClientUtils.SelectHeaderAccept(_accepts);
+            if (localVarAccept != null) localVarRequestOptions.HeaderParameters.Add("Accept", localVarAccept);
+
+            if (m_Builder.IncludeAllModels != null)
+                localVarRequestOptions.QueryParameters.Add(ClientUtils.ParameterToMultiMap("", "include_all_models", m_Builder.IncludeAllModels));
+
+            localVarRequestOptions.HeaderParameters.Add("analytics-session-count", ClientUtils.ParameterToString(m_Builder.AnalyticsSessionCount));
+            localVarRequestOptions.HeaderParameters.Add("analytics-session-id", ClientUtils.ParameterToString(m_Builder.AnalyticsSessionId));
+            localVarRequestOptions.HeaderParameters.Add("analytics-user-id", ClientUtils.ParameterToString(m_Builder.AnalyticsUserId));
+            localVarRequestOptions.HeaderParameters.Add("org-id", ClientUtils.ParameterToString(m_Builder.OrgId));
+            localVarRequestOptions.HeaderParameters.Add("project-id", ClientUtils.ParameterToString(m_Builder.ProjectId));
+            localVarRequestOptions.HeaderParameters.Add("version-api-specification", ClientUtils.ParameterToString(m_Builder.VersionApiSpecification));
+            localVarRequestOptions.HeaderParameters.Add("version-editor", ClientUtils.ParameterToString(m_Builder.VersionEditor));
+            localVarRequestOptions.HeaderParameters.Add("version-package", ClientUtils.ParameterToString(m_Builder.VersionPackage));
+
+            if (!string.IsNullOrEmpty(m_Builder.Configuration.AccessToken) && !localVarRequestOptions.HeaderParameters.ContainsKey("Authorization"))
+                localVarRequestOptions.HeaderParameters.Add("Authorization", "Bearer " + m_Builder.Configuration.AccessToken);
+
+            var task = m_Builder.Client.GetAsync<ModelConfigsResponseV1>("/v1/assistant/models", localVarRequestOptions, m_Builder.Configuration, cancellationToken, callbacks);
+
+#if UNITY_EDITOR
+            var localVarResponse = await task.ConfigureAwait(UnityEditor.EditorApplication.isPlaying && UnityEditor.EditorApplication.isPaused);
+#else
+            var localVarResponse = await task;
+#endif
+
+            return localVarResponse;
+        }
+    }
     internal interface IPatchAssistantConversationInfoUsingConversationIdV1RequestBuilder
     {
 
@@ -1986,6 +2122,8 @@ namespace Unity.Ai.Assistant.Protocol.Api
             => new GetHealthzRequestBuilder(m_Configuration, m_Client);
         public IGetVersionsRequestBuilder GetVersionsBuilder()
             => new GetVersionsRequestBuilder(m_Configuration, m_Client);
+        public IGetAssistantModelsV1RequestBuilder GetAssistantModelsV1Builder(int analyticsSessionCount, string analyticsSessionId, string analyticsUserId, string orgId, string projectId, string versionApiSpecification, string versionEditor, string versionPackage)
+            => new GetAssistantModelsV1RequestBuilder(m_Configuration, m_Client, analyticsSessionCount, analyticsSessionId, analyticsUserId, orgId, projectId, versionApiSpecification, versionEditor, versionPackage);
         public IPatchAssistantConversationInfoUsingConversationIdV1RequestBuilder PatchAssistantConversationInfoUsingConversationIdV1Builder(int analyticsSessionCount, string analyticsSessionId, string analyticsUserId, Guid conversationId, string orgId, string projectId, string versionApiSpecification, string versionEditor, string versionPackage, ConversationInfoUpdateV1 requestBody)
             => new PatchAssistantConversationInfoUsingConversationIdV1RequestBuilder(m_Configuration, m_Client, analyticsSessionCount, analyticsSessionId, analyticsUserId, conversationId, orgId, projectId, versionApiSpecification, versionEditor, versionPackage, requestBody);
         public IPostAssistantFeedbackV1RequestBuilder PostAssistantFeedbackV1Builder(int analyticsSessionCount, string analyticsSessionId, string analyticsUserId, string orgId, string projectId, string versionApiSpecification, string versionEditor, string versionPackage, FeedbackCreationV1 requestBody)

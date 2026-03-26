@@ -13,6 +13,7 @@ using Unity.AI.Generators.Contexts;
 using Unity.AI.Generators.IO.Utilities;
 using Unity.AI.Generators.Redux.Thunks;
 using Unity.AI.Generators.UI;
+using Unity.AI.Generators.UI.Actions;
 using Unity.AI.Generators.UI.Payloads;
 using Unity.AI.Generators.UI.Utilities;
 using Unity.AI.Toolkit.Asset;
@@ -45,6 +46,7 @@ namespace Unity.AI.Sound.Components
         RenderTexture m_SkeletonTexture;
         readonly Label m_Label;
         GenerationMetadata m_Metadata;
+        readonly GenerationFeedbackManipulator m_FeedbackManipulator;
 
         public GenerationTile()
         {
@@ -58,8 +60,8 @@ namespace Unity.AI.Sound.Components
                 if (m_SkeletonTexture)
                     progress.style.backgroundImage = Background.FromRenderTexture(m_SkeletonTexture); });
             RegisterCallback<GeometryChangedEvent>(OnGeometryChanged);
-            RegisterCallback<MouseEnterEvent>(_ => m_PlayButton.EnableInClassList("hide", audioClipResult is AudioClipSkeleton || audioClipResult.IsFailed()));
-            RegisterCallback<MouseLeaveEvent>(_ => m_PlayButton.EnableInClassList("hide", true));
+            RegisterCallback<MouseEnterEvent>(OnMouseEnter);
+            RegisterCallback<MouseLeaveEvent>(OnMouseLeave);
             RegisterCallback<MouseOverEvent>(_ => UpdateTooltip());
             m_PlayButton.clickable = m_PlayManipulator = new PlayManipulator(() => null,
                 () => AudioClipCache.TryGetAudioClip(audioClipResult.uri, out var audioClip) ? audioClip : null, () => false)
@@ -77,6 +79,16 @@ namespace Unity.AI.Sound.Components
             progress = this.Q<VisualElement>("progress");
             progress.AddManipulator(m_SpinnerManipulator = new SpinnerManipulator());
 
+            // Initialize feedback manipulator
+            m_FeedbackManipulator = new GenerationFeedbackManipulator(
+                FeedbackActions.SoundGenerationDialogType,
+                () => audioClipResult?.uri,
+                this.GetAsset,
+                this.GetStoreApi,
+                () => this.GetState()?.SelectSubmittedFeedbackSentiment(this.GetAsset(), audioClipResult?.uri?.AbsoluteUri),
+                () => audioClipResult != null && audioClipResult is not AudioClipSkeleton && !audioClipResult.IsFailed());
+            this.AddManipulator(m_FeedbackManipulator);
+
             this.AddManipulator(new DelayedCleanupManipulator(() =>
             {
                 m_PlayManipulator?.Cancel();
@@ -91,6 +103,16 @@ namespace Unity.AI.Sound.Components
                     m_CompositeTexture = null;
                 }
             }));
+        }
+
+        void OnMouseEnter(MouseEnterEvent evt)
+        {
+            m_PlayButton.EnableInClassList("hide", audioClipResult is AudioClipSkeleton || audioClipResult.IsFailed());
+        }
+
+        void OnMouseLeave(MouseLeaveEvent evt)
+        {
+            m_PlayButton.EnableInClassList("hide", true);
         }
 
         public void SetGenerationProgress(IEnumerable<GenerationProgressData> data)

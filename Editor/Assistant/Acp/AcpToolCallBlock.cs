@@ -36,6 +36,11 @@ namespace Unity.AI.Assistant.Editor.Acp
         /// </summary>
         public bool IsReasoning;
 
+        /// <summary>
+        /// The full rawInput JObject, preserved for auto-approved tool calls that need to display file content.
+        /// </summary>
+        public JObject RawInput;
+
         public string ToolCallId => CallInfo?.ToolCallId;
 
         /// <summary>
@@ -90,13 +95,21 @@ namespace Unity.AI.Assistant.Editor.Acp
                 else if (pendingPermission?.RequestId is JToken jToken)
                     pendingPermission.RequestId = jToken.ToObject<object>();
 
+                var rawInput = unityData?[AcpToolCallStorageKeys.UnityRawInputKey] as JObject;
+
+                // Restore the [JsonIgnore]d RawInput on CallInfo so renderers can access
+                // tool-specific fields (e.g., Code/Title for RunCommand) without a separate lookup.
+                if (callInfo != null && rawInput != null)
+                    callInfo.RawInput = rawInput;
+
                 return new AcpToolCallBlock
                 {
                     CallInfo = callInfo,
                     LatestUpdate = update,
                     PendingPermission = pendingPermission,
                     PermissionResponse = permissionResponse,
-                    IsReasoning = isReasoning
+                    IsReasoning = isReasoning,
+                    RawInput = rawInput
                 };
             }
             catch (Exception ex)

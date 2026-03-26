@@ -10,7 +10,8 @@ namespace Unity.AI.Assistant.FunctionCalling
         {
             AllowOnce,
             AllowAlways,
-            DenyOnce
+            DenyOnce,
+            DenyAlways
         }
 
         public enum PermissionType
@@ -46,7 +47,7 @@ namespace Unity.AI.Assistant.FunctionCalling
 #endif
         }
 
-        async Task<UserAnswer> WaitForUser(ToolExecutionContext.CallInfo callInfo, IUserInteraction<UserAnswer> userInteraction, CancellationToken cancellationToken, float timeoutSeconds = 600f)
+        async Task<UserAnswer> WaitForUser(ToolExecutionContext.CallInfo callInfo, IInteractionSource<UserAnswer> userInteraction, CancellationToken cancellationToken, float timeoutSeconds = 600f)
         {
             ToolUiContainer.PushElement(callInfo, userInteraction);
 

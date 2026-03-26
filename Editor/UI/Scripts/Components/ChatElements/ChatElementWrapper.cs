@@ -1,6 +1,5 @@
 using System.IO;
 using JetBrains.Annotations;
-using Unity.AI.Assistant.FunctionCalling;
 using Unity.AI.Assistant.UI.Editor.Scripts.Data;
 using UnityEngine;
 using UnityEngine.UIElements;
@@ -50,22 +49,6 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components.ChatElements
             });
 
             return true;
-        }
-
-        public bool TryPushInteraction(ToolExecutionContext.CallInfo callInfo, VisualElement userInteraction)
-        {
-            if (m_ChatElement is not ChatElementResponse chatElementResponse)
-                return false;
-
-            return chatElementResponse.TryPushInteraction(callInfo, userInteraction);
-        }
-
-        public bool TryPopInteraction(ToolExecutionContext.CallInfo callInfo, VisualElement userInteraction)
-        {
-            if (m_ChatElement is not ChatElementResponse chatElementResponse)
-                return false;
-
-            return chatElementResponse.TryPopInteraction(callInfo, userInteraction);
         }
 
         void SetupChatElement(ref ChatElementBase element, MessageModel message)

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
+using Unity.AI.Toolkit;
 using UnityEditor;
 
 namespace Unity.AI.MCP.Editor.Helpers
@@ -39,7 +40,7 @@ namespace Unity.AI.MCP.Editor.Helpers
 
             // Kick off a ticking callback that waits until the window has elapsed
             // from the last request before performing the refresh.
-            EditorApplication.delayCall += () => Tick(window);
+            EditorTask.delayCall += () => Tick(window);
             // Nudge the editor loop so ticks run even if the window is unfocused
             EditorApplication.QueuePlayerLoopUpdate();
         }
@@ -74,7 +75,7 @@ namespace Unity.AI.MCP.Editor.Helpers
             if (!ready)
             {
                 // Window has not yet elapsed; check again on the next editor tick.
-                EditorApplication.delayCall += () => Tick(window);
+                EditorTask.delayCall += () => Tick(window);
                 return;
             }
 

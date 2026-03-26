@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using Unity.AI.Assistant.Editor.Analytics;
 using Unity.AI.Assistant.FunctionCalling;
 
@@ -18,29 +18,32 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components.ChatElements
             UserAnswer answer,
             PermissionType permissionType)
         {
+            if (k_Context == null)
+            {
+                return;
+            }
+
             AIAssistantAnalytics.ReportUITriggerLocalPermissionResponseEvent(k_Context.Blackboard.ActiveConversation.Id, callInfo, answer, permissionType);
         }
 
-        protected override IUserInteraction<UserAnswer> CreateAssetGenerationElement(ToolExecutionContext.CallInfo callInfo, string path, Type type, long cost)
+        PermissionInteraction CreatePermission(string action, string question = null)
         {
-            var element = new PermissionElement(
+            return new PermissionInteraction(action, question);
+        }
+
+        protected override IInteractionSource<UserAnswer> CreateAssetGenerationElement(ToolExecutionContext.CallInfo callInfo, string path, Type type, long cost)
+        {
+            return CreatePermission(
                 action: $"Generate {type.Name} asset",
-                question: $"Save to {path}?",
-                null,
-                cost
-            );
-            element.Initialize(k_Context);
-            return element;
+                question: $"Save to {path}?");
         }
 
-        protected override IUserInteraction<UserAnswer> CreateCodeExecutionElement(ToolExecutionContext.CallInfo callInfo, string code)
+        protected override IInteractionSource<UserAnswer> CreateCodeExecutionElement(ToolExecutionContext.CallInfo callInfo, string code)
         {
-            var element = new PermissionElement(action: "Execute code", code: code);
-            element.Initialize(k_Context);
-            return element;
+            return CreatePermission(action: "Execute code");
         }
 
-        protected override IUserInteraction<UserAnswer> CreateFileSystemAccessElement(ToolExecutionContext.CallInfo callInfo, IToolPermissions.ItemOperation operation, string path)
+        protected override IInteractionSource<UserAnswer> CreateFileSystemAccessElement(ToolExecutionContext.CallInfo callInfo, IToolPermissions.ItemOperation operation, string path)
         {
             var action = PathUtils.IsFilePath(path)
                 ? operation switch
@@ -69,26 +72,20 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components.ChatElements
                 _ => throw new ArgumentOutOfRangeException(nameof(operation), operation, null)
             };
 
-            var element = new PermissionElement(action: action, question: question);
-            element.Initialize(k_Context);
-            return element;
+            return CreatePermission(action: action, question: question);
         }
 
-        protected override IUserInteraction<UserAnswer> CreateScreenCaptureElement(ToolExecutionContext.CallInfo callInfo)
+        protected override IInteractionSource<UserAnswer> CreateScreenCaptureElement(ToolExecutionContext.CallInfo callInfo)
         {
-            var element = new PermissionElement(action: "Allow screen capture");
-            element.Initialize(k_Context);
-            return element;
+            return CreatePermission(action: "Allow screen capture");
         }
 
-        protected override IUserInteraction<UserAnswer> CreateToolExecutionElement(ToolExecutionContext.CallInfo callInfo)
+        protected override IInteractionSource<UserAnswer> CreateToolExecutionElement(ToolExecutionContext.CallInfo callInfo)
         {
-            var element = new PermissionElement(action: "Execute tool", question: $"Execute {callInfo.FunctionId}?");
-            element.Initialize(k_Context);
-            return element;
+            return CreatePermission(action: "Execute tool", question: $"Execute {callInfo.FunctionId}?");
         }
 
-        protected override IUserInteraction<UserAnswer> CreatePlayModeElement(ToolExecutionContext.CallInfo callInfo, IToolPermissions.PlayModeOperation operation)
+        protected override IInteractionSource<UserAnswer> CreatePlayModeElement(ToolExecutionContext.CallInfo callInfo, IToolPermissions.PlayModeOperation operation)
         {
             var action = operation switch
             {
@@ -97,14 +94,10 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components.ChatElements
                 _ => throw new ArgumentOutOfRangeException(nameof(operation), operation, null)
             };
 
-            var question = $"{action}?";
-
-            var element = new PermissionElement(action: action, question: question);
-            element.Initialize(k_Context);
-            return element;
+            return CreatePermission(action: action, question: $"{action}?");
         }
 
-        protected override IUserInteraction<UserAnswer> CreateUnityObjectAccessElement(ToolExecutionContext.CallInfo callInfo, IToolPermissions.ItemOperation operation, Type type, UnityEngine.Object target)
+        protected override IInteractionSource<UserAnswer> CreateUnityObjectAccessElement(ToolExecutionContext.CallInfo callInfo, IToolPermissions.ItemOperation operation, Type type, UnityEngine.Object target)
         {
             var action = operation switch
             {
@@ -128,9 +121,7 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components.ChatElements
                 _ => throw new ArgumentOutOfRangeException(nameof(operation), operation, null)
             };
 
-            var element = new PermissionElement(action: action, question: question);
-            element.Initialize(k_Context);
-            return element;
+            return CreatePermission(action: action, question: question);
         }
     }
 }

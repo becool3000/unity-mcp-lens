@@ -1,5 +1,7 @@
+using System.IO;
+using Newtonsoft.Json.Linq;
 using Unity.AI.Assistant.Editor.Acp;
-using Unity.AI.Assistant.FunctionCalling;
+using Unity.AI.Assistant.Tools.Editor;
 using UnityEngine.UIElements;
 
 namespace Unity.AI.Assistant.UI.Editor.Scripts.Components.ChatElements
@@ -7,19 +9,50 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components.ChatElements
     /// <summary>
     /// UI element for displaying ACP (Agent Client Protocol) tool calls in the assistant chat.
     /// Handles tool calls from external agents like Claude Code.
+    /// Supports an optional <see cref="IAcpToolCallRenderer"/> for specialized rendering.
     /// </summary>
     class AcpToolCallElement : FunctionCallBaseElement
     {
+        const string k_CodeEditDisplayName = "Code Edit";
+
+        readonly IAcpToolCallRenderer m_Renderer;
+
+        bool m_HasExpanded;
         TextField m_ContentField;
         VisualElement m_WidgetContainer;
         ScrollView m_ParentScrollView;
         bool m_HasWidget;
+        bool m_HasDiffContent;
 
         string ToolCallId { get; set; }
         string ToolName { get; set; }
 
+        /// <summary>
+        /// Whether this element is using a custom renderer.
+        /// </summary>
+        public bool HasRenderer => m_Renderer != null;
+
+        public AcpToolCallElement(IAcpToolCallRenderer renderer = null)
+        {
+            m_Renderer = renderer;
+        }
+
         protected override void InitializeContent()
         {
+            if (m_Renderer != null)
+            {
+                var rendererElement = (VisualElement)m_Renderer;
+                ContentRoot.Add(rendererElement);
+
+                // Initialize the renderer if it's a ManagedTemplate
+                if (rendererElement is ManagedTemplate managedTemplate)
+                    managedTemplate.Initialize(Context);
+                if (rendererElement is IAssistantUIContextAware contextAware)
+                    contextAware.Context = Context;
+
+                return;
+            }
+
             m_ContentField = new TextField { isReadOnly = true };
             m_ContentField.AddToClassList("mui-function-call-text-field");
             ContentRoot.Add(m_ContentField);
@@ -69,8 +102,28 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components.ChatElements
             if (state != ToolCallState.InProgress)
                 EnableFoldout();
 
-            SetTitle(GetDisplayTitle(info.Title, info.ToolName));
-            SetDetails(info.Description ?? string.Empty);
+            if (m_Renderer != null)
+            {
+                m_Renderer.OnToolCall(info);
+                SetTitle(m_Renderer.Title ?? GetDisplayTitle(info.Title, info.ToolName));
+                SetDetails(m_Renderer.TitleDetails ?? string.Empty);
+
+                if (m_Renderer.Expanded && !m_HasExpanded)
+                {
+                    EnableFoldout();
+                    SetFoldoutExpanded(true);
+                    m_HasExpanded = true;
+                }
+
+                return;
+            }
+
+            // Don't override title/details if diff content already set them to CodeEdit style
+            if (!m_HasDiffContent)
+            {
+                SetTitle(GetDisplayTitle(info.Title, info.ToolName));
+                SetDetails(info.Description ?? string.Empty);
+            }
 
             // Only clear content if starting fresh (pending status)
             if (info.Status == AcpToolCallStatus.Pending)
@@ -98,6 +151,22 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components.ChatElements
                     break;
             }
 
+            if (m_Renderer != null)
+            {
+                m_Renderer.OnToolCallUpdate(update);
+
+                // Update title/details in case the renderer changed them
+                var title = m_Renderer.Title;
+                if (!string.IsNullOrEmpty(title))
+                    SetTitle(title);
+
+                var details = m_Renderer.TitleDetails;
+                if (details != null)
+                    SetDetails(details);
+
+                return;
+            }
+
             // Try to render a widget if UI metadata is present
             if (TryRenderWidget(update))
             {
@@ -106,9 +175,9 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components.ChatElements
                     m_ParentScrollView.style.display = DisplayStyle.None;
                 m_WidgetContainer.style.display = DisplayStyle.Flex;
             }
-            else if (!string.IsNullOrEmpty(update.Content))
+            else if (!string.IsNullOrEmpty(update.Content) && !m_HasDiffContent)
             {
-                // No widget, show text content as usual
+                // No widget and no diff content, show text content as usual
                 m_ContentField.value = update.Content;
             }
         }
@@ -137,6 +206,18 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components.ChatElements
         /// </summary>
         public void OnConversationCancelled()
         {
+            if (m_Renderer != null)
+            {
+                if (CurrentState == ToolCallState.InProgress)
+                {
+                    SetState(ToolCallState.Failed);
+                    EnableFoldout();
+                }
+
+                m_Renderer.OnConversationCancelled();
+                return;
+            }
+
             if (CurrentState == ToolCallState.InProgress)
             {
                 SetState(ToolCallState.Failed);
@@ -154,10 +235,47 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components.ChatElements
         }
 
         /// <summary>
+        /// Renders file diff/write content inline in the tool call's expandable content area.
+        /// Delegates to <see cref="DiffPermissionContentRenderer"/> for the actual rendering.
+        /// </summary>
+        public void SetDiffContent(JObject rawInput, AssistantUIContext context)
+        {
+            if (m_HasDiffContent || rawInput == null)
+                return;
+
+            var renderer = new DiffPermissionContentRenderer();
+            if (!renderer.CanRender(rawInput))
+                return;
+
+            var rendered = renderer.Render(rawInput, context);
+            if (rendered == null)
+                return;
+
+            // Match AI Assistant's CodeEdit appearance
+            var isEdit = rawInput["new_string"] != null;
+            var filePath = rawInput["file_path"]?.ToString();
+            var filename = !string.IsNullOrEmpty(filePath) ? Path.GetFileName(filePath) : null;
+            SetTitle(k_CodeEditDisplayName);
+            SetDetails(filename != null
+                ? $"{(isEdit ? "Edit" : "Create")} {filename}"
+                : string.Empty);
+
+            ContentRoot.Add(rendered);
+
+            // Hide the empty text field so it doesn't create a gap above the diff
+            m_ContentField.style.display = DisplayStyle.None;
+
+            EnableFoldout();
+            SetFoldoutExpanded(true);
+
+            m_HasDiffContent = true;
+        }
+
+        /// <summary>
         /// Gets the display title for a tool call, preferring title unless it looks like JSON.
         /// Gemini sends JSON-stringified params as title (e.g., "{}"), so we fall back to toolName.
         /// </summary>
-        static string GetDisplayTitle(string title, string toolName)
+        internal static string GetDisplayTitle(string title, string toolName)
         {
             // Use title if it's not empty and doesn't look like JSON
             if (!string.IsNullOrEmpty(title) && !title.StartsWith("{") && !title.StartsWith("["))

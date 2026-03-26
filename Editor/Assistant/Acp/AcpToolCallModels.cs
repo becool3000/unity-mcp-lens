@@ -135,12 +135,22 @@ namespace Unity.AI.Assistant.Editor.Acp
         public AcpToolCallStatus Status { get; set; }
 
         /// <summary>
+        /// The full rawInput JObject from the tool_call event.
+        /// Preserved so auto-approved tool calls can display file content inline.
+        /// </summary>
+        [JsonIgnore]
+        public JObject RawInput { get; set; }
+
+        /// <summary>
         /// Parse tool call info from a session update payload.
         /// </summary>
         public static AcpToolCallInfo FromUpdate(JObject update)
         {
             if (update == null)
                 return null;
+
+            // Capture the full rawInput JObject before typed deserialization discards unknown fields.
+            var rawInputJObject = update["rawInput"] as JObject;
 
             var payload = update.ToObject<ToolCallUpdatePayload>();
 
@@ -162,7 +172,8 @@ namespace Unity.AI.Assistant.Editor.Acp
                 ToolName = toolName,
                 Title = payload.Title,
                 Description = description,
-                Status = ParseStatus(payload.Status)
+                Status = ParseStatus(payload.Status),
+                RawInput = rawInputJObject
             };
         }
 
@@ -203,6 +214,13 @@ namespace Unity.AI.Assistant.Editor.Acp
         public UiMetadata Ui { get; set; }
 
         /// <summary>
+        /// The structured rawOutput from the tool call event, preserved for custom renderers
+        /// that need to navigate the output structure (e.g., executionLogs, compilationLogs).
+        /// </summary>
+        [JsonProperty("rawOutput")]
+        public JToken RawOutput { get; set; }
+
+        /// <summary>
         /// Parse tool call update from a session update payload.
         /// </summary>
         public static AcpToolCallUpdate FromUpdate(JObject update)
@@ -215,15 +233,31 @@ namespace Unity.AI.Assistant.Editor.Acp
             string content = null;
             ToolOutputMeta outputMeta = null;
 
-            // Get content for display - prefer rawOutput (normalized by relay), fall back to content array
-            if (payload.RawOutput != null && payload.RawOutput.Type != JTokenType.Null)
+            // Normalize rawOutput: some providers (e.g., Claude Code via MCP) send it as a
+            // JSON string rather than a parsed object. Parse it so downstream consumers
+            // (renderers, widget extractors) can navigate the structure.
+            var rawOutputToken = payload.RawOutput;
+            if (rawOutputToken is { Type: JTokenType.String })
             {
-                content = payload.RawOutput.ToString(Formatting.Indented);
-
-                // Parse the raw output to extract _meta (only if it's an object, not a string)
-                if (payload.RawOutput.Type == JTokenType.Object)
+                try
                 {
-                    var rawOutput = payload.RawOutput.ToObject<ToolRawOutput>();
+                    rawOutputToken = JToken.Parse(rawOutputToken.Value<string>());
+                }
+                catch
+                {
+                    // Not valid JSON — keep as string token
+                }
+            }
+
+            // Get content for display - prefer rawOutput (normalized by relay), fall back to content array
+            if (rawOutputToken != null && rawOutputToken.Type != JTokenType.Null)
+            {
+                content = rawOutputToken.ToString(Formatting.Indented);
+
+                // Parse the raw output to extract _meta
+                if (rawOutputToken.Type == JTokenType.Object)
+                {
+                    var rawOutput = rawOutputToken.ToObject<ToolRawOutput>();
                     outputMeta = rawOutput?.Meta;
                 }
             }
@@ -248,7 +282,8 @@ namespace Unity.AI.Assistant.Editor.Acp
                 Status = ParseStatus(payload.Status),
                 Content = content,
                 ToolExecutionId = outputMeta?.ToolExecutionId,
-                Ui = outputMeta?.Ui
+                Ui = outputMeta?.Ui,
+                RawOutput = rawOutputToken
             };
         }
 

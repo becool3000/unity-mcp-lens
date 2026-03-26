@@ -17,16 +17,27 @@ namespace Unity.AI.Assistant.FunctionCalling
                 const string k_StateName = "Code Execution";
 
                 [SerializeField]
-                bool m_AlwaysAllow;
+                PermissionOverride m_Override;
 
-                public void Reset() => m_AlwaysAllow = false;
-                public void Allow() => m_AlwaysAllow = true;
-                public bool IsAllowed() => m_AlwaysAllow;
+                public void Reset() => m_Override = PermissionOverride.None;
+
+                public void Allow() => m_Override = PermissionOverride.AlwaysAllow;
+                public bool IsAllowed() => m_Override == PermissionOverride.AlwaysAllow;
+
+                public void Deny() => m_Override = PermissionOverride.AlwaysDeny;
+                public bool IsDenied() => m_Override == PermissionOverride.AlwaysDeny;
 
                 public void AppendTemporaryPermissions(IList<IToolPermissions.TemporaryPermission> allowedStates)
                 {
-                    if (m_AlwaysAllow)
-                        allowedStates.Add(new IToolPermissions.TemporaryPermission(k_StateName, Reset));
+                    switch (m_Override)
+                    {
+                        case PermissionOverride.AlwaysAllow:
+                            allowedStates.Add(new IToolPermissions.TemporaryPermission(k_StateName, Reset));
+                            break;
+                        case PermissionOverride.AlwaysDeny:
+                            allowedStates.Add(new IToolPermissions.TemporaryPermission($"{k_StateName} (Denied)", Reset));
+                            break;
+                    }
                 }
             }
         }
@@ -62,6 +73,11 @@ namespace Unity.AI.Assistant.FunctionCalling
                         currentStatus = PermissionStatus.Denied;
                         break;
 
+                    case UserAnswer.DenyAlways:
+                        State.CodeExecution.Deny();
+                        currentStatus = PermissionStatus.Denied;
+                        break;
+
                     default:
                         throw new ArgumentOutOfRangeException();
                 }
@@ -82,12 +98,14 @@ namespace Unity.AI.Assistant.FunctionCalling
             {
                 IPermissionsPolicyProvider.PermissionPolicy.Allow => PermissionStatus.Approved,
                 IPermissionsPolicyProvider.PermissionPolicy.Ask =>
-                    State.CodeExecution.IsAllowed() ? PermissionStatus.Approved : PermissionStatus.Pending,
+                    State.CodeExecution.IsAllowed() ? PermissionStatus.Approved :
+                    State.CodeExecution.IsDenied() ? PermissionStatus.Denied :
+                    PermissionStatus.Pending,
                 IPermissionsPolicyProvider.PermissionPolicy.Deny => PermissionStatus.Denied,
                 _ => throw new ArgumentOutOfRangeException()
             };
         }
 
-        protected abstract IUserInteraction<UserAnswer> CreateCodeExecutionElement(ToolExecutionContext.CallInfo callInfo, string code);
+        protected abstract IInteractionSource<UserAnswer> CreateCodeExecutionElement(ToolExecutionContext.CallInfo callInfo, string code);
     }
 }

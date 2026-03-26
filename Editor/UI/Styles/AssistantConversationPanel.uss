@@ -6,11 +6,6 @@
     flex-grow: 1;
 }
 
-.mui-text-field-popup-container {
-    position: absolute;
-    bottom: 70px;
-}
-
 .mui-conversation-overlay-elements {
     position: absolute;
     left: 0;

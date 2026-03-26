@@ -9,6 +9,7 @@ using Unity.AI.Generators.Contexts;
 using Unity.AI.Generators.IO.Utilities;
 using Unity.AI.Generators.Redux.Thunks;
 using Unity.AI.Generators.UI;
+using Unity.AI.Generators.UI.Actions;
 using Unity.AI.Generators.UI.Payloads;
 using Unity.AI.Generators.UI.Utilities;
 using Unity.AI.Generators.UIElements.Extensions;
@@ -48,6 +49,7 @@ namespace Unity.AI.Mesh.Components
         readonly Label m_Label;
         readonly Label m_Type;
         GenerationMetadata m_Metadata;
+        readonly GenerationFeedbackManipulator m_FeedbackManipulator;
 
         public GenerationTile()
         {
@@ -75,6 +77,16 @@ namespace Unity.AI.Mesh.Components
 
             progress = this.Q<VisualElement>("progress");
             progress.AddManipulator(m_SpinnerManipulator = new SpinnerManipulator());
+
+            // Initialize feedback manipulator
+            m_FeedbackManipulator = new GenerationFeedbackManipulator(
+                FeedbackActions.MeshGenerationDialogType,
+                () => meshResult?.uri,
+                this.GetAsset,
+                this.GetStoreApi,
+                () => this.GetState()?.SelectSubmittedFeedbackSentiment(this.GetAsset(), meshResult?.uri?.AbsoluteUri),
+                () => meshResult != null && meshResult is not MeshSkeleton && !meshResult.IsFailed());
+            this.AddManipulator(m_FeedbackManipulator);
         }
 
         void MouseLeave(MouseLeaveEvent evt)

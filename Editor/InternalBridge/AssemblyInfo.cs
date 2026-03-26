@@ -6,3 +6,4 @@ using System.Runtime.CompilerServices;
 [assembly: InternalsVisibleTo("Unity.AI.Assistant.Integrations.Profiler.Editor")]
 [assembly: InternalsVisibleTo("Unity.AI.Assistant.Tests")]
 [assembly: InternalsVisibleTo("Unity.AI.Assistant.UI.Editor")]
+[assembly: InternalsVisibleTo("Unity.AI.Assistant.Tools.Editor")]

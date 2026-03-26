@@ -9,10 +9,10 @@ using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
-using Unity.AI.Assistant.Editor;
 using Unity.AI.Tracing;
 using Unity.AI.Assistant.Editor.Utils;
 using Unity.AI.Assistant.Utils;
+using Unity.AI.Toolkit;
 using UnityEditor;
 using UnityEngine;
 using Debug = UnityEngine.Debug;
@@ -20,6 +20,7 @@ using Trace = Unity.AI.Tracing.Trace;
 
 namespace Unity.Relay.Editor
 {
+
     /// <summary>
     /// Status of the relay service lifecycle.
     /// </summary>
@@ -293,7 +294,7 @@ namespace Unity.Relay.Editor
 
             if (Application.isBatchMode)
             {
-                EditorApplication.delayCall += () => _ = StartAsync();
+                EditorTask.delayCall += () => _ = StartAsync();
             }
             else
             {
@@ -547,32 +548,49 @@ namespace Unity.Relay.Editor
                 }
 
                 m_IsConnectedToExternalServer = false;
+                await StartNewRelayWithPortRetry();
+            }
+            catch (Exception ex)
+            {
+                TransitionTo(RelayStatus.Failed, $"Error starting relay: {ex.Message}");
+            }
+        }
 
+        /// <summary>
+        /// Find available ports and start the relay process.
+        /// Retries with different ports if the process exits immediately (e.g., EADDRINUSE).
+        /// </summary>
+        async Task StartNewRelayWithPortRetry()
+        {
+            const int maxStartAttempts = 3;
+            var excludePorts = new HashSet<int>();
+
+            for (int startAttempt = 0; startAttempt < maxStartAttempts; startAttempt++)
+            {
                 // Find port for relay WebSocket server
                 int port = await FindAvailablePortAsync(
                     FixedPort > 0 ? FixedPort : null,
                     GetPersistedPort() > 0 ? GetPersistedPort() : null,
-                    null);
+                    excludePorts);
                 if (port == 0)
                 {
                     TransitionTo(RelayStatus.Failed, "No available ports found in range 9001-9100");
                     return;
                 }
 
-                SetPersistedPort(port);
-
-                // Find port for MCP client REST API (exclude the relay port)
-                var excludePorts = new HashSet<int> { port };
+                // Find port for MCP client REST API (exclude the relay port and previously failed ports)
+                var mcpExclude = new HashSet<int>(excludePorts) { port };
                 int mcpClientPort = await FindAvailablePortAsync(
                     null,
                     GetPersistedMcpPort() > 0 ? GetPersistedMcpPort() : null,
-                    excludePorts);
+                    mcpExclude);
                 if (mcpClientPort == 0)
                 {
                     TransitionTo(RelayStatus.Failed, "No available ports found for MCP client in range 9001-9100");
                     return;
                 }
 
+                SetPersistedPort(port);
                 SetPersistedMcpPort(mcpClientPort);
 
                 m_ProcessHandle = CustomStartHandler != null
@@ -588,13 +606,29 @@ namespace Unity.Relay.Editor
                 SetPersistedProcessId(m_ProcessHandle.Id);
                 SetupProcessMonitoring();
 
-                // ConnectWebSocketAsync has retry logic to wait for server to be ready
-                await ConnectWebSocketAsync();
+                // Try to connect — TryConnectAsync will bail early if the process exits
+                // (e.g., EADDRINUSE crash), so no artificial delay needed here.
+                var (success, error) = await TryConnectAsync(k_MaxConnectionRetries);
+                if (success)
+                {
+                    return;
+                }
+
+                // Connection failed — if process crashed, retry with different ports
+                if (m_ProcessHandle.HasExited)
+                {
+                    InternalLog.LogWarning($"[RelayService] Relay exited on ports {port}/{mcpClientPort} (attempt {startAttempt + 1}/{maxStartAttempts}), retrying with different ports...");
+                    excludePorts.Add(port);
+                    excludePorts.Add(mcpClientPort);
+                    continue;
+                }
+
+                // Process is alive but connection failed for another reason — don't retry
+                TransitionTo(RelayStatus.Failed, error ?? "Connection failed");
+                return;
             }
-            catch (Exception ex)
-            {
-                TransitionTo(RelayStatus.Failed, $"Error starting relay: {ex.Message}");
-            }
+
+            TransitionTo(RelayStatus.Failed, "Relay process failed to start after multiple port attempts");
         }
 
         const int k_MaxConnectionRetries = 10;
@@ -676,6 +710,10 @@ namespace Unity.Relay.Editor
             {
                 if (m_State.Status == RelayStatus.Stopping || m_State.Status == RelayStatus.Stopped)
                     return (false, "Stop requested");
+
+                // Early exit if the relay process has already crashed (e.g., EADDRINUSE)
+                if (m_ProcessHandle is { HasExited: true })
+                    return (false, $"Relay process exited (exit code {m_ProcessHandle.ExitCode})");
 
                 try
                 {
@@ -937,6 +975,14 @@ namespace Unity.Relay.Editor
                 m_RelayVersion = testResponse.version;
                 m_Capabilities = testResponse.capabilities ?? Array.Empty<string>();
 
+                // Check editor PID ownership — reject relays belonging to other Unity instances
+                if (!string.IsNullOrEmpty(testResponse.editorPid) &&
+                    int.TryParse(testResponse.editorPid, out var relayEditorPid) &&
+                    relayEditorPid != m_EditorProcessId)
+                {
+                    return false;
+                }
+
                 // Check protocol version compatibility
                 if (!IsProtocolVersionCompatible(testResponse.protocolVersion))
                 {
@@ -990,6 +1036,7 @@ namespace Unity.Relay.Editor
             public string version { get; set; }
             public string protocolVersion { get; set; }
             public string[] capabilities { get; set; }
+            public string editorPid { get; set; }
         }
 
         Process StartDefaultRelay(int port, int mcpClientPort)
@@ -1046,7 +1093,7 @@ namespace Unity.Relay.Editor
                     // Process may already be disposed
                 }
 
-                EditorApplication.delayCall += () =>
+                EditorTask.delayCall += () =>
                 {
                     // Expected exit during intentional shutdown
                     if (m_State.Status == RelayStatus.Stopping || m_State.Status == RelayStatus.Stopped)
@@ -1174,6 +1221,33 @@ namespace Unity.Relay.Editor
             }
         }
 
+        static bool IsEditorStableForRelayActivity()
+        {
+            return Unity.AI.Assistant.Editor.EditorStabilityUtility.IsStable();
+        }
+
+        async Task<bool> WaitForEditorStabilityAsync(string context)
+        {
+            if (IsEditorStableForRelayActivity())
+                return true;
+
+            InternalLog.Log($"[RelayService] Waiting for editor stability before {context}");
+            var startTime = EditorApplication.timeSinceStartup;
+
+            while (!IsEditorStableForRelayActivity())
+            {
+                if (m_State.Status == RelayStatus.Stopping || m_State.Status == RelayStatus.Stopped)
+                    return false;
+
+                if ((EditorApplication.timeSinceStartup - startTime) * 1000d >= k_MaxEditorStateWaitMs)
+                    return false;
+
+                await Task.Delay(k_EditorStatePollDelayMs);
+            }
+
+            return true;
+        }
+
         void Update()
         {
             // Only attempt reconnection when in Connecting state (process running, WebSocket needs connection)
@@ -1222,33 +1296,6 @@ namespace Unity.Relay.Editor
 
             Cleanup();
             ClearPersistedState();
-        }
-
-        static bool IsEditorStableForRelayActivity()
-        {
-            return EditorStabilityUtility.IsStable();
-        }
-
-        async Task<bool> WaitForEditorStabilityAsync(string context)
-        {
-            if (IsEditorStableForRelayActivity())
-                return true;
-
-            InternalLog.Log($"[RelayService] Waiting for editor stability before {context}");
-            var startTime = EditorApplication.timeSinceStartup;
-
-            while (!IsEditorStableForRelayActivity())
-            {
-                if (m_State.Status == RelayStatus.Stopping || m_State.Status == RelayStatus.Stopped)
-                    return false;
-
-                if ((EditorApplication.timeSinceStartup - startTime) * 1000d >= k_MaxEditorStateWaitMs)
-                    return false;
-
-                await Task.Delay(k_EditorStatePollDelayMs);
-            }
-
-            return true;
         }
 
         void SendWaitingDomainReloadMessage()

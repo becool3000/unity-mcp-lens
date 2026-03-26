@@ -14,6 +14,7 @@ using Unity.AI.Generators.IO.Utilities;
 using Unity.AI.Generators.UIElements.Extensions;
 using Unity.AI.Generators.Redux.Thunks;
 using Unity.AI.Generators.UI;
+using Unity.AI.Generators.UI.Actions;
 using Unity.AI.Generators.UI.Payloads;
 using Unity.AI.Generators.UI.Utilities;
 using Unity.AI.Toolkit;
@@ -49,6 +50,7 @@ namespace Unity.AI.Image.Components
         readonly Label m_Label;
         readonly Label m_Type;
         GenerationMetadata m_Metadata;
+        readonly GenerationFeedbackManipulator m_FeedbackManipulator;
 
         public GenerationTile()
         {
@@ -75,6 +77,16 @@ namespace Unity.AI.Image.Components
             progress = this.Q<VisualElement>("progress");
             progress.AddManipulator(m_SpinnerManipulator = new SpinnerManipulator());
 
+            // Initialize feedback manipulator
+            m_FeedbackManipulator = new GenerationFeedbackManipulator(
+                FeedbackActions.ImageGenerationDialogType,
+                () => textureResult?.uri,
+                this.GetAsset,
+                this.GetStoreApi,
+                () => this.GetState()?.SelectSubmittedFeedbackSentiment(this.GetAsset(), textureResult?.uri?.AbsoluteUri),
+                () => textureResult != null && textureResult is not TextureSkeleton && !textureResult.IsFailed());
+            this.AddManipulator(m_FeedbackManipulator);
+
             this.AddManipulator(new DelayedCleanupManipulator(() =>
             {
                 EditorApplication.playModeStateChanged -= OnPlayModeStateChangedForGetSpriteSheetFrameAsync;
@@ -96,9 +108,10 @@ namespace Unity.AI.Image.Components
 
         void OnMouseEnter(MouseEnterEvent evt)
         {
+            m_IsHovered = true;
+
             if (!textureResult.IsVideoClip() && !textureResult.IsSpriteSheet()) return;
 
-            m_IsHovered = true;
             m_LastEditorTime = EditorApplication.timeSinceStartup;
 
             if (m_Scheduled == null)

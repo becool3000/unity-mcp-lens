@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Threading.Tasks;
 using AiEditorToolsSdk.Domain.Abstractions.Services;
-using Unity.AI.Generators.Asset;
 using Unity.AI.Toolkit;
 using Unity.AI.Toolkit.Asset;
 using UnityEditor;

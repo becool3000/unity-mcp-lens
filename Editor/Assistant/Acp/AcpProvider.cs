@@ -12,6 +12,7 @@ using Unity.AI.Assistant.Bridge.Editor;
 using Unity.AI.Assistant.Data;
 using Unity.AI.Assistant.FunctionCalling;
 using Unity.AI.Assistant.Utils;
+using Unity.AI.Toolkit;
 using UnityEditor;
 using Unity.Relay;
 using Unity.Relay.Editor;
@@ -102,6 +103,7 @@ namespace Unity.AI.Assistant.Editor.Acp
         public event Action<AssistantConversationId> ConversationDeleted;
         public event Action<AssistantConversationId, ErrorInfo> ConversationErrorOccured;
         public event Action<AssistantMessageId, FeedbackData?> FeedbackLoaded;
+        public event Action<AssistantMessageId, bool> FeedbackSent;
         public event Action<AssistantMessageId, int?, bool> MessageCostReceived;
         public event Action<AssistantConversationId, string> IncompleteMessageStarted;
         public event Action<AssistantConversationId> IncompleteMessageCompleted;
@@ -643,7 +645,7 @@ namespace Unity.AI.Assistant.Editor.Acp
                 return;
 
             m_HadToolCallThisTurn = false;
-            EditorApplication.delayCall += () => AssetDatabase.Refresh();
+            EditorTask.delayCall += () => AssetDatabase.Refresh();
         }
 
         void CloseCurrentResponseBlock()
@@ -740,6 +742,9 @@ namespace Unity.AI.Assistant.Editor.Acp
 
             SetUnityField(toolCallData, AcpToolCallStorageKeys.UnityCallInfoKey, JObject.FromObject(info));
             SetUnityField(toolCallData, AcpToolCallStorageKeys.UnityIsReasoningKey, new JValue(isReasoning));
+
+            if (info.RawInput != null)
+                SetUnityField(toolCallData, AcpToolCallStorageKeys.UnityRawInputKey, info.RawInput);
         }
 
         static void ApplyUpdateToData(JObject toolCallData, AcpToolCallUpdate update)
@@ -879,7 +884,13 @@ namespace Unity.AI.Assistant.Editor.Acp
             if (string.IsNullOrEmpty(Conversation.AgentSessionId) || string.IsNullOrEmpty(Conversation.ProviderId))
                 return;
 
-            AcpConversationStorage.Save(Conversation);
+            // Save silently: write to disk for domain reload recovery but don't fire
+            // OnSessionSaved or run EnforceLimitForProvider. The OnSessionSaved event
+            // triggers a cascade that ultimately calls GET /v1/assistant/conversation-info
+            // via ConversationLoader → Unity provider refresh. Metadata changes that the
+            // history panel cares about (title, favorite) go through SetTitle/SetFavorite
+            // which fire the event independently.
+            AcpConversationStorage.Save(Conversation, silent: true);
         }
 
         void OnToolCall(AcpToolCallInfo info)
@@ -1660,7 +1671,10 @@ namespace Unity.AI.Assistant.Editor.Acp
         }
 
         public Task SendFeedback(AssistantMessageId messageId, bool flagMessage, string feedbackText, bool upVote)
-            => Task.CompletedTask;
+        {
+            FeedbackSent?.Invoke(messageId, true);
+            return Task.CompletedTask;
+        }
 
         public Task<FeedbackData?> LoadFeedback(AssistantMessageId messageId, CancellationToken ct = default)
             => Task.FromResult<FeedbackData?>(null);
@@ -1853,3 +1867,4 @@ namespace Unity.AI.Assistant.Editor.Acp
         }
     }
 }
+

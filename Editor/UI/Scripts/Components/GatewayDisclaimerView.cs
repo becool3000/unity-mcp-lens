@@ -1,6 +1,7 @@
 using System;
 using Unity.AI.Assistant.Editor;
 using Unity.AI.Assistant.UI.Editor.Scripts.Utils;
+using Unity.AI.Toolkit;
 using Unity.AI.Toolkit.Accounts.Services;
 using UnityEditor;
 using UnityEngine.UIElements;
@@ -73,7 +74,7 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
 
         void OnProviderChanged(string _) => UpdateState();
 
-        void OnSessionChanged() => EditorApplication.delayCall += UpdateState;
+        void OnSessionChanged() => EditorTask.delayCall += UpdateState;
 
         void OnAcceptClicked()
         {

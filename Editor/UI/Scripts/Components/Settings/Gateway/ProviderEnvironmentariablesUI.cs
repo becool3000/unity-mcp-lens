@@ -11,6 +11,7 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
     {
         VisualElement m_EnvironmentContainer;
         Button m_AddEnvVarButton;
+        Button m_ResetEnvVarButton;
 
         internal ProviderInfo providerInfo { get; private set; }
 
@@ -21,6 +22,8 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
             m_EnvironmentContainer = view.Q<VisualElement>("env-vars-container");
             m_AddEnvVarButton = view.Q<Button>("add-env-var-button");
             m_AddEnvVarButton.RegisterCallback<ClickEvent>(_ => AddEnvVar());
+            m_ResetEnvVarButton = view.Q<Button>("reset-env-var-button");
+            m_ResetEnvVarButton.RegisterCallback<ClickEvent>(_ => ResetToSystem());
         }
 
         public void Refresh(ProviderInfo provider)
@@ -40,6 +43,11 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
         {
             providerInfo.Variables.Add(new());
             GatewayPreferenceService.Instance.Preferences.Value = GatewayPreferenceService.Instance.Preferences.Value with { };
+        }
+
+        void ResetToSystem()
+        {
+            _ = GatewayPreferenceService.Instance.ResetPreferences();
         }
     }
 }

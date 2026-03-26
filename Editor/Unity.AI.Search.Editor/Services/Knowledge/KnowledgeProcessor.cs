@@ -6,6 +6,7 @@ using Unity.AI.Search.Editor.Utilities;
 using Unity.AI.Toolkit.Utility;
 using UnityEditor;
 using UnityEngine;
+using Object = UnityEngine.Object;
 
 namespace Unity.AI.Search.Editor.Knowledge
 {
@@ -67,16 +68,7 @@ namespace Unity.AI.Search.Editor.Knowledge
             // Skip the change check if forceProcess is true
             if (!forceProcess)
             {
-                // Do not reprocess if the content hash didn't change and the processor version is the same
-                var existingEmbedding = EmbeddingIndex.instance.GetEmbeddingForAsset(assetGuid);
-
-                var assetDescriptor = AssetDescriptorResolver.GetDescriptor(assetObject);
-
-                GUID.TryParse(assetGuid, out var guid);
-
-                if (existingEmbedding != null &&
-                    assetDescriptor.Version == existingEmbedding.version &&
-                    existingEmbedding.assetContentHash == AssetDatabase.GetAssetDependencyHash(guid))
+                if (!DoesNeedProcessing(assetObject, assetGuid))
                 {
                     InternalLog.Log(
                         $"[KnowledgeProcessor] Asset {assetPath} is already labeled and hasn't changed. Skipping reprocessing.",
@@ -100,7 +92,49 @@ namespace Unity.AI.Search.Editor.Knowledge
             }
         }
 
-        static async Task CreateAsync(UnityEngine.Object assetObject, CancellationToken cancellationToken)
+        static bool DoesNeedProcessing(Object assetObject, string assetGuid)
+        {
+            // Do not reprocess if the content hash didn't change and the processor version is the same
+            try
+            {
+                var assetDescriptor = AssetDescriptorResolver.GetDescriptor(assetObject);
+                var existingEmbeddings =
+                    EmbeddingIndex.instance.GetEmbeddingsForAsset(assetDescriptor.Model.ModelId, assetObject);
+
+                if (existingEmbeddings is { Length: > 0 })
+                {
+                    if (!GUID.TryParse(assetGuid, out var guid))
+                    {
+                        return true;
+                    }
+
+                    var assetDependencyHash = AssetDatabase.GetAssetDependencyHash(guid);
+
+                    foreach (var existingEmbedding in existingEmbeddings)
+                    {
+                        if (assetDescriptor.Version != existingEmbedding.version ||
+                            existingEmbedding.assetContentHash != assetDependencyHash)
+                        {
+                            return true;
+                        }
+                    }
+                }
+                else
+                {
+                    return true;
+                }
+            }
+            catch (Exception ex)
+            {
+                // Error while checking existing embeddings, proceed with generating a new one:
+                InternalLog.LogException(ex, LogFilter.Search);
+                return true;
+            }
+
+            return false;
+        }
+
+        static async Task CreateAsync(Object assetObject, CancellationToken cancellationToken)
         {
             if (assetObject == null)
                 throw new Exception("Asset object is null.");
@@ -115,14 +149,18 @@ namespace Unity.AI.Search.Editor.Knowledge
             await descriptor.ProcessAsync(assetObject, cancellationToken);
         }
 
-        static bool CanCreateKnowledge(UnityEngine.Object assetObject) =>
-            AssetDescriptorResolver.HasDescriptor(assetObject);
-
-        static bool CanCreateKnowledge(string assetGuid, out UnityEngine.Object assetObject)
+        static bool CanCreateKnowledge(string assetGuid, out Object assetObject)
         {
             var assetPath = AssetDatabase.GUIDToAssetPath(assetGuid);
-            assetObject = AssetDatabase.LoadMainAssetAtPath(assetPath);
-            return CanCreateKnowledge(assetObject);
+
+            if (AssetDescriptorResolver.HasDescriptor(AssetDatabase.GetMainAssetTypeAtPath(assetPath)))
+            {
+                assetObject = AssetDatabase.LoadMainAssetAtPath(assetPath);
+                return true;
+            }
+
+            assetObject = null;
+            return false;
         }
 
         static void ProcessAssetDeletion(string assetGuid)

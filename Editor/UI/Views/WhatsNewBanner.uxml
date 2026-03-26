@@ -1,0 +1,26 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns="UnityEngine.UIElements" editor-extension-mode="False">
+    <Style src="../Styles/WhatsNewBanner.uss" />
+    <ui:VisualElement name="bannerRoot" class="mui-whats-new-banner-root">
+        <!-- Collapsed row: single-line summary, click to expand -->
+        <ui:VisualElement name="collapsedRow" class="mui-whats-new-banner-row">
+            <ui:Image name="toggleIconCollapsed" class="mui-whats-new-banner-icon mui-icon-arrow-caret-right" picking-mode="Ignore"/>
+            <ui:Label name="collapsedLabel" class="mui-whats-new-banner-collapsed-label"/>
+            <ui:VisualElement name="closeButtonCollapsed" class="mui-whats-new-banner-close">
+                <ui:Image class="mui-whats-new-banner-close-icon mui-icon-close" picking-mode="Ignore"/>
+            </ui:VisualElement>
+        </ui:VisualElement>
+        <!-- Expanded content: version header + bullet list -->
+        <ui:VisualElement name="expandedContent" class="mui-whats-new-banner-expanded">
+            <ui:VisualElement name="headerRow" class="mui-whats-new-banner-header-row">
+                <ui:Image name="toggleIconExpanded" class="mui-whats-new-banner-icon mui-icon-arrow-caret-down" picking-mode="Ignore"/>
+                <ui:Label name="headerLabel" class="mui-whats-new-banner-header"/>
+                <ui:Button name="learnMoreButton" class="mui-whats-new-banner-learn-more" text="Learn more"/>
+                <ui:VisualElement name="closeButtonExpanded" class="mui-whats-new-banner-close">
+                    <ui:Image class="mui-whats-new-banner-close-icon mui-icon-close" picking-mode="Ignore"/>
+                </ui:VisualElement>
+            </ui:VisualElement>
+            <ui:ScrollView name="bulletList" class="mui-whats-new-banner-bullets" mode="Vertical" horizontal-scroller-visibility="Hidden" vertical-scroller-visibility="Auto"/>
+            <ui:VisualElement name="bulletsFade" class="mui-whats-new-banner-bullets-fade" picking-mode="Ignore"/>
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>

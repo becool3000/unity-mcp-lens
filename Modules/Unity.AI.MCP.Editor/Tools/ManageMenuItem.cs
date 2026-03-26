@@ -22,7 +22,7 @@ namespace Unity.AI.MCP.Editor.Tools
         /// <summary>
         /// Display title for the ManageMenuItem tool.
         /// </summary>
-        public const string Title = "Manage Unity Editor menu items (execute/list/exists/refresh)";
+        public const string Title = "Manage Editor menu items";
 
         /// <summary>
         /// Description of the ManageMenuItem tool functionality and parameters.

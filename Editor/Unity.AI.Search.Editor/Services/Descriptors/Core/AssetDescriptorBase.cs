@@ -29,7 +29,7 @@ namespace Unity.AI.Search.Editor.Knowledge
 
             if (!RetainPreviews)
             {
-                result.CleanUpTextures();
+                result?.Dispose();
             }
 
             return result;
@@ -37,23 +37,27 @@ namespace Unity.AI.Search.Editor.Knowledge
 
         protected abstract Task<AssetObservation> DoProcessAsync(T assetObject, CancellationToken cancellationToken);
 
-        protected class EmbeddingResultWithObservation<TEmbedding>
+        protected class EmbeddingResultWithObservation<TEmbedding, TAssetObservationType>
+            where TAssetObservationType : AssetObservation
         {
             public TEmbedding EmbeddingResult;
-            public AssetObservation Observation;
+            public TAssetObservationType Observation;
 
-            public EmbeddingResultWithObservation(TEmbedding embeddingResult, AssetObservation observation)
+            public EmbeddingResultWithObservation(TEmbedding embeddingResult, TAssetObservationType observation)
             {
                 EmbeddingResult = embeddingResult;
                 Observation = observation;
             }
         }
 
-        protected async Task<EmbeddingResultWithObservation<AssetEmbedding>> GetEmbedding(
-            Func<T, Task<AssetObservation>> assetInspector,
-            EmbeddingProviderDelegate<AssetEmbedding> embeddingAction,
+        protected async Task<EmbeddingResultWithObservation<TAssetEmbeddingType, TAssetObservationType>> GetEmbedding<
+            TAssetEmbeddingType, TAssetObservationType>(
+            Func<T, Task<TAssetObservationType>> assetInspector,
+            EmbeddingProviderDelegate<TAssetEmbeddingType, TAssetObservationType> embeddingAction,
             T asset,
             CancellationToken cancellationToken)
+            where TAssetEmbeddingType : AssetEmbedding
+            where TAssetObservationType : AssetObservation
         {
             return await Process(assetInspector,
                 async obs =>
@@ -65,15 +69,21 @@ namespace Unity.AI.Search.Editor.Knowledge
 
                     embeddingResult.version = Version;
 
-                    return new EmbeddingResultWithObservation<AssetEmbedding>(embeddingResult, obs);
+                    return new EmbeddingResultWithObservation
+                        <TAssetEmbeddingType, TAssetObservationType>(
+                            embeddingResult,
+                            obs);
                 }, asset, cancellationToken);
         }
 
-        protected async Task<EmbeddingResultWithObservation<AssetEmbedding[]>> GetEmbedding(
-            Func<T, Task<AssetObservation>> assetInspector,
-            EmbeddingProviderDelegate<AssetEmbedding[]> embeddingAction,
-            T asset,
-            CancellationToken cancellationToken)
+        protected async Task<EmbeddingResultWithObservation<TAssetEmbeddingType[], TAssetObservationType>>
+            GetEmbedding<TAssetEmbeddingType, TAssetObservationType>(
+                Func<T, Task<TAssetObservationType>> assetInspector,
+                EmbeddingProviderDelegate<TAssetEmbeddingType[], TAssetObservationType> embeddingAction,
+                T asset,
+                CancellationToken cancellationToken)
+            where TAssetEmbeddingType : AssetEmbedding
+            where TAssetObservationType : AssetObservation
         {
             return await Process(assetInspector,
                 async obs =>
@@ -88,15 +98,17 @@ namespace Unity.AI.Search.Editor.Knowledge
                         embeddingResult.version = Version;
                     }
 
-                    return new EmbeddingResultWithObservation<AssetEmbedding[]>(embeddingResults, obs);
+                    return new EmbeddingResultWithObservation<TAssetEmbeddingType[], TAssetObservationType>(
+                        embeddingResults, obs);
                 }, asset, cancellationToken);
         }
 
-        async Task<EmbeddingResultWithObservation<TU>> Process<TU>(
-            Func<T, Task<AssetObservation>> assetInspector,
-            EmbeddingProviderDelegate<EmbeddingResultWithObservation<TU>> embeddingAction,
+        async Task<EmbeddingResultWithObservation<TU, TAssetObservationType>> Process<TU, TAssetObservationType>(
+            Func<T, Task<TAssetObservationType>> assetInspector,
+            EmbeddingProviderDelegate<EmbeddingResultWithObservation<TU, TAssetObservationType>, TAssetObservationType>
+                embeddingAction,
             T asset,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken) where TAssetObservationType : AssetObservation
         {
             var sw = System.Diagnostics.Stopwatch.StartNew();
 
@@ -113,11 +125,6 @@ namespace Unity.AI.Search.Editor.Knowledge
             InternalLog.Log(
                 $"Created observation for asset: {asset} GUID: {obs.assetGuid} ({sw.ElapsedMilliseconds / 1000f}s)",
                 LogFilter.SearchVerbose);
-
-            if (obs.previews == null || obs.previews.Length == 0)
-            {
-                InternalLog.LogError("No previews available for embedding generation.", LogFilter.Search);
-            }
 
             // Store reference in static collection to avoid premature cleanup of textures by Unity:
             s_Observations.Add(obs);
@@ -139,10 +146,13 @@ namespace Unity.AI.Search.Editor.Knowledge
             catch (Exception ex)
             {
 #if ASSISTANT_INTERNAL
-                foreach (var texture in obs.previews)
+                if (obs is PreviewAssetObservation previewAssetObservation)
                 {
-                    if (texture == null)
-                        Debug.LogError($"Texture is null: {obs.assetGuid}");
+                    foreach (var texture in previewAssetObservation.previews)
+                    {
+                        if (texture == null)
+                            Debug.LogError($"Texture is null: {obs.assetGuid}");
+                    }
                 }
 #endif
                 InternalLog.LogError($"[{GetType().Name}] {nameof(AssetEmbedding)} failed for {asset}: {ex.Message}",

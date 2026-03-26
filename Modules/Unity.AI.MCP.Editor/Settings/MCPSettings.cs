@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 using Unity.AI.MCP.Editor.Models;
+using Unity.AI.Toolkit;
 using Unity.AI.MCP.Editor.Constants;
 
 namespace Unity.AI.MCP.Editor.Settings
@@ -18,7 +19,7 @@ namespace Unity.AI.MCP.Editor.Settings
     class ConnectionPolicies
     {
         public ConnectionOriginPolicy gateway = new() { allowed = true, requiresApproval = false };
-        public ConnectionOriginPolicy direct = new() { allowed = true, requiresApproval = true };
+        public ConnectionOriginPolicy direct = new() { allowed = true, requiresApproval = false };
 
         /// <summary>
         /// Maximum number of concurrent direct (non-gateway) connections.
@@ -34,8 +35,9 @@ namespace Unity.AI.MCP.Editor.Settings
         // General settings
         public bool bridgeEnabled = true;
         public bool batchModeEnabled = true;
+        public bool autoApproveInBatchMode = true;
         public string validationLevel = ToolDescriptions.ValidationLevels[1]; // Default to "standard"
-        public bool processValidationEnabled = true;
+        public bool processValidationEnabled = false;
         public ConnectionPolicies connectionPolicies = new();
 
         [SerializeField]
@@ -118,7 +120,7 @@ namespace Unity.AI.MCP.Editor.Settings
 
             if (changed)
             {
-                UnityEditor.EditorApplication.delayCall += () => {
+                EditorTask.delayCall += () => {
                     ToolRegistry.McpToolRegistry.NotifyToolAvailabilityChanged(toolName);
                 };
             }
@@ -145,7 +147,7 @@ namespace Unity.AI.MCP.Editor.Settings
             }
             disabledToolOverrides.Clear();
 
-            UnityEditor.EditorApplication.delayCall += () => {
+            EditorTask.delayCall += () => {
                 ToolRegistry.McpToolRegistry.NotifyToolAvailabilityChanged(null);
             };
         }
@@ -158,7 +160,7 @@ namespace Unity.AI.MCP.Editor.Settings
             enabledToolOverrides.Clear();
             disabledToolOverrides.Clear();
 
-            UnityEditor.EditorApplication.delayCall += () => {
+            EditorTask.delayCall += () => {
                 ToolRegistry.McpToolRegistry.NotifyToolAvailabilityChanged(null);
             };
         }

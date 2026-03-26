@@ -3,7 +3,6 @@ using System.Linq;
 using Unity.AI.Assistant.Data;
 using Unity.AI.Assistant.Editor;
 using Unity.AI.Assistant.Editor.Utils.Event;
-using Unity.AI.Assistant.FunctionCalling;
 using Unity.AI.Assistant.UI.Editor.Scripts.Components.ChatElements;
 using Unity.AI.Assistant.UI.Editor.Scripts.ConversationSearch;
 using Unity.AI.Assistant.UI.Editor.Scripts.Data;
@@ -17,6 +16,7 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
 {
     class AssistantConversationPanel : ManagedTemplate
     {
+        VisualElement m_ViewRoot;
         VisualElement m_ConversationRoot;
         ChatScrollView<MessageModel, ChatElementWrapper> m_ConversationList;
 
@@ -26,12 +26,19 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
 
         ResponseFeedbackQueue m_FeedbackQueue;
 
+        BaseEventSubscriptionTicket m_RevertedTimeStampFilterRequestedSubscription;
+        BaseEventSubscriptionTicket m_ExpandedViewRequestedSubscription;
+
+        AssistantExpandedPanel m_ExpandedPanel;
+
+
         public AssistantConversationPanel() : base(AssistantUIConstants.UIModulePath)
         {
         }
 
         protected override void InitializeView(TemplateContainer view)
         {
+            m_ViewRoot = view;
             m_OverlayElements = view.Q<VisualElement>("conversationOverlayElements");
 
             m_ConversationRoot = view.Q<VisualElement>("conversationRoot");
@@ -57,28 +64,22 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
 
             m_FeedbackQueue = new ResponseFeedbackQueue(Context);
             m_FeedbackQueue.LoadedFeedback += OnFeedbackLoaded;
-            
+
+            m_ExpandedPanel = new AssistantExpandedPanel();
+            m_ExpandedPanel.Initialize(Context);
+            m_ExpandedPanel.SetDisplay(false);
+            m_ViewRoot.Add(m_ExpandedPanel);
+
             UpdateVisibility();
+
+            RegisterAttachEvents(OnAttach, OnDetach);
         }
 
         public void Populate(ConversationModel conversation)
         {
             m_ConversationList.BeginUpdate();
-
-            long currentRevertedTimeStamp = GetRevertedTimeStampFilter();
-            bool isRevertedTimeStampMode = currentRevertedTimeStamp != 0;
-
-            if (isRevertedTimeStampMode)
-            {
-                PopulateRevertedTimeStampMode(conversation, currentRevertedTimeStamp);
-            }
-            else
-            {
-                PopulateNormalMode(conversation);
-            }
-
+            PopulateNormalMode(conversation);
             m_ConversationList.EndUpdate();
-
             UpdateVisibility();
         }
 
@@ -91,48 +92,84 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
             UpdateOverlayButtons();
         }
 
-        public bool TryPushInteraction(ToolExecutionContext.CallInfo callInfo, VisualElement userInteraction)
+        void OnAttach(AttachToPanelEvent evt)
         {
-            var chatElementsWrappers = m_ConversationList.VisualElements;
-            if (chatElementsWrappers.Count == 0)
-                return false;
-
-            for (var i = chatElementsWrappers.Count - 1; i >= 0; i--)
-            {
-                var chatElementWrapper = chatElementsWrappers[i];
-                if (chatElementWrapper.TryPushInteraction(callInfo, userInteraction))
-                {
-                    m_ConversationList.ScrollToEnd();
-                    return true;
-                }
-            }
-
-            return false;
+            m_RevertedTimeStampFilterRequestedSubscription =
+                AssistantEvents.Subscribe<EventRevertedTimeStampFilterRequested>(OnRevertedTimeStampFilterRequested);
+            m_ExpandedViewRequestedSubscription =
+                AssistantEvents.Subscribe<EventExpandedViewRequested>(OnExpandedViewRequested);
         }
 
-        public bool TryPopInteraction(ToolExecutionContext.CallInfo callInfo, VisualElement userInteraction)
+        void OnDetach(DetachFromPanelEvent evt)
         {
-            var chatElementsWrappers = m_ConversationList.VisualElements;
-            if (chatElementsWrappers.Count == 0)
-                return false;
+            AssistantEvents.Unsubscribe(ref m_RevertedTimeStampFilterRequestedSubscription);
+            AssistantEvents.Unsubscribe(ref m_ExpandedViewRequestedSubscription);
+        }
 
-            for (var i = chatElementsWrappers.Count - 1; i >= 0; i--)
+        void OnExpandedViewRequested(EventExpandedViewRequested eventData)
+        {
+            ShowExpandedPanel(eventData.Title, eventData.Element);
+        }
+
+        void OnRevertedTimeStampFilterRequested(EventRevertedTimeStampFilterRequested eventData)
+        {
+            var conversation = Context.Blackboard.ActiveConversation;
+            if (conversation == null)
             {
-                var chatElementWrapper = chatElementsWrappers[i];
-                if (chatElementWrapper.TryPopInteraction(callInfo, userInteraction))
-                    return true;
+                InternalLog.LogError("Requested reverted timestamp filter for a conversation that does not exist");
+                return;
             }
 
-            return false;
+            var list = new ChatScrollView<MessageModel, ChatElementWrapper>
+            {
+                EnableDelayedElements = false,
+                EnableScrollLock = false,
+                style =
+                {
+                    flexGrow = 1
+                }
+            };
+            list.Initialize(Context);
+
+            list.BeginUpdate();
+            foreach (var msg in conversation.Messages)
+            {
+                if (msg.RevertedTimeStamp == eventData.Timestamp)
+                    list.AddData(msg);
+            }
+
+            list.EndUpdate();
+            list.SetContentEnabled(false);
+
+            ShowExpandedPanel("Checkpoint", list);
+        }
+
+        internal void CloseExpandedPanel()
+        {
+            if (!m_ExpandedPanel.IsVisible)
+                return;
+
+            m_ExpandedPanel.HidePanel();
+            AssistantEvents.Send(new EventExpandedPanelClosed());
+        }
+
+        void ShowExpandedPanel(string title, VisualElement element)
+        {
+            if (m_ExpandedPanel.IsVisible)
+            {
+                InternalLog.LogError(
+                    $"Trying to open an expanded panel on top of an expanded panel should not happen! Panel: {title}");
+                return;
+            }
+
+            m_ExpandedPanel.ShowPanel(element);
+            AssistantEvents.Send(new EventExpandedPanelOpened(title));
         }
 
         void UpdateVisibility()
         {
             m_ConversationList.SetDisplay(m_ConversationList.HasContent);
             m_OverlayElements.SetDisplay(m_ConversationList.HasContent);
-
-            var showOnlyRevertedTimeStamp = GetRevertedTimeStampFilter() != 0;
-            m_ConversationList.SetContentEnabled(!showOnlyRevertedTimeStamp);
         }
 
         void OnConversationChanged(AssistantConversationId conversationId)
@@ -149,9 +186,6 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
                 m_ConversationList.ClearData();
             }
 
-            long currentRevertedTimeStamp = GetRevertedTimeStampFilter();
-            bool isRevertedTimeStampMode = currentRevertedTimeStamp != 0;
-
             bool scrollToEndRequired = false;
             int searchStartIndex = 0;
             for (var messageIndex = 0; messageIndex < conversation.Messages.Count; messageIndex++)
@@ -159,7 +193,7 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
                 var incoming = conversation.Messages[messageIndex];
 
                 // Skip reverted messages in normal mode
-                if (incoming.RevertedTimeStamp != 0 && !isRevertedTimeStampMode)
+                if (incoming.RevertedTimeStamp != 0)
                 {
                     continue;
                 }
@@ -169,18 +203,18 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
                 for (int i = searchStartIndex; i < m_ConversationList.Data.Count; i++)
                 {
                     var existing = m_ConversationList.Data[i];
-                    
+
                     // Local added data/elements are never a match for incoming messages 
                     if (existing.IsInitialCheckpoint || existing.IsRevertedTimeStampLink)
                         continue;
-                    
+
                     if (existing.Id.FragmentId == incoming.Id.FragmentId)
                     {
                         Debug.Assert(existing.Role == incoming.Role);
                         incomingMessageIndex = i;
                         break;
                     }
-                    
+
                     // Handle special cases for internal and incomplete messages
                     if (IsTemporaryMessage(existing, incoming))
                     {
@@ -260,12 +294,12 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
             m_ConversationList.UpdateData(messageIndex, message);
             ScrollToBottom(true);
         }
-        
+
         int FindMessageIndex(AssistantMessageId incomingMessageId)
         {
             var message = m_ConversationList.Data.FirstOrDefault(m =>
                 m.Id == incomingMessageId && IsNormalMessage(m));
-            
+
             if (!message.Id.ConversationId.IsValid)
             {
                 return -1;
@@ -276,20 +310,6 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
             bool IsNormalMessage(MessageModel message)
             {
                 return message is { IsInitialCheckpoint: false, IsRevertedTimeStampLink: false };
-            }
-        }
-
-        void PopulateRevertedTimeStampMode(ConversationModel conversation, long currentRevertedTimeStamp)
-        {
-            // Filtered mode: ONLY show messages with matching RevertedTimeStamp
-            for (var i = 0; i < conversation.Messages.Count; i++)
-            {
-                var msg = conversation.Messages[i];
-
-                if (msg.RevertedTimeStamp != currentRevertedTimeStamp)
-                    continue;
-
-                m_ConversationList.AddData(msg);
             }
         }
 
@@ -319,6 +339,7 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
                         };
                         m_ConversationList.AddData(linkMessage);
                     }
+
                     continue;
                 }
 
@@ -360,7 +381,8 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
             m_ConversationList.AddData(temporaryCheckpointMessage);
         }
 
-        void UpdateInitialCheckpointIfNeeded(ConversationModel conversation, int messageIndex, MessageModel incoming, MessageModel localMessage)
+        void UpdateInitialCheckpointIfNeeded(ConversationModel conversation, 
+            int messageIndex, MessageModel incoming, MessageModel localMessage)
         {
             // Check if message ID is transitioning from temporary to external
             var isLocalMessageTemporary = IsTemporaryMessage(localMessage, incoming);
@@ -452,14 +474,8 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
                     return false;
                 }
             }
-            return true;
-        }
 
-        long GetRevertedTimeStampFilter()
-        {
-            var evt = new EventGetRevertedTimeStampFilter();
-            AssistantEvents.Send(evt);
-            return evt.Timestamp;
+            return true;
         }
     }
 }

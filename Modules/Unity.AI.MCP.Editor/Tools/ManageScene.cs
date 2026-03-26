@@ -21,6 +21,8 @@ namespace Unity.AI.MCP.Editor.Tools
         /// Description of the Unity.ManageScene tool for MCP clients.
         /// Provides information about scene management operations including load, save, create, and hierarchy queries.
         /// </summary>
+        public const string Title = "Manage Unity scenes";
+
         public const string Description = @"Manages Unity scenes (load, save, create, get hierarchy, etc.).
 
 Args:
@@ -73,7 +75,7 @@ Returns:
         /// </summary>
         /// <param name="parameters">The parameters specifying the scene action and related settings.</param>
         /// <returns>A response object containing success status, message, and optional data.</returns>
-        [McpTool("Unity.ManageScene", Description, Groups = new string[] { "core", "scene" })]
+        [McpTool("Unity.ManageScene", Description, Title, Groups = new string[] { "core", "scene" })]
         public static object HandleCommand(ManageSceneParams parameters)
         {
             var @params = parameters;

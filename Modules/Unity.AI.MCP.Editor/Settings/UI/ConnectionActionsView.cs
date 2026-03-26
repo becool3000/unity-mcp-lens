@@ -54,11 +54,19 @@ namespace Unity.AI.MCP.Editor.Settings.UI
         }
 
         /// <summary>
-        /// Focus the deny button (useful for making it the default action).
+        /// Focus the deny button.
         /// </summary>
         public void FocusDenyButton()
         {
             m_DenyButton?.Focus();
+        }
+
+        /// <summary>
+        /// Focus the accept button (default action for accept-by-default policy).
+        /// </summary>
+        public void FocusAcceptButton()
+        {
+            m_AcceptButton?.Focus();
         }
     }
 }

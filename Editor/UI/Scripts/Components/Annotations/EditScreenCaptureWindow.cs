@@ -4,6 +4,7 @@ using Unity.AI.Assistant.Annotations;
 using Unity.AI.Assistant.Editor;
 using Unity.AI.Assistant.Editor.Context;
 using Unity.AI.Assistant.Utils;
+using Unity.AI.Toolkit;
 using UnityEditor;
 using UnityEditor.Overlays;
 using UnityEngine;
@@ -181,7 +182,7 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
             window.Show();
 
             // Delay capture to next frame so window isn't captured
-            EditorApplication.delayCall += () =>
+            EditorTask.delayCall += () =>
             {
                 window.CaptureScreen();
             };
@@ -337,7 +338,7 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
 
             // Ensure pen settings are synced from overlay after a frame
             // (overlay's CreatePanelContent might have run or might run after this)
-            EditorApplication.delayCall += () =>
+            EditorTask.delayCall += () =>
             {
                 if (Instance == this && m_Strokes != null)
                 {
@@ -353,7 +354,7 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
             // Restore screenshot and strokes from serialized data after domain reload
             if (m_SerializedScreenshotData != null && m_SerializedScreenshotData.Length > 0)
             {
-                EditorApplication.delayCall += () =>
+                EditorTask.delayCall += () =>
                 {
                     // Load screenshot WITHOUT clearing strokes (we'll restore them separately)
                     LoadScreenshot(m_SerializedScreenshotData, clearStrokes: false);
@@ -369,7 +370,7 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
             {
                 // If we have attachment data but no screenshot data, just restore and highlight the attachment
                 // This handles the case where AssistantWindow is reopened without a domain reload
-                EditorApplication.delayCall += () =>
+                EditorTask.delayCall += () =>
                 {
                     RestoreSerializedAttachment();
                 };
@@ -1264,9 +1265,9 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
 
                 // Highlight the context row after domain reload with additional delay
                 // to ensure ContextElements are fully created in the AssistantWindow
-                EditorApplication.delayCall += () =>
+                EditorTask.delayCall += () =>
                 {
-                    EditorApplication.delayCall += () =>
+                    EditorTask.delayCall += () =>
                     {
                         if (m_OriginalAttachment != null)
                         {

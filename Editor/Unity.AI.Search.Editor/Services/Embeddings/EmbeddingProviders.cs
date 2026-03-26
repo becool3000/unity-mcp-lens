@@ -2,48 +2,64 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Unity.AI.Assistant.Utils;
 using Unity.AI.Search.Editor.Services;
-using Unity.AI.Search.Editor.Services.Models;
 using UnityEditor;
 using UnityEngine; // Required for GUID in 6000.5
 
 namespace Unity.AI.Search.Editor.Embeddings
 {
-    delegate Task<T> EmbeddingProviderDelegate<T>(AssetObservation observation);
+    delegate Task<T> EmbeddingProviderDelegate<T, in TAssetObservationType>(TAssetObservationType observation)
+        where TAssetObservationType : AssetObservation;
 
     static class EmbeddingProviders
     {
         internal record EmbeddingJob(EmbeddingQuery Query, string AssetGuid);
+        internal record EmbeddingJobBatch(List<EmbeddingJob> Jobs, IModelService ModelService);
 
-        // Max number of embeddings to request in one batch:
-        public static readonly int EmbeddingBatchSize = SigLip2.ModelInfo.suggestedBatchSize;
+        static readonly Dictionary<string, EmbeddingBatchScheduler> k_Schedulers =
+            new Dictionary<string, EmbeddingBatchScheduler>();
 
-        static readonly EmbeddingBatchScheduler k_Scheduler = new EmbeddingBatchScheduler();
+        static EmbeddingBatchScheduler GetScheduler(IModelService modelService)
+        {
+            lock (k_Schedulers)
+            {
+                if (!k_Schedulers.TryGetValue(modelService.ModelId, out var scheduler))
+                {
+                    scheduler = new EmbeddingBatchScheduler(modelService);
+                    k_Schedulers[modelService.ModelId] = scheduler;
+                }
+
+                return scheduler;
+            }
+        }
 
         // Array-based provider: returns one embedding per preview
-        public static async Task<AssetEmbedding[]> Embeddings(AssetObservation observation)
+        public static async Task<AssetEmbedding[]> ImageEmbeddings(PreviewAssetObservation observation, IModelService modelToUse)
         {
             if (observation.previews == null || observation.previews.Length == 0)
                 throw new InvalidOperationException("No previews available for embedding generation.");
 
             var jobs = new List<EmbeddingJob>(observation.previews.Length);
             foreach (var preview in observation.previews)
-                jobs.Add(new EmbeddingJob(new EmbeddingQuery(preview), observation.assetGuid));
+                jobs.Add(new EmbeddingJob(new ImageEmbeddingQuery(preview), observation.assetGuid));
 
-            var results = await Task.WhenAll(jobs.Select(job => k_Scheduler.EnqueueAsync(job)));
+            var scheduler = GetScheduler(modelToUse);
+            var results = await Task.WhenAll(jobs.Select(job => scheduler.EnqueueAsync(job)));
 
             return results;
         }
 
         // Convenience: use first preview only by delegating to ImageEmbeddings
-        public static EmbeddingProviderDelegate<AssetEmbedding> ImageEmbedding() =>
-            async observation => (await Embeddings(observation)).FirstOrDefault();
+        public static EmbeddingProviderDelegate<AssetEmbedding, PreviewAssetObservation> ImageEmbedding(IModelService modelToUse) =>
+            async observation => (await ImageEmbeddings(observation, modelToUse)).FirstOrDefault();
 
-        internal static async Task<List<AssetEmbedding>> ExecuteBatchAsync(List<EmbeddingJob> jobs)
+        internal static async Task<List<AssetEmbedding>> ExecuteBatchAsync(EmbeddingJobBatch jobBatch)
         {
             // Start a flow for the embedding batch execution
-
-            var model = ModelService.Default;
+            var jobs = jobBatch.Jobs;
+            var model = jobBatch.ModelService;
+            
             var queries = new EmbeddingQuery[jobs.Count];
             for (var i = 0; i < jobs.Count; i++)
                 queries[i] = jobs[i].Query;
@@ -71,14 +87,12 @@ namespace Unity.AI.Search.Editor.Embeddings
                     throw new InvalidOperationException("NaN value in embedding vector.");
                 }
 
-                GUID.TryParse(jobs[i].AssetGuid, out var guid);
+                var job = jobs[i];
+                GUID.TryParse(job.AssetGuid, out var guid);
+                var query = job.Query;
+                var embedding = query.CreateEmbedding(job.AssetGuid, guid, vec, model.ModelId);
 
-                outputs.Add(new AssetEmbedding
-                {
-                    assetGuid = jobs[i].AssetGuid,
-                    embedding = vec,
-                    assetContentHash = AssetDatabase.GetAssetDependencyHash(guid)
-                });
+                outputs.Add(embedding);
             }
 
             return outputs;

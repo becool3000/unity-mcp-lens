@@ -7,6 +7,7 @@ using Unity.AI.Assistant.Editor.Context;
 using Unity.AI.Assistant.Editor.Utils;
 using Unity.AI.Assistant.UI.Editor.Scripts.Utils;
 using Unity.AI.Assistant.Utils;
+using Unity.AI.Toolkit;
 using Unity.Assistant.UI.Components;
 using UnityEditor;
 using UnityEngine;
@@ -113,7 +114,7 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
                         if (pathHash.Contains(assetPath))
                         {
                             m_DelayedUpdateContextElements = true;
-                            EditorApplication.delayCall += () => UpdateContextSelectionElements(true);
+                            EditorTask.delayCall += () => UpdateContextSelectionElements(true);
                             return;
                         }
 

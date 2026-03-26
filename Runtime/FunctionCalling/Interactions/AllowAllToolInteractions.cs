@@ -6,7 +6,7 @@ namespace Unity.AI.Assistant.FunctionCalling
     class AllowAllToolInteractions : IToolInteractions
     {
         public async Task<TOutput> WaitForUser<TOutput>(ToolExecutionContext.CallInfo callInfo,
-            IUserInteraction<TOutput> userInteraction, int timeoutSeconds = 30,
+            IInteractionSource<TOutput> userInteraction, int timeoutSeconds = 30,
             CancellationToken cancellationToken = default)
         {
             var task = userInteraction.TaskCompletionSource.Task;

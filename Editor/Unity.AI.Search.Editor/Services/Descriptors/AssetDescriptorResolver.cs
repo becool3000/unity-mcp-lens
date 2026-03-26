@@ -80,7 +80,7 @@ namespace Unity.AI.Search.Editor.Knowledge
             return null;
         }
 
-        public static bool HasDescriptor(Object assetObject) => GetDescriptor(assetObject) != null;
+        public static bool HasDescriptor(Type assetType) => GetDescriptor(assetType) != null;
 
         /// <summary>
         /// Returns a deterministic signature string that reflects the current descriptor mapping and versions.

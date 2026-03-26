@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -7,26 +8,41 @@ using UnityEngine;
 using Unity.AI.MCP.Editor.Models;
 using Unity.AI.MCP.Editor.Security;
 using Unity.AI.MCP.Editor.Settings.Utilities;
+using Unity.AI.Toolkit;
 
 namespace Unity.AI.MCP.Editor
 {
     /// <summary>
     /// Persists connection history on a per-project basis.
     /// Uses ScriptableSingleton to automatically save/load from Library folder.
+    ///
+    /// Thread Safety: All public methods are thread-safe. Callers may invoke from any thread.
+    /// Runtime data lives in ConcurrentDictionary fields; the [SerializeField] list is only
+    /// used for Unity persistence (populated on load, flushed before save on the main thread).
     /// </summary>
     [FilePath("Library/AI.MCP/connections.asset", FilePathAttribute.Location.ProjectFolder)]
     class ConnectionRegistry : ScriptableSingleton<ConnectionRegistry>
     {
+        /// <summary>
+        /// Serialized list used only for Unity persistence (save/load).
+        /// At runtime, all access goes through <see cref="m_ConnectionsByIdentity"/>.
+        /// </summary>
         [SerializeField]
         List<ConnectionRecord> connections = new();
 
         /// <summary>
-        /// Non-persisted list for AI Gateway connections (ephemeral, session-bound).
-        /// These connections are auto-approved via session tokens and don't affect
-        /// future approval decisions (token-based approval, not identity-based).
+        /// Thread-safe runtime store for persisted connections, keyed by CombinedIdentityKey.
+        /// Populated from <see cref="connections"/> on domain load; flushed back before save.
         /// </summary>
         [NonSerialized]
-        List<GatewayConnectionRecord> gatewayConnections = new();
+        ConcurrentDictionary<string, ConnectionRecord> m_ConnectionsByIdentity = new();
+
+        /// <summary>
+        /// Thread-safe runtime store for ephemeral AI Gateway connections, keyed by SessionId.
+        /// These are NOT persisted and don't affect future approval decisions.
+        /// </summary>
+        [NonSerialized]
+        ConcurrentDictionary<string, GatewayConnectionRecord> m_GatewayBySession = new();
 
         /// <summary>
         /// Event fired when connection history changes (add, update, remove, clear)
@@ -37,7 +53,32 @@ namespace Unity.AI.MCP.Editor
 
         void OnEnable()
         {
-            m_SaveManager = new SaveManager(() => Save(true));
+            // Initialize thread-safe runtime stores
+            m_ConnectionsByIdentity = new ConcurrentDictionary<string, ConnectionRecord>();
+            m_GatewayBySession = new ConcurrentDictionary<string, GatewayConnectionRecord>();
+
+            // Populate runtime dict from serialized list
+            foreach (var record in connections)
+            {
+                if (record?.Identity?.CombinedIdentityKey != null)
+                    m_ConnectionsByIdentity[record.Identity.CombinedIdentityKey] = record;
+            }
+
+            m_SaveManager = new SaveManager(() =>
+            {
+                FlushToSerializedList();
+                Save(true);
+            });
+        }
+
+        /// <summary>
+        /// Flush the runtime ConcurrentDictionary back into the serialized list for Unity persistence.
+        /// Called on the main thread before Save (scene save or editor quit).
+        /// </summary>
+        void FlushToSerializedList()
+        {
+            connections.Clear();
+            connections.AddRange(m_ConnectionsByIdentity.Values);
         }
 
         /// <summary>
@@ -47,11 +88,22 @@ namespace Unity.AI.MCP.Editor
         /// </summary>
         void NotifyAndMarkDirty()
         {
-            EditorApplication.delayCall += () =>
+            EditorTask.delayCall += () =>
             {
                 OnConnectionHistoryChanged?.Invoke();
             };
             m_SaveManager.MarkDirty();
+        }
+
+        /// <summary>
+        /// Flush and save immediately on the main thread.
+        /// Called for rare but important state changes (new connections, approval decisions)
+        /// that must survive domain reloads.
+        /// </summary>
+        void SaveNow()
+        {
+            m_SaveManager.MarkDirty();
+            EditorTask.delayCall += () => m_SaveManager.SaveImmediately();
         }
 
         /// <summary>
@@ -72,56 +124,56 @@ namespace Unity.AI.MCP.Editor
 
             // Create identity for this connection
             var identity = ConnectionIdentity.FromConnectionInfo(decision.Connection);
-            if (identity == null)
-            {
-                // Can't create identity - skip recording
+            if (identity?.CombinedIdentityKey == null)
                 return;
-            }
 
-            // Check if we already have a connection with this identity
-            var existingRecord = FindMatchingConnection(identity);
-
-            if (existingRecord != null)
-            {
-                existingRecord.Info = decision.Connection;
-                existingRecord.Identity = identity;
-
-                // System-enforced statuses (like CapacityLimit) always override,
-                // but user decisions (Accepted/Rejected) are preserved against
-                // non-system statuses (e.g. a reconnect shouldn't reset approval).
-                bool isSystemEnforced = decision.Status == ValidationStatus.CapacityLimit;
-                bool shouldPreserveStatus = !isSystemEnforced &&
-                    (existingRecord.Status == ValidationStatus.Accepted ||
-                     existingRecord.Status == ValidationStatus.Rejected);
-
-                if (!shouldPreserveStatus)
-                {
-                    existingRecord.Status = decision.Status;
-                    existingRecord.ValidationReason = decision.Reason;
-                }
-            }
-            else
-            {
-                // New connection - add to list
-                var record = new ConnectionRecord
+            m_ConnectionsByIdentity.AddOrUpdate(
+                identity.CombinedIdentityKey,
+                // Add factory: new connection
+                _ => new ConnectionRecord
                 {
                     Info = decision.Connection,
                     Status = decision.Status,
                     ValidationReason = decision.Reason,
                     Identity = identity
-                };
-
-                connections.Add(record);
-
-                // Keep only the most recent 1000 connections to prevent unbounded growth
-                if (connections.Count > 1000)
+                },
+                // Update factory: merge with existing
+                (_, existingRecord) =>
                 {
-                    connections.RemoveAt(0);
+                    existingRecord.Info = decision.Connection;
+                    existingRecord.Identity = identity;
+
+                    // System-enforced statuses (like CapacityLimit) always override,
+                    // but user decisions (Accepted/Rejected) are preserved against
+                    // non-system statuses (e.g. a reconnect shouldn't reset approval).
+                    bool isSystemEnforced = decision.Status == ValidationStatus.CapacityLimit;
+                    bool shouldPreserveStatus = !isSystemEnforced &&
+                        (existingRecord.Status == ValidationStatus.Accepted ||
+                         existingRecord.Status == ValidationStatus.Rejected);
+
+                    if (!shouldPreserveStatus)
+                    {
+                        existingRecord.Status = decision.Status;
+                        existingRecord.ValidationReason = decision.Reason;
+                    }
+
+                    return existingRecord;
+                });
+
+            // Evict oldest if over 1000 connections
+            if (m_ConnectionsByIdentity.Count > 1000)
+            {
+                var oldest = m_ConnectionsByIdentity.Values
+                    .OrderBy(c => c.Info?.Timestamp ?? DateTime.MinValue)
+                    .FirstOrDefault();
+                if (oldest?.Identity?.CombinedIdentityKey != null)
+                {
+                    m_ConnectionsByIdentity.TryRemove(oldest.Identity.CombinedIdentityKey, out _);
                 }
             }
 
-            // Notify listeners and mark for eventual save
             NotifyAndMarkDirty();
+            SaveNow();
         }
 
         /// <summary>
@@ -132,7 +184,9 @@ namespace Unity.AI.MCP.Editor
             if (string.IsNullOrEmpty(connectionId))
                 return false;
 
-            var record = connections.Find(c => c.Info?.ConnectionId == connectionId);
+            var record = m_ConnectionsByIdentity.Values
+                .FirstOrDefault(c => c.Info?.ConnectionId == connectionId);
+
             if (record != null)
             {
                 record.Status = newStatus;
@@ -141,8 +195,8 @@ namespace Unity.AI.MCP.Editor
                     record.ValidationReason = newReason;
                 }
 
-                // Notify listeners and mark for eventual save
                 NotifyAndMarkDirty();
+                SaveNow();
                 return true;
             }
 
@@ -154,10 +208,11 @@ namespace Unity.AI.MCP.Editor
         /// </summary>
         public ConnectionRecord FindMatchingConnection(ConnectionIdentity identity)
         {
-            if (identity == null)
+            if (identity?.CombinedIdentityKey == null)
                 return null;
 
-            return connections.Find(c => c.Identity?.Matches(identity) == true);
+            m_ConnectionsByIdentity.TryGetValue(identity.CombinedIdentityKey, out var record);
+            return record;
         }
 
         /// <summary>
@@ -180,10 +235,12 @@ namespace Unity.AI.MCP.Editor
             if (string.IsNullOrEmpty(connectionId))
                 return false;
 
-            var record = connections.Find(c => c.Info?.ConnectionId == connectionId);
-            if (record != null)
+            var record = m_ConnectionsByIdentity.Values
+                .FirstOrDefault(c => c.Info?.ConnectionId == connectionId);
+
+            if (record?.Identity?.CombinedIdentityKey != null &&
+                m_ConnectionsByIdentity.TryRemove(record.Identity.CombinedIdentityKey, out _))
             {
-                connections.Remove(record);
                 NotifyAndMarkDirty();
                 return true;
             }
@@ -196,10 +253,10 @@ namespace Unity.AI.MCP.Editor
         /// </summary>
         public void ClearAllConnections()
         {
-            if (connections.Count == 0)
+            if (m_ConnectionsByIdentity.IsEmpty)
                 return;
 
-            connections.Clear();
+            m_ConnectionsByIdentity.Clear();
             NotifyAndMarkDirty();
         }
 
@@ -208,39 +265,10 @@ namespace Unity.AI.MCP.Editor
         /// </summary>
         public List<ConnectionRecord> GetRecentConnections(int count = 50)
         {
-            return connections
+            return m_ConnectionsByIdentity.Values
                 .OrderByDescending(c => c.Info?.Timestamp ?? DateTime.MinValue)
                 .Take(count)
                 .ToList();
-        }
-
-        /// <summary>
-        /// Mark the dialog as shown for a connection identity.
-        /// This prevents the dialog from being shown again for the same identity.
-        /// </summary>
-        public void MarkDialogShown(ConnectionInfo connectionInfo)
-        {
-            if (connectionInfo == null)
-                return;
-
-            var record = FindMatchingConnection(connectionInfo);
-            if (record != null && !record.DialogShown)
-            {
-                record.DialogShown = true;
-                NotifyAndMarkDirty();
-            }
-        }
-
-        /// <summary>
-        /// Check if the approval dialog was already shown for this connection identity.
-        /// </summary>
-        public bool WasDialogShown(ConnectionInfo connectionInfo)
-        {
-            if (connectionInfo == null)
-                return false;
-
-            var record = FindMatchingConnection(connectionInfo);
-            return record?.DialogShown == true;
         }
 
         /// <summary>
@@ -252,7 +280,9 @@ namespace Unity.AI.MCP.Editor
             if (string.IsNullOrEmpty(connectionId))
                 return;
 
-            var record = connections.FirstOrDefault(c => c.Info?.ConnectionId == connectionId);
+            var record = m_ConnectionsByIdentity.Values
+                .FirstOrDefault(c => c.Info?.ConnectionId == connectionId);
+
             if (record != null && record.DialogShown)
             {
                 record.DialogShown = false;
@@ -268,7 +298,8 @@ namespace Unity.AI.MCP.Editor
             if (string.IsNullOrEmpty(identityKey))
                 return null;
 
-            return connections.FirstOrDefault(c => c.Identity?.CombinedIdentityKey == identityKey);
+            m_ConnectionsByIdentity.TryGetValue(identityKey, out var record);
+            return record;
         }
 
         /// <summary>
@@ -279,8 +310,7 @@ namespace Unity.AI.MCP.Editor
             if (string.IsNullOrEmpty(identityKey) || clientInfo == null)
                 return;
 
-            var record = GetConnectionByIdentity(identityKey);
-            if (record?.Info != null)
+            if (m_ConnectionsByIdentity.TryGetValue(identityKey, out var record) && record.Info != null)
             {
                 record.Info.ClientInfo = clientInfo;
                 NotifyAndMarkDirty();
@@ -295,8 +325,16 @@ namespace Unity.AI.MCP.Editor
             if (activeIdentityKeys == null)
                 return new List<ConnectionRecord>();
 
-            var activeSet = new HashSet<string>(activeIdentityKeys);
-            return connections.Where(c => c.Identity != null && activeSet.Contains(c.Identity.CombinedIdentityKey)).ToList();
+            var result = new List<ConnectionRecord>();
+            foreach (var key in activeIdentityKeys)
+            {
+                if (m_ConnectionsByIdentity.TryGetValue(key, out var record))
+                {
+                    result.Add(record);
+                }
+            }
+
+            return result;
         }
 
         /// <summary>
@@ -348,38 +386,30 @@ namespace Unity.AI.MCP.Editor
             if (decision?.Connection == null || string.IsNullOrEmpty(sessionId))
                 return;
 
-            // Ensure list is initialized (may be null after domain reload due to [NonSerialized])
-            gatewayConnections ??= new List<GatewayConnectionRecord>();
+            m_GatewayBySession.AddOrUpdate(
+                sessionId,
+                // Add factory: new gateway connection
+                _ => new GatewayConnectionRecord
+                {
+                    Info = decision.Connection,
+                    Status = decision.Status,
+                    ValidationReason = decision.Reason,
+                    Identity = ConnectionIdentity.FromConnectionInfo(decision.Connection),
+                    SessionId = sessionId,
+                    Provider = provider,
+                    ConnectedAt = DateTime.UtcNow
+                },
+                // Update factory: reconnection for same session
+                (_, existingRecord) =>
+                {
+                    existingRecord.Info = decision.Connection;
+                    existingRecord.Status = decision.Status;
+                    existingRecord.ValidationReason = decision.Reason;
+                    existingRecord.Identity = ConnectionIdentity.FromConnectionInfo(decision.Connection);
+                    // Keep original ConnectedAt timestamp and provider
+                    return existingRecord;
+                });
 
-            // Check if we already have a connection for this session (MCP reconnection case)
-            var existingRecord = gatewayConnections.Find(c => c.SessionId == sessionId);
-            if (existingRecord != null)
-            {
-                // Update existing record instead of adding duplicate
-                existingRecord.Info = decision.Connection;
-                existingRecord.Status = decision.Status;
-                existingRecord.ValidationReason = decision.Reason;
-                existingRecord.Identity = ConnectionIdentity.FromConnectionInfo(decision.Connection);
-                // Keep original ConnectedAt timestamp and provider
-                // Notify listeners (for UI updates)
-                NotifyAndMarkDirty();
-                return;
-            }
-
-            var record = new GatewayConnectionRecord
-            {
-                Info = decision.Connection,
-                Status = decision.Status,
-                ValidationReason = decision.Reason,
-                Identity = ConnectionIdentity.FromConnectionInfo(decision.Connection),
-                SessionId = sessionId,
-                Provider = provider,
-                ConnectedAt = DateTime.UtcNow
-            };
-
-            gatewayConnections.Add(record);
-
-            // Notify listeners (for UI updates, developer tools)
             NotifyAndMarkDirty();
         }
 
@@ -392,11 +422,7 @@ namespace Unity.AI.MCP.Editor
             if (string.IsNullOrEmpty(sessionId))
                 return;
 
-            // Ensure list is initialized
-            gatewayConnections ??= new List<GatewayConnectionRecord>();
-
-            int removed = gatewayConnections.RemoveAll(c => c.SessionId == sessionId);
-            if (removed > 0)
+            if (m_GatewayBySession.TryRemove(sessionId, out _))
             {
                 NotifyAndMarkDirty();
             }
@@ -404,11 +430,11 @@ namespace Unity.AI.MCP.Editor
 
         /// <summary>
         /// Get all gateway connections (for UI display/developer tools).
+        /// Returns a snapshot to prevent iteration-during-mutation.
         /// </summary>
         public IReadOnlyList<GatewayConnectionRecord> GetGatewayConnections()
         {
-            gatewayConnections ??= new List<GatewayConnectionRecord>();
-            return gatewayConnections;
+            return m_GatewayBySession.Values.ToList();
         }
 
         /// <summary>
@@ -416,12 +442,11 @@ namespace Unity.AI.MCP.Editor
         /// </summary>
         public void ClearAllGatewayConnections()
         {
-            gatewayConnections ??= new List<GatewayConnectionRecord>();
-            if (gatewayConnections.Count > 0)
-            {
-                gatewayConnections.Clear();
-                NotifyAndMarkDirty();
-            }
+            if (m_GatewayBySession.IsEmpty)
+                return;
+
+            m_GatewayBySession.Clear();
+            NotifyAndMarkDirty();
         }
     }
 

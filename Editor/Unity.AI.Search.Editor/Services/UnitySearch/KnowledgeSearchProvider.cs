@@ -1,8 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using Unity.AI.Assistant.Utils;
+using Unity.AI.Search.Editor.Embeddings;
 using Unity.AI.Search.Editor.Services;
 using Unity.AI.Search.Editor.Utilities;
 using UnityEditor;
@@ -152,10 +154,11 @@ namespace Unity.AI.Search.Editor.Knowledge
                 ? ksp.m_topKOverride.Value
                 : GetTopK(searchQuery) ?? k_DefaultTopK;
 
-            var tcs = new TaskCompletionSource<Result<EmbeddingOutput>>();
+            var tcs = new TaskCompletionSource<Result<float[]>>();
 
             // Compute query embedding
-            _ = ComputeEmbeddingAsync(EmbeddingModels.CurrentForSearch, embeddingText, tcs);
+            var embeddingModel = ModelService.ImageAndTextModel;
+            _ = ComputeEmbeddingAsync(embeddingModel, embeddingText, tcs);
 
             // Wait for query to complete
             while (!tcs.Task.IsCompleted)
@@ -169,23 +172,23 @@ namespace Unity.AI.Search.Editor.Knowledge
                 yield break;
             }
 
-            var queryEmbedding = embeddingResult.value.Embedding;
+            var queryEmbedding = embeddingResult.value;
 
             // Get a large set of similarity scores for caching (so other tools can look them up)
             // We'll cache these scores, then return only the top K to the search UI
             const int cacheSize = 1000;  // Cache top 1000 scores for reuse
             InternalLog.Log($"[KnowledgeSearchProvider.FetchItems] Computing similarity scores (caching top {cacheSize}, returning top {topK})", LogFilter.Search);
-            InternalLog.Log($"[KnowledgeSearchProvider.FetchItems] Total assets in embedding index: {EmbeddingIndex.instance.assets.Count}", LogFilter.Search);
+            InternalLog.Log($"[KnowledgeSearchProvider.FetchItems] Total assets in embedding index: {EmbeddingIndex.instance.TotalEmbeddingsCount}", LogFilter.Search);
 
             SearchResult[] allResults;
             if (allowedGuids != null && allowedGuids.Count > 0)
             {
                 InternalLog.Log($"[KnowledgeSearchProvider.FetchItems] Applying pre-filter: limiting to {allowedGuids.Count} assets", LogFilter.Search);
-                allResults = EmbeddingIndex.instance.FindSimilarWithin(queryEmbedding, allowedGuids, ScoringType.Similarity, k_SimilarityThreshold, cacheSize);
+                allResults = EmbeddingIndex.instance.FindSimilarWithin(embeddingModel.ModelId, queryEmbedding, allowedGuids, ScoringType.Similarity, k_SimilarityThreshold, cacheSize);
             }
             else
             {
-                allResults = EmbeddingIndex.instance.FindSimilar(queryEmbedding, ScoringType.Similarity, k_SimilarityThreshold, cacheSize);
+                allResults = EmbeddingIndex.instance.FindSimilar(embeddingModel.ModelId, queryEmbedding, ScoringType.Similarity, k_SimilarityThreshold, cacheSize);
             }
 
             // Cache all similarity scores for this query (thread-safe)
@@ -202,7 +205,7 @@ namespace Unity.AI.Search.Editor.Knowledge
             // Take only the top K results for the search UI, and convert to Unity Search scoring
             var searchResults = allResults
                 .Take(topK)
-                .Select(r => new SearchResult(r.AssetPath, ConvertToUnitySearchScore(r.Similarity)))
+                .Select(r => new SearchResult(r.AssetPath, ConvertToUnitySearchScore(r.Similarity), r.assetEmbedding))
                 .ToArray();
 
             InternalLog.Log($"[KnowledgeSearchProvider.FetchItems] Found {searchResults.Length} similar results", LogFilter.Search);
@@ -392,18 +395,17 @@ namespace Unity.AI.Search.Editor.Knowledge
         }
 
         static async Task ComputeEmbeddingAsync(
-            IEmbeddings embeddingApi, string searchQuery,
-            TaskCompletionSource<Result<EmbeddingOutput>> tcs)
+            IModelService embeddingApi, string searchQuery,
+            TaskCompletionSource<Result<float[]>> tcs)
         {
             try
             {
-                var result = await embeddingApi.ExecuteAsync(new EmbeddingInput(searchQuery));
-
-                tcs.TrySetResult(result);
+                var embeddings = await embeddingApi.GetEmbeddingAsync(new TextEmbeddingQuery(searchQuery));
+                tcs.TrySetResult(Result<float[]>.Success(embeddings));
             }
             catch (Exception ex)
             {
-                tcs.TrySetException(ex);
+                tcs.TrySetResult(Result<float[]>.Failure(ex.Message));
             }
         }
 
@@ -438,14 +440,15 @@ namespace Unity.AI.Search.Editor.Knowledge
 
         internal static string GetTags(Object asset)
         {
-            var assetEmbedding = EmbeddingIndex.instance.GetEmbeddingForAsset(asset);
+            var model = ModelService.ImageAndTextModel;
+            var assetEmbedding = EmbeddingIndex.instance.GetEmbeddingsForAsset(model.ModelId, asset)?.FirstOrDefault();
 
             if (assetEmbedding == null)
             {
                 return string.Empty;
             }
 
-            var tagResults = ModelService.Default.GetTags(assetEmbedding.embedding);
+            var tagResults = model.GetTags(assetEmbedding.embedding);
 
             var tagsList = tagResults.Aggregate(string.Empty,
                 (current, tag) => current.Length == 0 ? tag.Tag : current + "," + tag.Tag);

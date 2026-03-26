@@ -23,7 +23,7 @@ namespace Unity.AI.Assistant.FunctionCalling
         /// <param name="timeoutSeconds">A duration after which the interaction should fail if not completed</param>
         /// <typeparam name="TOutput">The type of interaction output</typeparam>
         /// <returns>An asynchronous task that returns the interaction result.</returns>
-        public async Task<TOutput> WaitForUser<TOutput>(IUserInteraction<TOutput> userInteraction, int timeoutSeconds = 600)
+        public async Task<TOutput> WaitForUser<TOutput>(IInteractionSource<TOutput> userInteraction, int timeoutSeconds = 600)
             => await Interactions.WaitForUser(Call, userInteraction, timeoutSeconds, CancellationToken);
     }
 }

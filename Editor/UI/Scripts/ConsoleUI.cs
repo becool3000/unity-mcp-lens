@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using Unity.AI.Assistant.Bridge.Editor;
+using Unity.AI.Toolkit;
 using UnityEditor;
 using UnityEngine;
 
@@ -87,7 +88,7 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts
             ConsoleUtils.GetSelectedConsoleLogs(k_SelectedLogData);
             AssistantWindow.ShowWindow();
 
-            EditorApplication.delayCall += () =>
+            EditorTask.delayCall += () =>
             {
                 s_OnLogsAdded?.Invoke(k_SelectedLogData);
             };

@@ -1,8 +1,12 @@
 using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
+using Unity.AI.Assistant.Backend;
 using Unity.AI.Assistant.Data;
 using Unity.AI.Assistant.Editor;
 using Unity.AI.Assistant.Editor.Acp;
+using Unity.AI.Assistant.Socket.Protocol.Models.FromClient;
+using Unity.AI.Assistant.UI.Editor.Scripts.Components.UserInteraction;
 using Unity.AI.Assistant.UI.Editor.Scripts.ConversationSearch;
 
 namespace Unity.AI.Assistant.UI.Editor.Scripts
@@ -11,6 +15,7 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts
     {
         readonly IAssistantProvider m_UnityProvider;
         IAssistantProvider m_CurrentProvider;
+        string m_LastProviderId;
 
         public AssistantUIContext(IAssistantProvider assistant)
         {
@@ -18,6 +23,12 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts
             Blackboard = new AssistantBlackboard();
             m_UnityProvider = assistant;
             m_CurrentProvider = assistant;
+            m_LastProviderId = AssistantProviderFactory.IsUnityProvider(AssistantUISessionState.instance?.LastActiveProviderId)
+                ? AssistantUISessionState.instance.LastActiveProviderId
+                : AssistantProviderFactory.DefaultProvider.ProfileId;
+
+            if (m_UnityProvider is Unity.AI.Assistant.Editor.Assistant unityAssistant)
+                unityAssistant.SetCurrentProviderId(m_LastProviderId);
 
             // ConversationLoader is the single source of truth for populating conversations
             ConversationLoader = new ConversationLoader(Blackboard, m_UnityProvider);
@@ -28,7 +39,7 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts
                 ConversationLoader.SetCurrentProvider(assistant);
             }
 
-            API = new AssistantUIAPIInterpreter(assistant, Blackboard);
+            API = new AssistantUIAPIInterpreter(assistant, Blackboard, InteractionQueue, () => AssistantProviderFactory.CreateModelConfigurationForProvider(CurrentProviderId));
             ConversationReloadManager = new ConversationReloadManager(this, Blackboard);
         }
 
@@ -38,14 +49,22 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts
         public readonly ConversationLoader ConversationLoader;
 
         /// <summary>
-        /// The current provider ID.
+        /// The current provider ID (UI id for Unity: unity-max or unity-fast).
         /// </summary>
-        public string CurrentProviderId => m_CurrentProvider?.ProviderId ?? AssistantProviderFactory.UnityProviderId;
+        public string CurrentProviderId => AssistantProviderFactory.IsUnityProvider(m_CurrentProvider?.ProviderId)
+            ? m_LastProviderId
+            : (m_CurrentProvider?.ProviderId ?? AssistantProviderFactory.DefaultProvider.ProfileId);
 
         /// <summary>
         /// Whether the current provider is the Unity provider.
         /// </summary>
         public bool IsUnityProvider => AssistantProviderFactory.IsUnityProvider(CurrentProviderId);
+
+        /// <summary>
+        /// Cached Unity model profiles from GET /v1/assistant/models (provider id, display name). Updated when conversations are refreshed. May be null or empty until first refresh.
+        /// </summary>
+        public IReadOnlyList<(string ProviderId, string ProfileName)> AvailableUnityModelProfiles
+            => m_UnityProvider is Assistant.Editor.Assistant unity ? unity.AvailableUnityModelProfiles : null;
 
         public Action ConversationScrollToEndRequested;
         public Action<AssistantConversationId> ConversationRenamed;
@@ -53,6 +72,8 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts
         public Action ProviderSwitched;
 
         public Func<bool> WindowDockingState;
+
+        public readonly UserInteractionQueue InteractionQueue = new();
 
         public AssistantViewSearchHelper SearchHelper;
 
@@ -72,6 +93,7 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts
 
             API.Deinitialize();
             ConversationLoader.Dispose();
+            InteractionQueue.CancelAll();
 
             // Dispose current provider if it's disposable (and not the Unity provider)
             if (m_CurrentProvider != m_UnityProvider && m_CurrentProvider is IDisposable disposable)
@@ -102,6 +124,11 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts
             m_CurrentProvider = await AssistantProviderFactory.CreateProviderAsync(
                 context.ProviderId,
                 m_UnityProvider);
+
+            m_LastProviderId = context.ProviderId;
+
+            if (m_CurrentProvider == m_UnityProvider && m_UnityProvider is Unity.AI.Assistant.Editor.Assistant unityAssistant)
+                unityAssistant.SetCurrentProviderId(context.ProviderId);
 
             // Switch the interpreter to use the new provider
             API.SwitchProvider(m_CurrentProvider);

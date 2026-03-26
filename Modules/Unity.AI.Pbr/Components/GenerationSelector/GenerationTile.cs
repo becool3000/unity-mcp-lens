@@ -13,6 +13,7 @@ using Unity.AI.Generators.Contexts;
 using Unity.AI.Generators.IO.Utilities;
 using Unity.AI.Generators.Redux.Thunks;
 using Unity.AI.Generators.UI;
+using Unity.AI.Generators.UI.Actions;
 using Unity.AI.Generators.UI.Payloads;
 using Unity.AI.Generators.UI.Utilities;
 using Unity.AI.Generators.UIElements.Extensions;
@@ -44,6 +45,7 @@ namespace Unity.AI.Pbr.Components
         readonly Label m_Type;
         GenerationMetadata m_Metadata;
         bool m_InvalidateCache;
+        readonly GenerationFeedbackManipulator m_FeedbackManipulator;
 
         public GenerationTile()
         {
@@ -81,6 +83,16 @@ namespace Unity.AI.Pbr.Components
 
             progress = this.Q<VisualElement>("progress");
             progress.AddManipulator(m_SpinnerManipulator = new SpinnerManipulator());
+
+            // Initialize feedback manipulator
+            m_FeedbackManipulator = new GenerationFeedbackManipulator(
+                FeedbackActions.PbrGenerationDialogType,
+                () => materialResult?.uri,
+                this.GetAsset,
+                this.GetStoreApi,
+                () => this.GetState()?.SelectSubmittedFeedbackSentiment(this.GetAsset(), materialResult?.uri?.AbsoluteUri),
+                () => materialResult != null && materialResult is not MaterialSkeleton && !materialResult.IsFailed());
+            this.AddManipulator(m_FeedbackManipulator);
         }
 
         public void SetGenerationProgress(IEnumerable<GenerationProgressData> data)

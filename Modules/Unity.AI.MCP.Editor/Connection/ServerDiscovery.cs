@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.Security.Cryptography;
 using System.Text;
@@ -45,35 +46,44 @@ namespace Unity.AI.MCP.Editor.Helpers
             /// Version of the MCP protocol being used.
             /// </summary>
             public string protocol_version;
+
+            /// <summary>
+            /// Process ID of the Unity Editor instance.
+            /// Allows distinguishing multiple instances of the same project.
+            /// </summary>
+            public int editor_pid;
         }
 
+        static readonly int s_EditorPid = Process.GetCurrentProcess().Id;
+
         /// <summary>
-        /// Get connection path for the current Unity project
+        /// Get connection path for the current Unity project.
+        /// Includes the editor PID so multiple instances of the same project get separate pipes.
         /// </summary>
         /// <returns>Platform-specific connection path</returns>
         public static string GetConnectionPath()
         {
             string projectHash = ComputeProjectHash(Application.dataPath);
-            return GenerateConnectionPath(projectHash);
+            return GenerateConnectionPath(projectHash, s_EditorPid);
         }
 
         /// <summary>
-        /// Generate platform-specific connection path from project hash
+        /// Generate platform-specific connection path from project hash and editor PID.
         /// NOTE: Using named pipes for all platforms due to Unity's .NET runtime limitations
         /// </summary>
-        static string GenerateConnectionPath(string projectHash)
+        static string GenerateConnectionPath(string projectHash, int pid)
         {
             if (IsWindows())
             {
                 // Windows: Named pipe
-                // Format: \\.\pipe\unity-mcp-{hash}
-                return $"\\\\.\\pipe\\unity-mcp-{projectHash}";
+                // Format: \\.\pipe\unity-mcp-{hash}-{pid}
+                return $"\\\\.\\pipe\\unity-mcp-{projectHash}-{pid}";
             }
             else
             {
                 // Mac/Linux: Named pipe path (cross-platform named pipes in .NET)
-                // Format: /tmp/unity-mcp-{hash}
-                return $"/tmp/unity-mcp-{projectHash}";
+                // Format: /tmp/unity-mcp-{hash}-{pid}
+                return $"/tmp/unity-mcp-{projectHash}-{pid}";
             }
         }
 
@@ -91,7 +101,8 @@ namespace Unity.AI.MCP.Editor.Helpers
                     connection_path = connectionPath,
                     created_date = DateTime.UtcNow.ToString("O"),
                     project_path = Application.dataPath,
-                    protocol_version = "2.0"
+                    protocol_version = "2.0",
+                    editor_pid = s_EditorPid
                 };
 
                 string registryDir = GetRegistryDirectory();
@@ -159,7 +170,8 @@ namespace Unity.AI.MCP.Editor.Helpers
                     tool_snapshot_utc = toolSnapshotUtc,
                     project_path = Application.dataPath,
                     last_heartbeat = DateTime.UtcNow.ToString("O"),
-                    protocol_version = "2.0"
+                    protocol_version = "2.0",
+                    editor_pid = s_EditorPid
                 };
 
                 string json = JsonConvert.SerializeObject(statusInfo, Formatting.Indented);
@@ -219,7 +231,7 @@ namespace Unity.AI.MCP.Editor.Helpers
         {
             string dir = GetRegistryDirectory();
             string hash = ComputeProjectHash(Application.dataPath);
-            string fileName = $"bridge-{hash}.json";
+            string fileName = $"bridge-{hash}-{s_EditorPid}.json";
             return Path.Combine(dir, fileName);
         }
 
@@ -227,7 +239,7 @@ namespace Unity.AI.MCP.Editor.Helpers
         {
             string dir = GetRegistryDirectory();
             string hash = ComputeProjectHash(Application.dataPath);
-            string fileName = $"bridge-status-{hash}.json";
+            string fileName = $"bridge-status-{hash}-{s_EditorPid}.json";
             return Path.Combine(dir, fileName);
         }
 

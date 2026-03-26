@@ -20,6 +20,10 @@
                     <ui:Label class="umcp-setting-label" />
                     <ui:Label name="validationDescription" />
                 </ui:VisualElement>
+                <ui:VisualElement class="umcp-setting-row">
+                    <ui:Label text="Auto-approve in Batch Mode" class="umcp-setting-label" />
+                    <ui:Toggle name="autoApproveBatchToggle" class="umcp-setting-control" />
+                </ui:VisualElement>
             </ui:VisualElement>
         </ui:VisualElement>
 

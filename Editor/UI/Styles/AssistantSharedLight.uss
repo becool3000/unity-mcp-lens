@@ -2,6 +2,7 @@
     --muse-chat-backgrounds-50: #aaaaaa;
     --muse-chat-backgrounds-75: #a9a9a9;
     --muse-chat-backgrounds-100: #c0c0c0;
+    --muse-chat-backgrounds-125: #c4c4c4;
     --muse-chat-backgrounds-150: #c8c8c8;
     --muse-chat-backgrounds-175: #e3e3e3;
     --muse-chat-backgrounds-200: #cbcbcb;
@@ -37,6 +38,8 @@
     --muse-chat-code-mark-info: rgba(76, 76, 255, 0.3);
     --muse-chat-image-hover-tint: #090909;
     --muse-chat-separator-line: rgba(0,0,0,0.1);
+    --muse-chat-feedback-status-text-color: #d2d2d2;
+    --muse-chat-feedback-status-link-color: #7baefa;
 
     /* Specific to this mode only */
     --muse-chat-light-mode-icon-tint: #383838;
@@ -211,6 +214,16 @@
 .mui-icon-checkmark {
     background-image: resource('check');
     -unity-background-image-tint-color: var(--muse-chat-light-mode-icon-tint);
+}
+
+.mui-icon-feedback-checkmark {
+    background-image: resource('check');
+    -unity-background-image-tint-color: var(--muse-chat-icon-success-color);
+}
+
+.mui-icon-feedback-error {
+    background-image: url('project://database/Packages/com.unity.ai.assistant/Editor/UI/Assets/icons/Error.png');
+    -unity-background-image-tint-color: var(--muse-chat-icon-error-color);
 }
 
 .mui-icon-double-checkmark {

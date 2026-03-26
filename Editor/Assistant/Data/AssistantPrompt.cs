@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using Unity.AI.Assistant.Bridge.Editor;
 using Unity.AI.Assistant.Editor;
+using Unity.AI.Assistant.Socket.Protocol.Models.FromClient;
 using UnityEngine;
 
 namespace Unity.AI.Assistant.Data
@@ -16,6 +17,8 @@ namespace Unity.AI.Assistant.Data
         public string Value;
 
         public AssistantMode Mode;
+
+        public ModelConfiguration ModelConfiguration { get; set; }
 
         public readonly List<Object> ObjectAttachments = new();
         public readonly List<VirtualAttachment> VirtualAttachments = new();

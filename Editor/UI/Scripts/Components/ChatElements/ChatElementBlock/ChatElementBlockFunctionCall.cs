@@ -26,16 +26,6 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components.ChatElements
             RefreshContent();
         }
 
-        public void PushInteraction(VisualElement interactionElement)
-        {
-            Add(interactionElement);
-        }
-
-        public void PopInteraction(VisualElement interactionElement)
-        {
-            Remove(interactionElement);
-        }
-
         void RefreshContent()
         {
             var functionCall = BlockModel.Call;

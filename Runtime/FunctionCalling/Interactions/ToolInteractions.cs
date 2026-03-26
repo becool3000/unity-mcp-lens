@@ -13,7 +13,7 @@ namespace Unity.AI.Assistant.FunctionCalling
             ToolUiContainer = toolUiContainer;
         }
 
-        public async Task<TOutput> WaitForUser<TOutput>(ToolExecutionContext.CallInfo callInfo, IUserInteraction<TOutput> userInteraction, int timeoutSeconds = 600, CancellationToken cancellationToken = default)
+        public async Task<TOutput> WaitForUser<TOutput>(ToolExecutionContext.CallInfo callInfo, IInteractionSource<TOutput> userInteraction, int timeoutSeconds = 600, CancellationToken cancellationToken = default)
         {
             if (userInteraction == null)
                 throw new ArgumentNullException(nameof(userInteraction));

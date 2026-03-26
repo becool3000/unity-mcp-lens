@@ -18,22 +18,22 @@ namespace Unity.AI.Assistant.Bridge.Editor
         internal static event Action<LogData> s_EntryContextClickedEvent;
         internal static event Action s_DrawCustomToolbarGuiEvent;
 
+#if UNITY_6000_3_OR_NEWER
         static bool s_TimestampsApiAvailable;
         static MethodInfo s_GetEntryTimestampMethod;
         static MethodInfo s_HasFlagMethod;
         static MethodInfo s_SetFlagMethod;
         static object[] s_HasFlagParameters;
         static object s_ShowTimestampFlag;
-#if UNITY_6000_3_OR_NEWER
         static object s_LogLevelLogFlag;
         static object s_LogLevelWarningFlag;
         static object s_LogLevelErrorFlag;
-#endif
 
         static readonly string s_MessageWithTimestamp = string.Empty;
         static readonly object[] s_GetEntryTimestampParameters = new object[2];
 
         static readonly List<LogData> s_ReusableResultslist = new();
+#endif
 
 #if UNITY_6000_3_OR_NEWER
         /// <summary>

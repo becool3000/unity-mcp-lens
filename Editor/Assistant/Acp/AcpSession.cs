@@ -1105,7 +1105,8 @@ namespace Unity.AI.Assistant.Editor.Acp
                 {
                     ProviderStateObserver.SetPhase(ProviderStateObserver.InitializationPhase.None);
                     ProviderStateObserver.SetReadyState(ProviderStateObserver.ProviderReadyState.Error,
-                        "Relay connection lost. Reconnecting...");
+                        "Relay connection lost.",
+                        AcpConstants.ErrorCode_RelayDisconnected);
                 });
             }
         }

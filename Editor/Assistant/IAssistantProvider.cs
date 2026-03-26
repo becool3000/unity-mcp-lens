@@ -8,7 +8,6 @@ using Unity.AI.Assistant.Agents;
 using Unity.AI.Assistant.Backend;
 using Unity.AI.Assistant.Data;
 using Unity.AI.Assistant.FunctionCalling;
-using Unity.AI.Assistant.Socket.ErrorHandling;
 
 namespace Unity.AI.Assistant.Editor
 {
@@ -39,6 +38,7 @@ namespace Unity.AI.Assistant.Editor
         event Action<AssistantConversationId, ErrorInfo> ConversationErrorOccured;
 
         event Action<AssistantMessageId, FeedbackData?> FeedbackLoaded;
+        event Action<AssistantMessageId, bool> FeedbackSent;
 
         /// <summary>
         /// Invoked when message cost is received.

@@ -632,16 +632,9 @@ namespace Unity.Relay
                 {
                     m_CancellationTokenSource?.Cancel();
 
-                    if (m_WebSocket != null)
+                    if (m_WebSocket?.State == WebSocketState.Open)
                     {
-                        try
-                        {
-                            m_WebSocket.Abort();
-                        }
-                        catch
-                        {
-                            // Ignore close-path failures during disposal.
-                        }
+                        m_WebSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Client disposing", CancellationToken.None).Wait(1000);
                     }
 
                     m_WebSocket?.Dispose();

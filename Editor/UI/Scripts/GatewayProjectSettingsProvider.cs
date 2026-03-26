@@ -12,9 +12,6 @@ namespace Unity.AI.Assistant.Editor
         [SettingsProvider]
         public static SettingsProvider CreateGatewayProjectSettingsProvider()
         {
-            if (!AssistantEditorPreferences.AiGatewayEnabled)
-                return null;
-
             var page = new GatewayProjectSettingsPage();
             page.Initialize(null);
 

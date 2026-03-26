@@ -26,6 +26,8 @@ using TaskUtils = Unity.AI.Assistant.Editor.Utils.TaskUtils;
 
 namespace Unity.AI.Assistant.Editor
 {
+    delegate void ChangePromptStateDelegate(AssistantConversationId conversationId, Assistant.PromptState newState, string message, bool force = false);
+    
     /// <summary>
     /// Encapsulates workflow event handling logic for Assistant conversations.
     /// Handles chat responses, function calls, and workflow state changes.
@@ -38,7 +40,7 @@ namespace Unity.AI.Assistant.Editor
         readonly StringBuilder m_ResponseBuilder;
         readonly CancellationToken m_CancellationToken;
         readonly bool m_IsNewConversation;
-        readonly Action<AssistantConversationId, Assistant.PromptState, string> m_ChangePromptState;
+        readonly ChangePromptStateDelegate m_ChangePromptState;
         readonly Action<AssistantConversationId, ErrorInfo> m_ConversationErrorOccured;
         readonly Action<AssistantConversation> m_NotifyConversationChange;
         readonly Action<AssistantConversationId> m_IncompleteMessageCompleted;
@@ -50,7 +52,7 @@ namespace Unity.AI.Assistant.Editor
             StringBuilder responseBuilder,
             CancellationToken cancellationToken,
             bool isNewConversation,
-            Action<AssistantConversationId, Assistant.PromptState, string> changePromptState,
+            ChangePromptStateDelegate changePromptState,
             Action<AssistantConversationId, ErrorInfo> conversationErrorOccured,
             Action<AssistantConversation> notifyConversationChange,
             Action<AssistantConversationId> incompleteMessageCompleted = null)
@@ -228,15 +230,17 @@ namespace Unity.AI.Assistant.Editor
             public List<ChatRequestV1.AttachedContextModel> Attached;
         }
 
-        void ChangePromptState(AssistantConversationId conversationId, PromptState newState, string message)
+        void ChangePromptState(AssistantConversationId conversationId, PromptState newState, string message, bool force = false)
         {
-            if (CurrentPromptState == newState)
+            if (CurrentPromptState == newState && !force)
             {
                 return;
             }
+            
             InternalLog.Log($"Changing state from {CurrentPromptState} to {newState} because {message}");
             CurrentPromptState = newState;
             PromptStateChanged?.Invoke(conversationId, newState);
+            
             if (newState == PromptState.Canceling && 
                 m_ConversationCache[conversationId]?.Messages.Count > 0 && 
                 m_ConversationCache[conversationId]?.Messages[^1].Role == "assistant")
@@ -250,6 +254,7 @@ namespace Unity.AI.Assistant.Editor
             if (CurrentPromptState is PromptState.Canceling or PromptState.NotConnected)
             {
                 InternalLog.LogWarning($"AbortPrompt: Ignored in state {CurrentPromptState}");
+                ChangePromptState(conversationId, PromptState.NotConnected, "Enforcing Not Connected on Abort", true);
                 return;
             }
 
@@ -487,7 +492,7 @@ namespace Unity.AI.Assistant.Editor
             // Report the user message before the prefix/command is removed
             MainThread.DispatchAndForget(() => AIAssistantAnalytics.ReportSendUserMessageEvent(originalPrompt, conversationId.Value));
 
-            await TaskUtils.WithExceptionLogging(workflow.SendChatRequest(prompt.Value, promptContext.Attached, agent, prompt.Mode, ct));
+            await TaskUtils.WithExceptionLogging(workflow.SendChatRequest(prompt.Value, promptContext.Attached, agent, prompt.Mode, prompt.ModelConfiguration, ct));
 
             return;
 

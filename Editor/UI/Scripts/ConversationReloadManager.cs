@@ -94,14 +94,7 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts
                 }
             }
 
-            // Unity conversations use GUIDs
-            if (Guid.TryParse(idString, out _))
-            {
-                return Task.FromResult(AssistantProviderFactory.UnityProviderId);
-            }
-
-            // Default to Unity if we can't find it
-            return Task.FromResult(AssistantProviderFactory.UnityProviderId);
+            return Task.FromResult(AssistantProviderFactory.DefaultProvider.ProfileId);
         }
     }
 }

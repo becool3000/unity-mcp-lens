@@ -1,9 +1,0 @@
-<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements">
-    <ui:VisualElement name="root" class="mui-popup-entry">
-        <ui:Image name="checkmark" class="mui-popup-entry-checkmark"/>
-        <ui:VisualElement name="entryContent" class="mui-popup-entry-content">
-            <ui:Image name="entryIcon" class="mui-popup-entry-icon"/>
-            <ui:Label name="entryLabel" class="mui-popup-entry-label"/>
-        </ui:VisualElement>
-    </ui:VisualElement>
-</ui:UXML>

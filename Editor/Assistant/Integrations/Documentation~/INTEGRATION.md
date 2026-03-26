@@ -425,13 +425,12 @@ If a tool needs to return image data that the AI Assistant should analyze to per
 You **must** use the available constructors to build the `ImageOutput` object:
 
 ```csharp
-[AgentTool( "Captures a screenshot", "Unity.Editor.CaptureScreenshot", assistantMode: AssistantMode.Agent | AssistantMode.Ask)]
-internal static ImageOutput CaptureScreenshot()
+[AgentTool("Captures a multi-angle view of the scene for verification", "Unity.SceneView.CaptureMultiAngleSceneView", assistantMode: AssistantMode.Agent | AssistantMode.Ask)]
+internal static ImageOutput CaptureMultiAngleSceneView(ToolExecutionContext context, int[] focusObjectIds = null)
 {
-    // Some screenshot method returning a Texture object
-    var texture = CaptureScreenshot();
-    
-    var result = new ImageOutput(texture, "A screenshot of the Editor", "MyScreenshot");
+    // Your logic that produces image data (e.g., render scene from multiple angles)
+    var texture = GetRenderedSceneTexture();
+    var result = new ImageOutput(texture, "Multi-angle scene capture", "SceneCapture");
     return result;
 }
 ```

@@ -9,6 +9,7 @@ using Unity.AI.Assistant.Editor.Context;
 using Unity.AI.Assistant.Editor.Utils;
 using Unity.AI.Assistant.UI.Editor.Scripts.Utils;
 using Unity.AI.Assistant.Utils;
+using Unity.AI.Toolkit;
 using UnityEditor;
 using UnityEditor.UIElements;
 using UnityEngine;
@@ -600,9 +601,9 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
             }
 
             // Schedule multiple frame delays to ensure UI is fully hidden before capturing
-            EditorApplication.delayCall += () =>
+            EditorTask.delayCall += () =>
             {
-                EditorApplication.delayCall += () =>
+                EditorTask.delayCall += () =>
                 {
                     // Capture screenshot with all popups hidden
                     byte[] screenshotBytes = EditScreenCaptureWindow.CaptureScreenToBytes();
@@ -654,10 +655,10 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
             }
 
             // Delay screenshot capture to ensure privacy notice dialog and UI are completely hidden before capturing
-            EditorApplication.delayCall += () =>
+            EditorTask.delayCall += () =>
             {
                 // Add another frame delay to ensure dialog is fully closed and not visible in screenshot
-                EditorApplication.delayCall += () =>
+                EditorTask.delayCall += () =>
                 {
                     // Capture full screen for annotation (including taskbar and everything)
                     byte[] screenshotBytes = EditScreenCaptureWindow.CaptureFullScreenToBytes();

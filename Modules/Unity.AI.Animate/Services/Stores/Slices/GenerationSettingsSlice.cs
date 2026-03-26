@@ -65,7 +65,16 @@ namespace Unity.AI.Animate.Services.Stores.Slices
                         state.generationSettings.Remove(payload.payload);
                     return state with { };
                 })
-                .AddCase(ModelSelectorActions.setLastModelDiscoveryTimestamp).With((state, _) => state with { }),
+                .AddCase(ModelSelectorActions.setLastModelDiscoveryTimestamp).With((state, _) =>
+                {
+                    state = state with { };
+                    foreach (var (_, generationSetting) in state.generationSettings)
+                    {
+                        generationSetting.EnsureSelectedModelID(store.State);
+                    }
+
+                    return state;
+                }),
             state => state with {
                 generationSettings = new SerializableDictionary<AssetReference, GenerationSetting>(
                     state.generationSettings.ToDictionary(kvp => kvp.Key, entry => entry.Value with {

@@ -14,6 +14,8 @@ namespace Unity.AI.MCP.Editor.Tools
         /// <summary>
         /// Human-readable description of the Unity.DeleteScript tool functionality and usage.
         /// </summary>
+        public const string Title = "Delete a C# script";
+
         public const string Description = @"Delete a C# script by URI or Assets-relative path.
 
 Args: uri (unity://path/... or file://... or Assets/...).
@@ -54,7 +56,7 @@ Rules: Target must resolve under Assets/.";
         /// </summary>
         /// <param name="parameters">Parameters containing the URI or path of the script to delete.</param>
         /// <returns>A response object indicating success or failure with relevant details.</returns>
-        [McpTool("Unity.DeleteScript", Description, Groups = new string[] { "core", "scripting" })]
+        [McpTool("Unity.DeleteScript", Description, Title, Groups = new string[] { "core", "scripting" })]
         public static object HandleCommand(DeleteScriptParams parameters)
         {
             string uri = parameters?.Uri;

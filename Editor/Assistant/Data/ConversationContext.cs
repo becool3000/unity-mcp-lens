@@ -12,11 +12,5 @@ namespace Unity.AI.Assistant.Editor.Acp
         /// Whether this context includes a conversation to resume.
         /// </summary>
         public bool HasConversation => ConversationId.IsValid;
-
-        /// <summary>
-        /// Whether this is the Unity provider (handles native Muse chat).
-        /// </summary>
-        public bool IsUnityProvider => ProviderId == AssistantProviderFactory.UnityProviderId
-            || string.IsNullOrEmpty(ProviderId);
     }
 }

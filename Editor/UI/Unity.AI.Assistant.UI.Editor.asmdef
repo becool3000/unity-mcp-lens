@@ -10,7 +10,8 @@
         "Unity.AI.Toolkit.Utility",
         "Unity.AI.Assistant.Tools.Editor",
         "Unity.AI.Assistant.Annotations.Editor",
-        "Unity.AI.Tracing"
+        "Unity.AI.Tracing",
+        "Unity.AI.Toolkit.Async"
     ],
     "includePlatforms": [
         "Editor"

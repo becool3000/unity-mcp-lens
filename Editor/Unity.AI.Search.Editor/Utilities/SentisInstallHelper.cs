@@ -1,4 +1,5 @@
 ﻿using Unity.AI.Search.Editor.Knowledge;
+using Unity.AI.Toolkit;
 using UnityEditor;
 using UnityEditor.PackageManager;
 
@@ -12,7 +13,7 @@ namespace Unity.AI.Search.Editor.Utilities
         static SentisInstallHelper()
         {
             AssetKnowledgeSettings.SearchEnabledChanged += AssetKnowledgeSettingsOnSearchEnabledChanged;
-            EditorApplication.delayCall += CheckIfSentisNeedsToBeInstalled;
+            EditorTask.delayCall += CheckIfSentisNeedsToBeInstalled;
         }
 
         static void AssetKnowledgeSettingsOnSearchEnabledChanged(bool enabled)
@@ -34,7 +35,7 @@ namespace Unity.AI.Search.Editor.Utilities
                         "Yes", "No"))
                 {
                     // Disable it next frame to avoid modifying settings during event callbacks:
-                    EditorApplication.delayCall += () => AssetKnowledgeSettings.SearchEnabled = false;
+                    EditorTask.delayCall += () => AssetKnowledgeSettings.SearchEnabled = false;
                 }
                 else
                 {

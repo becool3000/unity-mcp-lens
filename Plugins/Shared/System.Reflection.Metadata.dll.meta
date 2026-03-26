@@ -9,6 +9,7 @@ PluginImporter:
   executionOrder: {}
   defineConstraints:
   - '!EXCLUDE_REFLECTION_METADATA'
+  - '!UNITY_6_5_OR_NEWER'
   isPreloaded: 0
   isOverridable: 0
   isExplicitlyReferenced: 1

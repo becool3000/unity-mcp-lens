@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
@@ -11,11 +12,18 @@ namespace Unity.AI.Search.Editor.Services
 {
     static class ModelService
     {
-        static SigLip2ModelService s_Service;
+        static SigLip2ModelService s_SigLip2Service;
+        // Create more model services here as needed, e.g. for text-only models, or future multi-modal models
+        // and add them to the AvailableModels list.
 
-        static SigLip2ModelService Service => s_Service ??= new SigLip2ModelService();
+        static SigLip2ModelService SigLip2Service => s_SigLip2Service ??= new SigLip2ModelService();
 
-        public static IModelService Default => Service;
+        public static IModelService ImageAndTextModel => SigLip2Service;
+
+        public static List<IModelService> AvailableModels => new List<IModelService>
+        {
+            ImageAndTextModel
+        };
 
         internal static bool IsDownloadingModel { get; private set; }
 
@@ -63,7 +71,7 @@ namespace Unity.AI.Search.Editor.Services
             try
             {
                 // Wait for the model service to be ready, which will trigger tag embedding initialization
-                await Default.IsReadyAsync();
+                await ImageAndTextModel.IsReadyAsync();
             }
             catch
             {

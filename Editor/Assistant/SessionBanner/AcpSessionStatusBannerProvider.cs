@@ -88,6 +88,8 @@ namespace Unity.AI.Assistant.Editor.SessionBanner
                 case ProviderStateObserver.ProviderReadyState.Error:
                     // Check for credential-specific errors from relay (by error code, not string matching)
                     var errorCode = ProviderStateObserver.InitializationErrorCode;
+                    if (errorCode == AcpConstants.ErrorCode_RelayDisconnected)
+                        return null; // Handled by SessionBanner's top-level relay check
                     if (errorCode == AcpConstants.ErrorCode_CredentialAccessFailed ||
                         errorCode == AcpConstants.ErrorCode_CredentialNotFound)
                     {

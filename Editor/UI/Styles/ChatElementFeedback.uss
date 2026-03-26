@@ -156,3 +156,56 @@
 #feedbackValueText .mui-mtf-placeholder-root {
     margin: 4px;
 }
+
+.mui-feedback-status-row {
+    flex-direction: row;
+    align-items: center;
+    margin-top: 6px;
+}
+
+.mui-feedback-status-icon {
+    width: 16px;
+    height: 16px;
+    margin-right: 4px;
+}
+
+.mui-feedback-status-text {
+    font-size: var(--muse-chat-default-font-size);
+    color: var(--muse-chat-feedback-status-text-color);
+}
+
+.mui-feedback-status-action {
+    margin-left: 2px;
+    padding-left: 2px;
+    padding-right: 2px;
+    border-width: 0;
+    background-color: transparent;
+    cursor: link;
+    border-radius: 2px;
+    color: var(--muse-chat-feedback-status-link-color);
+}
+
+.mui-feedback-status-action .unity-button__text,
+.mui-feedback-status-action .unity-label,
+.mui-feedback-status-action Label {
+    color: var(--muse-chat-feedback-status-link-color);
+}
+
+.mui-feedback-status-action:hover:enabled {
+    color: var(--muse-chat-feedback-status-link-color);
+    background-color: var(--muse-chat-backgrounds-150);
+}
+
+.mui-feedback-status-action:hover:enabled .unity-button__text,
+.mui-feedback-status-action:hover:enabled .unity-label,
+.mui-feedback-status-action:hover:enabled Label {
+    color: var(--muse-chat-feedback-status-link-color);
+}
+
+.mui-feedback-status-error .mui-feedback-status-icon {
+    -unity-background-image-tint-color: var(--muse-chat-icon-error-color);
+}
+
+.mui-feedback-status-error .mui-feedback-status-text {
+    color: var(--muse-chat-text-answers);
+}

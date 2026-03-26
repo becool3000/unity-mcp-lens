@@ -14,6 +14,13 @@ namespace Unity.AI.Assistant.FunctionCalling
     {
         const string k_EditorPrefsKey = "__AI_ASSISTANT_TOOL_PERMISSIONS__";
 
+        enum PermissionOverride
+        {
+            None,
+            AlwaysAllow,
+            AlwaysDeny
+        }
+
         [Serializable]
         partial class PermissionsState
         {
@@ -51,6 +58,7 @@ namespace Unity.AI.Assistant.FunctionCalling
         public void ResetTemporaryPermissions()
         {
             State.Reset();
+            SaveState();
         }
 
         public void ResetIgnoredObjects()
@@ -65,8 +73,11 @@ namespace Unity.AI.Assistant.FunctionCalling
             var json = JsonUtility.ToJson(State);
 
 #if UNITY_EDITOR
-            UnityEditor.EditorPrefs.SetString(k_EditorPrefsKey, json);
-            InternalLog.Log("Successfully saved permissions state to preferences");
+            Utils.MainThread.DispatchIfNeeded(() =>
+            {
+                UnityEditor.EditorPrefs.SetString(k_EditorPrefsKey, json);
+                InternalLog.Log("Successfully saved permissions state to preferences");
+            });
 #else
             throw new Exception("State save is not supported in Builds");
 #endif

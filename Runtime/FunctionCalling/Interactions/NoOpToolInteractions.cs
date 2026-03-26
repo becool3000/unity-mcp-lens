@@ -12,7 +12,7 @@ namespace Unity.AI.Assistant.FunctionCalling
     {
         public Task<TOutput> WaitForUser<TOutput>(
             ToolExecutionContext.CallInfo callInfo,
-            IUserInteraction<TOutput> userInteraction,
+            IInteractionSource<TOutput> userInteraction,
             int timeoutSeconds = 30,
             CancellationToken cancellationToken = default)
         {

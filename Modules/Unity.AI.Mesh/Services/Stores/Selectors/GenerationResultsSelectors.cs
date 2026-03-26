@@ -7,6 +7,7 @@ using Unity.AI.Mesh.Services.Utilities;
 using Unity.AI.Generators.Asset;
 using Unity.AI.Generators.IO.Utilities;
 using Unity.AI.Generators.Redux;
+using Unity.AI.Generators.UI.Actions;
 using Unity.AI.Generators.UI.Payloads;
 using Unity.AI.Generators.UI.Utilities;
 using Unity.AI.Toolkit.Asset;
@@ -115,5 +116,20 @@ namespace Unity.AI.Mesh.Services.Stores.Selectors
         public static AssetUndoManager SelectAssetUndoManager(this IState state, AssetReference asset) => state.SelectGenerationResult(asset).assetUndoManager;
         public static int SelectGenerationCount(this IState state, VisualElement element) => state.SelectGenerationResult(element).generationCount;
         public static bool SelectReplaceWithoutConfirmationEnabled(this IState state, AssetReference asset) => state.SelectGenerationResult(asset).replaceWithoutConfirmation;
+
+        /// <summary>
+        /// Gets the sentiment of submitted feedback for a specific generation.
+        /// </summary>
+        /// <param name="state">The state to select from.</param>
+        /// <param name="asset">The asset reference.</param>
+        /// <param name="generationUri">The URI of the generated asset.</param>
+        /// <returns>The sentiment if feedback was submitted, null otherwise.</returns>
+        public static GenerationFeedbackSentiment? SelectSubmittedFeedbackSentiment(this IState state, AssetReference asset, string generationUri)
+        {
+            if (generationUri == null)
+                return null;
+            var submittedFeedback = state.SelectGenerationResult(asset).submittedFeedback;
+            return submittedFeedback.TryGetValue(generationUri, out var sentiment) ? sentiment : null;
+        }
     }
 }

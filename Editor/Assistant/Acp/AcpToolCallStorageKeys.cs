@@ -11,5 +11,6 @@ namespace Unity.AI.Assistant.Editor.Acp
         public const string UnityPendingPermissionKey = "pendingPermission";
         public const string UnityPermissionResponseKey = "permissionResponse";
         public const string UnityIsReasoningKey = "isReasoning";
+        public const string UnityRawInputKey = "rawInput";
     }
 }

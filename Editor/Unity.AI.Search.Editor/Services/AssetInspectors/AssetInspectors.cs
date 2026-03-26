@@ -34,40 +34,40 @@ namespace Unity.AI.Search.Editor
             EditorApplication.update += OnEditorUpdate;
         }
 
-        public static Task<AssetObservation> ForTexture(Texture asset) =>
+        public static Task<PreviewAssetObservation> ForTexture(Texture asset) =>
             Enqueue(() => ForTextureInternal(asset));
 
-        static async Task<AssetObservation> ForTextureInternal(Texture asset)
+        static async Task<PreviewAssetObservation> ForTextureInternal(Texture asset)
         {
             var path = AssetDatabase.GetAssetPath(asset);
-            return new AssetObservation
+            return new PreviewAssetObservation
             {
                 assetGuid = AssetDatabase.AssetPathToGUID(path),
                 previews = new[] { await AssetInspectorUtils.GetPreviewFromTexture(asset) }
             };
         }
 
-        public static Task<AssetObservation> ForMaterial(Material asset) =>
+        public static Task<PreviewAssetObservation> ForMaterial(Material asset) =>
             Enqueue(() => ForMaterialInternal(asset));
 
-        static async Task<AssetObservation> ForMaterialInternal(Material asset)
+        static async Task<PreviewAssetObservation> ForMaterialInternal(Material asset)
         {
             var path = AssetDatabase.GetAssetPath(asset);
             var preview = await AssetInspectorUtils.GetPreview(asset);
-            return new AssetObservation
+            return new PreviewAssetObservation
             {
                 assetGuid = AssetDatabase.AssetPathToGUID(path),
                 previews = new[] { preview }
             };
         }
 
-        public static Task<AssetObservation> ForGameObjectViews(GameObject gameObject,
+        public static Task<PreviewAssetObservation> ForGameObjectViews(GameObject gameObject,
             GameObjectPreviewOptions options = null)
         {
             return Enqueue(() => ForGameObjectViewsInternal(gameObject, options));
         }
 
-        static async Task<AssetObservation> ForGameObjectViewsInternal(
+        static async Task<PreviewAssetObservation> ForGameObjectViewsInternal(
             GameObject gameObject,
             GameObjectPreviewOptions options = null)
         {
@@ -91,7 +91,7 @@ namespace Unity.AI.Search.Editor
                 var multiViews = await Task.FromResult(util.RenderViews(gameObject, options));
                 views.AddRange(multiViews);
 
-                return new AssetObservation
+                return new PreviewAssetObservation
                 {
                     assetGuid = assetGuid,
                     previews = views.ToArray(),

@@ -3,18 +3,16 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Unity.AI.Assistant.Utils;
+using Unity.AI.Search.Editor.Knowledge;
 using Unity.AI.Search.Editor.Services.Models;
 using UnityEditor;
+using UnityEngine;
 
 namespace Unity.AI.Search.Editor.Services
 {
     class SigLip2ModelService : IModelService
     {
-        enum QueryType
-        {
-            Image,
-            Text
-        }
+        public int SuggestedBatchSize => SigLip2.ModelInfo.suggestedBatchSize;
 
         record IndexedQuery(EmbeddingQuery query, int index);
 
@@ -32,7 +30,6 @@ namespace Unity.AI.Search.Editor.Services
             m_IsReady = ModelReadiness();
 
             AssemblyReloadEvents.beforeAssemblyReload += Dispose;
-
             EditorApplication.playModeStateChanged += OnPlaymodeChanged;
         }
 
@@ -49,12 +46,12 @@ namespace Unity.AI.Search.Editor.Services
             await m_IsReady;
 
 #if SENTIS_AVAILABLE
-            if (query.image != null)
-                return await m_Model.GetImageEmbeddings(query.image);
-            else if (!string.IsNullOrEmpty(query.text))
-                return await m_Model.GetTextEmbeddings(query.text);
+            if (query is ImageEmbeddingQuery imageEmbeddingQuery)
+                return await m_Model.GetImageEmbeddings(imageEmbeddingQuery.Image);
+            else if (query is TextEmbeddingQuery textEmbeddingQuery)
+                return await m_Model.GetTextEmbeddings(textEmbeddingQuery.Text);
             else
-                throw new ArgumentException("EmbeddingQuery must contain either an image or text");
+                throw new ArgumentException("EmbeddingQuery must be either ImageEmbeddingQuery or TextEmbeddingQuery");
 #else
             return null;
 #endif
@@ -64,17 +61,24 @@ namespace Unity.AI.Search.Editor.Services
         {
             await m_IsReady;
 
+            // create lookup of queries that keeps track of original indices
             var lookup = queries
                 .Select((q, i) => new IndexedQuery(q, i))
-                .ToLookup(item => ValidateQuery(item) ? QueryType.Image : QueryType.Text);
+                .ToLookup(item => item.query.GetType());
 
             var results = new float[queries.Length][];
 
 #if SENTIS_AVAILABLE
             var tasks = new[]
             {
-                ProcessQueryGroup(lookup[QueryType.Image], q => q.image, m_Model.GetImageEmbeddings, results),
-                ProcessQueryGroup(lookup[QueryType.Text], q => q.text, m_Model.GetTextEmbeddings, results)
+                ProcessQueryGroup<ImageEmbeddingQuery, Texture2D>(lookup[typeof(ImageEmbeddingQuery)],
+                    q => q.Image,
+                    m_Model.GetImageEmbeddings,
+                    results),
+                ProcessQueryGroup<TextEmbeddingQuery, string>(lookup[typeof(TextEmbeddingQuery)],
+                    q => q.Text,
+                    m_Model.GetTextEmbeddings,
+                    results)
             };
 #else
             var tasks = new Task[] { Task.CompletedTask };
@@ -92,25 +96,18 @@ namespace Unity.AI.Search.Editor.Services
 #endif
         }
 
-        static bool ValidateQuery(IndexedQuery item)
-        {
-            var hasImage = item.query.image != null;
-            var hasText = !string.IsNullOrEmpty(item.query.text);
-            if (hasImage && hasText || (!hasImage && !hasText))
-                throw new ArgumentException(
-                    $"Query {item.index}: must contain exactly one of image or text, not both.");
-            return hasImage;
-        }
-
-        async Task ProcessQueryGroup<T>(IEnumerable<IndexedQuery> group, Func<EmbeddingQuery, T> selector,
-            Func<T[], Task<float[][]>> processor, float[][] results)
+        async Task ProcessQueryGroup<TQuery, TInput>(
+            IEnumerable<IndexedQuery> group,
+            Func<TQuery, TInput> selector,
+            Func<TInput[], Task<float[][]>> processor,
+            float[][] results) where TQuery : EmbeddingQuery
         {
             await m_IsReady;
 
             var items = group.ToArray();
             if (items.Length == 0) return;
 
-            var inputs = items.Select(item => selector(item.query)).ToArray();
+            var inputs = items.Select(item => selector((TQuery)item.query)).ToArray();
             var embeddings = await processor(inputs);
 
             for (var i = 0; i < items.Length; i++)
@@ -150,13 +147,16 @@ namespace Unity.AI.Search.Editor.Services
 #if SENTIS_AVAILABLE
             try
             {
-                // First check if we can load without downloading
+                if (!AssetKnowledgeSettings.SearchEnabled)
+                    return false;
+                
+                // Check if we can load without downloading
                 if (m_Model.CanLoad())
                 {
                     await EnsureTagMatcherInitialized();
                     return m_Model != null;
                 }
-
+                
                 return false;
             }
             catch (Exception ex)

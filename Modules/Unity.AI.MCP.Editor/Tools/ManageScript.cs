@@ -10,6 +10,7 @@ using Unity.AI.MCP.Editor.Helpers;
 using Unity.AI.MCP.Editor.ToolRegistry;
 using Unity.AI.MCP.Editor.Constants;
 using Unity.AI.MCP.Editor.Settings;
+using Unity.AI.Toolkit;
 using System.Threading;
 using System.Security.Cryptography;
 
@@ -57,6 +58,8 @@ namespace Unity.AI.MCP.Editor.Tools
         /// Description of the Unity.ManageScript tool for MCP clients.
         /// Provides compatibility routing for legacy script operations with guidance to use newer tools.
         /// </summary>
+        public const string Title = "Manage C# scripts";
+
         public const string Description = @"Compatibility router for legacy script operations.
 
 IMPORTANT:
@@ -251,7 +254,7 @@ Returns:
         /// </summary>
         /// <param name="params">The JObject containing action and parameters for script operations.</param>
         /// <returns>A response object containing success status, message, and optional data.</returns>
-        [McpTool("Unity.ManageScript", Description, Groups = new string[] { "core", "scripting" })]
+        [McpTool("Unity.ManageScript", Description, Title, Groups = new string[] { "core", "scripting" })]
         public static object HandleCommand(JObject @params)
         {
             // Handle null parameters
@@ -2730,7 +2733,7 @@ static class RefreshDebounce
 
         // Kick off a ticking callback that waits until the window has elapsed
         // from the last request before performing the refresh.
-        EditorApplication.delayCall += () => Tick(window);
+        EditorTask.delayCall += () => Tick(window);
         // Nudge the editor loop so ticks run even if the window is unfocused
         EditorApplication.QueuePlayerLoopUpdate();
     }
@@ -2751,7 +2754,7 @@ static class RefreshDebounce
         if (!ready)
         {
             // Window has not yet elapsed; check again on the next editor tick.
-            EditorApplication.delayCall += () => Tick(window);
+            EditorTask.delayCall += () => Tick(window);
             return;
         }
 

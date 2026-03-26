@@ -13,6 +13,16 @@
     margin-bottom: 8px;
 }
 
+.gateway-traces-toggle {
+    margin-left: 0;
+    padding-left: 0;
+}
+
+.gateway-traces-toggle > .unity-label {
+    width: 150px;
+    min-width: 150px;
+}
+
 .gateway-settings-scroll {
     flex-grow: 1;
 }
@@ -161,9 +171,18 @@
     flex-grow: 0;
 }
 
+.gateway-env-var-buttons {
+    flex-direction: row;
+    align-items: center;
+    margin-top: 4px;
+}
+
 .gateway-add-button {
     align-self: flex-start;
-    margin-top: 4px;
+}
+
+.gateway-reset-button {
+    margin-left: 8px;
 }
 
 .gateway-settings-content .error-message {

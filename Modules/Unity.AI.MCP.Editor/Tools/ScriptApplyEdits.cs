@@ -22,6 +22,8 @@ namespace Unity.AI.MCP.Editor.Tools
         /// <summary>
         /// Description of the ScriptApplyEdits tool functionality and parameters.
         /// </summary>
+        public const string Title = "Apply structured C# edits";
+
         public const string Description = @"Structured C# edits (methods/classes) with safer boundaries - prefer this over raw text.
 
 Best practices:
@@ -109,7 +111,7 @@ Examples:
         /// </summary>
         /// <param name="parameters">The parameters specifying the script edits to apply.</param>
         /// <returns>A response object containing success status, message, and optional data.</returns>
-        [McpTool("Unity.ScriptApplyEdits", Description, Groups = new string[] { "core", "scripting" })]
+        [McpTool("Unity.ScriptApplyEdits", Description, Title, Groups = new string[] { "core", "scripting" })]
         public static object HandleCommand(ScriptApplyEditsParams parameters)
         {
             if (parameters == null)

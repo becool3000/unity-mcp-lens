@@ -26,6 +26,7 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components.ChatElements
         VisualElement m_StatusElement;
         LoadingSpinner m_LoadingSpinner;
         ScrollView m_ScrollView;
+        bool m_FoldoutEnabled;
 
         protected enum ToolCallState
         {
@@ -91,7 +92,7 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components.ChatElements
                     m_StatusElement.AddToClassList(k_StatusSuccessClassName);
                     m_StatusElement.AddToClassList(k_IconCheckmarkClassName);
 
-                    // Temporary tint workaround for the current UITK icon styling behavior.
+                    // This is temporary until this is fixed in UITK https://jira.unity3d.com/browse/UUM-108227
                     m_StatusElement.AddToClassList("mui-icon-tint-success");
                     break;
                 case ToolCallState.Failed:
@@ -101,7 +102,7 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components.ChatElements
                     m_StatusElement.AddToClassList(k_StatusFailedClassName);
                     m_StatusElement.AddToClassList(k_IconCloseClassName);
 
-                    // Temporary tint workaround for the current UITK icon styling behavior.
+                    // This is temporary until this is fixed in UITK https://jira.unity3d.com/browse/UUM-108227
                     m_StatusElement.AddToClassList("mui-icon-tint-error");
                     break;
                 default:
@@ -123,7 +124,10 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components.ChatElements
 
         protected void EnableFoldout()
         {
-            // Clicking on the header toggles the foldout
+            if (m_FoldoutEnabled)
+                return;
+
+            m_FoldoutEnabled = true;
             m_Header.RegisterCallback<MouseDownEvent>(ToggleFoldout);
         }
 

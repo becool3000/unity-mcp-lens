@@ -1,131 +1,48 @@
-﻿using System;
-using System.Collections.Generic;
+using System;
 using Unity.AI.Assistant.FunctionCalling;
-using Unity.AI.Assistant.Utils;
-using UnityEditor;
-using UnityEngine.Pool;
-using UnityEngine.UIElements;
+using Unity.AI.Assistant.UI.Editor.Scripts.Components.UserInteraction;
+using Unity.AI.Assistant.UI.Editor.Scripts.Data;
 
 namespace Unity.AI.Assistant.UI.Editor.Scripts.Components.ChatElements
 {
     class AssistantWindowUiContainer : IToolUiContainer, IDisposable
     {
-        class PendingInteraction
-        {
-            public ToolExecutionContext.CallInfo CallInfo;
-            public VisualElement VisualElement;
-            public bool IsPop;
+        readonly AssistantUIContext m_Context;
 
-            public PendingInteraction(ToolExecutionContext.CallInfo callInfo, VisualElement visualElement, bool isPop)
+        public AssistantWindowUiContainer(AssistantUIContext context)
+        {
+            m_Context = context;
+        }
+
+        public void PushElement<TOutput>(ToolExecutionContext.CallInfo callInfo, IInteractionSource<TOutput> userInteraction)
+        {
+            if (userInteraction is IUserInteraction interaction)
             {
-                CallInfo = callInfo;
-                VisualElement = visualElement;
-                IsPop = isPop;
-            }
-        }
+                var content = new ApprovalInteractionContent();
+                content.SetApprovalData(interaction.AllowLabel, interaction.DenyLabel, interaction.Respond, interaction.ShowScope);
 
-        AssistantView AssistantView { get; set; }
-
-        readonly List<PendingInteraction> m_PendingInteractions = new();
-        bool m_IsRegisteredForEvents;
-
-        public AssistantWindowUiContainer(AssistantView assistantView)
-        {
-            AssistantView = assistantView;
-            RegisterForEditorEvents();
-        }
-
-        void RegisterForEditorEvents()
-        {
-            if (m_IsRegisteredForEvents)
-                return;
-
-            EditorApplication.update += OnEditorUpdate;
-            m_IsRegisteredForEvents = true;
-        }
-
-        void UnregisterFromEditorEvents()
-        {
-            if (!m_IsRegisteredForEvents)
-                return;
-
-            EditorApplication.update -= OnEditorUpdate;
-            m_IsRegisteredForEvents = false;
-        }
-
-        void OnEditorUpdate()
-        {
-            ProcessPendingInteractions();
-        }
-
-        void ProcessPendingInteractions()
-        {
-            if (m_PendingInteractions.Count == 0)
-                return;
-
-            if (AssistantView == null)
-            {
-                InternalLog.LogWarning($"{nameof(AssistantWindowUiContainer)}: AssistantView is null, cannot process pending interactions");
-                return;
-            }
-
-            using var toRemovePooled = ListPool<PendingInteraction>.Get(out var toRemove);
-            foreach (var pendingInteraction in m_PendingInteractions)
-            {
-                if (pendingInteraction.IsPop)
+                var entry = new UserInteractionEntry
                 {
-                    if (AssistantView.TryPopInteraction(pendingInteraction.CallInfo, pendingInteraction.VisualElement))
-                        toRemove.Add(pendingInteraction);
-                }
-                else
-                {
-                    if (AssistantView.TryPushInteraction(pendingInteraction.CallInfo, pendingInteraction.VisualElement))
-                        toRemove.Add(pendingInteraction);
-                }
-            }
+                    Title = interaction.Action,
+                    Detail = interaction.Detail,
+                    ContentView = content,
+                    OnCancel = userInteraction.CancelInteraction
+                };
 
-            foreach (var pendingInteraction in toRemove)
-            {
-                m_PendingInteractions.Remove(pendingInteraction);
+                m_Context.InteractionQueue.Enqueue(entry);
             }
         }
 
-        public void PushElement<TOutput>(ToolExecutionContext.CallInfo callInfo, IUserInteraction<TOutput> userInteraction)
+        public void PopElement<TOutput>(ToolExecutionContext.CallInfo callInfo, IInteractionSource<TOutput> userInteraction)
         {
-            if (userInteraction == null)
-                return;
-
-            var visualElement = userInteraction as VisualElement;
-            if (visualElement == null)
-                throw new ArgumentException("userInteraction must be of type VisualElement");
-
-            if (AssistantView == null)
-                throw new InvalidOperationException("Invalid UI context. No AssistantView found.");
-
-            m_PendingInteractions.Add(new PendingInteraction(callInfo, visualElement, false));
-            ProcessPendingInteractions();
-        }
-
-        public void PopElement<TOutput>(ToolExecutionContext.CallInfo callInfo, IUserInteraction<TOutput> userInteraction)
-        {
-            if (userInteraction == null)
-                return;
-
-            var visualElement = userInteraction as VisualElement;
-            if (visualElement == null)
-                throw new ArgumentException("userInteraction must be of type VisualElement");
-
-            if (AssistantView == null)
-                throw new InvalidOperationException("Invalid UI context. No AssistantView found.");
-
-            m_PendingInteractions.Add(new PendingInteraction(callInfo, visualElement, true));
-            ProcessPendingInteractions();
+            // No-op: the queue auto-advances when an entry is completed or cancelled.
+            // The PopElement call happens after WaitForUser completes, at which point
+            // the entry has already been removed from the queue.
         }
 
         public void Dispose()
         {
-            UnregisterFromEditorEvents();
-            m_PendingInteractions.Clear();
+            m_Context.InteractionQueue.CancelAll();
         }
 
         ~AssistantWindowUiContainer()

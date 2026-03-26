@@ -21,13 +21,8 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts
         internal const string AssetFolder = "Assets/";
         internal const string ViewFolder = "Views/";
         internal const string StyleFolder = "Styles/";
-        internal const string VideosFolder = "Videos/";
-
         internal const string UIModulePath = BasePath + UIEditorPath;
         internal const string UIStylePath = UIModulePath + StyleFolder;
-
-        internal const string VideoPath = UIModulePath + AssetFolder + VideosFolder;
-        internal const string VideoExtension = ".webm";
 
         internal const string AssistantBaseStyle = "Assistant.tss";
         internal const string AssistantSharedStyleDark = "AssistantSharedDark";
@@ -44,9 +39,11 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts
         internal const string CodeLineDefaultColor = "#606060" + CodeLineColorTransparency;
 
         internal const string FeedbackButtonDefaultTitle = "Send";
-        internal const string FeedbackButtonSentTitle = "Feedback sent";
         internal const string FeedbackDownVotePlaceholder = "Tell us what went wrong";
         internal const string FeedbackUpVotePlaceholder = "Tell us what went well";
+        internal const string FeedbackCommentSentMessage = "Thank you for sending your feedback.";
+        internal const string FeedbackSendAnotherCommentTitle = "Send another comment";
+        internal const string FeedbackSendFailedMessage = "Feedback failed to send. Try again.";
 
         internal const float UIAnalyticsDebounceInterval = 0.5f;
     }

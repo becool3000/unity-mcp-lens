@@ -17,7 +17,7 @@ namespace Unity.AI.MCP.Editor.Settings
         /// <summary>
         /// EditorPrefs key for storing MCP project settings.
         /// </summary>
-        public const string prefProjectSettings = "Unity.AI.MCP.ProjectSettings";
+        public const string prefProjectSettings = "Unity.AI.MCP.ProjectSettings.v2";
 
         // Unity Paths and Namespaces
         /// <summary>

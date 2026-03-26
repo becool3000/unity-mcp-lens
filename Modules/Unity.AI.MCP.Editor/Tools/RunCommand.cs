@@ -6,6 +6,7 @@ using Unity.AI.MCP.Editor.ToolRegistry;
 using Unity.AI.MCP.Editor.Tools.Parameters;
 using Unity.AI.Assistant.Editor.Backend.Socket.Tools;
 using Unity.AI.Assistant.FunctionCalling;
+using Unity.AI.Assistant.Tools.Editor;
 using UnityEditor;
 
 namespace Unity.AI.MCP.Editor.Tools
@@ -223,13 +224,12 @@ internal class CommandScript : IRunCommand
                     parameters?.Title);
 
                 // Return combined result
-                failureStage = executionResult.FailureStage;
-                exceptionType = executionResult.ExceptionType;
-                exceptionMessage = executionResult.ExceptionMessage;
-                var resultMessage = executionResult.ResultMessage ?? (
-                    executionResult.IsExecutionSuccessful
-                        ? "Command executed successfully."
-                        : "Command execution failed.");
+                failureStage = executionResult.IsExecutionSuccessful ? null : "execution";
+                exceptionType = null;
+                exceptionMessage = null;
+                var resultMessage = executionResult.IsExecutionSuccessful
+                    ? "Command executed successfully."
+                    : "Command execution failed.";
 
                 responseSuccess = executionResult.IsExecutionSuccessful;
                 responseMessage = resultMessage;
@@ -240,7 +240,7 @@ internal class CommandScript : IRunCommand
                     executionId = executionResult.ExecutionId,
                     compilationLogs = validationResult.CompilationLogs,
                     executionLogs = executionResult.ExecutionLogs,
-                    consoleLogs = executionResult.ConsoleLogs,
+                    consoleLogs = string.Empty,
                     localFixedCode = validationResult.LocalFixedCode,
                     result = resultMessage,
                     failureStage,
@@ -267,7 +267,7 @@ internal class CommandScript : IRunCommand
                     executionId = executionResult.ExecutionId,
                     compilationLogs = validationCompleted ? validationResult.CompilationLogs : string.Empty,
                     executionLogs = executionResult.ExecutionLogs ?? string.Empty,
-                    consoleLogs = executionResult.ConsoleLogs ?? string.Empty,
+                    consoleLogs = string.Empty,
                     localFixedCode = validationCompleted ? validationResult.LocalFixedCode : string.Empty,
                     result = responseMessage,
                     failureStage,

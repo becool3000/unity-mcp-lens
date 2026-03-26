@@ -45,6 +45,9 @@ namespace Unity.AI.Assistant.Bridge.Editor
         static int s_WarningModeFlags;
         static bool s_Initialized;
 
+        // Reusable buffer passed to GetSelectedConsoleLogs/GetConsoleLogs for count-only calls to avoid per-call list allocations.
+        static readonly List<LogData> s_ReusableResultslist = new();
+
         static void EnsureInitialized()
         {
             if (s_Initialized) return;
@@ -238,6 +241,7 @@ namespace Unity.AI.Assistant.Bridge.Editor
         internal static void GetConsoleLogs(List<LogData> results, string searchFilter = null,
             bool? includeLog = null, bool? includeWarning = null, bool? includeError = null)
         {
+            EnsureInitialized();
             results.Clear();
 
             bool hadLog = false, hadWarning = false, hadError = false;

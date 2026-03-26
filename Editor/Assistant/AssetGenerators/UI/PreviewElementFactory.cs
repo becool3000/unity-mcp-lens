@@ -1,6 +1,7 @@
 ﻿#define AI_GENERATORS_SHOW_DISCLAIMER
 using System;
 using Unity.AI.Assistant.UI.Editor.Scripts.Utils;
+using Unity.AI.Toolkit;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.UIElements;
@@ -24,7 +25,7 @@ namespace Unity.AI.Assistant.UI.Editor
             thisElement.RegisterCallback<ClickEvent>(_ =>
             {
                 // Defer ping after import to avoid conflicts with rapid asset switching
-                EditorApplication.delayCall += () =>
+                EditorTask.delayCall += () =>
                 {
                     if (assetObject != null)
                         EditorGUIUtility.PingObject(assetObject);
@@ -57,7 +58,7 @@ namespace Unity.AI.Assistant.UI.Editor
             button.AddToClassList("mui-action-button");
             button.Q<Label>()?.AddToClassList("mui-action-button-label");
 
-            var buttonImage = button.Q<UnityEngine.UIElements.Image>();
+            var buttonImage = button.Q<Image>();
             if (buttonImage != null)
             {
                 button.SetupImage("open-generator-window-image", "arrow-square-in");

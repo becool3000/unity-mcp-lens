@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Unity.AI.Assistant.FunctionCalling;
 using Unity.AI.Generators.Tools;
+using Unity.AI.Toolkit;
 using UnityEditor;
 using UnityEngine;
 using Object = UnityEngine.Object;
@@ -313,7 +314,7 @@ namespace Unity.AI.Assistant.Editor.Backend.Socket.Tools
                     {
                         if (string.IsNullOrEmpty(prompt)) throw new ArgumentException(Constants.PromptRequired);
                         assetType = AssetTypes.Sprite;
-                        var settings = new SpriteSettings { RemoveBackground = true, Width = width, Height = height };
+                        var settings = new SpriteSettings { RemoveBackground = false, Width = width, Height = height };
                         if (referenceImage)
                         {
                             if (referenceImage is not Texture2D) throw new ArgumentException("ReferenceImage is not a valid Texture2D.");
@@ -408,7 +409,7 @@ namespace Unity.AI.Assistant.Editor.Backend.Socket.Tools
 
                         var settings = new SpriteSettings
                         {
-                            RemoveBackground = true,
+                            RemoveBackground = false,
                             Width = width,
                             Height = height,
                             ImageReferences = new[] { new ObjectReference { Image = imageReference } }
@@ -558,7 +559,7 @@ namespace Unity.AI.Assistant.Editor.Backend.Socket.Tools
                 }
 
                 // Defer ping after import to avoid conflicts with rapid asset switching
-                EditorApplication.delayCall += () =>
+                EditorTask.delayCall += () =>
                 {
                     if (finalAsset != null)
                         EditorGUIUtility.PingObject(finalAsset);

@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using Unity.AI.Assistant.Editor;
-using Unity.AI.Assistant.FunctionCalling;
 using Unity.AI.Assistant.UI.Editor.Scripts.Data.MessageBlocks;
 using Unity.AI.Assistant.UI.Editor.Scripts.Utils;
 using UnityEngine.UIElements;
@@ -95,6 +94,10 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components.ChatElements
                             BreakReasoningSequence();
                         break;
                     }
+                    case AcpToolCallBlockModel acpToolCallModel when acpToolCallModel.IsReasoning:
+                        AddOrUpdateAcpToolCall(acpToolCallModel, ref sequenceIndex);
+                        continue;
+                    case AcpToolCallBlockModel:
                     case AnswerBlockModel:
                     case ErrorBlockModel:
                     case AcpPlanBlockModel:
@@ -190,6 +193,18 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components.ChatElements
                 existingBlock.SetBlockModel(functionCallModel);
             else
                 m_CurrentReasoningSequence.AddFunctionCall(functionCallModel);
+        }
+
+        void AddOrUpdateAcpToolCall(AcpToolCallBlockModel acpToolCallModel, ref int sequenceIndex)
+        {
+            EnsureReasoningSequence(ref sequenceIndex);
+
+            var toolCallId = acpToolCallModel.ToolCallId;
+            var existingBlock = m_CurrentReasoningSequence.GetAcpToolCall(toolCallId);
+            if (existingBlock != null)
+                existingBlock.SetBlockModel(acpToolCallModel);
+            else
+                m_CurrentReasoningSequence.AddAcpToolCall(acpToolCallModel);
         }
 
         void EnsureReasoningSequence(ref int sequenceIndex)
@@ -292,57 +307,5 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components.ChatElements
                 DisplayReasoning(false);
         }
 
-        public bool TryPushInteraction(ToolExecutionContext.CallInfo callInfo, VisualElement userInteraction)
-        {
-            // Search emphasized function call blocks
-            for (var i = m_Blocks.Count - 1; i >= 0; i--)
-            {
-                if (m_Blocks[i] is not ChatElementBlockFunctionCall elementBlock)
-                    continue;
-
-                if (elementBlock.IsDone)
-                    continue;
-
-                if (callInfo.CallId != elementBlock.CallId)
-                    continue;
-
-                elementBlock.PushInteraction(userInteraction);
-                return true;
-            }
-
-            // Search non-emphasized function call blocks in reasoning sequences
-            for (var i = m_ReasoningSequences.Count - 1; i >= 0; i--)
-            {
-                if (m_ReasoningSequences[i].TryPushInteraction(callInfo.CallId, userInteraction))
-                    return true;
-            }
-
-            return false;
-        }
-
-        public bool TryPopInteraction(ToolExecutionContext.CallInfo callInfo, VisualElement userInteraction)
-        {
-            // Search emphasized function call blocks
-            for (var i = m_Blocks.Count - 1; i >= 0; i--)
-            {
-                if (m_Blocks[i] is not ChatElementBlockFunctionCall elementBlock)
-                    continue;
-
-                if (callInfo.CallId != elementBlock.CallId)
-                    continue;
-
-                elementBlock.PopInteraction(userInteraction);
-                return true;
-            }
-
-            // Search non-emphasized function call blocks in reasoning sequences
-            for (var i = m_ReasoningSequences.Count - 1; i >= 0; i--)
-            {
-                if (m_ReasoningSequences[i].TryPopInteraction(callInfo.CallId, userInteraction))
-                    return true;
-            }
-
-            return false;
-        }
     }
 }

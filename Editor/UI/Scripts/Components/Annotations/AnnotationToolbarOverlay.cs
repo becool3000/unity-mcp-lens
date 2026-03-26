@@ -3,6 +3,7 @@ using UnityEditor.Overlays;
 using UnityEngine;
 using UnityEngine.UIElements;
 using Unity.AI.Assistant.Utils;
+using Unity.AI.Toolkit;
 
 namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
 {
@@ -646,9 +647,9 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
             {
                 // Delay the refresh to ensure domain reload is complete
                 // Use multiple delays to ensure all cleanup is done
-                EditorApplication.delayCall += () =>
+                EditorTask.delayCall += () =>
                 {
-                    EditorApplication.delayCall += RefreshButtonTextures;
+                    EditorTask.delayCall += RefreshButtonTextures;
                 };
             }
         }

@@ -31,14 +31,15 @@ Unity MCP supports four registration approaches.
 The simplest approach. Define a static method with the `[McpTool]` attribute and a typed parameter class:
 
 ```csharp
-using Unity.AI.MCP.Editor.ToolRegistry;
-
 [McpTool("my_tool", "Description of what this tool does")]
 public static object MyTool(MyParameters parameters)
 {
     return new { success = true, message = $"Processed {parameters.Action} for {parameters.Name}" };
 }
+```
 
+You can improve the schema description further by using the `[McpDescription]` attribute.
+```csharp
 public class MyParameters
 {
     [McpDescription("Action to perform", Required = true, EnumType = typeof(ActionType))]

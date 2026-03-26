@@ -5,7 +5,10 @@
 
         <ui:Foldout text="Environment Variables" name="env-vars-foldout" value="true" class="gateway-env-vars-foldout">
             <ui:VisualElement name="env-vars-container" class="gateway-env-vars-container" />
-            <ui:Button name="add-env-var-button" text="+ Add Variable" class="gateway-add-button" />
+            <ui:VisualElement class="gateway-env-var-buttons">
+                <ui:Button name="add-env-var-button" text="+ Add Variable" class="gateway-add-button" />
+                <ui:Button name="reset-env-var-button" text="Reset to System" class="gateway-reset-button" />
+            </ui:VisualElement>
         </ui:Foldout>
     </ui:VisualElement>
 </ui:UXML>

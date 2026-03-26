@@ -28,27 +28,24 @@ namespace Unity.Relay.Editor
         /// </summary>
         /// <param name="agentType">The agent type (e.g., "gemini").</param>
         /// <param name="name">The credential name (e.g., "GEMINI_API_KEY").</param>
-        /// <returns>The credential value, or null on failure.</returns>
-        public async Task<string> RevealAsync(string agentType, string name)
+        /// <returns>The relay response containing Success, Value, and Error fields.</returns>
+        public async Task<CredentialRevealResponse> RevealAsync(string agentType, string name)
         {
             try
             {
-                var response = await RelayService.Instance.Bus.CallAsync(
+                return await RelayService.Instance.Bus.CallAsync(
                     RelayChannels.CredentialReveal,
                     new CredentialRevealRequest(agentType, name),
                     Timeout.Infinite);
-
-                return response is { Success: true } ? response.Value : null;
             }
             catch (Exception ex) when (ex is RelayDisconnectedException or OperationCanceledException)
             {
-                // Relay not connected or disconnected while waiting
-                return null;
+                return new CredentialRevealResponse(false, Error: "Relay disconnected");
             }
             catch (Exception ex)
             {
                 InternalLog.LogError($"[CredentialClient] Error revealing credential: {ex.Message}");
-                return null;
+                return new CredentialRevealResponse(false, Error: ex.Message);
             }
         }
     }

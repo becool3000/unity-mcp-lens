@@ -46,5 +46,8 @@ namespace Unity.Relay.Editor.Acp
         // Error Codes (from relay credential failures)
         public const string ErrorCode_CredentialAccessFailed = "credential_access_failed";
         public const string ErrorCode_CredentialNotFound = "credential_not_found";
+
+        // Error Codes (relay connection)
+        public const string ErrorCode_RelayDisconnected = "relay_disconnected";
     }
 }

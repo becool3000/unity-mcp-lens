@@ -19,6 +19,8 @@ namespace Unity.AI.MCP.Editor.Tools
         /// <summary>
         /// Human-readable description of the Unity.ApplyTextEdits tool functionality and usage guidelines.
         /// </summary>
+        public const string Title = "Apply text edits to a file";
+
         public const string Description = @"Apply small text edits to a C# script identified by URI.
 
 ⚠️ IMPORTANT: This tool replaces EXACT character positions. Always verify content at target lines/columns BEFORE editing!
@@ -83,7 +85,7 @@ Notes:
         /// </summary>
         /// <param name="parameters">Parameters containing the URI, edits array, optional precondition SHA, and options</param>
         /// <returns>A response object indicating success or failure with detailed results including normalized edits and any warnings</returns>
-        [McpTool("Unity.ApplyTextEdits", Description, Groups = new string[] { "core", "scripting" })]
+        [McpTool("Unity.ApplyTextEdits", Description, Title, Groups = new string[] { "core", "scripting" })]
         public static object HandleCommand(ApplyTextEditsParams parameters)
         {
             string uri = parameters?.Uri;

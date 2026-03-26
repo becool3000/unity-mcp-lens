@@ -85,7 +85,7 @@
 #chatContentRoot {
     background-color: var(--muse-chat-backgrounds-150);
     flex-grow: 1;
-    min-height: 150px;
+    min-height: 0;
 }
 
 #historyPanelRoot {
@@ -122,23 +122,24 @@
     left: 0;
     right: 0;
     bottom: 0;
-    justify-content: center;
-    align-items: center;
+    flex-direction: column;
+    overflow: hidden;
 }
 
-.mui-chat-whats-new-button {
-    position: absolute;
-    top: 8px;
-    background-color: rgba(0,0,0,0);
-    min-height: 24px;
-    border-width: 0;
-}
-
-.mui-chat-whats-new-button:hover {
-    background-color: var(--muse-chat-backgrounds-75);
+#whatsNewBannerRoot {
+    max-width: 768px;
+    width: 100%;
+    align-self: center;
+    margin-top: 16px;
+    margin-bottom: 8px;
+    padding: 0 16px;
 }
 
 .mui-chat-disclaimer {
+    flex-grow: 1;
+    align-self: center;
+    min-height: 0;
+    overflow: hidden;
     display: flex;
     justify-content: center;
     align-items: center;
@@ -358,6 +359,22 @@ Button.banner-right-action {
 
 #openSearchButton {
     margin-right: 4px;
+}
+
+#expandedPanelBackButton {
+    display: none;
+}
+
+.mui-expanded-panel-active #newChatButton,
+.mui-expanded-panel-active #historyButton,
+.mui-expanded-panel-active #openSearchButton,
+.mui-expanded-panel-active #progressElementContainer,
+.mui-expanded-panel-active .mui-footer {
+    display: none;
+}
+
+.mui-expanded-panel-active #expandedPanelBackButton {
+    display: flex;
 }
 
 .mui-search-open {

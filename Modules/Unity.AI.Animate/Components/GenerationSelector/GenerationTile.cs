@@ -14,6 +14,7 @@ using Unity.AI.Generators.Contexts;
 using Unity.AI.Generators.IO.Utilities;
 using Unity.AI.Generators.Redux.Thunks;
 using Unity.AI.Generators.UI;
+using Unity.AI.Generators.UI.Actions;
 using Unity.AI.Generators.UI.Payloads;
 using Unity.AI.Generators.UI.Utilities;
 using Unity.AI.Generators.UIElements.Extensions;
@@ -51,6 +52,7 @@ namespace Unity.AI.Animate.Components
         readonly Label m_Label;
         readonly Label m_Type;
         GenerationMetadata m_Metadata;
+        readonly GenerationFeedbackManipulator m_FeedbackManipulator;
 
         public GenerationTile()
         {
@@ -83,6 +85,16 @@ namespace Unity.AI.Animate.Components
 
             progress = this.Q<VisualElement>("progress");
             progress.AddManipulator(m_SpinnerManipulator = new SpinnerManipulator());
+
+            // Initialize feedback manipulator
+            m_FeedbackManipulator = new GenerationFeedbackManipulator(
+                FeedbackActions.AnimateGenerationDialogType,
+                () => animationClipResult?.uri,
+                this.GetAsset,
+                this.GetStoreApi,
+                () => this.GetState()?.SelectSubmittedFeedbackSentiment(this.GetAsset(), animationClipResult?.uri?.AbsoluteUri),
+                () => animationClipResult != null && animationClipResult is not AnimationClipSkeleton && !animationClipResult.IsFailed());
+            this.AddManipulator(m_FeedbackManipulator);
 
             this.AddManipulator(new DelayedCleanupManipulator(() =>
             {

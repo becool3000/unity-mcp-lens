@@ -7,7 +7,7 @@ namespace Unity.AI.Search.Editor.Utilities
     {
         public static async Task<bool> IsReadyAsync()
         {
-            return await ModelService.Default.IsReadyAsync();
+            return await ModelService.ImageAndTextModel.IsReadyAsync();
         }
 
         public static async Task WaitForReadinessAsync()

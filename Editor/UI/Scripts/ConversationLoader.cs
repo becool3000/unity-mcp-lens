@@ -118,7 +118,7 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts
             {
                 AddConversationInfo(
                     conversationInfo.Id,
-                    AssistantProviderFactory.UnityProviderId,
+                    AssistantProviderFactory.DefaultProvider.ProfileId,
                     conversationInfo.Title,
                     conversationInfo.LastMessageTimestamp,
                     conversationInfo.IsFavorite);

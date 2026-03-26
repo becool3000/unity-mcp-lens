@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Generic;
 using System.Threading;
 using Unity.AI.Assistant.ApplicationModels;
@@ -20,8 +19,15 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
     partial class ChatElementFeedback : ManagedTemplate
     {
         const string k_FeedbackButtonActiveClass = "mui-feedback-button-active";
+        const string k_FeedbackStatusSuccessClass = "mui-feedback-status-success";
+        const string k_FeedbackStatusErrorClass = "mui-feedback-status-error";
+        const string k_FeedbackStatusCheckmarkClass = "mui-icon-feedback-checkmark";
+        const string k_FeedbackStatusErrorIconClass = "mui-icon-feedback-error";
+        const string k_FeedbackStatusRowClass = "mui-feedback-status-row";
+        const string k_FeedbackStatusIconClass = "mui-feedback-status-icon";
+        const string k_FeedbackStatusTextClass = "mui-feedback-status-text";
+        const string k_FeedbackStatusActionClass = "mui-feedback-status-action";
 
-        CancellationTokenSource m_FeedbackSendButtonTokenSource;
         CancellationTokenSource m_ResponseCopyButtonActiveTokenSource;
 
         VisualElement m_OptionsSection;
@@ -44,6 +50,10 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
         AssistantImage m_FeedbackSendButtonImage;
 
         Foldout m_FeedbackCommentFoldout;
+        VisualElement m_FeedbackStatusRow;
+        Image m_FeedbackStatusIcon;
+        Label m_FeedbackStatusText;
+        Button m_FeedbackStatusAction;
 
         FeedbackEditMode m_FeedbackMode = FeedbackEditMode.None;
 
@@ -57,6 +67,8 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
         MessageModel m_Message;
 
         private bool m_MessageCostRequested;
+        bool m_IsCommentSendPending;
+        AssistantMessageId m_PendingCommentMessageId;
 
         enum FeedbackEditMode
         {
@@ -88,8 +100,20 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
             SetupFeedbackParameters();
         }
 
+        void OnAttachToPanel(AttachToPanelEvent evt)
+        {
+            Context.API.FeedbackSent -= OnFeedbackSent;
+            Context.API.FeedbackSent += OnFeedbackSent;
+        }
+
+        void OnDetachFromPanel(DetachFromPanelEvent evt)
+        {
+            DisposeFeedbackResources();
+        }
+
         public void SetData(MessageModel message)
         {
+            var previousMessageId = m_MessageId;
             m_MessageId = message.Id;
             m_Message = message;
 
@@ -97,7 +121,16 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
 
             m_FeedbackMode = FeedbackEditMode.None;
 
+            // Preserve pending send state when this same message is rebound,
+            // otherwise the completion event can be ignored and the send button stays disabled.
+            if (previousMessageId != message.Id)
+            {
+                m_IsCommentSendPending = false;
+                m_PendingCommentMessageId = AssistantMessageId.Invalid;
+            }
+
             RefreshFeedbackParameters();
+            ClearFeedbackStatus();
 
             if (message.Feedback != null)
             {
@@ -172,8 +205,35 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
             });
 
             m_FeedbackPlaceholderContent.RegisterCallback<ClickEvent>(_ => m_FeedbackText.Focus());
+            RegisterAttachEvents(OnAttachToPanel, OnDetachFromPanel);
 
             CheckFeedbackState();
+        }
+
+        void EnsureFeedbackStatusUI()
+        {
+            if (m_FeedbackStatusRow != null)
+                return;
+
+            m_FeedbackStatusRow = new VisualElement { name = "feedbackStatusRow" };
+            m_FeedbackStatusRow.AddToClassList(k_FeedbackStatusRowClass);
+            m_FeedbackStatusRow.SetDisplay(false);
+
+            m_FeedbackStatusIcon = new Image { name = "feedbackStatusIcon" };
+            m_FeedbackStatusIcon.AddToClassList(k_FeedbackStatusIconClass);
+
+            m_FeedbackStatusText = new Label { name = "feedbackStatusText" };
+            m_FeedbackStatusText.AddToClassList(k_FeedbackStatusTextClass);
+
+            m_FeedbackStatusAction = new Button { name = "feedbackStatusAction", text = AssistantUIConstants.FeedbackSendAnotherCommentTitle };
+            m_FeedbackStatusAction.AddToClassList(k_FeedbackStatusActionClass);
+            m_FeedbackStatusAction.RegisterCallback<PointerUpEvent>(OnSendAnotherComment);
+            m_FeedbackStatusAction.SetDisplay(false);
+
+            m_FeedbackStatusRow.Add(m_FeedbackStatusIcon);
+            m_FeedbackStatusRow.Add(m_FeedbackStatusText);
+            m_FeedbackStatusRow.Add(m_FeedbackStatusAction);
+            m_FeedbackParamSection.Add(m_FeedbackStatusRow);
         }
 
         void SetFeedbackTextFocused(bool state)
@@ -185,12 +245,15 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
 
         void CheckFeedbackState()
         {
-            m_FeedbackSendButton.SetEnabled(!string.IsNullOrEmpty(m_FeedbackText.value));
+            m_FeedbackSendButton.SetEnabled(!m_IsCommentSendPending && !string.IsNullOrEmpty(m_FeedbackText.value));
             m_FeedbackPlaceholderContent.SetDisplay(!m_FeedbackTextFocused && string.IsNullOrEmpty(m_FeedbackText.value));
         }
 
         void OnSendFeedback(PointerUpEvent evt)
         {
+            if (m_IsCommentSendPending)
+                return;
+
             if (string.IsNullOrEmpty(m_FeedbackText.value))
             {
                 ErrorHandlingUtils.ShowGeneralError($"Failed to send Feedback: 'your feedback' section is empty");
@@ -210,32 +273,11 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
                 message += " (Message was flagged as inappropriate.)";
             }
 
+            m_FeedbackSendButton.SetEnabled(false);
+            ClearFeedbackStatus();
+            m_IsCommentSendPending = true;
+            m_PendingCommentMessageId = m_MessageId;
             Context.API.SendFeedback(m_MessageId, m_FeedbackFlagInappropriateCheckbox.value, message, m_FeedbackMode == FeedbackEditMode.UpVote);
-
-            if (k_StoredFeedbackUIState.TryGetValue(m_Message.Id, out var feedbackData))
-            {
-                // Null is intentional since we clear the sent text at this point
-                var newFeedbackData = new FeedbackData(feedbackData.Sentiment, null);
-                StoreFeedbackUIState(m_Message.Id, newFeedbackData);
-            }
-
-            m_FeedbackSendButton.EnableInClassList(AssistantUIConstants.ActiveActionButtonClass, true);
-            m_FeedbackSendButtonLabel.text = AssistantUIConstants.FeedbackButtonSentTitle;
-            m_FeedbackSendButtonImage.SetDisplay(true);
-
-            ClearFeedbackParameters();
-
-            TimerUtils.DelayedAction(ref m_FeedbackSendButtonTokenSource, () =>
-            {
-                m_FeedbackSendButton.EnableInClassList(AssistantUIConstants.ActiveActionButtonClass, false);
-                m_FeedbackSendButtonLabel.text = AssistantUIConstants.FeedbackButtonDefaultTitle;
-
-                m_FeedbackSendButtonImage.SetDisplay(false);
-
-                m_FeedbackCommentFoldout.value = false;
-                m_FeedbackText.value = string.Empty;
-                RefreshFeedbackParameters();
-            });
         }
 
         void ClearFeedbackParameters()
@@ -252,6 +294,7 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
                 return;
             }
 
+            ClearFeedbackStatus();
             m_FeedbackPlaceholder.text = AssistantUIConstants.FeedbackDownVotePlaceholder;
 
             Context.API.SendFeedback(m_MessageId, m_FeedbackFlagInappropriateCheckbox.value, string.Empty, false);
@@ -270,6 +313,7 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
                 return;
             }
 
+            ClearFeedbackStatus();
             m_FeedbackPlaceholder.text = AssistantUIConstants.FeedbackUpVotePlaceholder;
 
             Context.API.SendFeedback(m_MessageId, false, string.Empty, true);
@@ -321,6 +365,7 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
                 m_UpVoteButton.SetEnabled(false);
                 m_DownVoteButton.SetEnabled(false);
                 m_FeedbackParamSection.style.display = DisplayStyle.None;
+                ClearFeedbackStatus();
                 return;
             }
 
@@ -335,6 +380,7 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
                     m_FeedbackParamSection.style.display = DisplayStyle.None;
                     m_UpVoteButton.RemoveFromClassList(k_FeedbackButtonActiveClass);
                     m_DownVoteButton.RemoveFromClassList(k_FeedbackButtonActiveClass);
+                    ClearFeedbackStatus();
                     return;
                 }
 
@@ -344,6 +390,7 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
                     m_FeedbackFlagInappropriateCheckbox.style.display = DisplayStyle.Flex;
                     m_UpVoteButton.RemoveFromClassList(k_FeedbackButtonActiveClass);
                     m_DownVoteButton.AddToClassList(k_FeedbackButtonActiveClass);
+                    m_FeedbackCommentFoldout.SetDisplay(true);
 
                     if (!initialLoadedState)
                         Context.SendScrollToEndRequest();
@@ -357,6 +404,7 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
                     m_FeedbackFlagInappropriateCheckbox.style.display = DisplayStyle.None;
                     m_UpVoteButton.AddToClassList(k_FeedbackButtonActiveClass);
                     m_DownVoteButton.RemoveFromClassList(k_FeedbackButtonActiveClass);
+                    m_FeedbackCommentFoldout.SetDisplay(true);
 
                     if (!initialLoadedState)
                         Context.SendScrollToEndRequest();
@@ -386,8 +434,104 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
             }
 
             m_FeedbackText.value = string.Empty;
+            ClearFeedbackStatus();
 
             RefreshFeedbackParameters(true);
+        }
+
+        void OnSendAnotherComment(PointerUpEvent evt)
+        {
+            if (m_FeedbackCommentFoldout == null || m_FeedbackText == null) return;
+
+            ClearFeedbackStatus();
+            m_FeedbackCommentFoldout.SetDisplay(true);
+            m_FeedbackCommentFoldout.value = true;
+            m_FeedbackText.value = string.Empty;
+            m_FeedbackText.Focus();
+            CheckFeedbackState();
+            Context.SendScrollToEndRequest();
+        }
+
+        void OnFeedbackSent(AssistantMessageId messageId, bool success)
+        {
+            if (!m_IsCommentSendPending || messageId != m_PendingCommentMessageId)
+                return;
+
+            if (panel == null)
+                return;
+
+            m_IsCommentSendPending = false;
+            m_PendingCommentMessageId = AssistantMessageId.Invalid;
+
+            if (!success)
+            {
+                UpdateFeedbackStatus(false);
+                CheckFeedbackState();
+                return;
+            }
+
+            if (k_StoredFeedbackUIState.TryGetValue(m_Message.Id, out var feedbackData))
+            {
+                // Null is intentional since we clear the sent text at this point
+                var newFeedbackData = new FeedbackData(feedbackData.Sentiment, null);
+                StoreFeedbackUIState(m_Message.Id, newFeedbackData);
+            }
+
+            ClearFeedbackParameters();
+
+            m_FeedbackSendButtonLabel.text = AssistantUIConstants.FeedbackButtonDefaultTitle;
+            m_FeedbackSendButtonImage.SetDisplay(false);
+
+            UpdateFeedbackStatus(true);
+        }
+
+        void UpdateFeedbackStatus(bool isSuccess)
+        {
+            EnsureFeedbackStatusUI();
+            if (m_FeedbackStatusRow == null) return;
+
+            m_FeedbackStatusRow.EnableInClassList(k_FeedbackStatusSuccessClass, isSuccess);
+            m_FeedbackStatusRow.EnableInClassList(k_FeedbackStatusErrorClass, !isSuccess);
+            m_FeedbackStatusText.text = isSuccess
+                ? AssistantUIConstants.FeedbackCommentSentMessage
+                : AssistantUIConstants.FeedbackSendFailedMessage;
+
+            if (m_FeedbackStatusIcon != null)
+            {
+                m_FeedbackStatusIcon.EnableInClassList(k_FeedbackStatusCheckmarkClass, isSuccess);
+                m_FeedbackStatusIcon.EnableInClassList(k_FeedbackStatusErrorIconClass, !isSuccess);
+            }
+
+            m_FeedbackStatusAction.SetDisplay(isSuccess);
+            m_FeedbackStatusRow.SetDisplay(true);
+            m_FeedbackCommentFoldout.SetDisplay(!isSuccess);
+        }
+
+        void ClearFeedbackStatus()
+        {
+            if (m_FeedbackStatusRow == null) return;
+
+            m_FeedbackStatusRow.EnableInClassList(k_FeedbackStatusSuccessClass, false);
+            m_FeedbackStatusRow.EnableInClassList(k_FeedbackStatusErrorClass, false);
+            m_FeedbackStatusRow.SetDisplay(false);
+            m_FeedbackStatusAction.SetDisplay(false);
+
+            if (m_FeedbackStatusIcon != null)
+            {
+                m_FeedbackStatusIcon.RemoveFromClassList(k_FeedbackStatusCheckmarkClass);
+                m_FeedbackStatusIcon.RemoveFromClassList(k_FeedbackStatusErrorIconClass);
+            }
+        }
+
+        void DisposeFeedbackResources()
+        {
+            Context.API.FeedbackSent -= OnFeedbackSent;
+
+            m_IsCommentSendPending = false;
+            m_PendingCommentMessageId = AssistantMessageId.Invalid;
+            m_ResponseCopyButtonActiveTokenSource?.Cancel();
+            m_ResponseCopyButtonActiveTokenSource?.Dispose();
+            m_ResponseCopyButtonActiveTokenSource = null;
         }
 
         static void SetCurrentConversation(AssistantConversationId conversationId)

@@ -25,6 +25,8 @@ namespace Unity.AI.MCP.Editor.Tools
         /// Description text for the Unity.ListResources MCP tool.
         /// Explains how to list project files and URIs under a specified folder.
         /// </summary>
+        public const string ListResourcesTitle = "List project resources";
+
         public const string ListResourcesDescription = @"Lists project URIs (unity://path/...) under a folder (default: Assets). Returns all files by default; always appends unity://spec/script-edits.
 
 Args:
@@ -40,6 +42,8 @@ Returns:
         /// Description text for the Unity.ReadResource MCP tool.
         /// Explains how to read file contents with optional line-based or byte-based slicing.
         /// </summary>
+        public const string ReadResourceTitle = "Read a project resource";
+
         public const string ReadResourceDescription = @"Reads a resource by unity://path/... URI with optional slicing.
 
 Args:
@@ -58,6 +62,8 @@ Returns:
         /// Description text for the Unity.FindInFile MCP tool.
         /// Explains how to search files using regex patterns for methods, variables, or any text.
         /// </summary>
+        public const string FindInFileTitle = "Search within a file";
+
         public const string FindInFileDescription = @"Searches a file with a regex pattern and returns line numbers and excerpts.
             Ideal for: Finding methods, variables, classes, or any text patterns for renaming/editing.
 
@@ -80,7 +86,7 @@ Returns:
         /// </summary>
         /// <param name="parameters">Parameters controlling which resources to list, including pattern filter, base folder, and result limit.</param>
         /// <returns>A response dictionary containing success status, list of resource URIs, count, and any error messages.</returns>
-        [McpTool("Unity.ListResources", ListResourcesDescription, Groups = new[] {"core", "resources"})]
+        [McpTool("Unity.ListResources", ListResourcesDescription, ListResourcesTitle, Groups = new[] {"core", "resources"})]
         public static object ListResources(ListResourcesParams parameters)
         {
             // Provide defaults when parameters is null
@@ -162,7 +168,7 @@ Returns:
         /// </summary>
         /// <param name="parameters">Parameters specifying the URI to read and optional slicing options (line ranges, head bytes, tail lines, or natural language requests).</param>
         /// <returns>A response dictionary containing success status, file text content, metadata (SHA-256 and length), and any error messages.</returns>
-        [McpTool("Unity.ReadResource", ReadResourceDescription, Groups = new[] {"core", "resources"})]
+        [McpTool("Unity.ReadResource", ReadResourceDescription, ReadResourceTitle, Groups = new[] {"core", "resources"})]
         public static object ReadResource(ReadResourceParams parameters)
         {
             if (parameters == null)
@@ -290,7 +296,7 @@ Returns:
         /// </summary>
         /// <param name="parameters">Parameters specifying the URI to search, regex pattern, case sensitivity, and maximum results.</param>
         /// <returns>A response dictionary containing success status, list of matches with line/column positions, match count, file SHA-256, and any error messages.</returns>
-        [McpTool("Unity.FindInFile", FindInFileDescription, Groups = new[] {"core", "resources"})]
+        [McpTool("Unity.FindInFile", FindInFileDescription, FindInFileTitle, Groups = new[] {"core", "resources"})]
         public static object FindInFile(FindInFileParams parameters)
         {
             if (parameters == null)

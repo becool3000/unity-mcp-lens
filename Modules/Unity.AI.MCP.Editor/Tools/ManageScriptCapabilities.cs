@@ -14,6 +14,8 @@ namespace Unity.AI.MCP.Editor.Tools
         /// Description of the Unity.ManageScript_capabilities tool for MCP clients.
         /// Returns information about supported operations, payload limits, and guard settings for script management.
         /// </summary>
+        public const string Title = "Get ManageScript capabilities";
+
         public const string Description = @"Get Unity.ManageScript capabilities (supported ops, limits, and guards).
 
 Returns:
@@ -59,7 +61,7 @@ Returns:
         /// </summary>
         /// <param name="parameters">The parameters for retrieving script capabilities.</param>
         /// <returns>A response object containing supported operations, limits, and guards.</returns>
-        [McpTool("Unity.ManageScript_capabilities", Description, Groups = new string[] {"core", "scripting"})]
+        [McpTool("Unity.ManageScript_capabilities", Description, Title, Groups = new string[] {"core", "scripting"})]
         public static object HandleCommand(ManageScriptCapabilitiesParams parameters)
         {
             try

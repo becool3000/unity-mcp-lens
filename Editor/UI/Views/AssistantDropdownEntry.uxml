@@ -1,0 +1,7 @@
+<UXML xmlns:ui="UnityEngine.UIElements">
+    <ui:VisualElement name="assistantDropdownEntryRoot" class="assistant-dropdown-entry">
+        <ui:Image name="entryCheckmark" picking-mode="Ignore" class="assistant-dropdown-entry-checkmark mui-icon-checkmark" />
+        <ui:Image name="entryIcon" picking-mode="Ignore" class="assistant-dropdown-entry-icon" />
+        <ui:Label name="entryLabel" picking-mode="Ignore" class="assistant-dropdown-entry-label" />
+    </ui:VisualElement>
+</UXML>

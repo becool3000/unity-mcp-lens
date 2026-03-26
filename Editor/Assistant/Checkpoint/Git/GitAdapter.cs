@@ -18,7 +18,7 @@ namespace Unity.AI.Assistant.Editor.Checkpoint.Git
         const string k_SparseCheckoutDir = "info";
         const string k_SparseCheckoutFileName = "sparse-checkout";
         const string k_UserName = "Unity Assistant";
-        const string k_UserEmail = "assistant@local.invalid";
+        const string k_UserEmail = "assistant@unity.com";
 
         static readonly string[] k_TrackedPaths = { "Assets", "ProjectSettings", "Packages" };
 

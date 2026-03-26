@@ -3,8 +3,12 @@ using System.Collections.Generic;
 using System.Linq;
 using Unity.AI.Assistant.Data;
 using Unity.AI.Assistant.Editor;
+using Unity.AI.Assistant.Editor.Acp;
 using Unity.AI.Assistant.Editor.Settings;
 using Unity.AI.Assistant.FunctionCalling;
+using Unity.AI.Assistant.Editor.Utils.Event;
+using Unity.AI.Assistant.UI.Editor.Scripts.Components.UserInteraction;
+using Unity.AI.Assistant.UI.Editor.Scripts.Events;
 using Unity.AI.Assistant.UI.Editor.Scripts.Utils;
 using Unity.AI.Assistant.Utils;
 
@@ -22,6 +26,7 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
         const string k_ChatFocusClass = "mui-mft-input-focused";
         const string k_ChatHoverClass = "mui-mft-input-hovered";
         const string k_ChatActionEnabledClass = "mui-submit-enabled";
+        const string k_HasInteractionClass = "mui-mtf-has-interaction";
 
         const string k_SubmitImage = "arrow-up";
         const string k_StopImage = "stop-square";
@@ -37,6 +42,8 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
         const string k_PlaceholderError = "Session failed to initialize";
 
         VisualElement m_Root;
+        UserInteractionBar m_InteractionBar;
+        BaseEventSubscriptionTicket m_InteractionQueueSubscription;
 
         Button m_ActionButton;
         AssistantImage m_SubmitButtonImage;
@@ -52,23 +59,14 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
 
         Button m_AddContextButton;
         Button m_SettingsButton;
-        ModeDropdown m_ModeDropdownController;
-        ModeProvider m_ModeProvider;
         SettingsPopup m_SettingsPopup;
         PopupTracker m_SettingPopupTracker;
 
         VisualElement m_PopupRoot;
 
-        // Provider selector
-        PopupSelector m_ProviderSelector;
-        Image m_ProviderIcon;
-        Label m_ProviderLabel;
         string m_SelectedProviderId = "unity";
-
-        // Command/model selector (visible only for third-party providers)
-        PopupSelector m_CommandSelector;
-        readonly List<PopupItemData> m_CommandItems = new();
-        readonly List<PopupItemData> m_ModelItems = new();
+        readonly List<(string id, string displayName)> m_CommandItems = new();
+        readonly List<(string id, string displayName)> m_ModelItems = new();
         string m_SelectedModelId;
 
         bool m_TextHasFocus;
@@ -87,14 +85,30 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
 
         void OnAttachToPanel(AttachToPanelEvent evt)
         {
-            // Currently no action needed on attach
+            AssistantEditorPreferences.AiGatewayEnabledChanged += OnAiGatewayEnabledChanged;
+            AcpProvidersRegistry.OnProvidersChanged += RefreshProviderItems;
+            Context.ConversationLoader.ConversationsLoaded += RefreshProviderItems;
+            m_InteractionQueueSubscription = AssistantEvents.Subscribe<EventInteractionQueueChanged>(OnInteractionQueueChanged);
+            UpdateInteractionBarStyle();
         }
 
         void OnDetachFromPanel(DetachFromPanelEvent evt)
         {
             AssistantEditorPreferences.AiGatewayEnabledChanged -= OnAiGatewayEnabledChanged;
-            ProviderStateObserver.OnReadyStateChanged -= OnProviderReadyStateChanged;
-            AcpProvidersRegistry.OnProvidersChanged -= OnAcpProvidersChanged;
+            AcpProvidersRegistry.OnProvidersChanged -= RefreshProviderItems;
+            Context.ConversationLoader.ConversationsLoaded -= RefreshProviderItems;
+            AssistantEvents.Unsubscribe(ref m_InteractionQueueSubscription);
+        }
+
+        void OnInteractionQueueChanged(EventInteractionQueueChanged evt)
+        {
+            UpdateInteractionBarStyle();
+        }
+
+        void UpdateInteractionBarStyle()
+        {
+            var hasInteraction = Context?.InteractionQueue?.HasPending ?? false;
+            m_Root?.EnableInClassList(k_HasInteractionClass, hasInteraction);
         }
 
         public bool ShowPlaceholder
@@ -150,8 +164,9 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
 
             var oldProvider = m_SelectedProviderId;
             m_SelectedProviderId = providerId;
-            UpdateProviderButtonDisplay();
-            m_ProviderSelector?.SetSelectedId(providerId);
+            m_ProviderMenu?.SetSelectedId(providerId);
+            UpdateProviderLabel();
+            UpdateProviderTooltip();
             // Ensure UI state stays in sync even when we skip provider-change events (e.g., domain reload restore).
             UpdateCommandSelectorVisibility();
             UpdateCommandSelectorEnabled();
@@ -168,12 +183,7 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
             m_EditContextEnabled = true;
 
             InitializeSettingsPopup();
-
-            // Set up provider popup host
-            m_ProviderSelector?.SetPopupHost(m_PopupRoot);
-
-            // Set up command selector popup host
-            m_CommandSelector?.SetPopupHost(m_PopupRoot);
+            InitializeDropdownMenus(m_PopupRoot);
 
             m_AddContextButton.SetDisplay(m_EditContextEnabled);
         }
@@ -215,16 +225,17 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
         {
             m_Root = view.Q<VisualElement>("museTextFieldRoot");
 
+            m_InteractionBar = new UserInteractionBar();
+            m_InteractionBar.Initialize(Context, autoShowControl: false);
+            view.Insert(view.IndexOf(m_Root), m_InteractionBar);
+
             m_AddContextButton = view.Q<Button>("addContextButton");
             m_AddContextButton.SetDisplay(m_EditContextEnabled);
 
             m_SettingsButton = view.Q<Button>("settingsButton");
             m_SettingsButton.clicked += OnSettingsButtonClicked;
 
-            // Set up mode dropdown with unified mode provider
-            var modeDropdownField = view.Q<DropdownField>("modeDropdown");
-            m_ModeProvider = new ModeProvider(Context.Blackboard);
-            m_ModeDropdownController = new ModeDropdown(modeDropdownField, m_ModeProvider);
+            InitializeDropdowns(view);
 
             // Subscribe to mode changes for settings popup auto-run update
             m_ModeProvider.ModeChanged += OnModeChanged;
@@ -257,31 +268,6 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
 
             m_ActionRow = view.Q<VisualElement>("museTextFieldActionRow");
 
-            // Provider selector setup
-            m_ProviderSelector = view.Q<PopupSelector>("providerSelector");
-            m_ProviderSelector.Configure(showIcons: false, showCheckmarks: true, "mui-provider-popup-root");
-            m_ProviderSelector.Initialize(Context);
-            m_ProviderSelector.ItemSelected += OnProviderItemSelected;
-
-            // Get references to provider button content
-            m_ProviderIcon = m_ProviderSelector.Q<Image>("selectorIcon");
-            m_ProviderLabel = m_ProviderSelector.Q<Label>("selectorLabel");
-
-            // Subscribe to provider registry changes
-            AcpProvidersRegistry.EnsureInitialized();
-            AcpProvidersRegistry.OnProvidersChanged += OnAcpProvidersChanged;
-            RefreshProviderItems();
-
-            // Command/model selector setup
-            m_CommandSelector = view.Q<PopupSelector>("commandSelector");
-            m_CommandSelector.Configure(showIcons: false, showCheckmarks: true, "mui-command-popup-root");
-            m_CommandSelector.Initialize(Context);
-            m_CommandSelector.ItemSelected += OnCommandItemSelected;
-
-            UpdateProviderSelectorVisibility();
-            UpdateCommandSelectorVisibility();
-            UpdateCommandSelectorEnabled();
-
             m_Root.RegisterCallback<ClickEvent>(e =>
             {
                 // Focus the input when clicking anywhere in the root, except on focusable elements
@@ -313,13 +299,11 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
             UpdatePlaceholderText();
             RefreshUI();
 
-            AssistantEditorPreferences.AiGatewayEnabledChanged += OnAiGatewayEnabledChanged;
-
             // Apply granular status tracking to disableable elements, keeping ProviderSelector always enabled
             view.Q<VisualElement>(className: "mui-mtf-warning-area")?.AddSessionAndCompatibilityStatusManipulators(Context.API.Provider);
             view.Q<VisualElement>(className: "mui-mtf-input-root")?.AddSessionAndCompatibilityStatusManipulators(Context.API.Provider);
             view.Q<VisualElement>(className: "mui-left-actions")?.AddSessionAndCompatibilityStatusManipulators(Context.API.Provider);
-            view.Q<VisualElement>("disableableActions")?.AddSessionAndCompatibilityStatusManipulators(Context.API.Provider);
+            view.Q<Button>("actionButton")?.AddSessionAndCompatibilityStatusManipulators(Context.API.Provider);
 
             // Subscribe to provider ready state changes for placeholder updates
             ProviderStateObserver.OnReadyStateChanged += OnProviderReadyStateChanged;
@@ -412,23 +396,6 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
             m_ChatCharCount.text = $"{Text.Length}/{AssistantMessageSizeConstraints.PromptLimit}";
         }
 
-        void UpdateProviderSelectorVisibility()
-        {
-            m_ProviderSelector?.UpdateVisibility(AssistantEditorPreferences.AiGatewayEnabled);
-        }
-
-        void UpdateCommandSelectorVisibility()
-        {
-            var isThirdPartyProvider = m_SelectedProviderId != "unity";
-            // Use preserveSpace to prevent layout shift when switching providers
-            m_CommandSelector?.UpdateVisibility(isThirdPartyProvider, preserveSpace: true);
-        }
-
-        void UpdateCommandSelectorEnabled()
-        {
-            m_CommandSelector?.SetEnabled(m_CommandItems.Count > 0 || m_ModelItems.Count > 0);
-        }
-
         void OnProviderChangedHandler(string oldProvider, string newProvider)
         {
             UpdateCommandSelectorVisibility();
@@ -442,108 +409,27 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
             OnProviderChanged?.Invoke(oldProvider, newProvider);
         }
 
-        void OnProviderItemSelected(PopupItemData item)
+        string GetProviderDisplayName(string providerId)
         {
-            if (m_SelectedProviderId == item.Id)
-                return;
-
-            var oldProvider = m_SelectedProviderId;
-            m_SelectedProviderId = item.Id;
-            UpdateProviderButtonDisplay();
-
-            OnProviderChangedHandler(oldProvider, item.Id);
-        }
-
-        void OnCommandItemSelected(PopupItemData item)
-        {
-            // Determine if it's a model or command
-            if (m_ModelItems.Any(m => m.Id == item.Id))
+            if (AssistantProviderFactory.IsUnityProvider(providerId))
             {
-                m_SelectedModelId = item.Id;
-                OnModelSelected?.Invoke(item.Id);
-            }
-            else
-            {
-                OnCommandSelected?.Invoke(item.Id);
-            }
-        }
-
-        void OnAcpProvidersChanged()
-        {
-            RefreshProviderItems();
-        }
-
-        void RefreshProviderItems()
-        {
-            var items = new List<PopupItemData>
-            {
-                new("unity", "Unity", null, ProviderIconCache.GetIcon("unity"))
-            };
-
-            items.AddRange(AcpProvidersRegistry.Providers.Select(p =>
-                new PopupItemData(p.Id, AcpProvidersRegistry.GetDisplayName(p.Id))));
-
-            m_ProviderSelector?.SetItems(items, m_SelectedProviderId);
-            UpdateProviderButtonDisplay();
-        }
-
-        void UpdateProviderButtonDisplay()
-        {
-            if (m_ProviderIcon != null)
-            {
-                m_ProviderIcon.image = null;
-                m_ProviderIcon.style.display = DisplayStyle.None;
-            }
-
-            if (m_ProviderLabel != null)
-            {
-                var displayName = AcpProvidersRegistry.GetDisplayName(m_SelectedProviderId);
-                m_ProviderLabel.text = displayName;
-            }
-
-            // Set tooltip with version info
-            if (m_ProviderSelector != null)
-            {
-                var displayName = AcpProvidersRegistry.GetDisplayName(m_SelectedProviderId);
-                var provider = AcpProvidersRegistry.Providers.FirstOrDefault(p => p.Id == m_SelectedProviderId);
-
-                if (provider != null && !string.IsNullOrEmpty(provider.Version))
+                var profiles = Context.AvailableUnityModelProfiles;
+                if (profiles != null)
                 {
-                    var tooltip = $"{displayName} v{provider.Version}";
-                    if (provider.IsCustom)
+                    foreach (var (id, displayName) in profiles)
                     {
-                        tooltip += "  [Custom]";
+                        if (id == providerId && !string.IsNullOrEmpty(displayName))
+                            return displayName;
                     }
-                    m_ProviderSelector.tooltip = tooltip;
                 }
-                else
-                {
-                    m_ProviderSelector.tooltip = displayName;
-                }
-            }
-        }
-
-        void RefreshCommandSelectorItems()
-        {
-            var items = new List<PopupItemData>();
-
-            // Add models first (if available)
-            if (m_ModelItems.Count > 0)
-            {
-                items.AddRange(m_ModelItems);
-
-                // Add separator if there are commands
-                if (m_CommandItems.Count > 0)
-                {
-                    items.Add(PopupItemData.CreateSeparator());
-                }
+                return providerId;
             }
 
-            // Add commands
-            items.AddRange(m_CommandItems);
+            var match = AcpProvidersRegistry.Providers.FirstOrDefault(p => p.Id == providerId);
+            if (match != null && !string.IsNullOrEmpty(match.DisplayName))
+                return match.DisplayName;
 
-            m_CommandSelector?.SetItems(items, m_SelectedModelId);
-            UpdateCommandSelectorEnabled();
+            return providerId;
         }
 
         public void SetAvailableCommands(IReadOnlyList<(string name, string description)> commands)
@@ -551,8 +437,7 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
             m_CommandItems.Clear();
             if (commands != null)
             {
-                m_CommandItems.AddRange(commands.Select(c =>
-                    new PopupItemData(c.name, "/" + c.name, c.description)));
+                m_CommandItems.AddRange(commands.Select(c => (c.name, "/" + c.name)));
             }
 
             RefreshCommandSelectorItems();
@@ -738,7 +623,7 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
             {
                 foreach (var (modelId, name, description) in models)
                 {
-                    m_ModelItems.Add(new PopupItemData(modelId, name, description));
+                    m_ModelItems.Add((modelId, name));
                 }
             }
 

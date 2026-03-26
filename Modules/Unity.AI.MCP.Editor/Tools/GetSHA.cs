@@ -14,6 +14,8 @@ namespace Unity.AI.MCP.Editor.Tools
         /// <summary>
         /// Human-readable description of the Unity.GetSha tool functionality and usage.
         /// </summary>
+        public const string Title = "Get file SHA256 hash";
+
         public const string Description = @"Get SHA256 and basic metadata for a Unity C# script without returning file contents";
 
         /// <summary>
@@ -53,7 +55,7 @@ namespace Unity.AI.MCP.Editor.Tools
         /// </summary>
         /// <param name="parameters">Parameters containing the script URI or path.</param>
         /// <returns>A response object with SHA256 hash and metadata, or an error if the operation fails.</returns>
-        [McpTool("Unity.GetSha", Description, Groups = new string[] { "core", "scripting" })]
+        [McpTool("Unity.GetSha", Description, Title, Groups = new string[] { "core", "scripting" })]
         public static object HandleCommand(GetSHAParams parameters)
         {
             string uri = parameters?.Uri;

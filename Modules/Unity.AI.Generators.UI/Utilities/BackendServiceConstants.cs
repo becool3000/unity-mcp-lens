@@ -31,6 +31,8 @@ namespace Unity.AI.Generators.UI.Utilities
             public const string ApiNoLongerSupported = "ApiNoLongerSupported";
             public const string ModelParameterValidationFailed = "ModelParameterValidationFailed";
             public const string UnavailableForLegalReasons = "UnavailableForLegalReasons";
+            public const string SubmissionFailure = "SubmissionFailure";
+            public const string ProviderFailure = "ProviderFailure";
 
             public static IEnumerable<string> EnumerateAll()
             {
@@ -57,6 +59,8 @@ namespace Unity.AI.Generators.UI.Utilities
                 yield return ApiNoLongerSupported;
                 yield return ModelParameterValidationFailed;
                 yield return UnavailableForLegalReasons;
+                yield return SubmissionFailure;
+                yield return ProviderFailure;
             }
         }
 

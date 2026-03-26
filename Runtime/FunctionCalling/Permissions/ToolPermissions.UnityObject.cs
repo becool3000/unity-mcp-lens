@@ -20,11 +20,15 @@ namespace Unity.AI.Assistant.FunctionCalling
                 List<IToolPermissions.ItemOperation> m_AllowedOperations = new();
 
                 [SerializeField]
+                List<IToolPermissions.ItemOperation> m_DeniedOperations = new();
+
+                [SerializeField]
                 List<UnityEngine.Object> m_IgnoredObjects = new();
 
                 public void Reset()
                 {
                     m_AllowedOperations.Clear();
+                    m_DeniedOperations.Clear();
                     ResetIgnoredObjects();
                 }
 
@@ -35,6 +39,9 @@ namespace Unity.AI.Assistant.FunctionCalling
 
                 public void Allow(IToolPermissions.ItemOperation operation, Type type, UnityEngine.Object target)
                     => m_AllowedOperations.Add(operation);
+
+                public void Deny(IToolPermissions.ItemOperation operation, Type type, UnityEngine.Object target)
+                    => m_DeniedOperations.Add(operation);
 
                 public void Ignore(UnityEngine.Object target) => m_IgnoredObjects.Add(target);
 
@@ -55,12 +62,22 @@ namespace Unity.AI.Assistant.FunctionCalling
                     return false;
                 }
 
+                public bool IsDenied(IToolPermissions.ItemOperation operation, Type type, UnityEngine.Object target)
+                {
+                    return m_DeniedOperations.Contains(operation);
+                }
 
                 public void AppendTemporaryPermissions(IList<IToolPermissions.TemporaryPermission> allowedStates)
                 {
                     foreach (var operation in m_AllowedOperations)
                     {
                         var permission = new IToolPermissions.TemporaryPermission($"{operation} {k_StateName}", () => m_AllowedOperations.Remove(operation));
+                        allowedStates.Add(permission);
+                    }
+
+                    foreach (var operation in m_DeniedOperations)
+                    {
+                        var permission = new IToolPermissions.TemporaryPermission($"{operation} {k_StateName} (Denied)", () => m_DeniedOperations.Remove(operation));
                         allowedStates.Add(permission);
                     }
                 }
@@ -118,6 +135,11 @@ namespace Unity.AI.Assistant.FunctionCalling
                         currentStatus = PermissionStatus.Denied;
                         break;
 
+                    case UserAnswer.DenyAlways:
+                        State.UnityObject.Deny(operation, type, target);
+                        currentStatus = PermissionStatus.Denied;
+                        break;
+
                     default:
                         throw new ArgumentOutOfRangeException();
                 }
@@ -146,12 +168,14 @@ namespace Unity.AI.Assistant.FunctionCalling
             {
                 IPermissionsPolicyProvider.PermissionPolicy.Allow => PermissionStatus.Approved,
                 IPermissionsPolicyProvider.PermissionPolicy.Ask =>
-                    State.UnityObject.IsAllowed(operation, type, target) ? PermissionStatus.Approved : PermissionStatus.Pending,
+                    State.UnityObject.IsAllowed(operation, type, target) ? PermissionStatus.Approved :
+                    State.UnityObject.IsDenied(operation, type, target) ? PermissionStatus.Denied :
+                    PermissionStatus.Pending,
                 IPermissionsPolicyProvider.PermissionPolicy.Deny => PermissionStatus.Denied,
                 _ => throw new ArgumentOutOfRangeException()
             };
         }
 
-        protected abstract IUserInteraction<UserAnswer> CreateUnityObjectAccessElement(ToolExecutionContext.CallInfo callInfo, IToolPermissions.ItemOperation operation, Type type, UnityEngine.Object target);
+        protected abstract IInteractionSource<UserAnswer> CreateUnityObjectAccessElement(ToolExecutionContext.CallInfo callInfo, IToolPermissions.ItemOperation operation, Type type, UnityEngine.Object target);
     }
 }

@@ -16,6 +16,8 @@ namespace Unity.AI.MCP.Editor.Tools
         /// <summary>
         /// Human-readable description of the Unity.CreateScript tool functionality and usage.
         /// </summary>
+        public const string Title = "Create a C# script";
+
         public const string Description = @"Create a new C# script at the given project path.
 
 Args: path (e.g., 'Assets/Scripts/My.cs'), contents (string), script_type, namespace.
@@ -36,7 +38,7 @@ Rules: path must be under Assets/. Contents will be Base64-encoded over transpor
         /// </summary>
         /// <param name="parameters">Parameters containing the script path, contents, type, and namespace.</param>
         /// <returns>A response object indicating success or failure with relevant details.</returns>
-        [McpTool("Unity.CreateScript", Description, Groups = new string[] {"core", "scripting"})]
+        [McpTool("Unity.CreateScript", Description, Title, Groups = new string[] {"core", "scripting"})]
         public static object HandleCommand(CreateScriptParams parameters)
         {
             var @params = parameters;

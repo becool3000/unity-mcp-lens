@@ -4,7 +4,6 @@ using Newtonsoft.Json.Linq;
 using Unity.AI.Assistant.Backend;
 using Unity.AI.Assistant.Data;
 using Unity.AI.Assistant.Editor;
-using Unity.AI.Assistant.Editor.Backend.Socket.Tools;
 using Unity.AI.Assistant.Editor.CodeAnalyze;
 using Unity.AI.Assistant.Editor.FunctionCalling;
 using Unity.AI.Assistant.FunctionCalling;

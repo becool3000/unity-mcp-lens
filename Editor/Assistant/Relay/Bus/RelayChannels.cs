@@ -32,6 +32,9 @@ namespace Unity.Relay
         /// <summary>Save gateway preferences (Unity → Relay).</summary>
         public static readonly RelayMethod<PreferencesData, SetPreferencesResult> PreferencesSet = new();
 
+        /// <summary>Reset gateway preferences to system defaults and re-seed from shell env (Unity → Relay).</summary>
+        public static readonly RelayMethod<PreferencesResetRequest, PreferencesData> PreferencesReset = new();
+
         /// <summary>Post analytics data via the relay (Unity → Relay).</summary>
         public static readonly RelayMethod<AnalyticsPostRequest, AnalyticsPostResponse> AnalyticsPost = new();
 
@@ -70,6 +73,7 @@ namespace Unity.Relay
 
     // ── Preferences ──
     record PreferencesGetRequest;
+    record PreferencesResetRequest;
     record SetPreferencesResult(bool CredentialsUpdated);
 
     // ── MCP Session ──

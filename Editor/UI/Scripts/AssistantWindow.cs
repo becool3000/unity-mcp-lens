@@ -7,11 +7,13 @@ using Unity.AI.Assistant.Editor;
 using Unity.AI.Assistant.Editor.Backend.Socket;
 using Unity.AI.Assistant.Editor.Config;
 using Unity.AI.Assistant.Editor.Context;
+using Unity.AI.Assistant.Editor.GraphGeneration;
 using Unity.AI.Assistant.Editor.Utils;
 using Unity.AI.Assistant.FunctionCalling;
 using Unity.AI.Assistant.UI.Editor.Scripts.Components;
 using Unity.AI.Assistant.UI.Editor.Scripts.Components.ChatElements;
 using Unity.AI.Assistant.Utils;
+using Unity.AI.Toolkit;
 using UnityEditor;
 using UnityEditor.Overlays;
 using UnityEngine;
@@ -85,7 +87,7 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts
             m_View.InitializeState();
 
             // Initialize the view to be used to display user interactions
-            m_AssistantWindowUiContainer = new AssistantWindowUiContainer(m_View);
+            m_AssistantWindowUiContainer = new AssistantWindowUiContainer(m_Context);
             var permissionPolicy = new SettingsPermissionsPolicyProvider();
 
             // TODO:
@@ -97,6 +99,8 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts
                 new ToolInteractions(m_AssistantWindowUiContainer));
 
             m_AssistantInstance.Reconfigure(configuration);
+
+            EditorTask.delayCall += () => AssistantGraphGenerator.GenerateGraphAsync();
         }
 
         internal void InternalConfigureBackend(IAssistantBackend backend)
@@ -109,11 +113,12 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts
 
         void OnDestroy()
         {
+            AssistantGraphGenerator.ResetGenerationInProgress();
             m_View?.Deinit();
             m_AssistantWindowUiContainer?.Dispose();
             m_AssistantWindowUiContainer = null;
 
-            // TODO: Revisit workflow disposal once backend lifecycle cleanup is more robust.
+            // TODO: https://jira.unity3d.com/browse/ASST-2178
             m_AssistantInstance?.Backend?.ActiveWorkflow?.Dispose();
             m_AssistantInstance = null;
         }

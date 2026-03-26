@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using Unity.AI.Assistant.Utils;
+using Unity.AI.Toolkit;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.UIElements;
@@ -85,9 +86,9 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
 
         void OnDetachFromPanel(DetachFromPanelEvent evt)
         {
-            EditorApplication.delayCall -= ContinueCreateElements;
-            EditorApplication.delayCall -= ContinueUpdateElements;
-            EditorApplication.delayCall -= EnforceScrollState;
+            EditorTask.delayCall -= ContinueCreateElements;
+            EditorTask.delayCall -= ContinueUpdateElements;
+            EditorTask.delayCall -= EnforceScrollState;
         }
 
         public void AddData(TD item)
@@ -179,7 +180,7 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
 
             if (EnableDelayedElements)
             {
-                EditorApplication.delayCall += ContinueCreateElements;
+                EditorTask.delayCall += ContinueCreateElements;
             }
             else
             {
@@ -192,7 +193,7 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
             QueueUpdate(index);
             if (EnableDelayedElements)
             {
-                EditorApplication.delayCall += ContinueUpdateElements;
+                EditorTask.delayCall += ContinueUpdateElements;
             }
             else
             {
@@ -216,7 +217,7 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
 
                 if (EnableDelayedElements && operations >= DelayedElementOperations)
                 {
-                    EditorApplication.delayCall += ContinueCreateElements;
+                    EditorTask.delayCall += ContinueCreateElements;
                     return;
                 }
             }
@@ -251,7 +252,7 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
                     k_PendingUpdates.Insert(0, index);
                     if (EnableDelayedElements)
                     {
-                        EditorApplication.delayCall += ContinueUpdateElements;
+                        EditorTask.delayCall += ContinueUpdateElements;
                     }
                     else
                     {
@@ -266,7 +267,7 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
 
                 if (EnableDelayedElements && operations >= DelayedElementOperations)
                 {
-                    EditorApplication.delayCall += ContinueUpdateElements;
+                    EditorTask.delayCall += ContinueUpdateElements;
                     break;
                 }
             }
@@ -323,7 +324,7 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
             }
 
             m_EnforcementQueued = true;
-            EditorApplication.delayCall += EnforceScrollState;
+            EditorTask.delayCall += EnforceScrollState;
         }
 
         void EnforceScrollState()

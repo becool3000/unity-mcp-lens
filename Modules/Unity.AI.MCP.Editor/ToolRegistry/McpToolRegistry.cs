@@ -54,13 +54,50 @@ namespace Unity.AI.MCP.Editor.ToolRegistry
     {
         static readonly Dictionary<string, IToolHandler> k_Tools = new();
 
+        // MCP clients prefix tool names with "mcp_{serverName}_" (22 chars for "unity-mcp-gateway").
+        // The MCP spec enforces max 64 chars total, leaving 42 for the tool name itself.
+        const int k_MaxToolNameLength = 42;
+        const int k_HashSuffixLength = 9; // "_" + 8 hex chars
+
         /// <summary>
         /// Sanitize a tool name for cross-provider compatibility.
-        /// OpenAI requires tool names to match ^[a-zA-Z0-9_-]+$ (no periods allowed).
+        /// Replaces periods with underscores (OpenAI requires ^[a-zA-Z0-9_-]+$) and enforces
+        /// a maximum length of <see cref="k_MaxToolNameLength"/> characters. Names that exceed
+        /// the limit are truncated and appended with a 4-character hex hash for uniqueness.
         /// </summary>
         /// <param name="name">The tool name to sanitize.</param>
-        /// <returns>The sanitized tool name with periods replaced by underscores, or null if <paramref name="name"/> is null.</returns>
-        public static string SanitizeToolName(string name) => name?.Replace('.', '_');
+        /// <returns>The sanitized tool name, or null if <paramref name="name"/> is null.</returns>
+        public static string SanitizeToolName(string name)
+        {
+            if (name == null)
+                return null;
+
+            var sanitized = name.Replace('.', '_');
+
+            if (sanitized.Length <= k_MaxToolNameLength)
+                return sanitized;
+
+            var hash = GetStableHash(sanitized);
+            var truncated = sanitized.Substring(0, k_MaxToolNameLength - k_HashSuffixLength);
+            var result = $"{truncated}_{hash}";
+
+            return result;
+        }
+
+        /// <summary>
+        /// Produces a deterministic 8-character hex hash from a string.
+        /// Used to generate unique suffixes when truncating long tool names.
+        /// </summary>
+        static string GetStableHash(string input)
+        {
+            unchecked
+            {
+                int hash = 17;
+                foreach (char c in input)
+                    hash = hash * 31 + c;
+                return ((uint)hash).ToString("x8");
+            }
+        }
 
         /// <summary>
         /// Event fired when the tool registry changes (tools added, removed, updated, or refreshed).
@@ -464,8 +501,6 @@ namespace Unity.AI.MCP.Editor.ToolRegistry
 
             var changeType = isUpdate ? ToolChangeType.Updated : ToolChangeType.Added;
             ToolsChanged?.Invoke(new(changeType, sanitizedName, handler));
-
-            McpLog.Log($"[McpToolRegistry] {(isUpdate ? "Updated" : "Registered")} tool '{sanitizedName}'");
         }
 
         /// <summary>
@@ -494,8 +529,6 @@ namespace Unity.AI.MCP.Editor.ToolRegistry
 
             return false;
         }
-
-
 
         static void DiscoverTools()
         {
@@ -553,7 +586,6 @@ namespace Unity.AI.MCP.Editor.ToolRegistry
                     else
                     {
                         k_Tools[toolAttribute.Name] = handler;
-                        McpLog.Log($"[McpToolRegistry] Registered tool '{toolAttribute.Name}' from {method.DeclaringType?.Name}.{method.Name}");
                     }
                 }
                 catch (Exception ex)
@@ -613,7 +645,6 @@ namespace Unity.AI.MCP.Editor.ToolRegistry
                     else
                     {
                         k_Tools[toolAttribute.Name] = handler;
-                        McpLog.Log($"[McpToolRegistry] Registered class-based tool '{toolAttribute.Name}' from {type.Name}");
                     }
                 }
                 catch (Exception ex)

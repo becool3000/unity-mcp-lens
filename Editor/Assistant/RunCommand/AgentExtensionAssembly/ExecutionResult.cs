@@ -101,7 +101,7 @@ namespace Unity.AI.Assistant.Agent.Dynamic.Extension.Editor
 
         public List<ExecutionLog> Logs = new();
 
-        public string ConsoleLogs = string.Empty;
+        public string ConsoleLogs;
 
         public bool SuccessfullyStarted;
 

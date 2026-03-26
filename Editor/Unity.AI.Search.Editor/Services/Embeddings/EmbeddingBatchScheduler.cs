@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Unity.AI.Search.Editor.Knowledge;
+using Unity.AI.Search.Editor.Services;
+using Unity.AI.Search.Editor.Services.Models;
 using Unity.AI.Toolkit.Utility;
 using UnityEditor;
 
@@ -16,18 +18,20 @@ namespace Unity.AI.Search.Editor.Embeddings
 
         // NOTE: The batch size can be larger than k_MaxBatchSize since we only check if we went over the batch size on every .update.
         //       We could either flush immediately when going over the batch size, or process in chunks of k_MaxBatchSize.
-        readonly int k_MaxBatchSize = EmbeddingProviders.EmbeddingBatchSize;
+        readonly int k_MaxBatchSize;
         const int m_MaxDelayMs = 50;
+
+        readonly IModelService m_ModelService;
 
         readonly List<(EmbeddingProviders.EmbeddingJob input, TaskCompletionSource<AssetEmbedding> tcs)> m_Pending =
             new List<(EmbeddingProviders.EmbeddingJob input, TaskCompletionSource<AssetEmbedding> tcs)>();
 
         ScheduledAction m_PendingSchedule;
 
-        public EmbeddingBatchScheduler()
+        public EmbeddingBatchScheduler(IModelService modelService)
         {
-            if (!AssetKnowledgeSettings.RunAsync)
-                k_MaxBatchSize = 1;
+            m_ModelService = modelService;
+            k_MaxBatchSize = !AssetKnowledgeSettings.RunAsync ? 1 : Math.Max(1, modelService.SuggestedBatchSize);
         }
 
         public Task<AssetEmbedding> EnqueueAsync(EmbeddingProviders.EmbeddingJob input)
@@ -60,7 +64,7 @@ namespace Unity.AI.Search.Editor.Embeddings
                 var inputs = new List<EmbeddingProviders.EmbeddingJob>(toProcess.Count);
                 foreach (var (input, _) in toProcess)
                     inputs.Add(input);
-                outputs = await EmbeddingProviders.ExecuteBatchAsync(inputs);
+                outputs = await EmbeddingProviders.ExecuteBatchAsync(new EmbeddingProviders.EmbeddingJobBatch(inputs, m_ModelService));
             }
             catch (Exception ex)
             {

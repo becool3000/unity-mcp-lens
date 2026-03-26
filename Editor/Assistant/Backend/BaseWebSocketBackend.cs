@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using Unity.AI.Assistant.ApplicationModels;
 using Unity.AI.Assistant.Backend;
 using Unity.AI.Assistant.Data;
+using Unity.AI.Assistant.Editor.Acp;
 using Unity.Ai.Assistant.Protocol.Api;
 using Unity.Ai.Assistant.Protocol.Client;
 using Unity.Ai.Assistant.Protocol.Model;
@@ -186,18 +187,55 @@ namespace Unity.AI.Assistant.Editor.Backend.Socket
 
         public bool SessionStatusTrackingEnabled => true;
 
+        public async Task<BackendResult<IReadOnlyList<(string ProviderId, string ProfileName)>>> GetAvailableModelProfiles(ICredentialsContext credentialsContext, CancellationToken ct = default)
+        {
+            if (ct.IsCancellationRequested)
+                return BackendResult<IReadOnlyList<(string ProviderId, string ProfileName)>>.FailOnCancellation();
+            try
+            {
+                var api = GetApi(credentialsContext);
+                
+#if ASSISTANT_INTERNAL
+                var modelsResponse = await api.GetAssistantModelsV1RequestBuilderWithAnalytics(true).BuildAndSendAsync(ct);
+#else
+                var modelsResponse = await api.GetAssistantModelsV1RequestBuilderWithAnalytics().BuildAndSendAsync(ct);
+#endif
+
+                if (modelsResponse.StatusCode != HttpStatusCode.OK)
+                {
+                    CheckApiResponseForTokenRefreshIssue(modelsResponse);
+                    return BackendResult<IReadOnlyList<(string ProviderId, string ProfileName)>>.FailOnServerResponse(
+                        new(ErrorHandlingUtility.GetErrorMessageFromHttpResult(
+                            (int)modelsResponse.StatusCode,
+                            modelsResponse.RawContent,
+                            GetServerErrorMessage("fetching model profiles")), FormatApiResponse(modelsResponse)));
+                }
+
+                if (modelsResponse.Data?.Models == null)
+                    return BackendResult<IReadOnlyList<(string ProviderId, string ProfileName)>>.Success(null);
+
+                var profiles = modelsResponse.Data.Models
+                    .Select(m => (AssistantProviderFactory.PrefixUnityProvider + m.Id, (m.Type == ModelConfigType.Model) ? "Internal - " + m.Name: m.Name))
+                    .ToList();
+                return BackendResult<IReadOnlyList<(string ProviderId, string ProfileName)>>.Success(profiles);
+            }
+            catch (Exception e)
+            {
+                return BackendResult<IReadOnlyList<(string ProviderId, string ProfileName)>>.FailOnException(GetExceptionErrorMessage("fetching model profiles"), e);
+            }
+        }
+
         public async Task<BackendResult<IEnumerable<ConversationInfo>>> ConversationRefresh(ICredentialsContext credentialsContext, CancellationToken ct = default)
         {
             if (ct.IsCancellationRequested)
                 return BackendResult<IEnumerable<ConversationInfo>>.FailOnCancellation();
             try
             {
-                var convosBuilder = GetApi(credentialsContext)
+                var api = GetApi(credentialsContext);
+                var response = await api
                     .GetConversationInfoV1RequestBuilderWithAnalytics()
-                    .SetLimit(AssistantConstants.MaxConversationHistory);
-
-                var response = await convosBuilder.BuildAndSendAsync(ct);
-
+                    .SetLimit(AssistantConstants.MaxConversationHistory)
+                    .BuildAndSendAsync(ct);
                 if (response.StatusCode != HttpStatusCode.OK)
                 {
                     CheckApiResponseForTokenRefreshIssue(response);

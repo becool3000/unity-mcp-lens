@@ -111,10 +111,23 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
             try
             {
                 m_ValueField.SetEnabled(false);
-                var value = await CredentialClient.Instance.RevealAsync(m_ProviderInfo.ProviderType, m_EnvVar.Name);
-                m_ValueField.SetValueWithoutNotify(value);
-                m_ValueField.SetEnabled(true);
-                SetIsRevealed(true);
+                var response = await CredentialClient.Instance.RevealAsync(m_ProviderInfo.ProviderType, m_EnvVar.Name);
+
+                if (response is { Success: true })
+                {
+                    m_ValueField.SetValueWithoutNotify(response.Value ?? "");
+                    m_ValueField.SetEnabled(true);
+                    m_ValueField.tooltip = "";
+                    SetIsRevealed(true);
+                }
+                else
+                {
+                    Debug.LogWarning($"[AI Gateway] Failed to reveal credential '{m_EnvVar.Name}': {response?.Error}");
+                    m_ValueField.SetValueWithoutNotify("");
+                    m_ValueField.SetEnabled(true);
+                    m_ValueField.tooltip = $"Could not reveal: {response?.Error}";
+                    SetIsRevealed(false);
+                }
             }
             catch (Exception e)
             {

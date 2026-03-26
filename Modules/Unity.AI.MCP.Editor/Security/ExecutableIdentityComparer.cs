@@ -49,17 +49,21 @@ namespace Unity.AI.MCP.Editor.Security
         /// <summary>
         /// Get a stable identity key for an executable.
         /// Used for grouping and deduplication.
-        /// Format: "Publisher:PublisherName" for signed, "Hash:SHA256" for unsigned
+        /// Includes executable path to distinguish different binaries from the same publisher
+        /// (e.g. claude vs codex, both signed by the same Homebrew team ID).
+        /// Format: "Signed:Path:Publisher" for signed, "Hash:SHA256" for unsigned
         /// </summary>
         public static string GetIdentityKey(ExecutableIdentity identity)
         {
             if (identity == null)
                 return "Unknown:null";
 
-            // For signed executables with valid signatures, use publisher
+            // For signed executables with valid signatures, use path + publisher.
+            // Path differentiates binaries; publisher ensures identity survives binary updates
+            // (same path + same publisher = same identity even if hash changes).
             if (identity.IsSigned && identity.SignatureValid && !string.IsNullOrEmpty(identity.SignaturePublisher))
             {
-                return $"Publisher:{identity.SignaturePublisher}";
+                return $"Signed:{identity.Path ?? "unknown"}:{identity.SignaturePublisher}";
             }
 
             // For unsigned or invalid signatures, use hash

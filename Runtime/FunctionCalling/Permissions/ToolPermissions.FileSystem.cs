@@ -23,10 +23,18 @@ namespace Unity.AI.Assistant.FunctionCalling
                 [SerializeField]
                 List<IToolPermissions.ItemOperation> m_AllowedExternalOperations = new();
 
+                [SerializeField]
+                List<IToolPermissions.ItemOperation> m_DeniedProjectOperations = new();
+
+                [SerializeField]
+                List<IToolPermissions.ItemOperation> m_DeniedExternalOperations = new();
+
                 public void Reset()
                 {
                     m_AllowedProjectOperations.Clear();
                     m_AllowedExternalOperations.Clear();
+                    m_DeniedProjectOperations.Clear();
+                    m_DeniedExternalOperations.Clear();
                 }
 
                 public void Allow(IToolPermissions.ItemOperation operation, string path)
@@ -46,6 +54,23 @@ namespace Unity.AI.Assistant.FunctionCalling
                         : m_AllowedExternalOperations.Contains(operation);
                 }
 
+                public void Deny(IToolPermissions.ItemOperation operation, string path)
+                {
+                    var isProjectPath = PathUtils.IsProjectPath(path);
+                    if (isProjectPath)
+                        m_DeniedProjectOperations.Add(operation);
+                    else
+                        m_DeniedExternalOperations.Add(operation);
+                }
+
+                public bool IsDenied(IToolPermissions.ItemOperation operation, string path)
+                {
+                    var isProjectPath = PathUtils.IsProjectPath(path);
+                    return isProjectPath
+                        ? m_DeniedProjectOperations.Contains(operation)
+                        : m_DeniedExternalOperations.Contains(operation);
+                }
+
                 public void AppendTemporaryPermissions(IList<IToolPermissions.TemporaryPermission> allowedStates)
                 {
                     foreach (var operation in m_AllowedProjectOperations)
@@ -57,6 +82,18 @@ namespace Unity.AI.Assistant.FunctionCalling
                     foreach (var operation in m_AllowedExternalOperations)
                     {
                         var permission = new IToolPermissions.TemporaryPermission($"{operation} {k_ExternalFilesName}", () => m_AllowedExternalOperations.Remove(operation));
+                        allowedStates.Add(permission);
+                    }
+
+                    foreach (var operation in m_DeniedProjectOperations)
+                    {
+                        var permission = new IToolPermissions.TemporaryPermission($"{operation} {k_ProjectFilesName} (Denied)", () => m_DeniedProjectOperations.Remove(operation));
+                        allowedStates.Add(permission);
+                    }
+
+                    foreach (var operation in m_DeniedExternalOperations)
+                    {
+                        var permission = new IToolPermissions.TemporaryPermission($"{operation} {k_ExternalFilesName} (Denied)", () => m_DeniedExternalOperations.Remove(operation));
                         allowedStates.Add(permission);
                     }
                 }
@@ -94,6 +131,11 @@ namespace Unity.AI.Assistant.FunctionCalling
                         currentStatus = PermissionStatus.Denied;
                         break;
 
+                    case UserAnswer.DenyAlways:
+                        State.FileSystem.Deny(operation, path);
+                        currentStatus = PermissionStatus.Denied;
+                        break;
+
                     default:
                         throw new ArgumentOutOfRangeException();
                 }
@@ -122,12 +164,14 @@ namespace Unity.AI.Assistant.FunctionCalling
             {
                 IPermissionsPolicyProvider.PermissionPolicy.Allow => PermissionStatus.Approved,
                 IPermissionsPolicyProvider.PermissionPolicy.Ask =>
-                    State.FileSystem.IsAllowed(operation, path) ? PermissionStatus.Approved : PermissionStatus.Pending,
+                    State.FileSystem.IsAllowed(operation, path) ? PermissionStatus.Approved :
+                    State.FileSystem.IsDenied(operation, path) ? PermissionStatus.Denied :
+                    PermissionStatus.Pending,
                 IPermissionsPolicyProvider.PermissionPolicy.Deny => PermissionStatus.Denied,
                 _ => throw new ArgumentOutOfRangeException()
             };
         }
 
-        protected abstract IUserInteraction<UserAnswer> CreateFileSystemAccessElement(ToolExecutionContext.CallInfo callInfo, IToolPermissions.ItemOperation operation, string path);
+        protected abstract IInteractionSource<UserAnswer> CreateFileSystemAccessElement(ToolExecutionContext.CallInfo callInfo, IToolPermissions.ItemOperation operation, string path);
     }
 }

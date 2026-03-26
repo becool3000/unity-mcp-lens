@@ -1,7 +1,10 @@
 using System;
+using System.Linq;
 using System.Threading.Tasks;
 using Unity.AI.Assistant.Utils;
 using Unity.AI.Search.Editor.Services;
+using Unity.AI.Search.Editor.Utilities;
+using Unity.AI.Toolkit;
 using Unity.AI.Toolkit.Utility;
 using UnityEditor;
 
@@ -19,7 +22,7 @@ namespace Unity.AI.Search.Editor.Knowledge
         static void Init()
         {
             // Defer execution until the editor is fully initialized
-            EditorApplication.delayCall += OnEditorReady;
+            EditorTask.delayCall += OnEditorReady;
         }
 
         static void OnEditorReady()
@@ -128,7 +131,7 @@ namespace Unity.AI.Search.Editor.Knowledge
             InternalLog.Log($"[KnowledgeBackfill] Total time: {timeElapsed.TotalSeconds:0.0}s",
                 LogFilter.Search);
             InternalLog.Log(
-                $"[KnowledgeBackfill] Total embeddings in index: {EmbeddingIndex.instance.assets.Count}",
+                $"[KnowledgeBackfill] Total embeddings in index: {EmbeddingIndex.instance.TotalEmbeddingsCount}",
                 LogFilter.Search);
 
             SessionState.SetBool(k_BackFillDoneSessionStateKey, true);
@@ -174,7 +177,7 @@ namespace Unity.AI.Search.Editor.Knowledge
             try
             {
                 // This will initialize the model and generate tag embeddings if not already done
-                await ModelService.Default.IsReadyAsync();
+                await PipelineReadiness.IsReadyAsync();
             }
             catch
             {

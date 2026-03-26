@@ -5,6 +5,7 @@ using System.Reflection;
 using System.Threading.Tasks;
 using Newtonsoft.Json.Linq;
 using Unity.AI.Assistant.Editor.Backend.Socket.Tools;
+using Unity.AI.Assistant.Tools.Editor;
 using Unity.AI.Assistant.FunctionCalling;
 using Unity.AI.Assistant.Utils;
 using Unity.AI.MCP.Editor.Helpers;

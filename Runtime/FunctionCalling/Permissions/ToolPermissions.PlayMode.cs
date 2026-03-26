@@ -17,9 +17,13 @@ namespace Unity.AI.Assistant.FunctionCalling
                 [SerializeField]
                 List<IToolPermissions.PlayModeOperation> m_AllowedOperations = new();
 
+                [SerializeField]
+                List<IToolPermissions.PlayModeOperation> m_DeniedOperations = new();
+
                 public void Reset()
                 {
                     m_AllowedOperations.Clear();
+                    m_DeniedOperations.Clear();
                 }
 
                 public void Allow(IToolPermissions.PlayModeOperation operation)
@@ -32,11 +36,27 @@ namespace Unity.AI.Assistant.FunctionCalling
                     return m_AllowedOperations.Contains(operation);
                 }
 
+                public void Deny(IToolPermissions.PlayModeOperation operation)
+                {
+                    m_DeniedOperations.Add(operation);
+                }
+
+                public bool IsDenied(IToolPermissions.PlayModeOperation operation)
+                {
+                    return m_DeniedOperations.Contains(operation);
+                }
+
                 public void AppendTemporaryPermissions(IList<IToolPermissions.TemporaryPermission> allowedStates)
                 {
                     foreach (var operation in m_AllowedOperations)
                     {
                         var permission = new IToolPermissions.TemporaryPermission($"{operation} Play Mode", () => m_AllowedOperations.Remove(operation));
+                        allowedStates.Add(permission);
+                    }
+
+                    foreach (var operation in m_DeniedOperations)
+                    {
+                        var permission = new IToolPermissions.TemporaryPermission($"{operation} Play Mode (Denied)", () => m_DeniedOperations.Remove(operation));
                         allowedStates.Add(permission);
                     }
                 }
@@ -72,6 +92,11 @@ namespace Unity.AI.Assistant.FunctionCalling
                         currentStatus = PermissionStatus.Denied;
                         break;
 
+                    case UserAnswer.DenyAlways:
+                        State.PlayMode.Deny(operation);
+                        currentStatus = PermissionStatus.Denied;
+                        break;
+
                     default:
                         throw new ArgumentOutOfRangeException();
                 }
@@ -98,12 +123,14 @@ namespace Unity.AI.Assistant.FunctionCalling
             {
                 IPermissionsPolicyProvider.PermissionPolicy.Allow => PermissionStatus.Approved,
                 IPermissionsPolicyProvider.PermissionPolicy.Ask =>
-                    State.PlayMode.IsAllowed(operation) ? PermissionStatus.Approved : PermissionStatus.Pending,
+                    State.PlayMode.IsAllowed(operation) ? PermissionStatus.Approved :
+                    State.PlayMode.IsDenied(operation) ? PermissionStatus.Denied :
+                    PermissionStatus.Pending,
                 IPermissionsPolicyProvider.PermissionPolicy.Deny => PermissionStatus.Denied,
                 _ => throw new ArgumentOutOfRangeException()
             };
         }
 
-        protected abstract IUserInteraction<UserAnswer> CreatePlayModeElement(ToolExecutionContext.CallInfo callInfo, IToolPermissions.PlayModeOperation operation);
+        protected abstract IInteractionSource<UserAnswer> CreatePlayModeElement(ToolExecutionContext.CallInfo callInfo, IToolPermissions.PlayModeOperation operation);
     }
 }

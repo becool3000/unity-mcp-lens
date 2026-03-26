@@ -24,7 +24,7 @@ namespace Unity.AI.Assistant.Editor.Acp
         public const string RejectOnceKind = "reject_once";
 
         /// <summary>
-        /// ACP option kind for "reject always" - not supported in Assistant UI.
+        /// ACP option kind for "reject always" (for this session/conversation).
         /// </summary>
         public const string RejectAlwaysKind = "reject_always";
 
@@ -38,6 +38,7 @@ namespace Unity.AI.Assistant.Editor.Acp
                 AllowOnceKind => ToolPermissions.UserAnswer.AllowOnce,
                 AllowAlwaysKind => ToolPermissions.UserAnswer.AllowAlways,
                 RejectOnceKind => ToolPermissions.UserAnswer.DenyOnce,
+                RejectAlwaysKind => ToolPermissions.UserAnswer.DenyAlways,
                 _ => ToolPermissions.UserAnswer.DenyOnce
             };
         }
@@ -52,20 +53,46 @@ namespace Unity.AI.Assistant.Editor.Acp
                 ToolPermissions.UserAnswer.AllowOnce => AllowOnceKind,
                 ToolPermissions.UserAnswer.AllowAlways => AllowAlwaysKind,
                 ToolPermissions.UserAnswer.DenyOnce => RejectOnceKind,
+                ToolPermissions.UserAnswer.DenyAlways => RejectAlwaysKind,
                 _ => RejectOnceKind
             };
         }
 
         /// <summary>
         /// Finds the ACP option ID that matches the given UserAnswer.
+        /// Falls back from session-scoped answers to single-use equivalents
+        /// when the tool doesn't support the broader scope.
         /// </summary>
         public static string FindOptionId(AcpPermissionOption[] options, ToolPermissions.UserAnswer answer)
         {
             if (options == null)
+            {
                 return null;
+            }
 
             var kind = ToAcpKind(answer);
-            return options.FirstOrDefault(o => o != null && o.Kind == kind)?.OptionId;
+            var optionId = options.FirstOrDefault(o => o != null && o.Kind == kind)?.OptionId;
+
+            if (optionId == null)
+            {
+                var fallbackKind = GetFallbackKind(kind);
+                if (fallbackKind != null)
+                {
+                    optionId = options.FirstOrDefault(o => o != null && o.Kind == fallbackKind)?.OptionId;
+                }
+            }
+
+            return optionId;
+        }
+
+        static string GetFallbackKind(string kind)
+        {
+            return kind switch
+            {
+                AllowAlwaysKind => AllowOnceKind,
+                RejectAlwaysKind => RejectOnceKind,
+                _ => null
+            };
         }
     }
 }

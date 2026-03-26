@@ -6,6 +6,25 @@ namespace Unity.AI.Assistant.Socket.Protocol
 {
     static class ProtocolUtility
     {
+        public static IGetAssistantModelsV1RequestBuilder GetAssistantModelsV1RequestBuilderWithAnalytics(this IAiAssistantApi api, bool? includeAllModels = null)
+        {
+            var credentialsContext = api.CredentialsContext;
+            var builder = api
+                .GetAssistantModelsV1Builder(
+                    analyticsSessionCount: credentialsContext.AnalyticsSessionCount,
+                    analyticsSessionId: credentialsContext.AnalyticsSessionId,
+                    analyticsUserId: credentialsContext.AnalyticsUserId,
+                    orgId: credentialsContext.OrganizationId,
+                    projectId: credentialsContext.ProjectId,
+                    versionApiSpecification: credentialsContext.ApiVersion,
+                    versionEditor: credentialsContext.EditorVersion,
+                    versionPackage: credentialsContext.PackageVersion
+                );
+            if (includeAllModels != null)
+                builder.SetIncludeAllModels(includeAllModels);
+            return builder;
+        }
+
         public static IGetAssistantConversationInfoV1RequestBuilder GetConversationInfoV1RequestBuilderWithAnalytics(
             this IAiAssistantApi api)
         {

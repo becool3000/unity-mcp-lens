@@ -40,7 +40,10 @@ namespace Unity.AI.MCP.Editor.Helpers
                 string installedVersion = ReadRelayVersion(Path.Combine(targetDir, k_RelayMetadataFileName));
 
                 if (!IsNewerVersion(bundledVersion, installedVersion))
+                {
+                    McpLog.Log($"Relay is up to date (bundled: {bundledVersion}, installed: {installedVersion})");
                     return;
+                }
 
                 if (!Directory.Exists(targetDir))
                     Directory.CreateDirectory(targetDir);
@@ -76,14 +79,34 @@ namespace Unity.AI.MCP.Editor.Helpers
         {
             try
             {
-                var pkgVersion = new Version(CleanVersion(packageVersion));
-                var instVersion = new Version(CleanVersion(installedVersion));
-                return pkgVersion > instVersion;
+                var pkgBase = new Version(CleanVersion(packageVersion));
+                var instBase = new Version(CleanVersion(installedVersion));
+
+                int cmp = pkgBase.CompareTo(instBase);
+                if (cmp != 0)
+                    return cmp > 0;
+
+                // Base versions equal — compare build numbers from pre-release tag
+                return ExtractBuildNumber(packageVersion) > ExtractBuildNumber(installedVersion);
             }
             catch
             {
                 return true;
             }
+        }
+
+        static int ExtractBuildNumber(string version)
+        {
+            // Parse "X.Y.Z-build.N" → N, or 0 if no tag
+            int dashIndex = version.IndexOf('-');
+            if (dashIndex < 0) return 0;
+
+            string tag = version.Substring(dashIndex + 1);
+            int lastDot = tag.LastIndexOf('.');
+            if (lastDot >= 0 && int.TryParse(tag.Substring(lastDot + 1), out int n))
+                return n;
+
+            return 0;
         }
 
         static string CleanVersion(string version)

@@ -144,7 +144,7 @@ namespace Unity.AI.MCP.Editor.Settings.UI
                 "• Modify scenes and GameObjects\n" +
                 "• Create and edit scripts\n" +
                 "• Access all project files and assets\n\n" +
-                $"Only approve connections from trusted applications.\n\n{legalDisclaimer}";
+                $"This connection is active. Use Revoke Access if you do not trust this application.\n\n{legalDisclaimer}";
         }
 
         /// <summary>
@@ -189,24 +189,24 @@ namespace Unity.AI.MCP.Editor.Settings.UI
             {
                 case SecurityTier.Unknown:
                     m_TierWarning.messageType = HelpBoxMessageType.Error;
-                    m_TierWarning.text = $"{appName} is attempting to connect. This application is unsigned or not recognized and may be dangerous!";
+                    m_TierWarning.text = $"{appName} has connected. This application is unsigned or not recognized and may be dangerous!";
                     break;
                 case SecurityTier.Untrusted:
                     m_TierWarning.messageType = HelpBoxMessageType.Warning;
-                    m_TierWarning.text = $"{appName} is requesting access. This application is unsigned - proceed with caution.";
+                    m_TierWarning.text = $"{appName} has connected. This application is unsigned - proceed with caution.";
                     break;
                 case SecurityTier.Trusted:
                     m_TierWarning.messageType = HelpBoxMessageType.Info;
                     if (!string.IsNullOrWhiteSpace(publisherName))
-                        m_TierWarning.text = $"{appName} from {publisherName} is requesting access.";
+                        m_TierWarning.text = $"{appName} from {publisherName} is connected.";
                     else if (isSigned)
-                        m_TierWarning.text = $"{appName} (unnamed publisher) is requesting access.";
+                        m_TierWarning.text = $"{appName} (unnamed publisher) is connected.";
                     else
-                        m_TierWarning.text = $"{appName} is requesting access.";
+                        m_TierWarning.text = $"{appName} is connected.";
                     break;
                 default:
                     m_TierWarning.messageType = HelpBoxMessageType.Warning;
-                    m_TierWarning.text = $"{appName} is requesting Unity access.";
+                    m_TierWarning.text = $"{appName} is connected to Unity.";
                     break;
             }
         }

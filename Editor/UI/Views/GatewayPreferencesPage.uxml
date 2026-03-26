@@ -5,6 +5,11 @@
             <ui:VisualElement name="gateway-settings-content" class="gateway-settings-content">
                 <ui:Label name="error-message"/>
 
+                <!-- Enable Traces -->
+                <ui:VisualElement class="gateway-settings-row">
+                    <ui:Toggle name="enable-traces-toggle" label="Enable Traces" class="gateway-traces-toggle" tooltip="Writes a traces.jsonl file in the project's Logs folder for bug reporting purposes." />
+                </ui:VisualElement>
+
                 <!-- Agent Type Selection -->
                 <ui:VisualElement class="gateway-settings-row">
                     <ui:Label text="Agent Type" class="gateway-settings-label" />

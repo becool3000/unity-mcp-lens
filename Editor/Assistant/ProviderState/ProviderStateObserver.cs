@@ -1,5 +1,6 @@
 using System;
 using Unity.AI.Assistant.Editor.Acp;
+using Unity.AI.Toolkit;
 using UnityEditor;
 using UnityEngine;
 
@@ -12,9 +13,7 @@ namespace Unity.AI.Assistant.Editor
     /// </summary>
     static class ProviderStateObserver
     {
-        const string k_UnityProviderId = "unity";
-
-        static string s_CurrentProviderId = k_UnityProviderId;
+        static string s_CurrentProviderId = AssistantProviderFactory.DefaultProvider.ProfileId;
         static ProviderReadyState s_ReadyState = ProviderReadyState.Ready;
         static string s_InitializationError;
         static string s_InitializationErrorCode;
@@ -99,9 +98,9 @@ namespace Unity.AI.Assistant.Editor
         public static bool IsReady => s_ReadyState == ProviderReadyState.Ready;
 
         /// <summary>
-        /// Returns true if the Unity provider is currently selected.
+        /// Returns true if a Unity profile is currently selected
         /// </summary>
-        public static bool IsUnityProvider => string.IsNullOrEmpty(s_CurrentProviderId) || s_CurrentProviderId == k_UnityProviderId;
+        public static bool IsUnityProvider => AssistantProviderFactory.IsUnityProvider(s_CurrentProviderId);
 
         /// <summary>
         /// Sets the current provider and notifies subscribers.
@@ -114,9 +113,9 @@ namespace Unity.AI.Assistant.Editor
             if (s_CurrentProviderId == providerId)
                 return;
 
-            AcpTracing.Observer.Debug($"observer.provider.changed: oldId={s_CurrentProviderId}, newId={providerId ?? k_UnityProviderId}");
+            AcpTracing.Observer.Debug($"observer.provider.changed: oldId={s_CurrentProviderId}, newId={providerId ?? AssistantProviderFactory.DefaultProvider.ProfileId}");
 
-            s_CurrentProviderId = providerId ?? k_UnityProviderId;
+            s_CurrentProviderId = providerId ?? AssistantProviderFactory.DefaultProvider.ProfileId;
 
             // All providers start as Ready. Initializing state is set explicitly
             // when a session is being created (ConversationLoad or EnsureSession).
@@ -188,20 +187,20 @@ namespace Unity.AI.Assistant.Editor
         {
             AcpTracing.Observer.Debug($"observer.reset");
 
-            s_CurrentProviderId = k_UnityProviderId;
+            s_CurrentProviderId = AssistantProviderFactory.DefaultProvider.ProfileId;
             s_ReadyState = ProviderReadyState.Ready;
             s_InitializationError = null;
             s_InitializationErrorCode = null;
             s_CurrentPhase = InitializationPhase.None;
 
-            Dispatch(() => OnProviderChanged?.Invoke(k_UnityProviderId));
+            Dispatch(() => OnProviderChanged?.Invoke(AssistantProviderFactory.DefaultProvider.ProfileId));
             Dispatch(() => OnReadyStateChanged?.Invoke(ProviderReadyState.Ready, null));
             Dispatch(() => OnPhaseChanged?.Invoke(InitializationPhase.None));
         }
 
         static void Dispatch(Action action)
         {
-            EditorApplication.delayCall += () => action();
+            EditorTask.delayCall += () => action();
         }
     }
 }

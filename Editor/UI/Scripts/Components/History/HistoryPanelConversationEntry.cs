@@ -1,3 +1,5 @@
+using System;
+using Unity.AI.Assistant.Editor.Acp;
 using Unity.AI.Assistant.Editor.Analytics;
 using Unity.AI.Assistant.Editor.Utils.Event;
 using Unity.AI.Assistant.UI.Editor.Scripts.Data;
@@ -159,7 +161,7 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components.History
 
             // Determine provider ID for icon lookup
             bool isUnityProvider = string.IsNullOrEmpty(m_Data.ProviderId) ||
-                                   m_Data.ProviderId == Unity.AI.Assistant.Editor.Acp.AssistantProviderFactory.UnityProviderId;
+                                   AssistantProviderFactory.IsUnityProvider(m_Data.ProviderId);
 
             string providerIdForIcon = isUnityProvider ? "unity" : m_Data.ProviderId;
 

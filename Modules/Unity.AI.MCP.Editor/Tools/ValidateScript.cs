@@ -15,6 +15,8 @@ namespace Unity.AI.MCP.Editor.Tools
         /// <summary>
         /// Description of the Unity.ValidateScript tool functionality and parameters.
         /// </summary>
+        public const string Title = "Validate a C# script";
+
         public const string Description = @"Validate a C# script and return diagnostics.
 
 Args: uri, level=('basic'|'standard'), include_diagnostics (bool, optional).
@@ -82,7 +84,7 @@ Args: uri, level=('basic'|'standard'), include_diagnostics (bool, optional).
         /// </summary>
         /// <param name="parameters">The validation parameters including URI, validation level, and diagnostic options.</param>
         /// <returns>A response object containing validation results with error and warning counts, and optionally full diagnostics.</returns>
-        [McpTool("Unity.ValidateScript", Description, Groups = new string[] { "core", "scripting" })]
+        [McpTool("Unity.ValidateScript", Description, Title, Groups = new string[] { "core", "scripting" })]
         public static object HandleCommand(ValidateScriptParams parameters)
         {
             string uri = parameters?.Uri;

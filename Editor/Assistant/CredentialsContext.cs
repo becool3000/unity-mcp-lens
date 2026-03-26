@@ -69,7 +69,7 @@ namespace Unity.AI.Assistant.Editor
             public string version;
         }
 
-        static string GetPackageVersion()
+        internal static string GetPackageVersion()
         {
             try
             {

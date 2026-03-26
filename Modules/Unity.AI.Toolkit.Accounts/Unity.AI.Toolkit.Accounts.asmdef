@@ -2,7 +2,8 @@
     "name": "Unity.AI.Toolkit.Accounts",
     "rootNamespace": "Unity.AI.Toolkit.Accounts",
     "references": [
-        "GUID:5a241fc381813534d9cc6d07eb989239"
+        "GUID:5a241fc381813534d9cc6d07eb989239",
+        "GUID:6faae282c16541e783ea8766fb588077"
     ],
     "includePlatforms": [
         "Editor"
@@ -22,8 +23,5 @@
             "define": "UNITY_AI_OPEN_BETA"
         }
     ],
-    "noEngineReferences": false,
-    "internalsVisibleTo": [
-        "Unity.AI.Assistant.Editor"
-    ]
+    "noEngineReferences": false
 }

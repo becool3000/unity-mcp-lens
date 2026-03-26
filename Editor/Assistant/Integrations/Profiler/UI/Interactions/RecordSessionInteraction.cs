@@ -1,51 +1,37 @@
-﻿using Unity.AI.Assistant.Editor.Backend.Socket.Tools;
+using System;
+using System.Threading.Tasks;
+using Unity.AI.Assistant.Editor.Backend.Socket.Tools;
+using Unity.AI.Assistant.FunctionCalling;
 using UnityEditor;
-using UnityEngine;
-using UnityEngine.UIElements;
 
 namespace Unity.AI.Assistant.Integrations.Profiler.Editor
 {
-    class RecordSessionInteraction : BaseInteraction<SessionProvider.ProfilerSessionInfo>
+    class RecordSessionInteraction : IInteractionSource<SessionProvider.ProfilerSessionInfo>, IUserInteraction
     {
-        public RecordSessionInteraction()
+        public string Action => "Open Profiler";
+        public string Detail => "No existing profiler captures. Record a new capture and prompt again.";
+        public string AllowLabel => "Open Profiler";
+        public string DenyLabel => "Cancel";
+        public bool ShowScope => false;
+
+        public event Action<SessionProvider.ProfilerSessionInfo> OnCompleted;
+        public TaskCompletionSource<SessionProvider.ProfilerSessionInfo> TaskCompletionSource { get; } = new();
+
+        public void Respond(ToolPermissions.UserAnswer answer)
         {
-            AddToClassList("record-session-interaction");
-            var path = ProfilerUIConstants.UIPath + "/Interactions/RecordSessionInteraction.uss";
-            styleSheets.Add(AssetDatabase.LoadAssetAtPath<StyleSheet>(path));
+            if (answer == ToolPermissions.UserAnswer.AllowOnce || answer == ToolPermissions.UserAnswer.AllowAlways)
+            {
+                var profilerWindow = EditorWindow.GetWindow<ProfilerWindow>();
+                profilerWindow.Show();
+            }
 
-            // Row 1: Icon + Title
-            var headerRow = new VisualElement();
-            headerRow.AddToClassList("record-session-interaction__header-row");
-
-            var icon = new VisualElement();
-            icon.AddToClassList("record-session-interaction__icon");
-            icon.AddToClassList("mui-icon-info");
-            headerRow.Add(icon);
-
-            var title = new Label("No Existing Profiler Captures");
-            title.AddToClassList("record-session-interaction__title");
-            headerRow.Add(title);
-
-            Add(headerRow);
-
-            // Row 2: Description
-            var description = new Label("Assistant can analyze existing profiling captures, but there are none available. Record a new capture and prompt again.");
-            description.AddToClassList("record-session-interaction__description");
-            Add(description);
-
-            // Row 3: Button
-            var button = new Button(OnOpenProfilerClicked) { text = "Open Profiler" };
-            button.AddToClassList("record-session-interaction__button");
-            button.AddToClassList("mui-action-button");
-            Add(button);
+            TaskCompletionSource.TrySetResult(null);
+            OnCompleted?.Invoke(null);
         }
 
-        void OnOpenProfilerClicked()
+        public void CancelInteraction()
         {
-            var profilerWindow = EditorWindow.GetWindow<ProfilerWindow>();
-            profilerWindow.Show();
-
-            CompleteInteraction(null);
+            TaskCompletionSource.TrySetCanceled();
         }
     }
 }

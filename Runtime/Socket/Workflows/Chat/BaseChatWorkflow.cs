@@ -265,7 +265,7 @@ namespace Unity.AI.Assistant.Socket.Workflows.Chat
         }
 
         public async Task<IStreamStatusHook> SendChatRequest(string prompt, List<ChatRequestV1.AttachedContextModel> context,
-            IAgent agent = null, AssistantMode? assistantMode = null, CancellationToken ct = default)
+            IAgent agent = null, AssistantMode? assistantMode = null, ModelConfiguration modelConfiguration = null, CancellationToken ct = default)
         {
             if (!CheckWorkflowIsOneOfStates(State.Idle))
                 throw new InvalidOperationException("A chat request cannot be made unless the workflow is idle or in the initial connection handshake");
@@ -287,7 +287,8 @@ namespace Unity.AI.Assistant.Socket.Workflows.Chat
                 Markdown = prompt,
                 AttachedContext = context,
                 Agent = agent.ConvertToAgentDefinitionV1(),
-                Mode = assistantMode?.ToName()
+                Mode = assistantMode?.ToName(),
+                ModelSettings = modelConfiguration
             }, ct);
 
             m_ChatRequestCancellationTokenSource = new();

@@ -35,6 +35,11 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components.History
         {
         }
 
+        public void FocusSearch()
+        {
+            m_SearchBar.Focus();
+        }
+
         protected override void InitializeView(TemplateContainer view)
         {
             m_ContentRoot = view.Q<VisualElement>("historyContentRoot");

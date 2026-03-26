@@ -5,11 +5,11 @@
         <ui:VisualElement name="root-main">
             <ui:VisualElement name="headerRoot" class="mui-header -muse-chat-panel">
                 <ui:VisualElement name="headerRow" class="mui-header-row">
+                    <ui:Button name="expandedPanelBackButton" class="mui-action-button mui-header-button">
+                        <ui:Image class="mui-action-button-image-large mui-icon-arrow-left"/>
+                    </ui:Button>
                     <ui:Button name="newChatButton" class="mui-action-button mui-header-button">
                         <ui:Label class="mui-action-button-label-header" text="New"/>
-                    </ui:Button>
-                    <ui:Button name="hideRevertedTimeStampViewButton" class="mui-action-button mui-header-button">
-                        <ui:Image class="mui-action-button-image-large mui-icon-arrow-left"/>
                     </ui:Button>
                     <ui:Label name="conversationNameLabel" class="mui-chat-label mui-header-label" text="Conversation Name" picking-mode="ignore"/>
                     <ui:Button name="openSearchButton" class="mui-action-button mui-header-button">
@@ -38,18 +38,13 @@
                     <ui:VisualElement class="mui-conversation-panel">
                         <ui:VisualElement name="chatPanelRoot">
                         </ui:VisualElement>
-
-                        <VisualElement name="userInteractionContainer"/>
                     </ui:VisualElement>
 
                     <ui:VisualElement name="emptyStateRoot" class="mui-chat-empty-state">
                         <ui:VisualElement name="emptyStateLoading" class="mui-chat-empty-state-loading">
                         </ui:VisualElement>
                         <ui:VisualElement name="emptyStateContent" class="mui-chat-empty-state-content">
-                            <ui:Button name="museChatWhatsNewButton" class="mui-action-button mui-chat-whats-new-button">
-                                <ui:Image class="mui-action-button-image-large mui-icon-sparkle"/>
-                                <ui:Label text="See what's new" class="mui-action-button-label"/>
-                            </ui:Button>
+                            <ui:VisualElement name="whatsNewBannerRoot"/>
                             <ui:VisualElement class="mui-chat-disclaimer">
                                 <ui:Label text="Surprises and mistakes are possible. Make sure to check results, and share feedback so we can learn and improve." class="mui-chat-label mui-chat-disclaimer-text"/>
                             </ui:VisualElement>

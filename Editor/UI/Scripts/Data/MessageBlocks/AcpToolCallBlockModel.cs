@@ -1,4 +1,5 @@
 using System;
+using Newtonsoft.Json.Linq;
 using Unity.AI.Assistant.Editor.Acp;
 
 namespace Unity.AI.Assistant.UI.Editor.Scripts.Data.MessageBlocks
@@ -9,6 +10,8 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Data.MessageBlocks
     /// </summary>
     class AcpToolCallBlockModel : IMessageBlockModel, IEquatable<AcpToolCallBlockModel>
     {
+        static readonly JTokenEqualityComparer s_JTokenComparer = new();
+
         /// <summary>
         /// The tool call info, updated on each tool_call event for this tool call ID.
         /// </summary>
@@ -37,6 +40,11 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Data.MessageBlocks
         /// </summary>
         public bool IsReasoning;
 
+        /// <summary>
+        /// The full rawInput JObject, preserved for auto-approved tool calls that need to display file content.
+        /// </summary>
+        public JObject RawInput;
+
         public string ToolCallId => CallInfo?.ToolCallId;
 
         /// <summary>
@@ -52,10 +60,12 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Data.MessageBlocks
                 && Equals(LatestUpdate, other.LatestUpdate)
                 && Equals(PendingPermission, other.PendingPermission)
                 && Equals(PermissionResponse, other.PermissionResponse)
-                && IsReasoning == other.IsReasoning;
+                && IsReasoning == other.IsReasoning
+                && JToken.DeepEquals(RawInput, other.RawInput);
         }
 
         public override bool Equals(object obj) => obj is AcpToolCallBlockModel other && Equals(other);
-        public override int GetHashCode() => HashCode.Combine(CallInfo, LatestUpdate, PendingPermission, PermissionResponse, IsReasoning);
+        public override int GetHashCode() => HashCode.Combine(CallInfo, LatestUpdate, PendingPermission, PermissionResponse, IsReasoning,
+            RawInput != null ? s_JTokenComparer.GetHashCode(RawInput) : 0);
     }
 }

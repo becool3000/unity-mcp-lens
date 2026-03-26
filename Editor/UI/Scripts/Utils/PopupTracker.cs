@@ -151,7 +151,7 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Utils
 
         public void RealignPopup()
         {
-            if (m_Anchor == null)
+            if (!m_AutoAlign || m_Anchor == null)
             {
                 return;
             }

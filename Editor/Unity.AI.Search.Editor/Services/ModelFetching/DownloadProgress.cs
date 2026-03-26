@@ -1,4 +1,5 @@
 using HuggingfaceHub;
+using Unity.AI.Toolkit;
 using UnityEditor;
 using UnityEngine.UIElements;
 
@@ -19,7 +20,7 @@ namespace HFHubClient
             if (ProgressBar != null)
             {
                 // Need to be on main thread to update UI:
-                EditorApplication.delayCall += () =>
+                EditorTask.delayCall += () =>
                 {
                     ProgressBar.value = pct;
                 };

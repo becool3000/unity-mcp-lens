@@ -1,7 +1,9 @@
+using System.Collections.Generic;
 using Unity.AI.Assistant.Editor.ServerCompatibility;
 using Unity.AI.Assistant.Editor;
 using Unity.AI.Toolkit.Accounts.Components;
 using Unity.AI.Toolkit.Accounts.Services;
+using Unity.Relay.Editor;
 using UnityEngine.UIElements;
 
 namespace Unity.AI.Assistant.Editor.SessionBanner
@@ -17,7 +19,10 @@ namespace Unity.AI.Assistant.Editor.SessionBanner
         AssistantInsufficientPointsBanner m_InsufficientPointsBanner;
         AcpSessionStatusBannerProvider m_AcpBannerProvider;
         UpdateAvailableBanner m_UpdateAvailableBanner;
+        BasicBannerContent m_RelayStoppedBanner;
+        BasicBannerContent m_RelayReconnectingBanner;
         bool m_IsAttached;
+        bool m_RelayWasConnected;
 
         public SessionBanner()
         {
@@ -37,6 +42,8 @@ namespace Unity.AI.Assistant.Editor.SessionBanner
 
             // Subscribe directly to ready state changes to ensure banner updates
             ProviderStateObserver.OnReadyStateChanged += OnReadyStateChanged;
+            RelayService.Instance.StateChanged += OnRelayStateChanged;
+            m_RelayWasConnected = RelayService.Instance.IsConnected;
 
             if (!ProviderStateObserver.IsUnityProvider)
             {
@@ -51,6 +58,7 @@ namespace Unity.AI.Assistant.Editor.SessionBanner
             m_IsAttached = false;
 
             ProviderStateObserver.OnReadyStateChanged -= OnReadyStateChanged;
+            RelayService.Instance.StateChanged -= OnRelayStateChanged;
 
             if (m_AcpBannerProvider != null)
             {
@@ -78,6 +86,19 @@ namespace Unity.AI.Assistant.Editor.SessionBanner
 
         protected override VisualElement CurrentView()
         {
+            // Relay is required for all providers (chat routes through relay)
+            var relayStatus = RelayService.Instance.State.Status;
+            if (relayStatus == RelayStatus.Stopped || relayStatus == RelayStatus.Failed)
+            {
+                EnableInClassList("empty", false);
+                return m_RelayStoppedBanner ??= BuildRelayStoppedBanner();
+            }
+            if (relayStatus == RelayStatus.Connecting && m_RelayWasConnected)
+            {
+                EnableInClassList("empty", false);
+                return m_RelayReconnectingBanner ??= BuildRelayReconnectingBanner();
+            }
+
             var view = ProviderStateObserver.IsUnityProvider
                 ? GetUnityProviderBanner()
                 : GetAcpProviderBanner();
@@ -159,6 +180,31 @@ namespace Unity.AI.Assistant.Editor.SessionBanner
             }
 
             Refresh();
+        }
+
+        void OnRelayStateChanged()
+        {
+            if (RelayService.Instance.State.Status == RelayStatus.Running)
+                m_RelayWasConnected = true;
+            m_RelayStoppedBanner = null;
+            m_RelayReconnectingBanner = null;
+            Refresh();
+        }
+
+        static BasicBannerContent BuildRelayStoppedBanner()
+        {
+            var message = "Chat is unavailable — relay connection was lost.\n<link=reconnect-relay><color=#7BAEFA>Try reconnecting</color></link>";
+            var links = new List<LabelLink>
+            {
+                new LabelLink("reconnect-relay", () => _ = RelayService.Instance.StartAsync())
+            };
+            return new BasicBannerContent(message, links);
+        }
+
+        static BasicBannerContent BuildRelayReconnectingBanner()
+        {
+            var message = "Chat is unavailable — reconnecting...";
+            return new BasicBannerContent(message, links: null, loadingMessage: message);
         }
 
         void Dismiss()

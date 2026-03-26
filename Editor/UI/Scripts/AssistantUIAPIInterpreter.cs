@@ -12,7 +12,9 @@ using Unity.AI.Assistant.Editor.CodeAnalyze;
 using Unity.AI.Assistant.Editor.CodeBlock;
 using Unity.AI.Assistant.Editor.Context;
 using Unity.AI.Assistant.Editor.Utils;
+using Unity.AI.Assistant.Socket.Protocol.Models.FromClient;
 using Unity.AI.Assistant.Editor.Checkpoint;
+using Unity.AI.Assistant.UI.Editor.Scripts.Components.UserInteraction;
 using Unity.AI.Assistant.UI.Editor.Scripts.Data;
 using Unity.AI.Assistant.UI.Editor.Scripts.Data.MessageBlocks;
 using Unity.AI.Assistant.Utils;
@@ -26,11 +28,15 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts
     internal class AssistantUIAPIInterpreter
     {
         readonly AssistantBlackboard m_Blackboard;
+        readonly Func<ModelConfiguration> m_GetModelConfiguration;
+        readonly UserInteractionQueue m_InteractionQueue;
 
-        public AssistantUIAPIInterpreter(IAssistantProvider provider, AssistantBlackboard blackboard)
+        public AssistantUIAPIInterpreter(IAssistantProvider provider, AssistantBlackboard blackboard, UserInteractionQueue interactionQueue, Func<ModelConfiguration> getModelConfiguration = null)
         {
             m_Blackboard = blackboard;
+            m_InteractionQueue = interactionQueue;
             Provider = provider;
+            m_GetModelConfiguration = getModelConfiguration;
         }
 
         /// <summary>
@@ -50,6 +56,7 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts
             Provider.PromptStateChanged += OnPromptStateChanged;
 
             Provider.FeedbackLoaded += OnFeedbackLoaded;
+            Provider.FeedbackSent += OnFeedbackSent;
             Provider.MessageCostReceived += OnMessageCostReceived;
 
             Provider.IncompleteMessageStarted += OnIncompleteMessageStarted;
@@ -72,6 +79,7 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts
         public event Action APIStateChanged;
 
         public event Action<AssistantMessageId, FeedbackData?> FeedbackLoaded;
+        public event Action<AssistantMessageId, bool> FeedbackSent;
         public event Action<AssistantMessageId, int?> MessageCostReceived;
 
         // Capability events - forwarded from providers that support them
@@ -113,6 +121,11 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts
         void OnFeedbackLoaded(AssistantMessageId messageId, FeedbackData? feedback)
         {
             MainThread.DispatchAndForget(() => FeedbackLoaded?.Invoke(messageId, feedback));
+        }
+
+        void OnFeedbackSent(AssistantMessageId messageId, bool success)
+        {
+            MainThread.DispatchIfNeeded(() => FeedbackSent?.Invoke(messageId, success));
         }
 
         void OnMessageCostReceived(AssistantMessageId assistantMessageId, int? cost, bool isNewMessage)
@@ -260,6 +273,7 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts
             Provider.ConversationChanged -= OnConversationChanged;
             Provider.ConversationDeleted -= OnConversationDeleted;
             Provider.FeedbackLoaded -= OnFeedbackLoaded;
+            Provider.FeedbackSent -= OnFeedbackSent;
             Provider.MessageCostReceived -= OnMessageCostReceived;
             Provider.IncompleteMessageStarted -= OnIncompleteMessageStarted;
             Provider.IncompleteMessageCompleted -= OnIncompleteMessageCompleted;
@@ -419,7 +433,9 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts
             }
 
             RemoveErrorFromCurrentConversation();
-            TaskUtils.WithExceptionLogging(Provider.ProcessPrompt(m_Blackboard.ActiveConversationId, BuildPrompt(stringPrompt, assistantMode), agent, ct));
+            var prompt = BuildPrompt(stringPrompt, assistantMode);
+            prompt.ModelConfiguration = m_GetModelConfiguration?.Invoke();
+            TaskUtils.WithExceptionLogging(Provider.ProcessPrompt(m_Blackboard.ActiveConversationId, prompt, agent, ct));
         }
 
         void RemoveErrorFromCurrentConversation()
@@ -514,7 +530,8 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts
                     LatestUpdate = b.LatestUpdate,
                     PendingPermission = b.PendingPermission,
                     PermissionResponse = b.PermissionResponse,
-                    IsReasoning = b.IsReasoning
+                    IsReasoning = b.IsReasoning,
+                    RawInput = b.RawInput
                 },
                 AcpPlanBlock b => new AcpPlanBlockModel { Entries = b.Entries },
                 AcpToolCallStorageBlock storageBlock => ConvertStorageBlockToModel(storageBlock),
@@ -534,7 +551,8 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts
                 LatestUpdate = toolCallBlock.LatestUpdate,
                 PendingPermission = toolCallBlock.PendingPermission,
                 PermissionResponse = toolCallBlock.PermissionResponse,
-                IsReasoning = toolCallBlock.IsReasoning
+                IsReasoning = toolCallBlock.IsReasoning,
+                RawInput = toolCallBlock.RawInput
             };
         }
 
@@ -631,6 +649,13 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts
             if (isWorking && m_Blackboard.ActiveConversation != null)
             {
                 m_Blackboard.ActiveConversation.StartTime = 0;
+            }
+
+            // When the assistant stops working, clear any pending permission requests
+            // from the UI queue — they are stale at this point.
+            if (!isWorking)
+            {
+                m_InteractionQueue.CancelAll();
             }
 
             MainThread.DispatchAndForget(() => APIStateChanged?.Invoke());

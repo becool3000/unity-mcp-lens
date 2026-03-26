@@ -5,7 +5,7 @@ using UnityEngine.UIElements;
 
 namespace Unity.AI.Assistant.Integrations.Sample.Editor
 {
-    abstract class BaseInteraction<TOutput> : VisualElement, IUserInteraction<TOutput>
+    abstract class BaseInteraction<TOutput> : VisualElement, IInteractionSource<TOutput>
     {
         public event Action<TOutput> OnCompleted;
 

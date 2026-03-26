@@ -57,7 +57,16 @@ namespace Unity.AI.Mesh.Services.Stores.Slices
                         state.generationSettings.Remove(payload.payload);
                     return state with { };
                 })
-                .AddCase(ModelSelectorActions.setLastModelDiscoveryTimestamp).With((state, _) => state with { })
+                .AddCase(ModelSelectorActions.setLastModelDiscoveryTimestamp).With((state, _) =>
+                {
+                    state = state with { };
+                    foreach (var (_, generationSetting) in state.generationSettings)
+                    {
+                        generationSetting.EnsureSelectedModelID(store.State);
+                    }
+
+                    return state;
+                })
                 .AddCase(ModelSelectorActions.discoverModels.Fulfilled, async (state, payload) =>
                 {
                     var models = new List<ModelSettings>();

@@ -33,6 +33,7 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Utils
         static readonly Regex k_FirstSourceMarkerRegEx = new Regex(@"(?<!{{source:\d+}})({{source:\d+}})", RegexOptions.Compiled);
 
         static readonly Regex k_BoldRegex = new(@"\*\*(.*?)\*\*", RegexOptions.Compiled);
+        static readonly Regex k_RichTextTagRegex = new(@"<.*?>", RegexOptions.Compiled);
 
         static readonly DayOfWeek k_FirstDayOfWeek = CultureInfo.CurrentCulture.DateTimeFormat.FirstDayOfWeek;
 
@@ -374,6 +375,8 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Utils
         {
             return $"<a href=\"{url}\">{title}</a>";
         }
+
+        public static string StripRichTextTags(string text) => k_RichTextTagRegex.Replace(text, string.Empty);
 
         public static string RichColor(this string text, string hexColor)
         {

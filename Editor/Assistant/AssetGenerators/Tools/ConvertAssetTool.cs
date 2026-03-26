@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Unity.AI.Assistant.FunctionCalling;
 using Unity.AI.Generators.Tools;
+using Unity.AI.Toolkit;
 using UnityEditor;
 using UnityEditor.Animations;
 using UnityEngine;
@@ -67,7 +68,7 @@ namespace Unity.AI.Assistant.Editor.Backend.Socket.Tools
                 }
 
                 // Defer ping after import to avoid conflicts with rapid asset switching
-                EditorApplication.delayCall += () =>
+                EditorTask.delayCall += () =>
                 {
                     if (finalAsset != null)
                         EditorGUIUtility.PingObject(finalAsset);
@@ -135,7 +136,7 @@ namespace Unity.AI.Assistant.Editor.Backend.Socket.Tools
                 }
 
                 // Defer ping after import to avoid conflicts with rapid asset switching
-                EditorApplication.delayCall += () =>
+                EditorTask.delayCall += () =>
                 {
                     if (finalAsset != null)
                         EditorGUIUtility.PingObject(finalAsset);
@@ -206,7 +207,7 @@ namespace Unity.AI.Assistant.Editor.Backend.Socket.Tools
                 }
 
                 // Defer ping after import to avoid conflicts with rapid asset switching
-                EditorApplication.delayCall += () =>
+                EditorTask.delayCall += () =>
                 {
                     if (finalAsset != null)
                         EditorGUIUtility.PingObject(finalAsset);
@@ -283,7 +284,7 @@ namespace Unity.AI.Assistant.Editor.Backend.Socket.Tools
                 // --- 3. Return Success Output ---
                 var finalAsset = AssetDatabase.LoadAssetAtPath<AnimatorController>(savePath);
                 // Defer ping after import to avoid conflicts with rapid asset switching
-                EditorApplication.delayCall += () =>
+                EditorTask.delayCall += () =>
                 {
                     if (finalAsset != null)
                         EditorGUIUtility.PingObject(finalAsset);

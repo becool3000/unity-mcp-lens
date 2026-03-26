@@ -17,7 +17,7 @@ namespace Unity.AI.Assistant.FunctionCalling
             ToolInteractions = interactions;
         }
 
-        public Task<TOutput> WaitForUser<TOutput>(ToolExecutionContext.CallInfo callInfo, IUserInteraction<TOutput> userInteraction, int timeoutSeconds = 600, CancellationToken cancellationToken = default) => ToolInteractions.WaitForUser(callInfo, userInteraction, timeoutSeconds, cancellationToken);
+        public Task<TOutput> WaitForUser<TOutput>(ToolExecutionContext.CallInfo callInfo, IInteractionSource<TOutput> userInteraction, int timeoutSeconds = 600, CancellationToken cancellationToken = default) => ToolInteractions.WaitForUser(callInfo, userInteraction, timeoutSeconds, cancellationToken);
 
         public void ResetTemporaryPermissions() => ToolPermissions.ResetTemporaryPermissions();
 

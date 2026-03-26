@@ -4,7 +4,7 @@ using System.Collections.Generic;
 
 namespace Unity.AI.Assistant.Utils
 {
-    /// TODO:
+    /// TODO - https://jira.unity3d.com/browse/ASST-1993:
     /// This is a relatively fast way to patch an issue where other threads are requesting conversation update more
     /// frequently than the main thread is processing them. Ideally, we need to take a look at this more closely. It
     /// might be necessary to create a more robust scheduling system for our purposes. This should be revisited and a

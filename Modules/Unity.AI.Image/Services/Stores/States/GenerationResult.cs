@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Unity.AI.Generators.Asset;
 using Unity.AI.Image.Services.Undo;
 using Unity.AI.Image.Services.Utilities;
+using Unity.AI.Generators.UI.Actions;
 using Unity.AI.Generators.UI.Payloads;
 using Unity.AI.Generators.UI.Utilities;
 using Unity.AI.Toolkit.Asset;
@@ -40,6 +41,12 @@ namespace Unity.AI.Image.Services.Stores.States
         public Action<AssetReference> promoteNewAssetPostAction = null;
         public SerializableDictionary<string, GeneratedResultSelectorSettings> generatedResultSelectorSettings = new();
         public GenerationValidationResult generationValidation = new(true, BackendServiceConstants.ErrorTypes.Unknown, 0, new List<GenerationFeedbackData>());
+
+        /// <summary>
+        /// Tracks which generated assets have received user feedback (thumbs up/down).
+        /// Maps generation URI to the sentiment that was submitted.
+        /// </summary>
+        public SerializableDictionary<string, GenerationFeedbackSentiment> submittedFeedback = new();
     }
 
     [Serializable]

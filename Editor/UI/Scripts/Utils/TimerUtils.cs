@@ -1,6 +1,7 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using Unity.AI.Toolkit;
 using UnityEditor;
 
 namespace Unity.AI.Assistant.UI.Editor.Scripts.Utils
@@ -28,7 +29,7 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Utils
             {
                 await Task.Delay(time, token);
 
-                EditorApplication.delayCall += () => completed?.Invoke();
+                EditorTask.delayCall += () => completed?.Invoke();
             }
             catch (TaskCanceledException)
             {

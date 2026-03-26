@@ -15,6 +15,7 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components.ChatElements
     {
         readonly List<ChatElementBlockThought> m_ThoughtBlocks = new();
         readonly List<ChatElementBlockFunctionCall> m_FunctionCallBlocks = new();
+        readonly List<ChatElementBlockAcpToolCall> m_AcpToolCallBlocks = new();
 
         Foldout m_Foldout;
         VisualElement m_ContentContainer;
@@ -120,6 +121,32 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components.ChatElements
             return true;
         }
 
+        /// <summary>
+        /// Adds an ACP tool call block to the sequence.
+        /// </summary>
+        public ChatElementBlockAcpToolCall AddAcpToolCall(AcpToolCallBlockModel model)
+        {
+            var block = new ChatElementBlockAcpToolCall();
+            block.Initialize(Context);
+            block.SetBlockModel(model);
+
+            m_AcpToolCallBlocks.Add(block);
+            m_ContentContainer.Add(block);
+
+            m_LastTitle = AcpToolCallElement.GetDisplayTitle(model.CallInfo?.Title, model.CallInfo?.ToolName);
+            UpdateFoldoutTitle();
+
+            return block;
+        }
+
+        /// <summary>
+        /// Gets an existing ACP tool call block by tool call ID.
+        /// </summary>
+        public ChatElementBlockAcpToolCall GetAcpToolCall(string toolCallId)
+        {
+            return m_AcpToolCallBlocks.FirstOrDefault(b => b.ToolCallId == toolCallId);
+        }
+
         void UpdateFoldoutTitle()
         {
             // When expanded, show just "Thoughts"; when collapsed, show full title
@@ -138,7 +165,8 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components.ChatElements
 
         public bool HasPendingFunctionCalls()
         {
-            return m_FunctionCallBlocks.Any(b => !b.IsDone);
+            return m_FunctionCallBlocks.Any(b => !b.IsDone)
+                || m_AcpToolCallBlocks.Any(b => !b.IsDone);
         }
 
         public void Collapse()
@@ -147,42 +175,15 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components.ChatElements
             UpdateFoldoutTitle();
         }
 
-        public bool TryPushInteraction(Guid callId, VisualElement userInteraction)
-        {
-            for (var i = m_FunctionCallBlocks.Count - 1; i >= 0; i--)
-            {
-                var block = m_FunctionCallBlocks[i];
-                if (block.IsDone || block.CallId != callId)
-                    continue;
-
-                block.PushInteraction(userInteraction);
-                return true;
-            }
-
-            return false;
-        }
-
-        public bool TryPopInteraction(Guid callId, VisualElement userInteraction)
-        {
-            for (var i = m_FunctionCallBlocks.Count - 1; i >= 0; i--)
-            {
-                var block = m_FunctionCallBlocks[i];
-                if (block.CallId != callId)
-                    continue;
-
-                block.PopInteraction(userInteraction);
-                return true;
-            }
-
-            return false;
-        }
-
         public void OnConversationCancelled()
         {
             foreach (var block in m_ThoughtBlocks)
                 block.OnConversationCancelled();
-            
+
             foreach (var block in m_FunctionCallBlocks)
+                block.OnConversationCancelled();
+
+            foreach (var block in m_AcpToolCallBlocks)
                 block.OnConversationCancelled();
         }
     }

@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using Unity.AI.Assistant.Utils;
 using Unity.AI.Search.Editor.Embeddings;
 using Unity.AI.Search.Editor.Knowledge;
+using Unity.AI.Search.Editor.Services;
 using Unity.AI.Toolkit;
 using UnityEditor;
 using UnityEngine;
@@ -27,7 +28,7 @@ namespace Unity.AI.Search.Editor.Utilities
         // Preview and embedding generation have their own batch limits in the pipeline.
         // We use double the EmbeddingBatchSize here so some embedding jobs can be creating previews
         // while others are generating embeddings without filling the memory with all tasks at once.
-        readonly int k_BatchSize = EmbeddingProviders.EmbeddingBatchSize * 2;
+        readonly int k_BatchSize = ModelService.ImageAndTextModel.SuggestedBatchSize * 2;
 
         CancellationTokenSource m_CancellationTokenSource;
         bool m_IsProcessing;
@@ -47,7 +48,7 @@ namespace Unity.AI.Search.Editor.Utilities
 
             m_Queue.OnQueueChanged += OnQueueChanged;
             // Wait until all the `OnEnable` have been called since the QueueProcessor is often created in `InitializeOnLoad`
-            EditorApplication.delayCall += () => EditorTask.RunOnMainThread(Process);
+            EditorTask.delayCall += () => EditorTask.RunOnMainThread(Process);
         }
 
         public void Dispose()
@@ -105,7 +106,7 @@ namespace Unity.AI.Search.Editor.Utilities
             if (EditorApplication.isCompiling ||
                 EditorApplication.isUpdating)
             {
-                EditorApplication.delayCall += () => EditorTask.RunOnMainThread(Process);
+                EditorTask.delayCall += () => EditorTask.RunOnMainThread(Process);
                 return;
             }
 
@@ -131,7 +132,7 @@ namespace Unity.AI.Search.Editor.Utilities
                     {
                         if (cancellationToken.IsCancellationRequested) break;
 
-                        if (Application.isPlaying)
+                        if (Application.isPlaying || !AssetKnowledgeSettings.SearchEnabled)
                             return;
 
                         await ProcessBatch(m_Queue

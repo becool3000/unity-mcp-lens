@@ -4,6 +4,7 @@ using Unity.AI.Assistant.UI.Editor.Scripts.Components;
 using Unity.AI.Assistant.UI.Editor.Scripts.Components.ChatElements;
 using Unity.AI.Assistant.UI.Editor.Scripts.Data;
 using Unity.AI.Assistant.UI.Editor.Scripts.Utils;
+using Unity.AI.Toolkit;
 using UnityEditor;
 using UnityEditor.UIElements;
 using UnityEngine;
@@ -243,7 +244,7 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.ConversationSearch
 
             var scrollToMain = m_ScrollToMainSearchResult;
 
-            EditorApplication.delayCall += () =>
+            EditorTask.delayCall += () =>
             {
                 m_SearchHighlighter.Highlight(m_MessageView,
                     m_ConversationSearcher.SearchString,
@@ -319,7 +320,7 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.ConversationSearch
             m_SearchButton.EnableInClassList(k_SearchOpenClass, true);
         }
 
-        void HideSearchBar()
+        internal void HideSearchBar()
         {
             m_SearchContainer.SetDisplay(false);
 
@@ -334,8 +335,8 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.ConversationSearch
 
         void RequestSearchNextFrame()
         {
-            EditorApplication.delayCall -= DoSearch;
-            EditorApplication.delayCall += DoSearch;
+            EditorTask.delayCall -= DoSearch;
+            EditorTask.delayCall += DoSearch;
         }
 
         #region UI Element registration methods

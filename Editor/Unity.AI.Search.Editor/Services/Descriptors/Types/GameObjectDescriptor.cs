@@ -2,6 +2,7 @@
 using System.Threading.Tasks;
 using JetBrains.Annotations;
 using Unity.AI.Search.Editor.Embeddings;
+using Unity.AI.Search.Editor.Services;
 using Unity.AI.Search.Editor.Utilities;
 using UnityEngine;
 
@@ -10,14 +11,16 @@ namespace Unity.AI.Search.Editor.Knowledge.Descriptors
     [UsedImplicitly]
     class GameObjectDescriptor : AssetDescriptorBase<GameObject>
     {
-        public override string Version => "0.1.0";
+        public override IModelService Model => ModelService.ImageAndTextModel;
+        public override string Version => $"0.2.0_{Model.ModelId}";
 
-        protected override async Task<AssetObservation> DoProcessAsync(GameObject gameObject, CancellationToken cancellationToken)
+        protected override async Task<AssetObservation> DoProcessAsync(GameObject gameObject,
+            CancellationToken cancellationToken)
         {
             var result = await GetEmbedding(
                 obj => AssetInspectors.ForGameObjectViews(obj,
                     new GameObjectPreviewOptions(images: 3, baseYaw: 135, pitch: 30f, stepDegrees: 90f)),
-                EmbeddingProviders.Embeddings,
+                obs => EmbeddingProviders.ImageEmbeddings(obs, Model),
                 gameObject, cancellationToken);
 
             var embeddingResults = result?.EmbeddingResult;

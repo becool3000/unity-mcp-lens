@@ -1,5 +1,6 @@
 /*
-* Author: Morten Mikkelsen
+* @author Morten Mikkelsen
+* Contact: mortenm@unity3d.com
 */
 
 Shader "Hidden/AIToolkit/AmbientOcclusion"

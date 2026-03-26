@@ -6,7 +6,8 @@
         "GUID:aa454c0a07d2f4c6d8e03da09405270b",
         "GUID:e3051e6249837eb4aa4eeeb16fa62de2",
         "GUID:014b346a84d6445cad431c8b47c25633",
-        "GUID:1395b03e142ba0a44a7e77b3d90f334b"
+        "GUID:1395b03e142ba0a44a7e77b3d90f334b",
+        "Unity.AI.Toolkit.Async"
     ],
     "includePlatforms": [
         "Editor"

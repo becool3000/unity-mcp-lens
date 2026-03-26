@@ -130,9 +130,17 @@ namespace Unity.AI.Assistant.Editor
                 return;
 
             var tag = UnityDataUtils.GetProjectId();
+            var credentialsContext = await CredentialsProvider.GetCredentialsContext(ct);
 
-            var infosResult = await Backend.ConversationRefresh(await CredentialsProvider.GetCredentialsContext(ct), ct);
+            var convosTask = Backend.ConversationRefresh(credentialsContext, ct);
+            var profilesTask = Backend.GetAvailableModelProfiles(credentialsContext, ct);
+            await Task.WhenAll(convosTask, profilesTask);
 
+            var profilesResult = await profilesTask;
+            if (profilesResult.Status == BackendResult.ResultStatus.Success)
+                MainThread.DispatchAndForget(() => m_AvailableUnityModelProfiles = profilesResult.Value);
+
+            var infosResult = await convosTask;
             if (infosResult.Status != BackendResult.ResultStatus.Success)
             {
                 ErrorHandlingUtility.PublicLogBackendResultError(infosResult);

@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using Unity.AI.Assistant.FunctionCalling;
 using Unity.AI.Assistant.UI.Editor.Scripts.Data;
 using Unity.AI.Assistant.UI.Editor.Scripts.Data.MessageBlocks;
 using UnityEngine.Pool;
@@ -67,36 +66,6 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components.ChatElements
 
 
             m_Feedback.SetData(message);
-        }
-
-        public bool TryPushInteraction(ToolExecutionContext.CallInfo callInfo, VisualElement userInteraction)
-        {
-            if (k_ResponseSections.Count == 0)
-                return false;
-
-            for (var i = k_ResponseSections.Count - 1; i >= 0; i--)
-            {
-                var responseSection = k_ResponseSections[i];
-                if (responseSection.TryPushInteraction(callInfo, userInteraction))
-                    return true;
-            }
-
-            return false;
-        }
-
-        public bool TryPopInteraction(ToolExecutionContext.CallInfo callInfo, VisualElement userInteraction)
-        {
-            if (k_ResponseSections.Count == 0)
-                return false;
-
-            for (var i = k_ResponseSections.Count - 1; i >= 0; i--)
-            {
-                var responseSection = k_ResponseSections[i];
-                if (responseSection.TryPopInteraction(callInfo, userInteraction))
-                    return true;
-            }
-
-            return false;
         }
 
         void OnAttachedToPanel(AttachToPanelEvent evt)

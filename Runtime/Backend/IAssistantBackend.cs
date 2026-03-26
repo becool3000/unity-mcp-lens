@@ -22,7 +22,8 @@ namespace Unity.AI.Assistant.Backend
         Task<BackendResult> SendFeedback(ICredentialsContext credentialsContext, string conversationUid, MessageFeedback feedback, CancellationToken ct = default);
         Task<BackendResult<FeedbackData?>> LoadFeedback(ICredentialsContext credentialsContext, AssistantMessageId messageId, CancellationToken ct = default);
         Task<BackendResult<int?>> FetchMessageCost(ICredentialsContext credentialsContext, AssistantMessageId messageId, CancellationToken ct = default);
-
+        Task<BackendResult<IReadOnlyList<(string ProviderId, string ProfileName)>>> GetAvailableModelProfiles(ICredentialsContext credentialsContext, CancellationToken ct = default);
+        
         /// <summary>
         /// Returns version support info that can used to check if the version of the server the client wants to
         /// communicate with is supported. Returns null if the version support info could not be retrieved or the

@@ -4,6 +4,60 @@ All notable changes to this package will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
+## [2.3.0-pre.2] - 2026-03-23
+
+### Fixed
+
+- Fixed What's new banner not loading correctly.
+
+## [2.3.0-pre.1] - 2026-03-23
+
+### Added
+
+- Added a standalone 2D scene capture tool and enhanced the Multi-Angle Scene View tool with object focusing capabilities for better visual validation.
+- Added feedback text in generators.
+- Client-side `Unity.Web.Fetch` tool for hybrid web search architecture with HTML-to-markdown conversion, Discourse JSON API support, and browser User-Agent for bot-detection bypass.
+- Game-Data-collection package: README with onboarding guide for the game-data-collection package.
+- The feature of GetDependency tool to query the dependency graph.
+- Toggle in project settings for batch mode auto-approve for Unity MCP.
+
+### Changed
+
+- Game-Data-collection package: Snapshot commit messages now include the first 15 words of conversation content for easier identification.
+- MCP connection speed to be much faster.
+
+### Fixed
+
+- Assistant tries and fails repeatedly to generate a sprite with a background color.
+- Fixed banner not dismissing after package update from package manager.
+- Invalid model selected in generator windows.
+- NullReferenceException in Chat Window.
+- Assistant issues related to editor not in focus.
+- Brittle connection behaviour due to multiple tool updates during MCP server initialization phase.
+- Connection issues related to editor not in focus.
+- MCP connection issues in batch mode.
+- MCP reconnection after domain reload.
+- MCP tool calls failing during domain reload validation window.
+
+## [2.2.0-pre.1] - 2026-03-16
+
+### Added
+
+- Added feedback system for Generators.
+- LLM Model selection for AI Assistant.
+- Added dependency graph creation and refreshing.
+
+### Changed
+
+- Changed feedback UI for Assistant.
+
+### Fixed
+
+- Clear all attachments (objects, console logs, virtual attachments) after sending a prompt, not just screenshots.
+- Cursor access fixed.
+- NullReferenceException in Chat Window.
+- Project image asset contents unable to be read by AI Assistant.
+
 ## [2.1.0-pre.1] - 2026-03-09
 
 ### Added
@@ -19,7 +73,6 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ### Fixed
 
 - NullReferenceException in Chat Window.
-- Spritesheet generation stalls at 75%
 
 ## [2.0.0-pre.1] - 2026-03-03
 

@@ -1,4 +1,5 @@
 ﻿using Unity.AI.Assistant.UI.Editor.Scripts.Data.MessageBlocks;
+using Unity.AI.Toolkit;
 using UnityEditor;
 using UnityEngine.UIElements;
 
@@ -52,7 +53,7 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components.ChatElements
 
         void OnSourcesFoldoutChanged()
         {
-            EditorApplication.delayCall += Context.SendScrollToEndRequest;
+            EditorTask.delayCall += Context.SendScrollToEndRequest;
         }
     }
 }

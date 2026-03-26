@@ -12,6 +12,7 @@ using AiEditorToolsSdk.Components.Organization;
 using AiEditorToolsSdk.Components.Organization.Responses;
 using AiEditorToolsSdk.Domain.Abstractions.Services;
 using Unity.AI.Toolkit.Accounts.Services.States;
+using Unity.AI.Toolkit.Asset;
 using Unity.AI.Toolkit.Connect;
 using UnityEditor;
 using UnityEngine;
@@ -55,6 +56,20 @@ namespace Unity.AI.Toolkit.Accounts.Services.Core
             public TraceIdProvider(string sessionId) => m_SessionId = sessionId;
 
             public Task<string> GetTraceId() => Task.FromResult(m_SessionId);
+        }
+
+        class PreCapturedTraceIdProvider : ITraceIdProvider
+        {
+            readonly AssetReference m_AssetReference;
+
+            readonly long m_Value = EditorAnalyticsSessionInfo.id;
+
+            public PreCapturedTraceIdProvider(AssetReference asset) => m_AssetReference = asset;
+
+            public Task<string> GetTraceId()
+            {
+                return Task.FromResult($"{m_AssetReference.guid}&{m_Value}");
+            }
         }
 
         class PackageInfoProvider : IPackageInfoProvider
@@ -227,6 +242,71 @@ namespace Unity.AI.Toolkit.Accounts.Services.Core
 
         internal static Task<SettingsResult> SetTermsOfServiceAcceptance(bool value) =>
             Request((component, ct) => component.SetTermsOfServiceAcceptance(value, cancellationToken: ct));
+
+        /// <summary>
+        /// Submits user feedback for a generated asset.
+        /// </summary>
+        /// <param name="assetReference">The asset reference for the generation.</param>
+        /// <param name="dialogType">The type of generation dialog (e.g., "image_generation").</param>
+        /// <param name="feedbackText">Optional text feedback from the user.</param>
+        /// <param name="feedbackCategories">Categories for the feedback (e.g., "quality", "prompt_adherence").</param>
+        /// <param name="sentiment">The sentiment of the feedback (Positive or Negative).</param>
+        /// <param name="downloadedAssetId">The ID of the generated asset to link in metadata for feedback correlation.</param>
+        /// <returns>A task that completes when the feedback is submitted. Returns true on success, false on failure.</returns>
+        internal static async Task<bool> SubmitFeedback(AssetReference assetReference, string dialogType, string feedbackText, string[] feedbackCategories, FeedbackSentimentEnum sentiment, string downloadedAssetId = null)
+        {
+            try
+            {
+                await ApiAccessibleState.WaitForCloudProjectSettings();
+
+                using var editorFocus = new EditorAsyncKeepAliveScope("Submitting feedback.");
+
+                var timeSpan = TimeSpan.FromSeconds(k_TimeoutDurationsDisconnect[0]);
+                var builder = Builder.Build(
+                    orgId: UnityConnectProvider.organizationKey,
+                    userId: UnityConnectProvider.userId,
+                    projectId: UnityConnectProvider.projectId,
+                    httpClient: HttpClientManager.instance,
+                    baseUrl: selectedEnvironment,
+                    logger: new Logger(),
+                    unityAuthenticationTokenProvider: new Auth(),
+                    traceIdProvider: new PreCapturedTraceIdProvider(assetReference),
+                    defaultOperationTimeout: timeSpan,
+                    packageInfoProvider: new PackageInfoProvider());
+
+                var component = builder.OrganizationComponent();
+
+                using var tokenSource = new CancellationTokenSource(timeSpan);
+                var timeoutToken = tokenSource.Token;
+
+                var metadata = new Dictionary<string, string>();
+                if (!string.IsNullOrEmpty(downloadedAssetId))
+                {
+                    metadata["SdkDownloadUrlAssetID"] = downloadedAssetId;
+                }
+
+                var result = await component.SubmitFeedback(
+                    dialogType,
+                    feedbackText,
+                    feedbackCategories,
+                    sentiment,
+                    metadata: metadata.Count > 0 ? metadata : null,
+                    cancellationToken: timeoutToken);
+
+                if (result.Result.IsSuccessful)
+                {
+                    return true;
+                }
+
+                Debug.LogWarning($"Failed to submit feedback: {result.Result.Error.AiResponseError} - {result.Result.Error.Errors.FirstOrDefault()}");
+                return false;
+            }
+            catch (Exception exception)
+            {
+                Debug.LogWarning($"Exception submitting feedback: {exception.Message}");
+                return false;
+            }
+        }
     }
 
     static class HttpClientManager

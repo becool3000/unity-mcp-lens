@@ -4,16 +4,18 @@ using System.Threading;
 using System.Threading.Tasks;
 using Unity.AI.Assistant.Data;
 using Unity.AI.Assistant.Editor;
+using Unity.AI.Assistant.Editor.Acp;
 using Unity.AI.Assistant.Editor.Analytics;
 using Unity.AI.Assistant.Editor.Checkpoint.Events;
 using Unity.AI.Assistant.Editor.SessionBanner;
 using Unity.AI.Assistant.Editor.Settings;
 using Unity.AI.Assistant.Editor.Utils.Event;
-using Unity.AI.Assistant.FunctionCalling;
 using Unity.AI.Assistant.UI.Editor.Scripts.Components.History;
+using Unity.AI.Assistant.UI.Editor.Scripts.Components.WhatsNew;
 using Unity.AI.Assistant.UI.Editor.Scripts.Events;
 using Unity.AI.Assistant.UI.Editor.Scripts.Utils;
 using Unity.AI.Assistant.Utils;
+using Unity.AI.Toolkit;
 using Unity.AI.Toolkit.Accounts.Services;
 using UnityEditor;
 using UnityEditor.Search;
@@ -30,7 +32,8 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
         static readonly char[] k_MessageTrimChars = { ' ', '\n', '\r', '\t' };
 
         const string k_HistoryOpenClass = "mui-chat-history-open";
-        const string k_ProviderUnity = "unity";
+        const string k_ExpandedPanelActiveClass = "mui-expanded-panel-active";
+        const string k_NewConversationTitle = "New conversation";
 
         readonly IAssistantHostWindow k_HostWindow;
 
@@ -41,7 +44,7 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
 
         Button m_NewChatButton;
         Button m_HistoryButton;
-        Button m_HideRevertedTimeStampButton;
+        Button m_ExpandedPanelBackButton;
 
         Label m_ConversationName;
 
@@ -74,7 +77,7 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
         VisualElement m_SelectedContextRoot;
         ContextDropdown m_SelectedContextDropdown;
 
-        Button m_WhatsNewButton;
+        WhatsNewBanner m_WhatsNewBanner;
         VisualElement m_EmptyStateRoot;
         VisualElement m_EmptyStateLoading;
         VisualElement m_EmptyStateContent;
@@ -88,11 +91,9 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
         bool m_WaitingForConversationChange;
 
         BaseEventSubscriptionTicket m_ConversationSelectedEventTicket;
-        BaseEventSubscriptionTicket m_RevertedTimeStampFilterRequestedEventTicket;
-        BaseEventSubscriptionTicket m_GetRevertedTimeStampFilterEventTicket;
         BaseEventSubscriptionTicket m_CheckpointEnableStateChangedEventTicket;
-
-        long m_RevertedTimeStampFilter;
+        BaseEventSubscriptionTicket m_ExpandedPanelOpenedEventTicket;
+        BaseEventSubscriptionTicket m_ExpandedPanelClosedEventTicket;
 
         // Provider switching state
         bool m_IsSwitchingProvider;
@@ -119,16 +120,6 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
             LoadStyle(m_RootPanel, EditorGUIUtility.isProSkin ? AssistantUIConstants.AssistantSharedStyleDark : AssistantUIConstants.AssistantSharedStyleLight);
             LoadStyle(m_RootPanel, AssistantUIConstants.AssistantBaseStyle, true);
             LoadStyle(m_RootPanel, "AiGatewayDisclaimer");
-        }
-
-        public bool TryPushInteraction(ToolExecutionContext.CallInfo callInfo, VisualElement userInteraction)
-        {
-            return m_AssistantConversationPanel.TryPushInteraction(callInfo, userInteraction);
-        }
-
-        public bool TryPopInteraction(ToolExecutionContext.CallInfo callInfo, VisualElement userInteraction)
-        {
-            return m_AssistantConversationPanel.TryPopInteraction(callInfo, userInteraction);
         }
 
         /// <summary>
@@ -162,8 +153,7 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
             m_NewChatButton.AddSessionAndCompatibilityStatusManipulators(Context.API.Provider, enableOnProviderError: true);
             m_HistoryButton = view.SetupButton("historyButton", OnHistoryClicked);
             m_HistoryButton.AddSessionAndCompatibilityStatusManipulators(Context.API.Provider, enableOnProviderError: true);
-            m_HideRevertedTimeStampButton = view.SetupButton("hideRevertedTimeStampViewButton", OnHideRevertedTimeStampClicked);
-            m_HideRevertedTimeStampButton.SetDisplay(false);
+            m_ExpandedPanelBackButton = view.SetupButton("expandedPanelBackButton", _ => m_AssistantConversationPanel.CloseExpandedPanel());
 
             m_ConversationName = view.Q<Label>("conversationNameLabel");
             m_ConversationName.enableRichText = false;
@@ -190,6 +180,7 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
             view.AddSessionRefreshManipulators(Context.API.Provider);
 
             m_FooterRoot = view.Q<VisualElement>("footerRoot");
+
             // Note: Status tracking is applied granularly to footer children in AssistantTextField
             // to keep ProviderSelector always enabled. contextRoot is tracked here.
             view.Q<VisualElement>("contextRoot")?.AddSessionAndCompatibilityStatusManipulators(Context.API.Provider);
@@ -210,14 +201,13 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
 
             m_ChatInput = new AssistantTextField();
             m_ChatInput.Initialize(Context);
+            // Set host (and create dropdown menus) before setting provider so provider label/items are populated.
+            m_ChatInput.SetHost(m_PopupRoot);
             // Pre-seed provider UI from session state to avoid selector flicker on domain reload.
             var lastProviderId = AssistantUISessionState.instance.LastActiveProviderId;
             if (string.IsNullOrEmpty(lastProviderId))
-            {
-                lastProviderId = k_ProviderUnity;
-            }
+                lastProviderId = AssistantProviderFactory.DefaultProvider.ProfileId;
             m_ChatInput.SetProvider(lastProviderId, triggerEvent: false);
-            m_ChatInput.SetHost(m_PopupRoot);
             m_ChatInput.SubmitRequest += OnRequestSubmit;
             m_ChatInput.CancelRequest += OnActiveProgressCancelRequested;
             m_ChatInput.OnProviderChanged += OnProviderChanged;
@@ -232,8 +222,11 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
             m_EmptyStateSpinner = new LoadingSpinner();
             m_EmptyStateSpinner.Hide();
             m_EmptyStateLoading.Add(m_EmptyStateSpinner);
-            m_WhatsNewButton = view.Q<Button>("museChatWhatsNewButton");
-            m_WhatsNewButton.clicked += WhatsNewWindow.ShowWindow;
+
+            var bannerRoot = view.Q<VisualElement>("whatsNewBannerRoot");
+            m_WhatsNewBanner = new WhatsNewBanner();
+            m_WhatsNewBanner.Initialize(Context, autoShowControl: false);
+            bannerRoot.Add(m_WhatsNewBanner);
 
             m_GatewayDisclaimerView = new GatewayDisclaimerView();
             m_GatewayDisclaimerView.IsActiveChanged += isActive =>
@@ -394,8 +387,8 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
         async Task RestoreProviderIfNeeded()
         {
             var lastProviderId = AssistantUISessionState.instance.LastActiveProviderId;
-            if (string.IsNullOrEmpty(lastProviderId) || lastProviderId == k_ProviderUnity)
-                return;
+            if (string.IsNullOrEmpty(lastProviderId))
+                lastProviderId = AssistantProviderFactory.DefaultProvider.ProfileId;
 
             try
             {
@@ -444,7 +437,7 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
             {
                 if (Application.isBatchMode)
                 {
-                    EditorApplication.delayCall += () => RestoreUIState(conversationId);
+                    EditorTask.delayCall += () => RestoreUIState(conversationId);
                 }
                 // In non-batch mode, OnConversationReload will call RestoreUIState after Populate() completes
                 return;
@@ -529,9 +522,14 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
         {
             InternalLogUtils.PerformAndSetupDomainReloadLog(conversationId, Context);
 
+            // Cancel any pending interactions when reloading a conversation
+            Context.InteractionQueue.CancelAll();
+
             // If this conversation is not active, we don't display it
             if (Context.Blackboard.ActiveConversationId != conversationId)
+            {
                 return;
+            }
 
             bool wasWaitingForRestore = m_WaitingForConversationChange;
 
@@ -574,7 +572,7 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
             {
                 if (Application.isBatchMode)
                 {
-                    EditorApplication.delayCall += () => RestoreUIState(conversationId);
+                    EditorTask.delayCall += () => RestoreUIState(conversationId);
                 }
                 else
                 {
@@ -585,7 +583,7 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
 
         void ClearChat(bool clearInput = true)
         {
-            m_ConversationName.text = "New conversation";
+            m_ConversationName.text = k_NewConversationTitle;
 
             if (clearInput)
             {
@@ -614,6 +612,7 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
                 m_EmptyStateLoading.SetDisplay(false);
                 m_EmptyStateContent.SetDisplay(true);
                 m_EmptyStateSpinner.Hide();
+                m_WhatsNewBanner.Collapse();
             }
         }
 
@@ -634,6 +633,11 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
             m_HistoryButton.EnableInClassList(k_HistoryOpenClass, isVisible);
 
             AssistantUISessionState.instance.IsHistoryOpen = isVisible;
+
+            if (isVisible)
+            {
+                m_HistoryPanel.FocusSearch();
+            }
         }
 
         void OnHistoryEntrySelected(EventHistoryConversationSelected eventData)
@@ -641,14 +645,18 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
             SetHistoryDisplay(false);
         }
 
-        void OnRevertedTimeStampFilterRequested(EventRevertedTimeStampFilterRequested eventData)
+        void OnExpandedPanelOpened(EventExpandedPanelOpened eventData)
         {
-            SetRevertedTimeStampFilter(eventData.Timestamp);
+            m_RootMain.AddToClassList(k_ExpandedPanelActiveClass);
+            m_ConversationName.text = eventData.Title;
+            Context.SearchHelper.HideSearchBar();
         }
 
-        void OnGetRevertedTimeStampFilter(EventGetRevertedTimeStampFilter eventData)
+        void OnExpandedPanelClosed(EventExpandedPanelClosed eventData)
         {
-            eventData.Timestamp = m_RevertedTimeStampFilter;
+            m_RootMain.RemoveFromClassList(k_ExpandedPanelActiveClass);
+            var activeConversation = Context.Blackboard.ActiveConversation;
+            m_ConversationName.text = activeConversation != null ? activeConversation.Title : k_NewConversationTitle;
         }
 
         void ResetConversation(string providerId)
@@ -701,7 +709,7 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
                 var providerId = m_ChatInput.SelectedProviderId;
                 ResetConversation(providerId);
 
-                if (providerId != k_ProviderUnity)
+                if (!AssistantProviderFactory.IsUnityProvider(providerId))
                 {
                     await Context.SwitchProviderAsync(providerId);
                     m_ChatInput.BindModeProvider(Context.API.Provider);
@@ -728,7 +736,7 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
             ResetConversation(m_ChatInput.SelectedProviderId);
 
             // For non-Unity providers, create a new session by switching to the same provider
-            if (m_ChatInput.SelectedProviderId != k_ProviderUnity)
+            if (!AssistantProviderFactory.IsUnityProvider(m_ChatInput.SelectedProviderId))
             {
                 await Context.SwitchProviderAsync(m_ChatInput.SelectedProviderId);
                 m_ChatInput.BindModeProvider(Context.API.Provider);
@@ -773,6 +781,14 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
 
         async Task SwitchProviderCoreAsync(string oldProviderId, string newProviderId)
         {
+            // Switching between Unity Max and Fast: same backend, only model settings change — keep conversation.
+            if (AssistantProviderFactory.IsUnityProvider(oldProviderId) && AssistantProviderFactory.IsUnityProvider(newProviderId))
+            {
+                await Context.SwitchProviderAsync(newProviderId);
+                m_ChatInput.BindModeProvider(Context.API.Provider);
+                return;
+            }
+
             // End active session before switching — ensures cancel completes
             // and session is released before the old provider is disposed.
             try
@@ -795,7 +811,7 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
 
             ResetConversation(oldProviderId);
 
-            if (oldProviderId == k_ProviderUnity && newProviderId != k_ProviderUnity)
+            if (AssistantProviderFactory.IsUnityProvider(oldProviderId) && !AssistantProviderFactory.IsUnityProvider(newProviderId))
             {
                 Context.API.DisconnectWorkflow();
             }
@@ -862,6 +878,9 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
 
         void OnActiveProgressCancelRequested()
         {
+            // Cancel any pending interactions in the queue
+            Context.InteractionQueue?.CancelAll();
+
             if (!Context.Blackboard.IsAPIWorking)
             {
                 return;
@@ -895,8 +914,9 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
             m_EmptyStateRoot.SetDisplay(false);
             Context.API.SendPrompt(message, Context.Blackboard.ActiveMode);
 
-            // Clear screenshot attachments after sending the prompt
+            // Clear screenshot attachments (notifies EditScreenCaptureWindow) then clear all remaining
             ClearScreenshotContextEntries();
+            k_SelectedContext.Clear();
             UpdateContextSelectionElements();
         }
 
@@ -1050,9 +1070,9 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
             AssistantAssetModificationDelegates.AssetDeletes -= OnAssetDeletes;
 
             AssistantEvents.Unsubscribe(ref m_ConversationSelectedEventTicket);
-            AssistantEvents.Unsubscribe(ref m_RevertedTimeStampFilterRequestedEventTicket);
-            AssistantEvents.Unsubscribe(ref m_GetRevertedTimeStampFilterEventTicket);
             AssistantEvents.Unsubscribe(ref m_CheckpointEnableStateChangedEventTicket);
+            AssistantEvents.Unsubscribe(ref m_ExpandedPanelOpenedEventTicket);
+            AssistantEvents.Unsubscribe(ref m_ExpandedPanelClosedEventTicket);
         }
 
         void OnAttachToPanel(AttachToPanelEvent evt)
@@ -1060,17 +1080,18 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
             AssistantAssetModificationDelegates.AssetDeletes += OnAssetDeletes;
 
             m_ConversationSelectedEventTicket = AssistantEvents.Subscribe<EventHistoryConversationSelected>(OnHistoryEntrySelected);
-            m_RevertedTimeStampFilterRequestedEventTicket = AssistantEvents.Subscribe<EventRevertedTimeStampFilterRequested>(OnRevertedTimeStampFilterRequested);
-            m_GetRevertedTimeStampFilterEventTicket = AssistantEvents.Subscribe<EventGetRevertedTimeStampFilter>(OnGetRevertedTimeStampFilter);
             m_CheckpointEnableStateChangedEventTicket = AssistantEvents.Subscribe<EventCheckpointEnableStateChanged>(OnCheckpointEnabledChanged);
+            m_ExpandedPanelOpenedEventTicket = AssistantEvents.Subscribe<EventExpandedPanelOpened>(OnExpandedPanelOpened);
+            m_ExpandedPanelClosedEventTicket = AssistantEvents.Subscribe<EventExpandedPanelClosed>(OnExpandedPanelClosed);
         }
 
         /// <summary>
         /// Ensures the specified provider is selected. Used by AssistantApi to reset state.
         /// </summary>
-        /// <param name="providerId">The provider ID to ensure is active. Defaults to "unity".</param>
-        public async Task EnsureProviderAsync(string providerId = k_ProviderUnity)
+        /// <param name="providerId">The provider ID to ensure is active. Defaults to Unity Fast.</param>
+        public async Task EnsureProviderAsync(string providerId = null)
         {
+            providerId ??= AssistantProviderFactory.DefaultProvider.ProfileId;
             if (m_ChatInput.SelectedProviderId == providerId)
                 return;
 
@@ -1082,27 +1103,6 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
             await SwitchProviderCoreAsync(oldProviderId, providerId);
         }
 
-        public void SetRevertedTimeStampFilter(long timestamp)
-        {
-            if (m_RevertedTimeStampFilter == timestamp)
-                return;
-            
-            m_RevertedTimeStampFilter = timestamp;
-
-            var showRevertedMessages = (timestamp != 0);
-            m_FooterRoot.SetDisplay(!showRevertedMessages);
-            m_NewChatButton.SetDisplay(!showRevertedMessages);
-            m_HistoryButton.SetDisplay(!showRevertedMessages);
-            m_HideRevertedTimeStampButton.SetDisplay(showRevertedMessages);
-
-            Context.API.RefreshConversation();
-        }
-        
-        void OnHideRevertedTimeStampClicked(PointerUpEvent evt)
-        {
-            SetRevertedTimeStampFilter(0);
-        }
-        
         void OnCheckpointEnabledChanged(EventCheckpointEnableStateChanged eventData)
         {
             if (Context.Blackboard.ActiveConversationId != AssistantConversationId.Invalid)

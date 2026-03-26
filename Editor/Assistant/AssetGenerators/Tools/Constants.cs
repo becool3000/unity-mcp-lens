@@ -58,12 +58,12 @@ namespace Unity.AI.Assistant.Editor.Backend.Socket.Tools
             "For optimal performance, you are strongly encouraged to generate multiple independent assets in parallel by issuing multiple tool calls simultaneously in a single response.";
 
         const string k_GenerateSpriteDescription =
-            "To generate a sprite with a transparent background, use '" + CommandNames.GenerateSprite + "'. " +
-            "To generate an image with a background (e.g., a portrait or environment), use '" + CommandNames.GenerateImage + "'. " +
-            "To remove the background from an existing sprite, use '" + CommandNames.RemoveSpriteBackground + "'. " +
-            "To edit a sprite using a prompt and ensure a transparent background, use '" + CommandNames.EditSpriteWithPrompt + "'. " +
-            "To edit an image using a prompt and preserve its background, use '" + CommandNames.EditImageWithPrompt + "'. " +
-            "To edit a sprite using a prompt into a sprite sheet (" + AssetTypeNames.Spritesheet + "), use '" + CommandNames.GenerateSpritesheet +
+            "To generate a sprite, use '" + CommandNames.GenerateSprite + "' you should then call '" + CommandNames.RemoveImageBackground + "'. " +
+            "To generate an image (e.g., a portrait or environment), use '" + CommandNames.GenerateImage + "'. " +
+            "To remove the background from an existing sprite or image, use '" + CommandNames.RemoveImageBackground + "'. " +
+            "To edit a sprite using a prompt, use '" + CommandNames.EditSpriteWithPrompt + "'. " +
+            "To edit an image using a prompt, use '" + CommandNames.EditImageWithPrompt + "'. " +
+            "To edit a sprite using a prompt into a sprite sheet (" + AssetTypeNames.Spritesheet + "), use '" + CommandNames.GenerateSpritesheet + "'. " +
             "All editing commands require a target asset path.";
 
         const string k_GenerateCubemapDescription =
@@ -95,7 +95,7 @@ namespace Unity.AI.Assistant.Editor.Backend.Socket.Tools
             "TerrainLayer: \"Assets/TerrainLayers/MyNewTerrainLayer.terrainlayer\". " +
             "If 'savePath' is provided during an 'Edit*' or 'Upscale*' command, a new asset will be created at this path instead of modifying the original asset specified in target asset path.";
         public const string TargetAssetPathDescription = "The project path to an EXISTING asset that will be directly modified, edited, or used as the subject of an operation. " +
-            "This is required for commands like '" + CommandNames.EditSpriteWithPrompt + "', '" + CommandNames.UpscaleCubemap + "', '" + CommandNames.RemoveSpriteBackground + "', '" + CommandNames.AddPbrToMaterial + "', and '" + CommandNames.AddPbrToTerrainLayer + "'.";
+            "This is required for commands like '" + CommandNames.EditSpriteWithPrompt + "', '" + CommandNames.UpscaleCubemap + "', '" + CommandNames.RemoveImageBackground + "', '" + CommandNames.AddPbrToMaterial + "', and '" + CommandNames.AddPbrToTerrainLayer + "'.";
         public const string ReferenceImagePathDescription = "The project path to an EXISTING image (Texture2D) that will be used as inspiration or a visual guide for generating a NEW asset. " +
             "The reference image itself is NOT modified. This is used with asset conversion operations.";
         public const string ReferenceImageInstanceIdDescription = "The instance ID of an EXISTING image (Texture2D) that will be used as inspiration or a visual guide for generating a NEW asset. " +

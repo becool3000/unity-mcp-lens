@@ -6,7 +6,6 @@ using Unity.AI.Assistant.Editor.Checkpoint;
 using Unity.AI.Assistant.Editor.Checkpoint.Events;
 using Unity.AI.Assistant.Editor.Utils.Event;
 using Unity.AI.Assistant.UI.Editor.Scripts.Data;
-using Unity.AI.Assistant.UI.Editor.Scripts.Events;
 using Unity.AI.Assistant.UI.Editor.Scripts.Utils;
 using UnityEditor;
 using UnityEngine.UIElements;
@@ -18,6 +17,10 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
     {
         static readonly string k_RevertDialogPrefsKey = AssistantEditorPreferences.k_SettingsPrefix + "RestoreCheckpointDialog_NeverAskAgain";
 
+        const string k_ToolTipCheckpointsDisabled = "Enable Checkpoints in Unity Preferences to roll back changes.";
+        const string k_ToolTipLatestCheckpoint = "You're caught up! No further changes.";
+        const string k_ToolTipRestoreCheckpoint = "Restore this checkpoint";
+        
         VisualElement m_CheckpointSection;
         VisualElement m_CheckpointTextSection;
 
@@ -82,14 +85,25 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
             CheckpointValid = false;
             m_TargetMessageId = default;
             m_ResponseMessageId = default;
-
-            var canShow = CanShowCheckpoint();
-            if (!canShow)
+            m_CheckpointSection.SetEnabled(false);
+            m_CheckpointSection.SetDisplay(false);
+            
+            if (!AssistantProjectPreferences.CheckpointEnabled)
             {
-                m_CheckpointSection.SetDisplay(false);
+                m_CheckpointSection.SetDisplay(true);
+                m_CheckpointSection.SetEnabled(false);
+                m_CheckpointButton.tooltip = k_ToolTipCheckpointsDisabled;
                 return;
             }
             
+            if (IsLastNonRevertedMessage())
+            {
+                m_CheckpointSection.SetDisplay(true);
+                m_CheckpointSection.SetEnabled(false);
+                m_CheckpointButton.tooltip = k_ToolTipLatestCheckpoint;
+                return;
+            }
+
             var hasMessageIds = TryUpdateTargetMessage(out var outOfRange);
 
             if (m_ResponseMessageId.Type != AssistantMessageIdType.External)
@@ -107,22 +121,8 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
             CheckpointValid = true;
             OnValidated?.Invoke();
             
-            var isEnabled = hasMessageIds && !IsLastNonRevertedMessage();
-            m_CheckpointSection.SetEnabled(isEnabled);
-            m_CheckpointButton.tooltip = isEnabled
-                ? "Restore this checkpoint"
-                : "You're caught up! No checkpoint to restore.";
-        }
-
-        bool CanShowCheckpoint()
-        {
-            if (!AssistantProjectPreferences.CheckpointEnabled)
-                return false;
-            
-            // No checkpoints available in filtered view
-            var evt = new EventGetRevertedTimeStampFilter();
-            AssistantEvents.Send(evt);
-            return evt.Timestamp == 0;
+            m_CheckpointSection.SetEnabled(hasMessageIds);
+            m_CheckpointButton.tooltip = k_ToolTipRestoreCheckpoint;
         }
 
         bool TryGetConversationAndMessageIndex(out ConversationModel conv, out int messageIndex)

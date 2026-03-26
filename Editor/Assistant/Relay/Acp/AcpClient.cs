@@ -7,6 +7,7 @@ using Unity.AI.Assistant.Data;
 using Unity.AI.Assistant.Editor.Acp;
 using Unity.AI.Assistant.Editor.Settings;
 using Unity.AI.Assistant.Utils;
+using Unity.AI.Toolkit;
 using Unity.Relay;
 using UnityEditor;
 using UnityEngine;
@@ -112,7 +113,7 @@ namespace Unity.Relay.Editor.Acp
                     client.OnGatewayMessage += HandleGatewayMessage;
                 }
 
-                EditorApplication.delayCall += () => _ = RequestProvidersAsync();
+                EditorTask.delayCall += () => _ = RequestProvidersAsync();
             }
         }
 
@@ -128,7 +129,7 @@ namespace Unity.Relay.Editor.Acp
             OnConnectionStateChanged?.Invoke(true);
 
             // Refresh providers list on connect (best effort).
-            EditorApplication.delayCall += () => _ = RequestProvidersAsync();
+            EditorTask.delayCall += () => _ = RequestProvidersAsync();
         }
 
         void OnRelayDisconnected()

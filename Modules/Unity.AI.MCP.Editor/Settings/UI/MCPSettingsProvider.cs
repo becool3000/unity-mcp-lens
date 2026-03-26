@@ -10,6 +10,7 @@ using Unity.AI.MCP.Editor.ToolRegistry;
 using Unity.AI.MCP.Editor.Constants;
 using Unity.AI.MCP.Editor.Helpers;
 using Unity.AI.MCP.Editor.Security;
+using Unity.AI.Toolkit;
 using Unity.AI.Tracing;
 using UnityEngine;
 using GatewayConnectionRecord = Unity.AI.MCP.Editor.GatewayConnectionRecord;
@@ -24,6 +25,7 @@ namespace Unity.AI.MCP.Editor.Settings
 
         // Cached UI elements
         Toggle m_DebugLogsToggle;
+        Toggle m_AutoApproveBatchToggle;
         DropdownField m_ValidationLevelField;
         Button m_ToggleBridgeButton;
         VisualElement m_ClientList;
@@ -91,8 +93,7 @@ namespace Unity.AI.MCP.Editor.Settings
 
         void OnConnectionHistoryChanged()
         {
-            // Ensure refresh happens on main thread and after current frame
-            EditorApplication.delayCall += RefreshConnectionsList;
+            RefreshConnectionsList();
         }
 
         void LoadUI()
@@ -145,6 +146,12 @@ namespace Unity.AI.MCP.Editor.Settings
                 TraceCategories.SetEnabled("mcp", evt.newValue);
             });
 
+            m_AutoApproveBatchToggle = m_RootElement.Q<Toggle>("autoApproveBatchToggle");
+            m_AutoApproveBatchToggle.value = settings.autoApproveInBatchMode;
+            m_AutoApproveBatchToggle.RegisterValueChangedCallback(evt => {
+                settings.autoApproveInBatchMode = evt.newValue;
+                MCPSettingsManager.MarkDirty();
+            });
 
             var validationLevels = ToolDescriptions.ValidationLevels.ToList();
             var currentLevelIndex = validationLevels.IndexOf(settings.validationLevel);

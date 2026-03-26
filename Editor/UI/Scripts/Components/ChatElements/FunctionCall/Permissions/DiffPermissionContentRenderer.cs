@@ -50,10 +50,11 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components.ChatElements
             var codeBlock = new CodeBlockElement();
             codeBlock.Initialize(context);
 
-            // Set the title to the filename (clears the default "C#" label)
             if (!string.IsNullOrEmpty(filePath))
             {
-                codeBlock.SetCodePreviewTitle(Path.GetFileName(filePath));
+                var filename = Path.GetFileName(filePath);
+                codeBlock.SetCustomTitle(filename);
+                codeBlock.SetFilename(filename);
             }
 
             codeBlock.SetCode(newCode, oldCode);

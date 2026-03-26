@@ -8,6 +8,7 @@ using Unity.AI.Assistant.Editor.Checkpoint.Events;
 using Unity.AI.Assistant.Editor.Checkpoint.Git;
 using Unity.AI.Assistant.Editor.Utils.Event;
 using Unity.AI.Assistant.Utils;
+using Unity.AI.Toolkit;
 using UnityEditor;
 using UnityEngine;
 
@@ -29,7 +30,7 @@ namespace Unity.AI.Assistant.Editor.Checkpoint
 
         static AssistantCheckpoints()
         {
-            EditorApplication.delayCall += OnDomainReloadDelayed;
+            EditorTask.delayCall += OnDomainReloadDelayed;
             AssistantEvents.Subscribe<EventCheckpointRestoreRequested>(OnRestoreRequested);
             AssistantEvents.Subscribe<EventCheckpointDeleteRequested>(OnDeleteRequested);
         }

@@ -14,7 +14,7 @@ namespace Unity.AI.MCP.Editor.Settings.Utilities
     {
         readonly Action m_SaveAction;
 
-        bool m_IsDirty;
+        volatile bool m_IsDirty;
         CancellationTokenSource m_SaveTokenSource;
 
         public SaveManager(Action saveAction)

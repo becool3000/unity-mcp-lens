@@ -3,7 +3,6 @@ using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using UnityEditor;
-using UnityEditor.PackageManager;
 using UnityEngine;
 
 namespace Unity.AI.Assistant.Editor.SessionBanner
@@ -13,7 +12,7 @@ namespace Unity.AI.Assistant.Editor.SessionBanner
     {
         const string k_PackageName = "com.unity.ai.assistant";
 
-        static bool s_HasCheckedThisSession;
+        static bool s_IsCheckingForUpdate;
 
         static AssistantPackageAutoUpdater()
         {
@@ -21,6 +20,8 @@ namespace Unity.AI.Assistant.Editor.SessionBanner
                 return;
 
             EditorApplication.update += DeferredCheckForUpdates;
+            UnityEditor.PackageManager.Events.registeredPackages -= OnPackagesChanged;
+            UnityEditor.PackageManager.Events.registeredPackages += OnPackagesChanged;
         }
 
         static void DeferredCheckForUpdates()
@@ -28,15 +29,31 @@ namespace Unity.AI.Assistant.Editor.SessionBanner
             if (AssetDatabase.IsAssetImportWorkerProcess() || EditorApplication.isCompiling || EditorApplication.isUpdating)
                 return;
 
-            if (s_HasCheckedThisSession)
-            {
-                EditorApplication.update -= DeferredCheckForUpdates;
+            if (s_IsCheckingForUpdate)
                 return;
-            }
 
             EditorApplication.update -= DeferredCheckForUpdates;
-            s_HasCheckedThisSession = true;
+            s_IsCheckingForUpdate = true;
             CheckForUpdate();
+        }
+
+        static void OnPackagesChanged(UnityEditor.PackageManager.PackageRegistrationEventArgs args)
+        {
+            // Check if the assistant package was added or updated via Package Manager
+            var assistantPackageChanged = args.added.Any(p => p.name == k_PackageName)
+                || args.changedTo.Any(p => p.name == k_PackageName);
+
+            if (assistantPackageChanged)
+            {
+                PackageUpdateState.instance.Clear();
+
+                if (!s_IsCheckingForUpdate)
+                {
+                    // Trigger the check on the next update frame to find any further available updates
+                    EditorApplication.update -= DeferredCheckForUpdates;
+                    EditorApplication.update += DeferredCheckForUpdates;
+                }
+            }
         }
 
         static async void CheckForUpdate()
@@ -44,40 +61,52 @@ namespace Unity.AI.Assistant.Editor.SessionBanner
             try
             {
                 var currentPackageInfo = UnityEditor.PackageManager.PackageInfo.FindForPackageName(k_PackageName);
-                if (currentPackageInfo is not { source: PackageSource.Registry })
+                if (currentPackageInfo is not { source: UnityEditor.PackageManager.PackageSource.Registry })
+                {
+                    s_IsCheckingForUpdate = false;
                     return;
+                }
 
-                var searchRequest = Client.Search(k_PackageName);
+                var searchRequest = UnityEditor.PackageManager.Client.Search(k_PackageName);
                 while (!searchRequest.IsCompleted)
                     await Task.Yield();
 
-                if (searchRequest.Status != StatusCode.Success)
+                if (searchRequest.Status != UnityEditor.PackageManager.StatusCode.Success)
+                {
+                    s_IsCheckingForUpdate = false;
                     return;
+                }
 
                 var remoteInfo = searchRequest.Result.FirstOrDefault(p => p.name == k_PackageName);
                 if (remoteInfo == null)
+                {
+                    s_IsCheckingForUpdate = false;
                     return;
+                }
 
                 var latestCompatible = remoteInfo.versions.latestCompatible;
                 if (!string.IsNullOrEmpty(latestCompatible) && CompareSemVer(latestCompatible, currentPackageInfo.version) > 0)
                     PackageUpdateState.instance.SetUpdateAvailable(currentPackageInfo.version, latestCompatible);
+
+                s_IsCheckingForUpdate = false;
             }
             catch (Exception ex)
             {
                 Debug.LogWarning($"[Assistant Auto-Updater] Check failed: {ex.Message}");
+                s_IsCheckingForUpdate = false;
             }
         }
 
         public static async Task UpdatePackage(string version)
         {
-            var addRequest = Client.Add($"{k_PackageName}@{version}");
+            var addRequest = UnityEditor.PackageManager.Client.Add($"{k_PackageName}@{version}");
 
             while (!addRequest.IsCompleted)
             {
                 await Task.Yield();
             }
 
-            if (addRequest.Status == StatusCode.Success)
+            if (addRequest.Status == UnityEditor.PackageManager.StatusCode.Success)
             {
                 Debug.Log($"[Assistant] Updated to {version}");
                 PackageUpdateState.instance.Clear();

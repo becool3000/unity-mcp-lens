@@ -7,9 +7,14 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Utils
 {
     static class VisualElementExtensions
     {
-        public static void SetDisplay(this VisualElement element, bool isVisible)
+        public static void SetDisplay(this VisualElement element, bool isDisplayed)
         {
-            element.style.display = isVisible ? DisplayStyle.Flex : DisplayStyle.None;
+            element.style.display = isDisplayed ? DisplayStyle.Flex : DisplayStyle.None;
+        }
+        
+        public static void SetVisible(this VisualElement element, bool isVisible)
+        {
+            element.style.visibility = isVisible ? Visibility.Visible : Visibility.Hidden;
         }
 
         /// <summary>

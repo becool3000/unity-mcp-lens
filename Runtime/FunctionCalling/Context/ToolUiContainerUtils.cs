@@ -4,7 +4,7 @@ namespace Unity.AI.Assistant.FunctionCalling
 {
     static class ToolUiContainerUtils
     {
-        public static IDisposable PushElementScoped<TOutput>(this IToolUiContainer container, ToolExecutionContext.CallInfo callInfo, IUserInteraction<TOutput> userInteraction)
+        public static IDisposable PushElementScoped<TOutput>(this IToolUiContainer container, ToolExecutionContext.CallInfo callInfo, IInteractionSource<TOutput> userInteraction)
         {
             if (userInteraction == null)
                 return EmptyDisposable.Empty;
@@ -16,11 +16,11 @@ namespace Unity.AI.Assistant.FunctionCalling
         class PopOnDispose<TOutput> : IDisposable
         {
             readonly IToolUiContainer m_Owner;
-            readonly IUserInteraction<TOutput> m_UserInteraction;
+            readonly IInteractionSource<TOutput> m_UserInteraction;
             bool m_Disposed;
             ToolExecutionContext.CallInfo m_CallInfo;
 
-            public PopOnDispose(ToolExecutionContext.CallInfo callInfo, IToolUiContainer owner, IUserInteraction<TOutput> userInteraction)
+            public PopOnDispose(ToolExecutionContext.CallInfo callInfo, IToolUiContainer owner, IInteractionSource<TOutput> userInteraction)
             {
                 m_CallInfo = callInfo;
                 m_Owner = owner;

@@ -35,7 +35,27 @@ namespace Unity.AI.Assistant.Editor
         public IToolPermissions ToolPermissions => ToolInteractionAndPermissionBridge.ToolPermissions;
         public IToolInteractions ToolInteractions => ToolInteractionAndPermissionBridge.ToolInteractions;
 
-        public string ProviderId => "unity";
+        string m_ProviderId = AssistantProviderFactory.DefaultProvider.ProfileId;
+        IReadOnlyList<(string ProviderId, string ProfileName)> m_AvailableUnityModelProfiles;
+
+        /// <summary>
+        /// Current Unity profile id (e.g. unity-max, unity-fast).
+        /// </summary>
+        public string ProviderId => m_ProviderId;
+
+        /// <summary>
+        /// Cached Unity model profiles from GET /v1/assistant/models. Updated when the backend raises AvailableModelProfilesUpdated. Exposed for UI context.
+        /// </summary>
+        internal IReadOnlyList<(string ProviderId, string ProfileName)> AvailableUnityModelProfiles => m_AvailableUnityModelProfiles;
+
+        /// <summary>
+        /// Sets the provider id when the user switches between Unity Max and Fast. Called by the UI context.
+        /// </summary>
+        internal void SetCurrentProviderId(string providerId)
+        {
+            if (AssistantProviderFactory.IsUnityProvider(providerId))
+                m_ProviderId = providerId;
+        }
 
         public ToolInteractionAndPermissionBridge ToolInteractionAndPermissionBridge { get; private set; }
 
@@ -59,6 +79,7 @@ namespace Unity.AI.Assistant.Editor
         }
 
         public event Action<AssistantMessageId, FeedbackData?> FeedbackLoaded;
+        public event Action<AssistantMessageId, bool> FeedbackSent;
 
         public bool SessionStatusTrackingEnabled => Backend == null || Backend.SessionStatusTrackingEnabled;
         public bool AutoRunSettingAvailable => true;
@@ -131,11 +152,24 @@ namespace Unity.AI.Assistant.Editor
                 Sentiment = upVote ? Sentiment.Positive : Sentiment.Negative
             };
 
-            // Failing to send feedback is non-critical. UX for failures here can be improved in a QOL pass if necessary.
-            var result = await Backend.SendFeedback(await CredentialsProvider.GetCredentialsContext(), messageId.ConversationId.Value, feedback);
+            try
+            {
+                // Failing to send feedback is non-critical. Surface completion through FeedbackSent event.
+                var result = await Backend.SendFeedback(await CredentialsProvider.GetCredentialsContext(), messageId.ConversationId.Value, feedback);
+                if (result.Status != BackendResult.ResultStatus.Success)
+                {
+                    ErrorHandlingUtility.InternalLogBackendResult(result);
+                    FeedbackSent?.Invoke(messageId, false);
+                    return;
+                }
 
-            if (result.Status != BackendResult.ResultStatus.Success)
-                ErrorHandlingUtility.InternalLogBackendResult(result);
+                FeedbackSent?.Invoke(messageId, true);
+            }
+            catch (Exception ex)
+            {
+                InternalLog.LogException(ex);
+                FeedbackSent?.Invoke(messageId, false);
+            }
         }
 
         public async Task<FeedbackData?> LoadFeedback(AssistantMessageId messageId, CancellationToken ct = default)

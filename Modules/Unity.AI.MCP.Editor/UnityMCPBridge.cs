@@ -3,7 +3,6 @@ using System.Linq;
 using System.Text;
 using Newtonsoft.Json;
 using Unity.AI.Assistant.Editor;
-using Unity.AI.MCP.Editor.Helpers;
 using Unity.AI.MCP.Editor.Models;
 using Unity.AI.MCP.Editor.Settings;
 using Unity.AI.MCP.Editor.ToolRegistry;
@@ -171,17 +170,11 @@ namespace Unity.AI.MCP.Editor
             }
 
             string clientInfo = s_Instance.GetClientInfo();
-            var bridgeStatus = BridgeStatusTracker.GetSnapshot();
-            string status = !string.IsNullOrWhiteSpace(bridgeStatus.Status)
-                ? bridgeStatus.Status
-                : (s_Instance.IsRunning ? "running" : "stopped");
+            string status = s_Instance.IsRunning ? "running" : "stopped";
             string connectionPath = s_Instance.CurrentConnectionPath ?? "not-started";
 
             string info = $"=== MCP Client Info ===\n" +
                          $"Bridge Status: {status}\n" +
-                         $"Bridge Status Reason: {bridgeStatus.Reason ?? "none"}\n" +
-                         $"Tool Discovery Mode: {bridgeStatus.ToolDiscoveryMode ?? "unknown"}\n" +
-                         $"Tool Count: {bridgeStatus.ToolCount}\n" +
                          $"Connection Path: {connectionPath}\n" +
                          $"Client: {clientInfo}";
 

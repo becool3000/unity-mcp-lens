@@ -10,6 +10,7 @@ using Unity.AI.Assistant.ApplicationModels;
 using Unity.AI.Assistant.Data;
 using Unity.AI.Assistant.Editor.Config.Credentials;
 using Unity.AI.Assistant.Editor.Utils;
+using Unity.AI.Assistant.Editor.Acp;
 using Unity.AI.Assistant.FunctionCalling;
 using Unity.AI.Assistant.Socket.Workflows.Chat;
 using Unity.AI.Assistant.UI.Editor.Scripts.Components.ChatElements;
@@ -109,7 +110,15 @@ namespace Unity.AI.Assistant.Editor.Api
             if (!isInitialized)
                 throw new Exception($"Failed to initialize workflow. {workflow.CloseReason}");
 
-            _ = await workflow.SendChatRequest(userPrompt, OrchestrationDataUtilities.FromEditorContextReport(context), agent, assistantMode, cancellationToken);
+            var providerId = AssistantUISessionState.instance?.LastActiveProviderId;
+            if (string.IsNullOrEmpty(providerId))
+            { 
+                // UI has never been opened, use the default provider
+                providerId = AssistantProviderFactory.DefaultProvider.ProfileId;
+            }
+            
+            var modelConfig = AssistantProviderFactory.CreateModelConfigurationForProvider(providerId);
+            _ = await workflow.SendChatRequest(userPrompt, OrchestrationDataUtilities.FromEditorContextReport(context), agent, assistantMode, modelConfig, cancellationToken);
 
             var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(k_TimeoutMinutes));
             while (!isLastMessage)

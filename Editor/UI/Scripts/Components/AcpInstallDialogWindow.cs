@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using Unity.AI.Assistant.Editor.SessionBanner;
 using Unity.AI.Assistant.Editor.Settings;
 using Unity.Relay.Editor;
+using Unity.AI.Toolkit;
 using Unity.Relay.Editor.Acp;
 using UnityEditor;
 using UnityEngine;
@@ -438,7 +439,7 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
             Close();
 
             // Restart session after dialog closes
-            EditorApplication.delayCall += () =>
+            EditorTask.delayCall += () =>
             {
                 var assistantWindow = AssistantWindow.ShowWindow();
                 if (assistantWindow?.m_Context != null)
@@ -457,7 +458,7 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
                 Close();
 
                 // Restart session even if no login command is configured
-                EditorApplication.delayCall += () =>
+                EditorTask.delayCall += () =>
                 {
                     var assistantWindow = AssistantWindow.ShowWindow();
                     if (assistantWindow?.m_Context != null)
@@ -527,7 +528,7 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
                 Close();
 
                 // Restart session after login completes
-                EditorApplication.delayCall += () =>
+                EditorTask.delayCall += () =>
                 {
                     var assistantWindow = AssistantWindow.ShowWindow();
                     if (assistantWindow?.m_Context != null)
@@ -572,7 +573,7 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
             Close();
 
             // Use delayCall to ensure the dialog is fully closed before switching providers
-            EditorApplication.delayCall += () =>
+            EditorTask.delayCall += () =>
             {
                 var assistantWindow = AssistantWindow.ShowWindow();
                 if (assistantWindow?.m_Context != null)

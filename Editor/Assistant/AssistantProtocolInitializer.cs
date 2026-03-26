@@ -36,7 +36,6 @@ namespace Unity.AI.Assistant.Editor
                 "Unity.GameObject.ManageLayer",
                 "Unity.GameObject.ManageTag",
                 "Unity.GetUserGuidelines",
-                "Unity.InputSystem.Modify",
                 "Unity.AssetGeneration.CreateAnimatorControllerFromClip",
                 "Unity.AssetGeneration.EditAnimationClipTool",
                 "Unity.AssetGeneration.ConvertToMaterial",

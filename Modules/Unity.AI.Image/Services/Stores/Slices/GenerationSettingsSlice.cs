@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Linq;
 using Unity.AI.Image.Services.Stores.Actions;
 using Unity.AI.Image.Services.Stores.States;
@@ -98,7 +98,16 @@ namespace Unity.AI.Image.Services.Stores.Slices
                         state.generationSettings.Remove(payload.payload);
                     return state with { };
                 })
-                .AddCase(ModelSelectorActions.setLastModelDiscoveryTimestamp).With((state, _) => state with { }),
+                .AddCase(ModelSelectorActions.setLastModelDiscoveryTimestamp).With((state, _) =>
+                {
+                    state = state with { };
+                    foreach (var (asset, generationSetting) in state.generationSettings)
+                    {
+                        generationSetting.EnsureSelectedModelID(store.State, asset);
+                    }
+
+                    return state;
+                }),
             state => state with {
                 generationSettings = new SerializableDictionary<AssetReference, GenerationSetting>(
                     state.generationSettings.ToDictionary(kvp => kvp.Key, entry => entry.Value with {

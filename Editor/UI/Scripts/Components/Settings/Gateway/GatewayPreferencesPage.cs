@@ -3,9 +3,11 @@ using System.Diagnostics;
 using System.Linq;
 using Unity.AI.Assistant.Editor.SessionBanner;
 using Unity.AI.Assistant.Editor.Settings;
+using Unity.AI.Tracing;
 using Unity.Relay.Editor;
 using Unity.Relay.Editor.Acp;
 using UnityEngine.UIElements;
+using Trace = Unity.AI.Tracing.Trace;
 
 namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
 {
@@ -16,6 +18,7 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
         Label m_AgentVersionLabel;
         Button m_AddRequiredEnvVarButton;
         Button m_LoginButton;
+        Toggle m_EnableTracesToggle;
         ProviderEnvironmentariablesUI m_ProviderEnvironmentariablesUI;
         Label m_ErrorMessage;
         VisualElement m_SettingsContent;
@@ -36,6 +39,14 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts.Components
             m_SettingsContent = view.Q<VisualElement>("gateway-settings-content");
             m_ProviderEnvironmentariablesUI = view.Q<ProviderEnvironmentariablesUI>("agent-environment-ui");
             m_ProviderEnvironmentariablesUI.Initialize(null);
+            m_EnableTracesToggle = view.Q<Toggle>("enable-traces-toggle");
+            m_EnableTracesToggle.value = Trace.Enabled;
+            m_EnableTracesToggle.RegisterValueChangedCallback(evt =>
+            {
+                Trace.SetEnabled(evt.newValue);
+                TraceConfigFileWriter.WriteTraceConfigFile(TraceLogDir.LogDir);
+            });
+
             m_ProviderDropdown.RegisterValueChangedCallback(_ => RefreshAgentUI());
             m_AddRequiredEnvVarButton.RegisterCallback<ClickEvent>(_ => AddMissingRequiredEnvVars());
             m_LoginButton.RegisterCallback<ClickEvent>(_ => ExecuteLogin());

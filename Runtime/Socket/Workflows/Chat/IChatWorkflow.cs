@@ -95,10 +95,11 @@ namespace Unity.AI.Assistant.Socket.Workflows.Chat
         /// <param name="context"></param>
         /// <param name="agent"></param>
         /// <param name="assistantMode"></param>
+        /// <param name="modelConfiguration">Optional model configuration (e.g. Fast, Max). When null, no config is sent.</param>
         /// <param name="ct"></param>
         /// <exception cref="InvalidOperationException">Thrown if a chat request is made when the workflow is not in the <see cref="State.AwaitingChatResponse"/> state</exception>
         /// <returns></returns>
-        Task<IStreamStatusHook> SendChatRequest(string prompt, List<ChatRequestV1.AttachedContextModel> context, Agents.IAgent agent = null, AssistantMode? assistantMode = null, CancellationToken ct = default);
+        Task<IStreamStatusHook> SendChatRequest(string prompt, List<ChatRequestV1.AttachedContextModel> context, Agents.IAgent agent = null, AssistantMode? assistantMode = null, ModelConfiguration modelConfiguration = null, CancellationToken ct = default);
 
         /// <summary>
         /// Try to cancel the current chat request. If there is no current chat request in progress, simply does

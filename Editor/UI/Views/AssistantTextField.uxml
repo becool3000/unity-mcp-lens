@@ -1,8 +1,5 @@
 <UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" xmlns="UnityEngine.UIElements" xmlns:assistant="Unity.AI.Assistant.UI.Editor.Scripts.Components" editor-extension-mode="False">
     <VisualElement name="museTextFieldRoot" class="mui-mtf-root">
-        <ui:VisualElement name="museTextFieldPopupRoot" class="mui-text-field-popup-container" picking-mode="Ignore">
-        </ui:VisualElement>
-
         <VisualElement class="mui-mtf-input-root">
             <TextField name="input" class="mui-mtf-prompt-textfield" />
             <VisualElement name="placeholderContent" class="mui-mtf-placeholder-root">
@@ -18,7 +15,11 @@
                 <ui:Button name="settingsButton" size="s" class="mui-action-button mui-mtf-action-button" tooltip="Settings">
                     <ui:Image picking-mode="ignore" class="mui-action-button-image-large mui-icon-settings"/>
                 </ui:Button>
-                <ui:DropdownField name="modeDropdown" class="mui-mode-dropdown" />
+                <ui:Button name="modeDropdown" class="mui-action-button mui-mode-dropdown">
+                    <ui:Image name="modeDropdownIcon" picking-mode="Ignore" class="mui-dropdown-button-icon" />
+                    <ui:Label name="modeDropdownLabel" picking-mode="Ignore" class="mui-dropdown-button-label" />
+                    <ui:Image picking-mode="Ignore" class="mui-dropdown-button-caret mui-icon-caret-down" />
+                </ui:Button>
             </ui:VisualElement>
 
             <ui:VisualElement class="mui-right-actions">
@@ -30,25 +31,17 @@
                         <ui:Image class="mui-context-limit-warning-icon mui-action-button-image-large mui-icon-warn"/>
                     </ui:VisualElement>
                 </ui:VisualElement>
-                <assistant:PopupSelector name="providerSelector">
-                    <ui:Button name="selectorButton" class="mui-popup-selector-button">
-                        <ui:VisualElement class="mui-popup-selector-content">
-                            <ui:Image name="selectorIcon" class="mui-popup-selector-icon"/>
-                            <ui:Label name="selectorLabel" class="mui-popup-selector-label"/>
-                            <ui:Label name="caret" text="&#x25BC;" class="mui-popup-selector-caret"/>
-                        </ui:VisualElement>
-                    </ui:Button>
-                </assistant:PopupSelector>
-                <ui:VisualElement name="disableableActions" class="mui-disableable-actions">
-                    <assistant:PopupSelector name="commandSelector">
-                        <ui:Button name="selectorButton" class="mui-action-button mui-mtf-action-button" tooltip="Show commands">
-                            <ui:Image picking-mode="ignore" class="mui-action-button-image-large mui-icon-slash"/>
-                        </ui:Button>
-                    </assistant:PopupSelector>
-                    <ui:Button name="actionButton" class="mui-action-button mui-submit-button">
-                        <ui:Image name="actionButtonImage" picking-mode="ignore" class="mui-action-button-image-large mui-icon-arrow-up"/>
-                    </ui:Button>
-                </ui:VisualElement>
+                <ui:Button name="providerSelector" class="mui-action-button mui-provider-dropdown">
+                    <ui:Image name="providerSelectorIcon" picking-mode="Ignore" class="mui-dropdown-button-icon" />
+                    <ui:Label name="providerSelectorLabel" picking-mode="Ignore" class="mui-dropdown-button-label" />
+                    <ui:Image picking-mode="Ignore" class="mui-dropdown-button-caret mui-icon-caret-down" />
+                </ui:Button>
+                <ui:Button name="commandSelector" class="mui-action-button mui-mtf-action-button" tooltip="Show commands">
+                    <ui:Image picking-mode="Ignore" class="mui-action-button-image-large mui-icon-slash" />
+                </ui:Button>
+                <ui:Button name="actionButton" class="mui-action-button mui-submit-button">
+                    <ui:Image name="actionButtonImage" picking-mode="ignore" class="mui-action-button-image-large mui-icon-arrow-up"/>
+                </ui:Button>
             </ui:VisualElement>
         </VisualElement>
 

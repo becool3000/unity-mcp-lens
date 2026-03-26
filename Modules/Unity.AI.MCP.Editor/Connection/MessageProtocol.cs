@@ -21,7 +21,7 @@ namespace Unity.AI.MCP.Editor.Connection
         static readonly byte NewlineByte = (byte)'\n';
 
         /// <summary>
-        /// Handshake message sent by Unity Bridge to establish protocol
+        /// Handshake message sent by Unity Bridge to establish protocol.
         /// </summary>
         public static string CreateHandshakeMessage()
         {
@@ -75,7 +75,7 @@ namespace Unity.AI.MCP.Editor.Connection
         }
 
         /// <summary>
-        /// Send handshake message to establish protocol
+        /// Send handshake message to establish protocol.
         /// </summary>
         public static async Task SendHandshakeAsync(IConnectionTransport transport, int timeoutMs = DefaultTimeoutMs)
         {

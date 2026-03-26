@@ -21,7 +21,8 @@
                 assetGuid = embeddings[0].assetGuid,
                 embedding = avg,
                 assetContentHash = embeddings[0].assetContentHash,
-                version = embeddings[0].version
+                version = embeddings[0].version,
+                embeddingModelId = embeddings[0].embeddingModelId
             };
         }
     }

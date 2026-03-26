@@ -22,6 +22,8 @@ namespace Unity.AI.MCP.Editor.Tools
         /// <summary>
         /// Human-readable description of the Unity.ImportExternalModel tool functionality and usage.
         /// </summary>
+        public const string Title = "Import an external 3D model";
+
         public const string Description = @"Import an FBX from a URL in Unity project. Instantiate the model in the scene and saves it as a prefab for reuse.
 
 Args:
@@ -83,7 +85,7 @@ Returns:
         /// </summary>
         /// <param name="parameters">Parameters containing model name, FBX URL, height, and optional albedo texture URL.</param>
         /// <returns>A response object with import results including scene object and prefab information.</returns>
-        [McpTool("Unity.ImportExternalModel", Description, Groups = new string[] { "core", "assets" })]
+        [McpTool("Unity.ImportExternalModel", Description, Title, Groups = new string[] { "core", "assets" })]
         public static object HandleCommand(ImportExternalModelParams parameters)
         {
             try
