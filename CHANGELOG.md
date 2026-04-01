@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ### Fixed
 
 - Fixed What's new banner not loading correctly.
+- Fixed `Unity_RunCommand` execution logs so composite scalar placeholders such as `{0:F3}` render correctly while Unity object references stay clickable.
 
 ## [2.3.0-pre.1] - 2026-03-23
 

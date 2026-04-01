@@ -13,6 +13,10 @@ namespace Unity.AI.MCP.Editor.Helpers
         public readonly string ToolsHash;
         public readonly string ToolDiscoveryReason;
         public readonly string ToolSnapshotUtc;
+        public readonly string DirectCommandHealth;
+        public readonly string LastCommandSuccessUtc;
+        public readonly string LastCommandFailureUtc;
+        public readonly string LastCommandFailureReason;
 
         public BridgeStatusSnapshot(
             string status,
@@ -22,7 +26,11 @@ namespace Unity.AI.MCP.Editor.Helpers
             int toolCount,
             string toolsHash,
             string toolDiscoveryReason,
-            string toolSnapshotUtc)
+            string toolSnapshotUtc,
+            string directCommandHealth,
+            string lastCommandSuccessUtc,
+            string lastCommandFailureUtc,
+            string lastCommandFailureReason)
         {
             Status = status;
             Reason = reason;
@@ -32,6 +40,10 @@ namespace Unity.AI.MCP.Editor.Helpers
             ToolsHash = toolsHash;
             ToolDiscoveryReason = toolDiscoveryReason;
             ToolSnapshotUtc = toolSnapshotUtc;
+            DirectCommandHealth = directCommandHealth;
+            LastCommandSuccessUtc = lastCommandSuccessUtc;
+            LastCommandFailureUtc = lastCommandFailureUtc;
+            LastCommandFailureReason = lastCommandFailureReason;
         }
     }
 
@@ -49,6 +61,10 @@ namespace Unity.AI.MCP.Editor.Helpers
         static string s_ToolsHash;
         static string s_ToolDiscoveryReason;
         static string s_ToolSnapshotUtc;
+        static string s_DirectCommandHealth = "unknown";
+        static string s_LastCommandSuccessUtc;
+        static string s_LastCommandFailureUtc;
+        static string s_LastCommandFailureReason;
 
         public static void SetConnectionPath(string connectionPath)
         {
@@ -70,7 +86,11 @@ namespace Unity.AI.MCP.Editor.Helpers
                     s_ToolCount,
                     s_ToolsHash,
                     s_ToolDiscoveryReason,
-                    s_ToolSnapshotUtc);
+                    s_ToolSnapshotUtc,
+                    s_DirectCommandHealth,
+                    s_LastCommandSuccessUtc,
+                    s_LastCommandFailureUtc,
+                    s_LastCommandFailureReason);
             }
         }
 
@@ -87,7 +107,7 @@ namespace Unity.AI.MCP.Editor.Helpers
             }
         }
 
-        public static void MarkReady()
+        public static void MarkReady(bool resetCommandHealth = false)
         {
             lock (s_Lock)
             {
@@ -95,6 +115,13 @@ namespace Unity.AI.MCP.Editor.Helpers
                 s_Reason = null;
                 s_ExpectedRecovery = false;
                 s_TransitionExpiresAt = 0;
+                if (resetCommandHealth)
+                {
+                    s_DirectCommandHealth = "unknown";
+                    s_LastCommandSuccessUtc = null;
+                    s_LastCommandFailureUtc = null;
+                    s_LastCommandFailureReason = null;
+                }
                 SaveLocked();
             }
         }
@@ -111,8 +138,18 @@ namespace Unity.AI.MCP.Editor.Helpers
             }
         }
 
-        public static void MarkEditorReloading(string reason = "compile_reload", double ttlSeconds = 60.0) =>
-            MarkTransition("editor_reloading", reason, ttlSeconds);
+        public static void MarkEditorReloading(string reason = "compile_reload", double ttlSeconds = 60.0)
+        {
+            lock (s_Lock)
+            {
+                s_DirectCommandHealth = "recovering";
+                s_Status = "editor_reloading";
+                s_Reason = reason;
+                s_ExpectedRecovery = true;
+                s_TransitionExpiresAt = EditorApplication.timeSinceStartup + Math.Max(1.0, ttlSeconds);
+                SaveLocked();
+            }
+        }
 
         public static void MarkDisconnected(string reason = "disconnected")
         {
@@ -122,6 +159,38 @@ namespace Unity.AI.MCP.Editor.Helpers
                 s_Reason = reason;
                 s_ExpectedRecovery = false;
                 s_TransitionExpiresAt = 0;
+                s_DirectCommandHealth = "unknown";
+                SaveLocked();
+            }
+        }
+
+        public static void MarkCommandSuccess()
+        {
+            lock (s_Lock)
+            {
+                s_DirectCommandHealth = "ok";
+                s_LastCommandSuccessUtc = DateTime.UtcNow.ToString("O");
+                s_LastCommandFailureUtc = null;
+                s_LastCommandFailureReason = null;
+                s_Status = "ready";
+                s_Reason = null;
+                s_ExpectedRecovery = false;
+                s_TransitionExpiresAt = 0;
+                SaveLocked();
+            }
+        }
+
+        public static void MarkCommandFailure(string reason, double ttlSeconds = 15.0)
+        {
+            lock (s_Lock)
+            {
+                s_DirectCommandHealth = "failed";
+                s_LastCommandFailureUtc = DateTime.UtcNow.ToString("O");
+                s_LastCommandFailureReason = string.IsNullOrWhiteSpace(reason) ? "direct_command_failed" : reason;
+                s_Status = "transport_recovering";
+                s_Reason = s_LastCommandFailureReason;
+                s_ExpectedRecovery = true;
+                s_TransitionExpiresAt = EditorApplication.timeSinceStartup + Math.Max(1.0, ttlSeconds);
                 SaveLocked();
             }
         }
@@ -133,10 +202,20 @@ namespace Unity.AI.MCP.Editor.Helpers
                 bool transitionActive = s_ExpectedRecovery && s_TransitionExpiresAt > EditorApplication.timeSinceStartup;
                 if (!transitionActive)
                 {
-                    s_Status = "ready";
-                    s_Reason = null;
-                    s_ExpectedRecovery = false;
-                    s_TransitionExpiresAt = 0;
+                    if (string.Equals(s_DirectCommandHealth, "failed", StringComparison.OrdinalIgnoreCase))
+                    {
+                        s_Status = "transport_degraded";
+                        s_Reason = string.IsNullOrWhiteSpace(s_LastCommandFailureReason) ? "direct_command_failed" : s_LastCommandFailureReason;
+                        s_ExpectedRecovery = false;
+                        s_TransitionExpiresAt = 0;
+                    }
+                    else
+                    {
+                        s_Status = "ready";
+                        s_Reason = null;
+                        s_ExpectedRecovery = false;
+                        s_TransitionExpiresAt = 0;
+                    }
                 }
 
                 SaveLocked();
@@ -157,7 +236,11 @@ namespace Unity.AI.MCP.Editor.Helpers
                 s_ToolCount,
                 s_ToolsHash,
                 s_ToolDiscoveryReason,
-                s_ToolSnapshotUtc);
+                s_ToolSnapshotUtc,
+                s_DirectCommandHealth,
+                s_LastCommandSuccessUtc,
+                s_LastCommandFailureUtc,
+                s_LastCommandFailureReason);
         }
     }
 }

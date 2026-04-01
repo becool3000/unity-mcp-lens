@@ -313,7 +313,7 @@ namespace Unity.AI.MCP.Editor
                     // Save discovery files
                     ServerDiscovery.SaveConnectionInfo(currentConnectionPath);
                     heartbeatSeq++;
-                    BridgeStatusTracker.MarkReady();
+                    BridgeStatusTracker.MarkReady(resetCommandHealth: true);
                     nextHeartbeatAt = EditorApplication.timeSinceStartup + 0.5f;
 
                     // Pre-warm tools cache so handshake can include tools immediately
@@ -1581,6 +1581,7 @@ namespace Unity.AI.MCP.Editor
             catch (OperationCanceledException) { /* connection closed */ }
             catch (Exception ex)
             {
+                BridgeStatusTracker.MarkCommandFailure(NormalizeTransportFailureReason(ex));
                 McpLog.LogDelayed($"Failed to write response: {ex.Message}");
             }
         }
@@ -1596,11 +1597,41 @@ namespace Unity.AI.MCP.Editor
             try
             {
                 await MessageProtocol.WriteMessageAsync(transport, message, ct);
+                BridgeStatusTracker.MarkCommandSuccess();
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                BridgeStatusTracker.MarkCommandFailure(NormalizeTransportFailureReason(ex));
+                throw;
             }
             finally
             {
                 transportWriteLock.Release();
             }
+        }
+
+        static string NormalizeTransportFailureReason(Exception ex)
+        {
+            if (ex == null)
+                return "direct_command_failed";
+
+            var message = ex.Message ?? string.Empty;
+            if (message.IndexOf("disposed", StringComparison.OrdinalIgnoreCase) >= 0)
+                return "disposed_transport";
+            if (message.IndexOf("closed", StringComparison.OrdinalIgnoreCase) >= 0)
+                return "transport_closed";
+            if (message.IndexOf("timeout", StringComparison.OrdinalIgnoreCase) >= 0)
+                return "transport_timeout";
+            if (message.IndexOf("errno=32", StringComparison.Ordinal) >= 0)
+                return "broken_pipe";
+            if (message.IndexOf("errno=9", StringComparison.Ordinal) >= 0)
+                return "bad_file_descriptor";
+
+            return message.Length <= 160 ? message : message.Substring(0, 160);
         }
 
         async Task<string> ExecuteCommandAsync(Command command, IConnectionTransport client, CancellationToken cancellationToken = default)

@@ -28,6 +28,7 @@ Fork-specific behavior retained on top of the official `2.3` package:
 - Preserves cached MCP tool snapshots when tool discovery temporarily fails or returns empty.
 - Publishes richer bridge status metadata for reload, recovery, and tool-discovery state.
 - Keeps the custom MCP tools for sprite import, serialized property editing, runtime diagnostics, UI diagnostics, and project diagnostics.
+- Formats `Unity_RunCommand` execution logs with composite scalar placeholders such as `{0:F3}` while preserving clickable Unity object tokens.
 
 Official `2.3` functionality now used as the base:
 - Graceful relay client shutdown and disposal.
@@ -41,3 +42,4 @@ Operational notes:
 - The relay binaries are upstream Unity binaries; this fork only patches the Unity-side managed code around them.
 - Keep the package version at the official upstream version and record fork-specific context in this repo rather than changing the package name or semver.
 - When Unity ships a newer package, diff this repo against the update and port forward only the still-needed fork behavior.
+- When searching this package during maintenance, treat `Editor/` and `Runtime/` as the live source tree and ignore `.codex-temp` snapshot content unless a note explicitly says otherwise.

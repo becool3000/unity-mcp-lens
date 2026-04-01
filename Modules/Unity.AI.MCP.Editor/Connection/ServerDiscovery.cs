@@ -151,7 +151,11 @@ namespace Unity.AI.MCP.Editor.Helpers
             int toolCount = -1,
             string toolsHash = null,
             string toolDiscoveryReason = null,
-            string toolSnapshotUtc = null)
+            string toolSnapshotUtc = null,
+            string directCommandHealth = null,
+            string lastCommandSuccessUtc = null,
+            string lastCommandFailureUtc = null,
+            string lastCommandFailureReason = null)
         {
             try
             {
@@ -168,6 +172,10 @@ namespace Unity.AI.MCP.Editor.Helpers
                     tools_hash = toolsHash,
                     tool_discovery_reason = toolDiscoveryReason,
                     tool_snapshot_utc = toolSnapshotUtc,
+                    command_health = directCommandHealth,
+                    last_command_success_utc = lastCommandSuccessUtc,
+                    last_command_failure_utc = lastCommandFailureUtc,
+                    last_command_failure_reason = lastCommandFailureReason,
                     project_path = Application.dataPath,
                     last_heartbeat = DateTime.UtcNow.ToString("O"),
                     protocol_version = "2.0",
