@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Newtonsoft.Json.Linq;
+using Unity.AI.Assistant.Utils;
 using Unity.AI.MCP.Editor.Helpers;
 using Unity.AI.MCP.Editor.ToolRegistry;
 using Unity.AI.MCP.Editor.Tools.Parameters;
@@ -55,7 +56,9 @@ Returns:
 
                     foreach (GameObject root in scene.GetRootGameObjects())
                     {
-                        CollectMissingScripts(root.transform, scene.path, sceneFindings);
+                        CollectMissingScripts(root.transform, scene.path, sceneFindings, parameters.MaxFindings);
+                        if (sceneFindings.Count + prefabFindings.Count >= parameters.MaxFindings)
+                            break;
                     }
                 }
             }
@@ -67,11 +70,14 @@ Returns:
                 int maxPrefabs = Math.Max(1, parameters.MaxPrefabs);
                 foreach (string guid in prefabGuids.Take(maxPrefabs))
                 {
+                    if (sceneFindings.Count + prefabFindings.Count >= parameters.MaxFindings)
+                        break;
+
                     string assetPath = AssetDatabase.GUIDToAssetPath(guid);
                     GameObject prefabRoot = PrefabUtility.LoadPrefabContents(assetPath);
                     try
                     {
-                        CollectMissingScripts(prefabRoot.transform, assetPath, prefabFindings);
+                        CollectMissingScripts(prefabRoot.transform, assetPath, prefabFindings, parameters.MaxFindings - sceneFindings.Count);
                     }
                     finally
                     {
@@ -80,13 +86,32 @@ Returns:
                 }
             }
 
-            return Response.Success("Missing-script scan completed.", new
+            var payload = new
             {
                 sceneFindingCount = sceneFindings.Count,
                 prefabFindingCount = prefabFindings.Count,
                 sceneFindings,
                 prefabFindings
-            });
+            };
+
+            return Response.Success(
+                "Missing-script scan completed.",
+                ShapePayload(
+                    "Unity.Project.ScanMissingScripts",
+                    $"Missing-script scan completed with {sceneFindings.Count + prefabFindings.Count} findings.",
+                    payload,
+                    new
+                    {
+                        tool = "Unity.Project.ScanMissingScripts",
+                        args = new
+                        {
+                            parameters.Under,
+                            parameters.IncludeOpenScenes,
+                            parameters.IncludePrefabs,
+                            parameters.MaxPrefabs,
+                            parameters.MaxFindings
+                        }
+                    }));
         }
 
         [McpTool("Unity.Object.ValidateReferences", ValidateReferencesDescription, Groups = new[] { "diagnostics", "project" }, EnabledByDefault = true)]
@@ -140,20 +165,48 @@ Returns:
                         isNullReference = nullReference,
                         instanceID = iterator.objectReferenceInstanceIDValue
                     });
+
+                    if (findings.Count >= PayloadBudgetPolicy.MaxDiagnosticFindings)
+                    {
+                        break;
+                    }
+                }
+
+                if (findings.Count >= PayloadBudgetPolicy.MaxDiagnosticFindings)
+                {
+                    break;
                 }
             }
 
-            return Response.Success($"Validated {auditTargets.Count} object(s).", new
+            var payload = new
             {
                 target = targetLabel,
                 findingCount = findings.Count,
                 findings
-            });
+            };
+
+            return Response.Success(
+                $"Validated {auditTargets.Count} object(s).",
+                ShapePayload(
+                    "Unity.Object.ValidateReferences",
+                    $"Validated {auditTargets.Count} object(s) and found {findings.Count} reference issues.",
+                    payload,
+                    new
+                    {
+                        tool = "Unity.Object.ValidateReferences",
+                        args = new
+                        {
+                            parameters.Target,
+                            parameters.SearchMethod,
+                            parameters.ComponentName,
+                            parameters.IncludeInactive
+                        }
+                    }));
         }
 
-        static void CollectMissingScripts(Transform transform, string ownerPath, List<object> findings)
+        static void CollectMissingScripts(Transform transform, string ownerPath, List<object> findings, int remainingBudget)
         {
-            if (transform == null)
+            if (transform == null || remainingBudget <= 0)
             {
                 return;
             }
@@ -171,7 +224,10 @@ Returns:
 
             for (int i = 0; i < transform.childCount; i++)
             {
-                CollectMissingScripts(transform.GetChild(i), ownerPath, findings);
+                if (findings.Count >= remainingBudget)
+                    break;
+
+                CollectMissingScripts(transform.GetChild(i), ownerPath, findings, remainingBudget);
             }
         }
 
@@ -249,6 +305,22 @@ Returns:
 
             results.Add(targetObject);
             return results;
+        }
+
+        static object ShapePayload(string toolName, string summary, object data, object detailRef)
+        {
+            var serialized = Newtonsoft.Json.JsonConvert.SerializeObject(data, Newtonsoft.Json.Formatting.None);
+            var rawBytes = PayloadBudgeting.GetUtf8ByteCount(serialized);
+            if (rawBytes <= PayloadBudgetPolicy.MaxToolResultBytes)
+            {
+                PayloadStats.Record("tool_result", toolName, rawBytes, rawBytes, PayloadBudgeting.EstimateTokensFromBytes(rawBytes), PayloadBudgeting.ComputeSha256(serialized));
+                return data;
+            }
+
+            var budgeted = PayloadBudgeting.CreateTextResult(summary, new { rawBytes }, serialized, detailRef, maxPreviewLines: 40, maxPreviewBytes: PayloadBudgetPolicy.MaxToolResultBytes);
+            var previewBytes = PayloadBudgeting.GetUtf8ByteCount(budgeted.Preview);
+            PayloadStats.Record("tool_result", toolName, rawBytes, previewBytes, PayloadBudgeting.EstimateTokensFromBytes(previewBytes), budgeted.Sha256);
+            return budgeted;
         }
     }
 }

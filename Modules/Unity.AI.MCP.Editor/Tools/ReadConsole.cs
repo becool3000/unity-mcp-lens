@@ -4,6 +4,7 @@ using System.Linq;
 using System.Reflection;
 using UnityEditor;
 using UnityEngine;
+using Unity.AI.Assistant.Utils;
 using Unity.AI.MCP.Editor.Helpers;
 using Unity.AI.MCP.Editor.ToolRegistry; // For Response class
 using Unity.AI.MCP.Editor.Tools.Parameters;
@@ -29,7 +30,8 @@ Args:
     Count: Max messages to return.
     FilterText: Text filter for messages.
     SinceTimestamp: Get messages after this timestamp (ISO 8601).
-    Format: Output format ('Plain', 'Detailed', 'Json').
+    Cursor: Optional incremental cursor from a previous response.
+    Format: Output format ('Summary', 'Plain', 'Detailed', 'Json').
     ExcludeMcpNoise: Exclude MCP, relay, and package self-noise from output (default: true).
     IncludeStacktrace: Include stack traces in output.
 
@@ -51,19 +53,11 @@ Returns:
                     message = new { type = "string", description = "Human-readable message about the operation" },
                     data = new
                     {
-                        type = "array",
-                        description = "Console log entries (for get action)",
-                        items = new
+                        type = "object",
+                        description = "Console log entries or grouped digests plus a cursor for incremental reads",
+                        properties = new
                         {
-                            type = "object",
-                            properties = new
-                            {
-                                message = new { type = "string", description = "Log message content" },
-                                type = new { type = "string", description = "Log type (Error, Warning, Log, etc.)" },
-                                file = new { type = "string", description = "Source file if available" },
-                                line = new { type = "integer", description = "Line number if available" },
-                                stackTrace = new { type = "string", description = "Stack trace if available" }
-                            }
+                            cursor = new { type = "integer", description = "Cursor to pass back on the next call" }
                         }
                     }
                 },
@@ -230,7 +224,11 @@ Returns:
                 // Trim and normalize SinceTimestamp
                 SinceTimestamp = string.IsNullOrWhiteSpace(parameters.SinceTimestamp)
                     ? null
-                    : parameters.SinceTimestamp.Trim()
+                    : parameters.SinceTimestamp.Trim(),
+
+                Cursor = parameters.Cursor.HasValue && parameters.Cursor.Value < 0
+                    ? 0
+                    : parameters.Cursor
             };
 
         // --- Main Handler ---
@@ -293,25 +291,18 @@ Returns:
 
                     int? count = @params.Count;
                     string filterText = @params.FilterText;
-                    string sinceTimestampStr = @params.SinceTimestamp; // TODO: Implement timestamp filtering
+                    string sinceTimestampStr = @params.SinceTimestamp;
                     string format = @params.Format.ToString().ToLower();
                     bool excludeMcpNoise = @params.ExcludeMcpNoise;
                     bool includeStacktrace = @params.IncludeStacktrace;
+                    int startCursor = ResolveCursor(@params.Cursor, sinceTimestampStr);
 
                     if (types.Contains("all"))
                     {
                         types = new List<string> { "error", "warning", "log" }; // Expand 'all'
                     }
 
-                    if (!string.IsNullOrEmpty(sinceTimestampStr))
-                    {
-                        Debug.LogWarning(
-                            "[ReadConsole] Filtering by 'since_timestamp' is not currently implemented."
-                        );
-                        // Need a way to get timestamp per log entry.
-                    }
-
-                    return GetConsoleEntries(types, count, filterText, format, includeStacktrace, excludeMcpNoise);
+                    return GetConsoleEntries(types, count, filterText, format, includeStacktrace, excludeMcpNoise, startCursor);
                 }
                 else
                 {
@@ -350,18 +341,21 @@ Returns:
             string filterText,
             string format,
             bool includeStacktrace,
-            bool excludeMcpNoise
+            bool excludeMcpNoise,
+            int startCursor
         )
         {
             List<ConsoleLogEntry> formattedEntries = new List<ConsoleLogEntry>();
             int retrievedCount = 0;
+            int totalEntries = 0;
+            int scanStart = 0;
 
             try
             {
                 // LogEntries requires calling Start/Stop around GetEntries/GetEntryInternal
                 _startGettingEntriesMethod.Invoke(null, null);
 
-                int totalEntries = (int)_getCountMethod.Invoke(null, null);
+                totalEntries = (int)_getCountMethod.Invoke(null, null);
                 // Create instance to pass to GetEntryInternal - Ensure the type is correct
                 Type logEntryType = typeof(EditorApplication).Assembly.GetType(
                     "UnityEditor.LogEntry"
@@ -372,7 +366,12 @@ Returns:
                     );
                 object logEntryInstance = Activator.CreateInstance(logEntryType);
 
-                for (int i = 0; i < totalEntries; i++)
+                int boundedWindow = format == "summary"
+                    ? Math.Max(200, (count ?? 50) * 20)
+                    : Math.Max(100, count ?? 100);
+                scanStart = Math.Max(startCursor, Math.Max(0, totalEntries - boundedWindow));
+
+                for (int i = scanStart; i < totalEntries; i++)
                 {
                     // Get the entry data into our instance using reflection
                     _getEntryMethod.Invoke(null, new object[] { i, logEntryInstance });
@@ -437,7 +436,9 @@ Returns:
 
                     // Get first line if stack is present and requested, otherwise use full message
                     string messageOnly =
-                        (includeStacktrace && !string.IsNullOrEmpty(stackTrace))
+                        (format == "summary")
+                            ? message.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries)[0]
+                        : (includeStacktrace && !string.IsNullOrEmpty(stackTrace))
                             ? message.Split(
                                 new[] { '\n', '\r' },
                                 StringSplitOptions.RemoveEmptyEntries
@@ -472,7 +473,7 @@ Returns:
                     retrievedCount++;
 
                     // Apply count limit (after filtering)
-                    if (count.HasValue && retrievedCount >= count.Value)
+                    if (format != "summary" && count.HasValue && retrievedCount >= count.Value)
                     {
                         break;
                     }
@@ -505,10 +506,56 @@ Returns:
                 }
             }
 
-            // Return the filtered and formatted list (might be empty)
+            if (format == "summary")
+            {
+                var grouped = formattedEntries
+                    .GroupBy(entry => CreateFingerprint(entry.Message, entry.StackTrace, entry.Type, entry.File, entry.Line))
+                    .Select(group =>
+                    {
+                        var first = group.First();
+                        return new
+                        {
+                            fingerprint = group.Key,
+                            type = first.Type,
+                            count = group.Count(),
+                            message = first.Message,
+                            file = first.File,
+                            line = first.Line,
+                            topFrame = GetTopFrame(first.StackTrace)
+                        };
+                    })
+                    .OrderByDescending(group => group.count)
+                    .ThenBy(group => group.type)
+                    .Take(count ?? PayloadBudgetPolicy.MaxDiagnosticFindings)
+                    .ToList();
+
+                var rawJson = Newtonsoft.Json.JsonConvert.SerializeObject(formattedEntries, Newtonsoft.Json.Formatting.None);
+                var shapedJson = Newtonsoft.Json.JsonConvert.SerializeObject(grouped, Newtonsoft.Json.Formatting.None);
+                PayloadStats.Record("tool_result", "Unity.ReadConsole.summary", PayloadBudgeting.GetUtf8ByteCount(rawJson), PayloadBudgeting.GetUtf8ByteCount(shapedJson), PayloadBudgeting.EstimateTokensFromBytes(PayloadBudgeting.GetUtf8ByteCount(shapedJson)), PayloadBudgeting.ComputeSha256(rawJson));
+
+                return Response.Success(
+                    $"Retrieved {formattedEntries.Count} console entries in summary mode.",
+                    new
+                    {
+                        cursor = totalEntries,
+                        scannedFrom = scanStart,
+                        entryCount = formattedEntries.Count,
+                        groups = grouped
+                    }
+                );
+            }
+
+            var resultJson = Newtonsoft.Json.JsonConvert.SerializeObject(formattedEntries, Newtonsoft.Json.Formatting.None);
+            PayloadStats.Record("tool_result", "Unity.ReadConsole", PayloadBudgeting.GetUtf8ByteCount(resultJson), PayloadBudgeting.GetUtf8ByteCount(resultJson), PayloadBudgeting.EstimateTokensFromBytes(PayloadBudgeting.GetUtf8ByteCount(resultJson)), PayloadBudgeting.ComputeSha256(resultJson));
+
             return Response.Success(
                 $"Retrieved {formattedEntries.Count} log entries.",
-                formattedEntries
+                new
+                {
+                    cursor = totalEntries,
+                    scannedFrom = scanStart,
+                    entries = formattedEntries
+                }
             );
         }
 
@@ -680,6 +727,41 @@ Returns:
 
             // No clear stack trace found based on the patterns.
             return null;
+        }
+
+        static int ResolveCursor(int? cursor, string sinceTimestamp)
+        {
+            if (cursor.HasValue)
+                return Math.Max(0, cursor.Value);
+
+            if (string.IsNullOrWhiteSpace(sinceTimestamp))
+                return 0;
+
+            var trimmed = sinceTimestamp.Trim();
+            if (trimmed.StartsWith("cursor:", StringComparison.OrdinalIgnoreCase) &&
+                int.TryParse(trimmed.Substring("cursor:".Length), out var cursorFromSince))
+            {
+                return Math.Max(0, cursorFromSince);
+            }
+
+            return int.TryParse(trimmed, out var numericCursor) ? Math.Max(0, numericCursor) : 0;
+        }
+
+        static string CreateFingerprint(string message, string stackTrace, string type, string file, int? line)
+        {
+            var normalizedMessage = (message ?? string.Empty).Trim();
+            var topFrame = GetTopFrame(stackTrace);
+            return PayloadBudgeting.ComputeSha256($"{type}|{normalizedMessage}|{topFrame}|{file}|{line}");
+        }
+
+        static string GetTopFrame(string stackTrace)
+        {
+            if (string.IsNullOrWhiteSpace(stackTrace))
+                return string.Empty;
+
+            return stackTrace.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(line => line.Trim())
+                .FirstOrDefault(line => !string.IsNullOrEmpty(line)) ?? string.Empty;
         }
 
         /* LogEntry.mode bits exploration (based on Unity decompilation/observation):

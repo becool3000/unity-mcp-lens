@@ -106,7 +106,7 @@ namespace Unity.AI.Assistant.Tools.Editor
                     logs.Add(new ConsoleLogEntry
                     {
                         Message = logData.Message,
-                        StackTrace = includeStackTrace ? logData.File : "",
+                        StackTrace = includeStackTrace ? ExtractStackTrace(logData.Message) : "",
                         Type = logType,
                         Timestamp = timeStamp
                     });
@@ -132,6 +132,29 @@ namespace Unity.AI.Assistant.Tools.Editor
                 ErrorCount = errorCount,
                 WarningCount = warningCount
             };
+        }
+
+        static string ExtractStackTrace(string message)
+        {
+            if (string.IsNullOrWhiteSpace(message))
+                return string.Empty;
+
+            var lines = message.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+            if (lines.Length <= 1)
+                return string.Empty;
+
+            for (var i = 1; i < lines.Length; i++)
+            {
+                var trimmed = lines[i].Trim();
+                if (trimmed.StartsWith("at ", StringComparison.OrdinalIgnoreCase) ||
+                    trimmed.Contains("(at ", StringComparison.OrdinalIgnoreCase) ||
+                    trimmed.StartsWith("UnityEngine.", StringComparison.Ordinal))
+                {
+                    return string.Join("\n", lines, i, lines.Length - i);
+                }
+            }
+
+            return string.Empty;
         }
     }
 }

@@ -361,47 +361,10 @@ Notes:
 
             if (NeedsNormalization(edits))
             {
-                // Read file to support index->line/col conversion when needed
-                var readParams = new JObject();
-                readParams["action"] = "read";
-                readParams["name"] = name;
-                readParams["path"] = directory;
-
-                var readResult = ManageScript.HandleCommand(readParams);
-
-                Dictionary<string, object> readDict = GetAnonymousProperties(readResult);
-
-                if (readDict.ContainsKey("success") && !Convert.ToBoolean(readDict["success"]))
+                if (!ManageScript.TryReadScriptText(name, directory, out var contents, out _, out _, out var error))
                 {
-                    warnings.Add((readResult as JObject)?["message"]?.ToString() ?? "Failed to read file");
-                    return (null, warnings); // Failed to read file
-                }
-
-                string contents = string.Empty;
-                if (readDict.ContainsKey("data") && readDict["data"] != null)
-                {
-                    var data = GetAnonymousProperties(readDict["data"]);
-                    if (data.ContainsKey("contents") && data["contents"] != null)
-                    {
-                        contents = data?["contents"]?.ToString();
-                    }
-
-                    if (string.IsNullOrEmpty(contents) && Convert.ToBoolean(data.GetValueOrDefault("contents_encoded", false)))
-                    {
-                        try
-                        {
-                            string encodedContent = data.GetValueOrDefault("encoded_contents", string.Empty)?.ToString();
-                            if (!string.IsNullOrEmpty(encodedContent))
-                            {
-                                var bytes = Convert.FromBase64String(encodedContent);
-                                contents = System.Text.Encoding.UTF8.GetString(bytes);
-                            }
-                        }
-                        catch
-                        {
-                            contents = contents ?? string.Empty;
-                        }
-                    }
+                    warnings.Add(error ?? "Failed to read file");
+                    return (null, warnings);
                 }
 
                 // Helper to map 0-based character index to 1-based line/col

@@ -23,6 +23,8 @@ namespace Unity.AI.Assistant.Editor.Utils
                 var contextModel = new ChatRequestV1.AttachedContextModel();
                 var metaDataModel = new ChatRequestV1.AttachedContextModel.MetadataModel();
                 ChatRequestV1.AttachedContextModel.BodyModel bodyModel = null;
+                var payloadHash = contextItem.PayloadHash ?? PayloadBudgeting.ComputeSha256(contextItem.Payload ?? string.Empty);
+                contextModel.AdditionalProperties["context_hash"] = payloadHash;
 
                 var selection = contextItem.Context as IContextSelection;
                 if (selection == null)
@@ -64,6 +66,7 @@ namespace Unity.AI.Assistant.Editor.Utils
                                 ImageContent = contextItem.Payload,
                                 Payload = "",
                             };
+                            contextModel.AdditionalProperties["blob_ref"] = payloadHash;
 
                             // Store the correlation ID for linking with annotation mask
                             metaDataModel.Value = screenshotCorrelationId;
@@ -71,6 +74,9 @@ namespace Unity.AI.Assistant.Editor.Utils
                             // Add the annotations mask as a separate context item if it exists
                             if (imageContextMetaData.Annotations != null && !string.IsNullOrEmpty(imageContextMetaData.Annotations.Base64))
                             {
+                                var annotationHash = PayloadBudgeting.ComputeSha256(imageContextMetaData.Annotations.Base64);
+                                var annotationKey = $"virtual-annotation|{virtualContext.DisplayValue}|{annotationHash}";
+                                var shouldSendAnnotation = StableContextCache.ShouldSendFull(annotationKey, annotationHash);
                                 var maskContextModel = new ChatRequestV1.AttachedContextModel
                                 {
                                     Metadata = new ChatRequestV1.AttachedContextModel.MetadataModel
@@ -87,10 +93,15 @@ namespace Unity.AI.Assistant.Editor.Utils
                                         Format = imageContextMetaData.Format,
                                         Width = imageContextMetaData.Annotations.Width > 0 ? imageContextMetaData.Annotations.Width : imageContextMetaData.Width,
                                         Height = imageContextMetaData.Annotations.Height > 0 ? imageContextMetaData.Annotations.Height : imageContextMetaData.Height,
-                                        ImageContent = imageContextMetaData.Annotations.Base64,
-                                        Payload = ""
+                                        ImageContent = shouldSendAnnotation ? imageContextMetaData.Annotations.Base64 : string.Empty,
+                                        Payload = shouldSendAnnotation ? string.Empty : $"Annotation mask unchanged from an earlier request in this conversation. sha256={annotationHash}."
                                     }
                                 };
+                                maskContextModel.AdditionalProperties["context_hash"] = annotationHash;
+                                maskContextModel.AdditionalProperties["stable_key"] = annotationKey;
+                                maskContextModel.AdditionalProperties["blob_ref"] = annotationHash;
+                                if (!shouldSendAnnotation)
+                                    maskContextModel.AdditionalProperties["cached"] = true;
                                 contextList.Add(maskContextModel);
                             }
                         }
@@ -138,18 +149,37 @@ namespace Unity.AI.Assistant.Editor.Utils
                     }
                 }
 
+                var stableKey = contextItem.StableCacheKey ?? $"{selection.ContextType}|{selection.TargetName}|{metaDataModel.ValueType}|{metaDataModel.Value}";
+                var shouldSendFull = StableContextCache.ShouldSendFull(stableKey, payloadHash);
+
                 if (bodyModel == null)
                 {
                     // No specific body model has been made, use the default one
                     bodyModel = new ChatRequestV1.AttachedContextModel.TextBodyModel
                     {
-                        Payload = contextItem.Payload,
-                        Truncated = contextItem.Truncated
+                        Payload = shouldSendFull
+                            ? contextItem.Payload
+                            : $"Context unchanged from an earlier request in this conversation. sha256={payloadHash}. Re-fetch only if more detail is needed.",
+                        Truncated = contextItem.Truncated || !shouldSendFull
                     };
+                }
+                else if (bodyModel is ChatRequestV1.AttachedContextModel.ImageBodyModel imageBody && !shouldSendFull)
+                {
+                    imageBody.ImageContent = string.Empty;
+                    imageBody.Payload = $"Image attachment unchanged from an earlier request in this conversation. sha256={payloadHash}.";
+                    contextModel.AdditionalProperties["cached"] = true;
                 }
 
                 contextModel.Body = bodyModel;
                 contextModel.Metadata = metaDataModel;
+                contextModel.AdditionalProperties["stable_key"] = stableKey;
+                if (bodyModel is ChatRequestV1.AttachedContextModel.ImageBodyModel)
+                    contextModel.AdditionalProperties["blob_ref"] = payloadHash;
+                if (!shouldSendFull)
+                {
+                    contextItem.IsCacheReference = true;
+                    contextModel.AdditionalProperties["cached"] = true;
+                }
                 contextList.Add(contextModel);
             }
 

@@ -9,6 +9,7 @@ using Newtonsoft.Json;
 using Unity.AI.Assistant.Data;
 using Unity.AI.Assistant.Editor;
 using Unity.AI.Assistant.FunctionCalling;
+using Unity.AI.Assistant.Utils;
 
 namespace Unity.AI.Assistant.Tools.Editor
 {
@@ -300,7 +301,9 @@ namespace Unity.AI.Assistant.Tools.Editor
             [Parameter("The first line number to read (1-based, inclusive). Defaults to 1.")]
             int startLine = 1,
             [Parameter("The last line number to read (1-based, inclusive). If -1, reads until the end of the file. Defaults to -1.")]
-            int endLine = -1
+            int endLine = -1,
+            [Parameter("When true, return the full file instead of the default preview window.")]
+            bool full = false
             )
         {
             try
@@ -316,9 +319,15 @@ namespace Unity.AI.Assistant.Tools.Editor
 
                 await context.Permissions.CheckFileSystemAccess(IToolPermissions.ItemOperation.Read, fullPath);
 
-                if (startLine == 1 && endLine == -1)
+                if (startLine == 1 && endLine == -1 && !full)
                 {
-                    return File.ReadAllText(fullPath);
+                    var previewContent = File.ReadAllText(fullPath);
+                    var preview = PayloadBudgeting.CreateTextPreview(previewContent, PayloadBudgetPolicy.MaxPreviewFileLines, PayloadBudgetPolicy.MaxPreviewFileBytes, out var truncated);
+                    var sha = PayloadBudgeting.ComputeSha256(previewContent);
+                    PayloadStats.Record("tool_result", k_GetFileContentFunctionId, PayloadBudgeting.GetUtf8ByteCount(previewContent), PayloadBudgeting.GetUtf8ByteCount(preview), PayloadBudgeting.EstimateTokensFromBytes(PayloadBudgeting.GetUtf8ByteCount(preview)), sha);
+                    return truncated
+                        ? $"Preview of '{filePath}' (sha256={sha}, bytes={PayloadBudgeting.GetUtf8ByteCount(previewContent)}). Use startLine/endLine or full=true for more.\n\n{preview}"
+                        : preview;
                 }
 
                 // Handle partial read by finding line boundaries in the full text
@@ -358,7 +367,9 @@ namespace Unity.AI.Assistant.Tools.Editor
                 if (startIdx >= endIdx)
                     return string.Empty;
 
-                return content.Substring(startIdx, endIdx - startIdx);
+                var result = content.Substring(startIdx, endIdx - startIdx);
+                PayloadStats.Record("tool_result", k_GetFileContentFunctionId, PayloadBudgeting.GetUtf8ByteCount(content), PayloadBudgeting.GetUtf8ByteCount(result), PayloadBudgeting.EstimateTokensFromBytes(PayloadBudgeting.GetUtf8ByteCount(result)), PayloadBudgeting.ComputeSha256(content));
+                return result;
             }
             catch (UnauthorizedAccessException)
             {

@@ -25,5 +25,11 @@ namespace Unity.AI.Assistant.Socket.Protocol.Models.FromClient
 
         [JsonProperty("agents", Required = Required.Default, NullValueHandling = NullValueHandling.Ignore)]
         public List<BaseAgentDefinitionV1> Agents { get; set; } = new();
+
+        [JsonProperty("hash", Required = Required.Default, NullValueHandling = NullValueHandling.Ignore)]
+        public string Hash { get; set; }
+
+        [JsonProperty("unchanged", Required = Required.Default, NullValueHandling = NullValueHandling.Ignore)]
+        public bool? Unchanged { get; set; }
     }
 }

@@ -24,6 +24,9 @@ namespace Unity.AI.Assistant.Socket.Protocol.Models.FromServer
         [JsonProperty("$type")]
         public const string Type = "SKILLS_REQUEST_V1";
 
+        [JsonProperty("known_hash", Required = Required.Default, NullValueHandling = NullValueHandling.Ignore)]
+        public string KnownHash { get; set; }
+
         public string GetModelType() => Type;
     }
 }

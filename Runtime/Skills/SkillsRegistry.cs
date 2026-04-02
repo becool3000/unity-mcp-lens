@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using Newtonsoft.Json;
 using Unity.AI.Assistant.Utils;
 
 namespace Unity.AI.Assistant.Skills
@@ -12,6 +13,16 @@ namespace Unity.AI.Assistant.Skills
         static Dictionary<string, SkillDefinition> s_RegisteredSkills = new();
 
         public static Dictionary<string, SkillDefinition> GetSkills() => s_RegisteredSkills;
+
+        public static List<SkillMetaData> GetSkillMetadata()
+        {
+            return s_RegisteredSkills.Values.Select(skill => skill.MetaData).ToList();
+        }
+
+        public static string GetSkillsHash()
+        {
+            return PayloadBudgeting.ComputeSha256(JsonConvert.SerializeObject(GetSkillMetadata(), Formatting.None));
+        }
 
         public static void RegisterSkill(SkillDefinition skill)
         {

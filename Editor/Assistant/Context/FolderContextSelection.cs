@@ -14,7 +14,7 @@ namespace Unity.AI.Assistant.Editor.Context
         string IContextSelection.Classifier => "Folder";
         string IContextSelection.Description => $"Folder: {FolderPath}";
         string IContextSelection.Payload => m_Payload ??= BuildPayload();
-        string IContextSelection.DownsizedPayload => m_Payload ??= BuildPayload();
+        string IContextSelection.DownsizedPayload => BuildPayload(maxEntries: 20, includeGuids: false);
         string IContextSelection.ContextType => "Folder";
         string IContextSelection.TargetName => FolderPath;
         bool? IContextSelection.Truncated => null;
@@ -23,7 +23,7 @@ namespace Unity.AI.Assistant.Editor.Context
             other is FolderContextSelection otherSelection &&
             string.Equals(otherSelection.FolderPath, FolderPath, StringComparison.OrdinalIgnoreCase);
 
-        string BuildPayload()
+        string BuildPayload(int maxEntries = int.MaxValue, bool includeGuids = true)
         {
             var entries = FolderContextUtils.EnumerateFolderAssetInfos(FolderPath);
             var builder = new StringBuilder();
@@ -31,16 +31,24 @@ namespace Unity.AI.Assistant.Editor.Context
             builder.AppendLine("Contents:");
 
             var contentStartLength = builder.Length;
+            var index = 0;
             foreach (var entry in entries)
             {
+                if (index >= maxEntries)
+                {
+                    builder.AppendLine("... [truncated]");
+                    break;
+                }
+
                 builder.Append("- Name: ").Append(entry.DisplayName)
                     .Append(" | Type: ").Append(entry.TypeName)
                     .Append(" | Path: ").Append(entry.Path);
 
-                if (!string.IsNullOrEmpty(entry.Guid))
+                if (includeGuids && !string.IsNullOrEmpty(entry.Guid))
                     builder.Append(" | GUID: ").Append(entry.Guid);
 
                 builder.AppendLine();
+                index++;
             }
 
             return builder.Length > contentStartLength ? builder.ToString() : null;

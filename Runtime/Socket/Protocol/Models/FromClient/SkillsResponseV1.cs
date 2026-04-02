@@ -21,5 +21,11 @@ namespace Unity.AI.Assistant.Socket.Protocol.Models.FromClient
 
         [JsonProperty("skills", Required = Required.Always)]
         public List<SkillMetaData> Skills { get; set; } = new();
+
+        [JsonProperty("hash", Required = Required.Default, NullValueHandling = NullValueHandling.Ignore)]
+        public string Hash { get; set; }
+
+        [JsonProperty("unchanged", Required = Required.Default, NullValueHandling = NullValueHandling.Ignore)]
+        public bool? Unchanged { get; set; }
     }
 }

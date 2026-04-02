@@ -186,7 +186,7 @@ namespace Unity.AI.Assistant.Editor.Mcp.Transport
             request.SetRequestHeader("Accept", "application/json");
 
             InternalLog.Log($"[UnityMcpHttpClient] Sending POST request to: {url}");
-            InternalLog.Log($"[UnityMcpHttpClient] Request body: {jsonBody}");
+            InternalLog.Log($"[UnityMcpHttpClient] Request body bytes={bodyBytes.Length}, sha256={PayloadBudgeting.ComputeSha256(bodyBytes)}, preview={PayloadBudgeting.CreateTextPreview(jsonBody, 8, 1024, out _)}");
 
             var operation = request.SendWebRequest();
 
@@ -210,7 +210,8 @@ namespace Unity.AI.Assistant.Editor.Mcp.Transport
             }
 
             var responseText = request.downloadHandler.text;
-            InternalLog.Log($"[UnityMcpHttpClient] Received response: {responseText}");
+            var responseBytes = PayloadBudgeting.GetUtf8ByteCount(responseText);
+            InternalLog.Log($"[UnityMcpHttpClient] Response bytes={responseBytes}, sha256={PayloadBudgeting.ComputeSha256(responseText ?? string.Empty)}, preview={PayloadBudgeting.CreateTextPreview(responseText, 8, 1024, out _)}");
 
             if (string.IsNullOrEmpty(responseText))
                 return null;

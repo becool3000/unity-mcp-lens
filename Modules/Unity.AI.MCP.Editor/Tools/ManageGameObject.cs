@@ -11,6 +11,7 @@ using UnityEditor;
 using UnityEditorInternal;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using Unity.AI.Assistant.Utils;
 using Unity.AI.MCP.Editor.Helpers;
 using Unity.AI.MCP.Editor.ToolRegistry; // For Response class
 using Unity.AI.MCP.Editor.ToolRegistry.Parameters;
@@ -209,7 +210,7 @@ Returns:
             JToken parentToken = @params["parent"];
 
             // --- Add parameter for controlling non-public field inclusion ---
-            bool includeNonPublicSerialized = @params["include_non_public_serialized"]?.ToObject<bool>() ?? true; // Default to true
+            bool includeNonPublicSerialized = @params["include_non_public_serialized"]?.ToObject<bool>() ?? false;
             // --- End add parameter ---
 
             // --- Prefab Redirection Check ---
@@ -1200,7 +1201,16 @@ Returns:
 
                 return Response.Success(
                     $"Retrieved {componentData.Count} components from '{targetGo.name}'.",
-                    componentData // List was built in original order
+                    ShapeComponentPayload(
+                        componentData,
+                        $"Retrieved {componentData.Count} components from '{targetGo.name}'.",
+                        new
+                        {
+                            action = "get_components",
+                            target,
+                            search_method = searchMethod,
+                            include_non_public_serialized = includeNonPublicSerialized
+                        })
                 );
             }
             catch (Exception e)
@@ -1272,7 +1282,17 @@ Returns:
 
                 return Response.Success(
                     $"Retrieved component '{componentName}' from '{targetGo.name}'.",
-                    componentData
+                    ShapeComponentPayload(
+                        componentData,
+                        $"Retrieved component '{componentName}' from '{targetGo.name}'.",
+                        new
+                        {
+                            action = "get_component",
+                            target,
+                            search_method = searchMethod,
+                            component_name = componentName,
+                            include_non_public_serialized = includeNonPublicSerialized
+                        })
                 );
             }
             catch (Exception e)
@@ -1281,6 +1301,27 @@ Returns:
                     $"Error getting component '{componentName}' from '{targetGo.name}': {e.Message}"
                 );
             }
+        }
+
+        static object ShapeComponentPayload(object data, string summary, object detailRef)
+        {
+            var serialized = JsonConvert.SerializeObject(data, Formatting.None);
+            var rawBytes = PayloadBudgeting.GetUtf8ByteCount(serialized);
+            if (rawBytes <= PayloadBudgetPolicy.MaxToolResultBytes)
+            {
+                PayloadStats.Record("tool_result", "Unity.ManageGameObject", rawBytes, rawBytes, PayloadBudgeting.EstimateTokensFromBytes(rawBytes), PayloadBudgeting.ComputeSha256(serialized));
+                return data;
+            }
+
+            var budgeted = PayloadBudgeting.CreateTextResult(
+                summary,
+                new { rawBytes },
+                serialized,
+                detailRef,
+                maxPreviewLines: 40,
+                maxPreviewBytes: PayloadBudgetPolicy.MaxToolResultBytes);
+            PayloadStats.Record("tool_result", "Unity.ManageGameObject", rawBytes, PayloadBudgeting.GetUtf8ByteCount(budgeted.Preview), PayloadBudgeting.EstimateTokensFromBytes(PayloadBudgeting.GetUtf8ByteCount(budgeted.Preview)), budgeted.Sha256);
+            return budgeted;
         }
 
         static object AddComponentToTarget(

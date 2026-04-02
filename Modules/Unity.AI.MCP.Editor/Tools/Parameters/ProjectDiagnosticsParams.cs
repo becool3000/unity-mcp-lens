@@ -1,3 +1,4 @@
+using Unity.AI.Assistant.Utils;
 using Unity.AI.MCP.Editor.ToolRegistry;
 
 namespace Unity.AI.MCP.Editor.Tools.Parameters
@@ -11,10 +12,13 @@ namespace Unity.AI.MCP.Editor.Tools.Parameters
         public bool IncludeOpenScenes { get; set; } = true;
 
         [McpDescription("Scan prefabs on disk for missing scripts.", Required = false)]
-        public bool IncludePrefabs { get; set; } = true;
+        public bool IncludePrefabs { get; set; } = false;
 
         [McpDescription("Maximum number of prefab assets to inspect.", Required = false)]
-        public int MaxPrefabs { get; set; } = 500;
+        public int MaxPrefabs { get; set; } = 50;
+
+        [McpDescription("Maximum number of findings to return.", Required = false)]
+        public int MaxFindings { get; set; } = PayloadBudgetPolicy.MaxDiagnosticFindings;
     }
 
     public record ValidateReferencesParams

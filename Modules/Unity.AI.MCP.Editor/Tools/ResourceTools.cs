@@ -6,6 +6,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using UnityEditor;
 using UnityEngine;
+using Unity.AI.Assistant.Utils;
 using Unity.AI.MCP.Editor.Helpers;
 using Unity.AI.MCP.Editor.ToolRegistry; // For McpTool attribute
 using Unity.AI.MCP.Editor.ToolRegistry.Parameters;
@@ -52,11 +53,12 @@ Args:
     LineCount: Number of lines to read
     HeadBytes: Number of bytes to read from start
     TailLines: Number of lines from end
+    Full: When true, return the full file instead of the default preview window
     Request: Natural language request (e.g., 'last 120 lines', 'show 40 lines around MethodName')
     ProjectRoot: Override project root path
 
 Returns:
-    Dictionary with 'success', 'data' (containing 'text' and 'metadata'), and optional 'error'.";
+    Dictionary with 'success', 'data' (containing preview text and metadata by default), and optional 'error'.";
 
         /// <summary>
         /// Description text for the Unity.FindInFile MCP tool.
@@ -212,10 +214,18 @@ Returns:
                     out var startLineFromRequest, out var lineCountFromRequest,
                     out var headBytesFromRequest, out var tailLinesFromRequest);
 
-                var isDefaultSlicing = parameters.StartLine == 1 && parameters.LineCount == -1;
+                var isDefaultSlicing = parameters.StartLine == 1 &&
+                    parameters.LineCount == PayloadBudgetPolicy.MaxPreviewFileLines &&
+                    parameters.HeadBytes == 0 &&
+                    parameters.TailLines == 0 &&
+                    !parameters.Full;
 
                 var effectiveStartLine = isDefaultSlicing ? (startLineFromRequest ?? 1) : parameters.StartLine;
-                var effectiveLineCount = isDefaultSlicing ? (lineCountFromRequest ?? -1) : parameters.LineCount;
+                var effectiveLineCount = parameters.Full
+                    ? -1
+                    : isDefaultSlicing
+                        ? (lineCountFromRequest ?? PayloadBudgetPolicy.MaxPreviewFileLines)
+                        : parameters.LineCount;
                 var effectiveHeadBytes = parameters.HeadBytes > 0 ? parameters.HeadBytes : (headBytesFromRequest ?? 0);
                 var effectiveTailLines = parameters.TailLines > 0 ? parameters.TailLines : (tailLinesFromRequest ?? 0);
 
@@ -224,12 +234,21 @@ Returns:
                 var fullSha = ResourceUriHelper.ComputeSha256(fileBytes);
 
                 // Determine if selection is requested
-                bool selectionRequested = effectiveHeadBytes > 0 ||
+                bool selectionRequested = parameters.Full ||
+                    effectiveHeadBytes > 0 ||
                     effectiveTailLines > 0 ||
-                    (effectiveStartLine != 1 || (effectiveLineCount != -1 && effectiveLineCount > 0)) ||
+                    (effectiveStartLine != 1 || (effectiveLineCount != PayloadBudgetPolicy.MaxPreviewFileLines && effectiveLineCount != -1 && effectiveLineCount > 0)) ||
                     !string.IsNullOrEmpty(parameters.Request);
 
-                var response = new ReadResourceResponse {Metadata = new ResourceMetadata {Sha256 = fullSha, LengthBytes = fileBytes.Length}};
+                var response = new ReadResourceResponse
+                {
+                    Metadata = new ResourceMetadata
+                    {
+                        Sha256 = fullSha,
+                        LengthBytes = fileBytes.Length,
+                        DetailAvailable = true
+                    }
+                };
 
                 if (selectionRequested)
                 {
@@ -240,21 +259,24 @@ Returns:
                         var headData = new byte[headBytes];
                         Array.Copy(fileBytes, headData, headBytes);
                         response.Text = Encoding.UTF8.GetString(headData);
+                        response.Metadata.Truncated = headBytes < fileBytes.Length;
                     }
                     else
                     {
                         var fileText = Encoding.UTF8.GetString(fileBytes);
+                        var lines = fileText.Split('\n');
 
                         if (effectiveTailLines > 0)
                         {
-                            var lines = fileText.Split('\n');
                             var tailCount = Math.Min(effectiveTailLines, lines.Length);
                             var tailLines = lines.Skip(lines.Length - tailCount).ToArray();
                             response.Text = string.Join("\n", tailLines);
+                            response.Metadata.ReturnedStartLine = Math.Max(1, lines.Length - tailCount + 1);
+                            response.Metadata.ReturnedLineCount = tailLines.Length;
+                            response.Metadata.Truncated = tailCount < lines.Length;
                         }
                         else if (effectiveStartLine != 1 || (effectiveLineCount != -1 && effectiveLineCount > 0))
                         {
-                            var lines = fileText.Split('\n');
                             var startIdx = Math.Max(0, effectiveStartLine - 1);
 
                             if (effectiveLineCount == -1)
@@ -262,6 +284,9 @@ Returns:
                                 // Read from startLine to end of file
                                 var selectedLines = lines.Skip(startIdx).ToArray();
                                 response.Text = string.Join("\n", selectedLines);
+                                response.Metadata.ReturnedStartLine = startIdx + 1;
+                                response.Metadata.ReturnedLineCount = selectedLines.Length;
+                                response.Metadata.Truncated = startIdx > 0;
                             }
                             else
                             {
@@ -269,19 +294,29 @@ Returns:
                                 var endIdx = Math.Min(lines.Length, startIdx + effectiveLineCount);
                                 var selectedLines = lines.Skip(startIdx).Take(endIdx - startIdx).ToArray();
                                 response.Text = string.Join("\n", selectedLines);
+                                response.Metadata.ReturnedStartLine = startIdx + 1;
+                                response.Metadata.ReturnedLineCount = selectedLines.Length;
+                                response.Metadata.Truncated = startIdx > 0 || endIdx < lines.Length;
                             }
                         }
                         else
                         {
-                            response.Text = fileText;
+                            response.Text = PayloadBudgeting.CreateTextPreview(fileText, PayloadBudgetPolicy.MaxPreviewFileLines, PayloadBudgetPolicy.MaxPreviewFileBytes, out var truncated);
+                            response.Metadata.ReturnedStartLine = 1;
+                            response.Metadata.ReturnedLineCount = response.Text.Split('\n').Length;
+                            response.Metadata.Truncated = truncated;
                         }
                     }
                 }
                 else
                 {
-                    // No selection requested - return full content
-                    response.Text = Encoding.UTF8.GetString(fileBytes);
+                    response.Text = PayloadBudgeting.CreateTextPreview(Encoding.UTF8.GetString(fileBytes), PayloadBudgetPolicy.MaxPreviewFileLines, PayloadBudgetPolicy.MaxPreviewFileBytes, out var truncated);
+                    response.Metadata.ReturnedStartLine = 1;
+                    response.Metadata.ReturnedLineCount = response.Text.Split('\n').Length;
+                    response.Metadata.Truncated = truncated;
                 }
+
+                PayloadStats.Record("tool_result", "Unity.ReadResource", fileBytes.Length, PayloadBudgeting.GetUtf8ByteCount(response.Text), PayloadBudgeting.EstimateTokensFromBytes(PayloadBudgeting.GetUtf8ByteCount(response.Text)), fullSha);
 
                 return Response.Success("Resource read successfully", response);
             }

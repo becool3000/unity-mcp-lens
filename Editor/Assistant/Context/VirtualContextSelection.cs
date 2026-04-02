@@ -1,3 +1,5 @@
+using Unity.AI.Assistant.Utils;
+
 namespace Unity.AI.Assistant.Editor.Context
 {
     internal class VirtualContextSelection : IContextSelection
@@ -36,7 +38,7 @@ namespace Unity.AI.Assistant.Editor.Context
         public string DisplayValue => m_DisplayValue;
         public object Metadata => m_Metadata;
 
-        string IContextSelection.DownsizedPayload => Payload;
+        string IContextSelection.DownsizedPayload => PayloadBudgeting.CreateTextPreview(Payload, 20, PayloadBudgetPolicy.MaxPreviewFileBytes / 2, out _);
 
         string IContextSelection.ContextType => m_Type;
 

@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Newtonsoft.Json;
 using Unity.AI.Assistant.Data;
 using Unity.AI.Assistant.Socket.Protocol.Models.FromClient;
 using Unity.AI.Assistant.Utils;
@@ -15,6 +16,11 @@ namespace Unity.AI.Assistant.Backend
         public static List<FunctionsObject> GetFunctionCapabilities()
         {
             return new List<FunctionsObject>(s_RegisteredFunctions);
+        }
+
+        public static string GetFunctionCapabilitiesHash()
+        {
+            return PayloadBudgeting.ComputeSha256(JsonConvert.SerializeObject(s_RegisteredFunctions, Formatting.None));
         }
 
         /// <summary>

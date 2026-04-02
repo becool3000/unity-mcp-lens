@@ -80,8 +80,8 @@ namespace Unity.AI.Assistant.Editor.Acp
                     Directory.CreateDirectory(directory);
                 }
 
-                // Serialize to JSON using explicit serialization
-                var json = conversation.ToJson();
+                // Serialize to JSON using explicit serialization, but bound oversized blocks before writing.
+                var json = SanitizeJsonForStorage(JObject.Parse(conversation.ToJson())).ToString(Newtonsoft.Json.Formatting.Indented);
                 File.WriteAllText(filePath, json);
 
                 // Check file size and warn if large
@@ -427,6 +427,46 @@ namespace Unity.AI.Assistant.Editor.Acp
             catch (Exception ex)
             {
                 Debug.LogError($"ACP: Failed to enforce conversation limit: {ex.Message}");
+            }
+        }
+
+        static JObject SanitizeJsonForStorage(JObject root)
+        {
+            if (root == null)
+                return new JObject();
+
+            SanitizeToken(root);
+            return root;
+        }
+
+        static void SanitizeToken(JToken token)
+        {
+            if (token == null)
+                return;
+
+            switch (token.Type)
+            {
+                case JTokenType.Object:
+                    foreach (var property in ((JObject)token).Properties().ToList())
+                    {
+                        SanitizeToken(property.Value);
+                    }
+                    break;
+                case JTokenType.Array:
+                    foreach (var item in ((JArray)token).ToList())
+                    {
+                        SanitizeToken(item);
+                    }
+                    break;
+                case JTokenType.String:
+                    var value = token.Value<string>();
+                    if (PayloadBudgeting.GetUtf8ByteCount(value) > PayloadBudgetPolicy.MaxPersistedBlockBytes)
+                    {
+                        var preview = PayloadBudgeting.TruncateForStorage(value, PayloadBudgetPolicy.MaxPersistedPreviewBytes, out _);
+                        var hash = PayloadBudgeting.ComputeSha256(value);
+                        ((JValue)token).Value = $"{preview}\n... [persisted content truncated, sha256={hash}, bytes={PayloadBudgeting.GetUtf8ByteCount(value)}]";
+                    }
+                    break;
             }
         }
     }

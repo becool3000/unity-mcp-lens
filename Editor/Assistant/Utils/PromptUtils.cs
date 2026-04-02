@@ -17,8 +17,10 @@ namespace Unity.AI.Assistant.Editor.Utils
             GetAttachedContextString(prompt, ref contextBuilder);
 
             var finalContext = contextBuilder.BuildContext(maxLength);
-
-            InternalLog.Log($"Final Context ({contextBuilder.PredictedLength} character):\n\n {finalContext.ToJson()}");
+            var json = finalContext.ToJson();
+            var jsonBytes = PayloadBudgeting.GetUtf8ByteCount(json);
+            PayloadStats.Record("prompt_context", "PromptUtils.GetContextModel", contextBuilder.PredictedLength, jsonBytes, PayloadBudgeting.EstimateTokensFromBytes(jsonBytes), PayloadBudgeting.ComputeSha256(json));
+            InternalLog.Log($"Final Context items={finalContext.AttachedContext?.Count ?? 0}, chars={contextBuilder.PredictedLength}, bytes={jsonBytes}, sha256={PayloadBudgeting.ComputeSha256(json)}, preview:\n{PayloadBudgeting.CreateTextPreview(json, 8, 1024, out _)}");
 
             return finalContext;
         }

@@ -302,20 +302,93 @@ namespace Unity.AI.Assistant.Editor
         /// Returns a string summary of the given log
         /// </summary>
         /// <param name="logData">The stored data for a single log entry</param>
-        /// <param name="includeSource">If true, the content of the related source file will be included</param>
+        /// <param name="includeSource">If true, a capped source snippet will be included</param>
         /// <returns>A string summary of the given log message</returns>
-        public static string OutputLogData(LogData logData, bool includeSource)
+        public static string OutputLogData(LogData logData, bool includeSource, int maxSnippetLines = PayloadBudgetPolicy.MaxInlineSnippetLines)
         {
+            var builder = new StringBuilder();
+            var firstLine = logData.Message?.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? string.Empty;
+            builder.AppendLine(firstLine);
+            builder.AppendLine($"Severity: {logData.Type}");
+
+            if (!string.IsNullOrEmpty(logData.File))
+            {
+                builder.Append("Location: ").Append(logData.File);
+                if (logData.Line > 0)
+                {
+                    builder.Append(":").Append(logData.Line);
+                    if (logData.Column > 0)
+                        builder.Append(":").Append(logData.Column);
+                }
+                builder.AppendLine();
+            }
+
+            var topFrame = ExtractTopStackFrame(logData.Message);
+            if (!string.IsNullOrEmpty(topFrame))
+            {
+                builder.AppendLine($"Top Frame: {topFrame}");
+            }
+
             if (includeSource)
             {
                 var fileName = logData.File;
                 if (!string.IsNullOrEmpty(fileName) && fileName.EndsWith(".cs") && File.Exists(fileName))
                 {
-                    return $"{logData.Message}\n{fileName} contains the following code:\n{File.ReadAllText(fileName)}";
+                    builder.AppendLine("Source Snippet:");
+                    builder.AppendLine(GetSourceSnippet(fileName, logData.Line, maxSnippetLines));
                 }
             }
 
-            return logData.Message;
+            return builder.ToString().TrimEnd();
+        }
+
+        static string ExtractTopStackFrame(string message)
+        {
+            if (string.IsNullOrWhiteSpace(message))
+                return string.Empty;
+
+            var lines = message.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+            foreach (var line in lines.Skip(1))
+            {
+                var trimmed = line.Trim();
+                if (trimmed.StartsWith("at ", StringComparison.OrdinalIgnoreCase) ||
+                    trimmed.Contains("(at ", StringComparison.OrdinalIgnoreCase) ||
+                    trimmed.StartsWith("UnityEngine.", StringComparison.Ordinal))
+                {
+                    return trimmed;
+                }
+            }
+
+            return string.Empty;
+        }
+
+        static string GetSourceSnippet(string fileName, int lineNumber, int maxSnippetLines)
+        {
+            try
+            {
+                var fileLines = File.ReadAllLines(fileName);
+                if (fileLines.Length == 0)
+                    return string.Empty;
+
+                var centerLine = Mathf.Clamp(lineNumber <= 0 ? 1 : lineNumber, 1, fileLines.Length);
+                var maxLines = Mathf.Max(1, maxSnippetLines);
+                var halfWindow = Mathf.Max(0, maxLines / 2);
+                var start = Mathf.Max(1, centerLine - halfWindow);
+                var end = Mathf.Min(fileLines.Length, start + maxLines - 1);
+                start = Mathf.Max(1, end - maxLines + 1);
+
+                var snippet = new StringBuilder();
+                for (var i = start; i <= end; i++)
+                {
+                    snippet.Append(i.ToString().PadLeft(4)).Append(": ").AppendLine(fileLines[i - 1]);
+                }
+
+                return snippet.ToString().TrimEnd();
+            }
+            catch (Exception ex)
+            {
+                return $"Unable to load source snippet: {ex.Message}";
+            }
         }
 
         /// <summary>

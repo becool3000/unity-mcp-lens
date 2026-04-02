@@ -51,9 +51,9 @@ namespace Unity.AI.Assistant.Editor.Context
             }
         }
 
-        string IContextSelection.Payload => GetPayload();
+        string IContextSelection.Payload => GetPayload(includeIdentifiers: true);
 
-        string IContextSelection.DownsizedPayload => GetPayload();
+        string IContextSelection.DownsizedPayload => GetPayload(includeIdentifiers: false);
 
         string IContextSelection.ContextType
         {
@@ -88,22 +88,24 @@ namespace Unity.AI.Assistant.Editor.Context
             return otherSelection.m_Target == m_Target;
         }
 
-        string GetPayload()
+        string GetPayload(bool includeIdentifiers)
         {
             if (m_Target == null)
                 return null;
 
             string path;
             string info = $"\n- Name: {m_Target.name}" +
-                          $"\n- Type: {m_Target.GetType()}" +
-                          $"\n- Instance ID: {m_Target.GetInstanceID()}";
+                          $"\n- Type: {m_Target.GetType()}";
+
+            if (includeIdentifiers)
+                info += $"\n- Instance ID: {m_Target.GetInstanceID()}";
 
             if (EditorUtility.IsPersistent(m_Target))
             {
                 path = AssetDatabase.GetAssetPath(m_Target);
-
-                info += $"\n- GUID: {AssetDatabase.AssetPathToGUID(path)}" +
-                        $"\n- Path: {path}";
+                if (includeIdentifiers)
+                    info += $"\n- GUID: {AssetDatabase.AssetPathToGUID(path)}";
+                info += $"\n- Path: {path}";
             }
             else if (m_Target is GameObject go)
             {

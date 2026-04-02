@@ -67,5 +67,8 @@ namespace Unity.AI.Assistant.ApplicationModels
 
         [JsonIgnore] public int Priority;
         [JsonIgnore] public object Context;
+        [JsonIgnore] public string PayloadHash;
+        [JsonIgnore] public string StableCacheKey;
+        [JsonIgnore] public bool IsCacheReference;
     }
 }

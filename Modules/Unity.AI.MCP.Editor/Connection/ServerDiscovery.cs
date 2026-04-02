@@ -6,6 +6,7 @@ using System.Text;
 using System.Runtime.InteropServices;
 using Newtonsoft.Json;
 using Unity.AI.MCP.Editor.Settings;
+using Unity.AI.Assistant.Utils;
 using UnityEngine;
 
 namespace Unity.AI.MCP.Editor.Helpers
@@ -55,6 +56,8 @@ namespace Unity.AI.MCP.Editor.Helpers
         }
 
         static readonly int s_EditorPid = Process.GetCurrentProcess().Id;
+        static string s_LastStatusJson;
+        static DateTime s_LastStatusWriteUtc;
 
         /// <summary>
         /// Get connection path for the current Unity project.
@@ -183,8 +186,16 @@ namespace Unity.AI.MCP.Editor.Helpers
                 };
 
                 string json = JsonConvert.SerializeObject(statusInfo, Formatting.Indented);
+                if (json == s_LastStatusJson &&
+                    (DateTime.UtcNow - s_LastStatusWriteUtc).TotalSeconds < PayloadBudgetPolicy.HeartbeatWriteIntervalSeconds)
+                {
+                    return;
+                }
+
                 Directory.CreateDirectory(GetRegistryDirectory());
                 File.WriteAllText(statusFile, json, new UTF8Encoding(false));
+                s_LastStatusJson = json;
+                s_LastStatusWriteUtc = DateTime.UtcNow;
 
                 #if UNITY_EDITOR_LINUX
                 // Ubuntu CI: Ensure status file is flushed to disk

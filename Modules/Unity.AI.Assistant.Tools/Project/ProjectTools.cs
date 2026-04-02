@@ -35,16 +35,22 @@ namespace Unity.AI.Assistant.Tools.Editor
             ToolExecutionContext context,
             [Parameter("Optional: Specify the depth of the folder hierarchy. Default is 2.")]
             int maxTaxonomyDepth = 2,
-            [Parameter("Optional: Maximum number of assets/folders to process. Default is 5000.")]
-            int maxAssetItems = 5000,
-            [Parameter("Optional: Maximum output size in characters. Default is 1,000,000 (~250K tokens).")]
-            int maxOutputChars = 1_000_000
+            [Parameter("Optional: Maximum number of assets/folders to process. Default is 300.")]
+            int maxAssetItems = PayloadBudgetPolicy.MaxProjectDataItems,
+            [Parameter("Optional: Maximum output size in characters. Default is 32,000.")]
+            int maxOutputChars = PayloadBudgetPolicy.MaxProjectDataChars
         )
         {
             var output = new GetProjectDataOutput();
             await context.Permissions.CheckFileSystemAccess(IToolPermissions.ItemOperation.Read, Application.dataPath);
 
+            maxTaxonomyDepth = Math.Max(1, maxTaxonomyDepth);
+            maxAssetItems = Math.Max(1, Math.Min(maxAssetItems, PayloadBudgetPolicy.MaxProjectDataItems));
+            maxOutputChars = Math.Max(1024, Math.Min(maxOutputChars, PayloadBudgetPolicy.MaxProjectDataChars));
+
             output.ProjectTaxonomy = ProjectHierarchyExporter.GetAssetsHierarchyMarkdown(maxTaxonomyDepth, maxAssetItems, maxOutputChars);
+            var taxonomyBytes = PayloadBudgeting.GetUtf8ByteCount(output.ProjectTaxonomy);
+            PayloadStats.Record("tool_result", k_GetProjectDataID, taxonomyBytes, taxonomyBytes, PayloadBudgeting.EstimateTokensFromBytes(taxonomyBytes), PayloadBudgeting.ComputeSha256(output.ProjectTaxonomy));
 
             return output;
         }
@@ -134,8 +140,8 @@ namespace Unity.AI.Assistant.Tools.Editor
     {
         public static string GetAssetsHierarchyMarkdown(
             int maxDepth = int.MaxValue,
-            int maxItems = 5000,
-            int maxOutputChars = 1_000_000)
+            int maxItems = PayloadBudgetPolicy.MaxProjectDataItems,
+            int maxOutputChars = PayloadBudgetPolicy.MaxProjectDataChars)
         {
             // Collect all assets under Assets/
             var guids = AssetDatabase.FindAssets("", new[] { "Assets" });

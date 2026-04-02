@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using Unity.AI.Assistant.Bridge.Editor;
+using Unity.AI.Assistant.Utils;
 using UnityEngine;
 
 namespace Unity.AI.Assistant.Editor.Context
@@ -39,7 +40,7 @@ namespace Unity.AI.Assistant.Editor.Context
                 if (m_Target == null)
                     return null;
 
-                return $"{UnityDataUtils.OutputLogData(m_Target.Value, true)}";
+                return $"{UnityDataUtils.OutputLogData(m_Target.Value, true, PayloadBudgetPolicy.MaxInlineSnippetLines)}";
             }
         }
 
@@ -50,7 +51,7 @@ namespace Unity.AI.Assistant.Editor.Context
                 if (m_Target == null)
                     return null;
 
-                return $"{UnityDataUtils.OutputLogData(m_Target.Value, false)}";
+                return $"{UnityDataUtils.OutputLogData(m_Target.Value, false, 0)}";
             }
         }
 

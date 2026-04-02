@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using Unity.AI.Assistant.Utils;
 using Unity.AI.MCP.Editor.ToolRegistry;
 
 namespace Unity.AI.MCP.Editor.ToolRegistry.Parameters
@@ -66,8 +67,8 @@ namespace Unity.AI.MCP.Editor.ToolRegistry.Parameters
         /// Gets or sets the number of lines to read from the starting line.
         /// Default is -1 (read all lines from StartLine to end of file).
         /// </summary>
-        [McpDescription("The number of lines to read (default: -1 = read all lines)", Required = false)]
-        public int LineCount { get; set; } = -1;  // Default: -1 = read all lines
+        [McpDescription("The number of lines to read (default: preview window)", Required = false)]
+        public int LineCount { get; set; } = PayloadBudgetPolicy.MaxPreviewFileLines;
 
         /// <summary>
         /// Gets or sets the number of bytes to read from the start of the file.
@@ -90,6 +91,9 @@ namespace Unity.AI.MCP.Editor.ToolRegistry.Parameters
         /// </summary>
         [McpDescription("Natural language request for content slicing (e.g., 'last 120 lines', 'show 40 lines around MethodName')", Required = false)]
         public string Request { get; set; }
+
+        [McpDescription("When true, return the full file contents instead of the default preview slice.", Required = false)]
+        public bool Full { get; set; }
 
         /// <summary>
         /// Gets or sets an override for the project root path.
@@ -188,6 +192,14 @@ namespace Unity.AI.MCP.Editor.ToolRegistry.Parameters
         /// Gets or sets the total length of the file in bytes (not just the slice).
         /// </summary>
         public long LengthBytes { get; set; }
+
+        public bool Truncated { get; set; }
+
+        public bool DetailAvailable { get; set; }
+
+        public int ReturnedStartLine { get; set; }
+
+        public int ReturnedLineCount { get; set; }
     }
 
     /// <summary>

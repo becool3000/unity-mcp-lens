@@ -38,9 +38,6 @@ namespace Unity.AI.Assistant.Utils
 
         public static void SetMessageSizeLimit(int newLimit)
         {
-            // POC Hack, no limit!!!
-            newLimit = int.MaxValue;
-
             if (newLimit <= 0)
             {
                 // Invalid value, probably a unit test
@@ -54,11 +51,11 @@ namespace Unity.AI.Assistant.Utils
             MessageLimit = (int)(newLimit * 0.95f);
 
             // Prompt limit is either 10% of message limit or the default up top, whichever is higher
-            PromptLimit = Mathf.Max(k_MinPromptLimit, (int)(newLimit * 0.1f));
+            PromptLimit = Mathf.Min(MessageLimit, Mathf.Max(k_MinPromptLimit, (int)(newLimit * 0.1f)));
             FeedbackLimit = PromptLimit;
 
             // 10% deducted for context to make room for prompt and more json overhead
-            s_ContextLimit = MessageLimit - PromptLimit;
+            s_ContextLimit = Mathf.Max(0, MessageLimit - PromptLimit);
         }
 
         public static void SetContextLimitOverride(int value)

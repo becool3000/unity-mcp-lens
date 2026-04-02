@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text.RegularExpressions;
 using System.Security.Cryptography;
 using System.Text;
+using Unity.AI.Assistant.Utils;
 using Unity.AI.MCP.Editor.Helpers;
 using Unity.AI.MCP.Editor.ToolRegistry;
 using Unity.AI.MCP.Editor.Tools.Parameters;
@@ -237,26 +238,9 @@ Examples:
         static object ExecuteTextEdits(string name, string path, List<Dictionary<string, object>> edits,
             Dictionary<string, object> options, string scriptType, string namespaceName)
         {
-            // First read the current script content
-            var readParams = new JObject
+            if (!ManageScript.TryReadScriptText(name, path, out var contents, out _, out _, out var error))
             {
-                ["action"] = "read",
-                ["name"] = name,
-                ["path"] = path,
-                ["namespace"] = namespaceName,
-                ["scriptType"] = scriptType
-            };
-
-            var readResult = ManageScript.HandleCommand(readParams);
-            if (!IsSuccessResponse(readResult))
-            {
-                return readResult;
-            }
-
-            string contents = ExtractContentsFromReadResult(readResult);
-            if (contents == null)
-            {
-                return Response.Error("Failed to read script contents for text editing.");
+                return Response.Error(error ?? "Failed to read script contents for text editing.");
             }
 
             // Try to convert and apply text edits directly
@@ -357,6 +341,27 @@ Examples:
             // Fallback: send as whole-file replacement
             try
             {
+                bool allowWholeFileReplace = GetBoolValue(options, "allowWholeFileReplace");
+                var newContentBytes = PayloadBudgeting.GetUtf8ByteCount(newContents);
+                if (!allowWholeFileReplace)
+                {
+                    return Response.Error("Whole-file replacement fallback disabled; set options.allowWholeFileReplace=true to enable.", new
+                    {
+                        normalizedEdits = edits,
+                        routing = "text/fallback",
+                        bytes = newContentBytes
+                    });
+                }
+
+                if (newContentBytes > 32768)
+                {
+                    return Response.Error("Whole-file replacement fallback refused for files larger than 32768 bytes.", new
+                    {
+                        normalizedEdits = edits,
+                        routing = "text/fallback",
+                        bytes = newContentBytes
+                    });
+                }
 
                 var lines = contents.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
                 int endLine = lines.Length + 1; // 1-based exclusive end
@@ -418,26 +423,9 @@ Examples:
         static object ExecuteMixedEdits(string name, string path, List<Dictionary<string, object>> edits,
             Dictionary<string, object> options, string scriptType, string namespaceName)
         {
-            // First read the current script content
-            var readParams = new JObject
+            if (!ManageScript.TryReadScriptText(name, path, out var contents, out _, out _, out var error))
             {
-                ["action"] = "read",
-                ["name"] = name,
-                ["path"] = path,
-                ["namespace"] = namespaceName,
-                ["scriptType"] = scriptType
-            };
-
-            var readResult = ManageScript.HandleCommand(readParams);
-            if (!IsSuccessResponse(readResult))
-            {
-                return readResult;
-            }
-
-            string contents = ExtractContentsFromReadResult(readResult);
-            if (contents == null)
-            {
-                return Response.Error("Failed to read script contents for mixed editing.");
+                return Response.Error(error ?? "Failed to read script contents for mixed editing.");
             }
 
             // Separate text and structured operations

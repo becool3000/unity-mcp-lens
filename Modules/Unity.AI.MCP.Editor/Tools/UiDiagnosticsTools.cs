@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using Unity.AI.Assistant.Editor.Context;
+using Unity.AI.Assistant.Utils;
 using Unity.AI.MCP.Editor.Helpers;
 using Unity.AI.MCP.Editor.ToolRegistry;
 using Unity.AI.MCP.Editor.Tools.Parameters;
@@ -74,10 +75,17 @@ Returns:
             }
 
             var entries = new List<object>();
+            int maxEntries = Math.Max(1, parameters.MaxEntries);
+            bool includeChildren = parameters.IncludeChildren && !string.IsNullOrWhiteSpace(parameters.Target);
             foreach (GameObject root in roots)
             {
-                foreach (RectTransform rectTransform in UiDiagnosticsHelper.EnumerateRectTransforms(root, parameters.IncludeChildren, parameters.IncludeInactive))
+                foreach (RectTransform rectTransform in UiDiagnosticsHelper.EnumerateRectTransforms(root, includeChildren, parameters.IncludeInactive))
                 {
+                    if (entries.Count >= maxEntries)
+                    {
+                        break;
+                    }
+
                     if (rectTransform == null)
                     {
                         continue;
@@ -101,8 +109,8 @@ Returns:
                         anchoredPosition = ToVector2Object(rectTransform.anchoredPosition),
                         localScale = ToVector3Object(rectTransform.localScale),
                         screenRect = ToRectObject(screenRect),
-                        worldCorners = worldCorners?.Select(ToVector3Object).ToArray() ?? Array.Empty<object>(),
-                        screenCorners = screenCorners?.Select(ToVector2Object).ToArray() ?? Array.Empty<object>(),
+                        worldCorners = parameters.IncludeGeometry ? worldCorners?.Select(ToVector3Object).ToArray() ?? Array.Empty<object>() : Array.Empty<object>(),
+                        screenCorners = parameters.IncludeGeometry ? screenCorners?.Select(ToVector2Object).ToArray() ?? Array.Empty<object>() : Array.Empty<object>(),
                         graphic = graphic == null ? null : new
                         {
                             typeName = graphic.GetType().FullName,
@@ -114,11 +122,31 @@ Returns:
                 }
             }
 
-            return Response.Success($"Captured {entries.Count} UI layout entries.", new
+            var payload = new
             {
                 rootCount = roots.Count,
                 entries
-            });
+            };
+
+            return Response.Success(
+                $"Captured {entries.Count} UI layout entries.",
+                ShapePayload(
+                    "Unity.UI.GetLayoutSnapshot",
+                    $"Captured {entries.Count} UI layout entries.",
+                    payload,
+                    new
+                    {
+                        tool = "Unity.UI.GetLayoutSnapshot",
+                        args = new
+                        {
+                            parameters.Target,
+                            parameters.SearchMethod,
+                            parameters.IncludeChildren,
+                            parameters.IncludeInactive,
+                            parameters.MaxEntries,
+                            parameters.IncludeGeometry
+                        }
+                    }));
         }
 
         [McpTool("Unity.UI.Raycast", UiRaycastDescription, Groups = new[] { "ui", "diagnostics" }, EnabledByDefault = true)]
@@ -153,13 +181,33 @@ Returns:
                 .Select(BuildHitResult)
                 .FirstOrDefault();
 
-            return Response.Success($"Found {ordered.Count} UI hits at the requested point.", new
+            var payload = new
             {
                 point = ToVector2Object(point),
                 hitCount = ordered.Count,
                 topHit,
                 hits = ordered.Select(BuildHitResult).ToArray()
-            });
+            };
+
+            return Response.Success(
+                $"Found {ordered.Count} UI hits at the requested point.",
+                ShapePayload(
+                    "Unity.UI.Raycast",
+                    $"Found {ordered.Count} UI hits at the requested point.",
+                    payload,
+                    new
+                    {
+                        tool = "Unity.UI.Raycast",
+                        args = new
+                        {
+                            parameters.ScreenX,
+                            parameters.ScreenY,
+                            parameters.Target,
+                            parameters.SearchMethod,
+                            parameters.IncludeInactive,
+                            parameters.MaxResults
+                        }
+                    }));
         }
 
         [McpTool("Unity.UI.GetInteractiveRegions", GetInteractiveRegionsDescription, Groups = new[] { "ui", "diagnostics" }, EnabledByDefault = true)]
@@ -196,11 +244,29 @@ Returns:
                 }));
             }
 
-            return Response.Success($"Collected {regions.Count} interactive UI regions.", new
+            var payload = new
             {
                 rootCount = roots.Count,
                 regions
-            });
+            };
+
+            return Response.Success(
+                $"Collected {regions.Count} interactive UI regions.",
+                ShapePayload(
+                    "Unity.UI.GetInteractiveRegions",
+                    $"Collected {regions.Count} interactive UI regions.",
+                    payload,
+                    new
+                    {
+                        tool = "Unity.UI.GetInteractiveRegions",
+                        args = new
+                        {
+                            parameters.Target,
+                            parameters.SearchMethod,
+                            parameters.IncludeChildren,
+                            parameters.IncludeInactive
+                        }
+                    }));
         }
 
         [McpTool("Unity.UI.CaptureGameView", CaptureGameViewDescription, Groups = new[] { "ui", "diagnostics" }, EnabledByDefault = true)]
@@ -405,5 +471,21 @@ Returns:
         static object ToVector3Object(Vector3 value) => new { x = value.x, y = value.y, z = value.z };
 
         static object ToRectObject(Rect value) => new { x = value.x, y = value.y, width = value.width, height = value.height };
+
+        static object ShapePayload(string toolName, string summary, object data, object detailRef)
+        {
+            var serialized = Newtonsoft.Json.JsonConvert.SerializeObject(data, Newtonsoft.Json.Formatting.None);
+            var rawBytes = PayloadBudgeting.GetUtf8ByteCount(serialized);
+            if (rawBytes <= PayloadBudgetPolicy.MaxToolResultBytes)
+            {
+                PayloadStats.Record("tool_result", toolName, rawBytes, rawBytes, PayloadBudgeting.EstimateTokensFromBytes(rawBytes), PayloadBudgeting.ComputeSha256(serialized));
+                return data;
+            }
+
+            var budgeted = PayloadBudgeting.CreateTextResult(summary, new { rawBytes }, serialized, detailRef, maxPreviewLines: 40, maxPreviewBytes: PayloadBudgetPolicy.MaxToolResultBytes);
+            var previewBytes = PayloadBudgeting.GetUtf8ByteCount(budgeted.Preview);
+            PayloadStats.Record("tool_result", toolName, rawBytes, previewBytes, PayloadBudgeting.EstimateTokensFromBytes(previewBytes), budgeted.Sha256);
+            return budgeted;
+        }
     }
 }

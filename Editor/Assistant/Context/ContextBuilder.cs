@@ -67,6 +67,8 @@ namespace Unity.AI.Assistant.Editor.Context
             {
                 Context = contextSelection
             };
+            contextItem.PayloadHash = PayloadBudgeting.ComputeSha256(payload);
+            contextItem.StableCacheKey = $"{contextSelection.ContextType}|{contextSelection.TargetName}";
 
             PredictedLength += contextItem.Payload.Length;
 
@@ -92,6 +94,7 @@ namespace Unity.AI.Assistant.Editor.Context
                 {
                     contextPiece.Payload = ((IContextSelection)contextPiece.Context).DownsizedPayload;
                     contextPiece.Truncated = true;
+                    contextPiece.PayloadHash = PayloadBudgeting.ComputeSha256(contextPiece.Payload);
 
                     // If the new length still exceeds the limit, remove this piece:
                     if (string.IsNullOrEmpty(contextPiece.Payload) ||

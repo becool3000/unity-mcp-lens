@@ -1,3 +1,4 @@
+using Unity.AI.Assistant.Utils;
 using Unity.AI.MCP.Editor.ToolRegistry;
 
 namespace Unity.AI.MCP.Editor.Tools.Parameters
@@ -14,7 +15,13 @@ namespace Unity.AI.MCP.Editor.Tools.Parameters
         public bool IncludeChildren { get; set; } = true;
 
         [McpDescription("Include inactive UI elements.", Required = false)]
-        public bool IncludeInactive { get; set; } = true;
+        public bool IncludeInactive { get; set; } = false;
+
+        [McpDescription("Maximum number of layout entries to return.", Required = false)]
+        public int MaxEntries { get; set; } = PayloadBudgetPolicy.MaxUiLayoutEntries;
+
+        [McpDescription("Include worldCorners and screenCorners geometry arrays.", Required = false)]
+        public bool IncludeGeometry { get; set; } = false;
     }
 
     public record UiRaycastParams

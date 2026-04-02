@@ -70,6 +70,9 @@ namespace Unity.AI.Assistant.Editor.Acp
 
         // Guards against duplicate prompts being sent while one is in flight
         bool m_IsPromptInFlight;
+        bool m_SaveQueued;
+        double m_NextSaveAt;
+        double m_LastSaveAt;
 
         /// <summary>
         /// Unity's routing key for this session (also known as channelId in relay).
@@ -1127,7 +1130,7 @@ namespace Unity.AI.Assistant.Editor.Acp
                 // NOTE: Must happen on main thread since AcpSessionTracker is a ScriptableSingleton
                 AcpSessionTracker.instance.Track(agentSessionId, SessionId.Value, ProviderId);
 
-                SaveConversation();
+                SaveConversation(immediate: true);
                 OnAgentSessionIdReceived?.Invoke(agentSessionId);
             });
         }
@@ -1140,7 +1143,7 @@ namespace Unity.AI.Assistant.Editor.Acp
 
             MainThread.DispatchAndForget(() =>
             {
-                SaveConversation();
+                SaveConversation(immediate: true);
                 OnSessionTitleReceived?.Invoke(title);
             });
         }
@@ -1396,14 +1399,14 @@ namespace Unity.AI.Assistant.Editor.Acp
             {
                 m_CurrentMessage.IsComplete = true;
                 m_CurrentMessage = null;
-                SaveConversation();
+                SaveConversation(immediate: true);
             }
         }
 
         /// <summary>
         /// Save the conversation to disk using explicit JSON serialization.
         /// </summary>
-        void SaveConversation()
+        void SaveConversation(bool immediate = false)
         {
             if (string.IsNullOrEmpty(m_Conversation.AgentSessionId))
                 return; // Can't save until we have the agent session ID
@@ -1412,6 +1415,46 @@ namespace Unity.AI.Assistant.Editor.Acp
             if (m_Conversation.Messages.Count == 0)
                 return;
 
+            if (immediate)
+            {
+                FlushPendingConversationSave(force: true);
+                return;
+            }
+
+            var now = EditorApplication.timeSinceStartup;
+            if (!m_SaveQueued && now - m_LastSaveAt >= PayloadBudgetPolicy.ConversationSaveDebounceSeconds)
+            {
+                SaveConversationNow();
+                return;
+            }
+
+            m_SaveQueued = true;
+            m_NextSaveAt = now + PayloadBudgetPolicy.ConversationSaveDebounceSeconds;
+            EditorApplication.update -= FlushPendingConversationSaveOnUpdate;
+            EditorApplication.update += FlushPendingConversationSaveOnUpdate;
+        }
+
+        void FlushPendingConversationSaveOnUpdate()
+        {
+            FlushPendingConversationSave(force: false);
+        }
+
+        void FlushPendingConversationSave(bool force)
+        {
+            if (!m_SaveQueued && !force)
+                return;
+
+            if (!force && EditorApplication.timeSinceStartup < m_NextSaveAt)
+                return;
+
+            EditorApplication.update -= FlushPendingConversationSaveOnUpdate;
+            m_SaveQueued = false;
+            SaveConversationNow();
+        }
+
+        void SaveConversationNow()
+        {
+            m_LastSaveAt = EditorApplication.timeSinceStartup;
             AcpConversationStorage.Save(m_Conversation);
         }
 
@@ -1550,6 +1593,8 @@ namespace Unity.AI.Assistant.Editor.Acp
             m_PendingStartTcs = null;
             m_PendingInitializedTcs?.TrySetResult(false);
             m_PendingInitializedTcs = null;
+            EditorApplication.update -= FlushPendingConversationSaveOnUpdate;
+            FlushPendingConversationSave(force: true);
 
             m_Client.OnMessage -= HandleMessage;
             m_Client.OnSessionStarted -= HandleSessionStarted;

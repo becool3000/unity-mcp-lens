@@ -13,6 +13,7 @@ using Unity.AI.MCP.Editor.Settings;
 using Unity.AI.Toolkit;
 using System.Threading;
 using System.Security.Cryptography;
+using Unity.AI.Assistant.Utils;
 
 #if USE_ROSLYN
 using Microsoft.CodeAnalysis;
@@ -75,7 +76,7 @@ Args:
     namespace: Script namespace.
 
 Returns:
-    Dictionary with results ('success', 'message', 'data').";
+    Dictionary with results ('success', 'message', 'data'). Read defaults to a preview slice; request full=true for the complete script.";
         /// <summary>
         /// Resolves a directory under Assets/, preventing traversal and escaping.
         /// Returns fullPathDir on disk and canonical 'Assets/...' relative path.
@@ -143,6 +144,45 @@ Returns:
             relPathSafe = ("Assets/" + tail).TrimEnd('/');
             return true;
         }
+
+        internal static bool TryReadScriptText(string name, string path, out string contents, out string fullPath, out string relativePath, out string error)
+        {
+            contents = null;
+            fullPath = null;
+            relativePath = null;
+            error = null;
+
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                error = "Script name is required.";
+                return false;
+            }
+
+            if (!TryResolveUnderAssets(path, out var fullPathDir, out var relPathSafeDir))
+            {
+                error = $"Invalid path. Target directory must be within 'Assets/'. Provided: '{(path ?? "(null)")}'";
+                return false;
+            }
+
+            fullPath = Path.Combine(fullPathDir, $"{name}.cs");
+            relativePath = Path.Combine(relPathSafeDir, $"{name}.cs").Replace('\\', '/');
+            if (!File.Exists(fullPath))
+            {
+                error = $"Script not found at '{relativePath}'.";
+                return false;
+            }
+
+            try
+            {
+                contents = File.ReadAllText(fullPath);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                error = $"Failed to read script '{relativePath}': {ex.Message}";
+                return false;
+            }
+        }
         /// <summary>
         /// JSON schema for script management tool parameters.
         /// </summary>
@@ -185,6 +225,11 @@ Returns:
                     {
                         type = "boolean",
                         description = "Whether contents are base64 encoded"
+                    },
+                    full = new
+                    {
+                        type = "boolean",
+                        description = "When true, return the full script instead of the default preview slice"
                     },
                     encoded_contents = new
                     {
@@ -347,7 +392,7 @@ Returns:
                     );
                 case "read":
                     McpLog.Warning("Unity.ManageScript.read is deprecated; prefer resources/read. Serving read for backward compatibility.");
-                    return ReadScript(fullPath, relativePath);
+                    return ReadScript(fullPath, relativePath, @params["full"]?.ToObject<bool>() ?? false);
                 case "update":
                     McpLog.Warning("Unity.ManageScript.update is deprecated; prefer apply_text_edits. Serving update for backward compatibility.");
                     return UpdateScript(fullPath, relativePath, name, contents);
@@ -522,7 +567,7 @@ Returns:
             }
         }
 
-        static object ReadScript(string fullPath, string relativePath)
+        static object ReadScript(string fullPath, string relativePath, bool full)
         {
             if (!File.Exists(fullPath))
             {
@@ -532,19 +577,22 @@ Returns:
             try
             {
                 string contents = File.ReadAllText(fullPath);
-
-                // Return both normal and encoded contents for larger files
-                bool isLarge = contents.Length > 10000; // If content is large, include encoded version
                 var uri = $"unity://path/{relativePath}";
+                var sha256 = PayloadBudgeting.ComputeSha256(contents);
+                var preview = PayloadBudgeting.CreateTextPreview(contents, PayloadBudgetPolicy.MaxPreviewFileLines, PayloadBudgetPolicy.MaxPreviewFileBytes, out var truncated);
                 var responseData = new
                 {
                     uri,
                     path = relativePath,
-                    contents = contents,
-                    // For large files, also include base64-encoded version
-                    encoded_contents = isLarge ? EncodeBase64(contents) : null,
-                    contents_encoded = isLarge,
+                    contents = full ? contents : preview,
+                    sha256,
+                    length_bytes = PayloadBudgeting.GetUtf8ByteCount(contents),
+                    truncated = truncated,
+                    full = full,
+                    detail_available = true
                 };
+
+                PayloadStats.Record("tool_result", "Unity.ManageScript.read", PayloadBudgeting.GetUtf8ByteCount(contents), PayloadBudgeting.GetUtf8ByteCount(full ? contents : preview), PayloadBudgeting.EstimateTokensFromBytes(PayloadBudgeting.GetUtf8ByteCount(full ? contents : preview)), sha256);
 
                 return Response.Success(
                     $"Script '{Path.GetFileName(relativePath)}' read successfully.",

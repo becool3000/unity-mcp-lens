@@ -15,6 +15,7 @@ using Unity.AI.MCP.Editor.Settings;
 using Unity.AI.MCP.Editor.ToolRegistry;
 using Unity.AI.MCP.Editor.UI;
 using Unity.AI.Assistant.Editor.Acp;
+using Unity.AI.Assistant.Utils;
 using Unity.AI.Toolkit;
 using Unity.Relay;
 using Unity.Relay.Editor;
@@ -314,7 +315,7 @@ namespace Unity.AI.MCP.Editor
                     ServerDiscovery.SaveConnectionInfo(currentConnectionPath);
                     heartbeatSeq++;
                     BridgeStatusTracker.MarkReady(resetCommandHealth: true);
-                    nextHeartbeatAt = EditorApplication.timeSinceStartup + 0.5f;
+                    nextHeartbeatAt = EditorApplication.timeSinceStartup + PayloadBudgetPolicy.HeartbeatWriteIntervalSeconds;
 
                     // Pre-warm tools cache so handshake can include tools immediately
                     RefreshToolsSnapshotIfNeeded();
@@ -1424,7 +1425,7 @@ namespace Unity.AI.MCP.Editor
                 if (now >= nextHeartbeatAt)
                 {
                     BridgeStatusTracker.RefreshHeartbeat();
-                    nextHeartbeatAt = now + 0.5f;
+                    nextHeartbeatAt = now + PayloadBudgetPolicy.HeartbeatWriteIntervalSeconds;
                 }
 
                 // Cache cleanup for completed commands (every 60 seconds)

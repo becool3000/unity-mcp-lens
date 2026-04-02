@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Unity.AI.Assistant.Agents;
 using Unity.AI.Assistant.Socket.Communication;
@@ -282,6 +283,17 @@ namespace Unity.AI.Assistant.Socket.Workflows.Chat
                 ("prompt", prompt)
             );
 
+            try
+            {
+                var contextJson = JsonConvert.SerializeObject(context, Formatting.None);
+                var contextBytes = PayloadBudgeting.GetUtf8ByteCount(contextJson);
+                PayloadStats.Record("chat_request", "attached_context", contextBytes, contextBytes, PayloadBudgeting.EstimateTokensFromBytes(contextBytes), PayloadBudgeting.ComputeSha256(contextJson));
+            }
+            catch
+            {
+                // Best effort metrics only.
+            }
+
             await SendMessageInternal(new ChatRequestV1
             {
                 Markdown = prompt,
@@ -394,6 +406,7 @@ namespace Unity.AI.Assistant.Socket.Workflows.Chat
             
             InternalLog.LogToFile(message.ConversationId, ("event", "discussion initialized"));
             ConversationId = message.ConversationId;
+            StableContextCache.Clear();
             OnConversationId?.Invoke(message.ConversationId);
 
             m_ChatTimeoutMilliseconds = message.ChatTimeoutSeconds * 1000;
@@ -451,6 +464,9 @@ namespace Unity.AI.Assistant.Socket.Workflows.Chat
         public void SendFunctionCallResponse(IFunctionCaller.CallResult result, Guid callId)
         {
             OnFunctionCallResult?.Invoke(callId, result);
+            var resultText = result.Result?.ToString(Formatting.None) ?? string.Empty;
+            var resultBytes = PayloadBudgeting.GetUtf8ByteCount(resultText);
+            PayloadStats.Record("function_call_response", "FunctionCallResponseV1", resultBytes, resultBytes, PayloadBudgeting.EstimateTokensFromBytes(resultBytes), PayloadBudgeting.ComputeSha256(resultText));
             SendMessageInternal(new FunctionCallResponseV1
             {
                 CallId = callId,
@@ -464,7 +480,9 @@ namespace Unity.AI.Assistant.Socket.Workflows.Chat
                 ("call_id", callId.ToString()),
                 ("succeeded", result.HasFunctionCallSucceeded.ToString()),
                 ("is_done", result.IsDone.ToString()),
-                ("data", result.Result.ToString()));
+                ("data_bytes", resultBytes.ToString()),
+                ("data_hash", PayloadBudgeting.ComputeSha256(resultText)),
+                ("data_preview", PayloadBudgeting.CreateTextPreview(resultText, 8, 1024, out _)));
         }
 
         public void RevertMessageRequest(string messageId)
@@ -479,11 +497,17 @@ namespace Unity.AI.Assistant.Socket.Workflows.Chat
         async Task HandleCapabilitiesRequestV1(CapabilitiesRequestV1 message)
         {
             InternalLog.LogToFile(ConversationId, ("event", "capabilities requested"));
+            var functions = CapabilityRegistry.GetFunctionCapabilities();
+            var agents = AgentRegistry.GetAgentDefinitions();
+            var hash = PayloadBudgeting.ComputeSha256(JsonConvert.SerializeObject(new { functions, agents }, Formatting.None));
+            var unchanged = string.Equals(message?.KnownHash, hash, StringComparison.Ordinal);
 
             await SendMessageInternal(new CapabilitiesResponseV1()
             {
-                Functions = CapabilityRegistry.GetFunctionCapabilities(),
-                Agents = AgentRegistry.GetAgentDefinitions()
+                Functions = unchanged ? new List<FunctionsObject>() : functions,
+                Agents = unchanged ? new List<BaseAgentDefinitionV1>() : agents,
+                Hash = hash,
+                Unchanged = unchanged
             }, default);
 
             InternalLog.LogToFile(ConversationId, ("event", "capabilities response sent"));
@@ -493,12 +517,15 @@ namespace Unity.AI.Assistant.Socket.Workflows.Chat
         {
             InternalLog.LogToFile(ConversationId, ("event", "skills requested"));
 
-            var skillDefinitions = SkillsRegistry.GetSkills();
-            var skillMetadata = skillDefinitions.Select(s => s.Value.MetaData).ToList();
+            var skillMetadata = SkillsRegistry.GetSkillMetadata();
+            var hash = SkillsRegistry.GetSkillsHash();
+            var unchanged = string.Equals(message?.KnownHash, hash, StringComparison.Ordinal);
 
             await SendMessageInternal(new SkillsResponseV1()
             {
-                Skills = skillMetadata
+                Skills = unchanged ? new List<SkillMetaData>() : skillMetadata,
+                Hash = hash,
+                Unchanged = unchanged
             }, default);
 
             InternalLog.LogToFile(ConversationId, ("event", "skills response sent"));
