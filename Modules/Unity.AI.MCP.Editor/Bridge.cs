@@ -1635,17 +1635,80 @@ namespace Unity.AI.MCP.Editor
             return message.Length <= 160 ? message : message.Substring(0, 160);
         }
 
+        object BuildBridgeCoverageMeta(Command command, IConnectionTransport client, string status, int payloadBytes, string error = null)
+        {
+            string identityKey = null;
+            bool isGateway = false;
+            ConnectionRecord record = null;
+
+            lock (clientsLock)
+            {
+                if (client != null && transportToIdentityMap.TryGetValue(client, out identityKey))
+                {
+                    isGateway = gatewayIdentityKeys.Contains(identityKey);
+                }
+            }
+
+            if (!string.IsNullOrEmpty(identityKey))
+                record = ConnectionRegistry.instance.GetConnectionByIdentity(identityKey);
+
+            var clientInfo = record?.Info?.ClientInfo;
+            var clientProcess = record?.Info?.Client?.ProcessName;
+            var serverProcess = record?.Info?.Server?.ProcessName;
+
+            return new
+            {
+                connectionId = client?.ConnectionId,
+                identityKey,
+                origin = isGateway ? "gateway" : "direct",
+                status,
+                payloadBytes,
+                requestId = command?.requestId,
+                clientName = clientInfo?.Name,
+                clientTitle = clientInfo?.Title,
+                clientVersion = clientInfo?.Version,
+                clientProcess,
+                serverProcess,
+                error
+            };
+        }
+
         async Task<string> ExecuteCommandAsync(Command command, IConnectionTransport client, CancellationToken cancellationToken = default)
         {
+            var requestJson = command == null
+                ? string.Empty
+                : JsonConvert.SerializeObject(new
+                {
+                    type = command.type,
+                    requestId = command.requestId,
+                    @params = command.@params
+                }, Formatting.None);
+
+            string ReturnResponse(string response, string status, string error = null)
+            {
+                PayloadStats.RecordCoverage(
+                    "coverage_bridge_command_response",
+                    command?.type ?? "(null)",
+                    BuildBridgeCoverageMeta(command, client, status, PayloadBudgeting.GetUtf8ByteCount(response), error),
+                    PayloadBudgeting.ComputeSha256(response ?? string.Empty));
+                return response;
+            }
+
             try
             {
+                PayloadStats.RecordCoverage(
+                    "coverage_bridge_command_request",
+                    command?.type ?? "(null)",
+                    BuildBridgeCoverageMeta(command, client, "request", PayloadBudgeting.GetUtf8ByteCount(requestJson)),
+                    PayloadBudgeting.ComputeSha256(requestJson));
+
                 if (string.IsNullOrEmpty(command.type))
                 {
-                    return JsonConvert.SerializeObject(new
+                    return ReturnResponse(JsonConvert.SerializeObject(new
                     {
                         status = "error",
                         error = "Command type cannot be empty"
-                    });
+                    }), "error", "Command type cannot be empty");
                 }
 
                 if (command.type.Equals("set_client_info", StringComparison.OrdinalIgnoreCase))
@@ -1677,11 +1740,11 @@ namespace Unity.AI.MCP.Editor
                     string displayName = string.IsNullOrEmpty(title) ? name : title;
                     McpLog.Log($"MCP client info: {displayName} v{version}");
 
-                    return JsonConvert.SerializeObject(new
+                    return ReturnResponse(JsonConvert.SerializeObject(new
                     {
                         status = "success",
                         result = new { message = "Client info received" }
-                    });
+                    }), "success");
                 }
 
                 if (command.type.Equals("get_available_tools", StringComparison.OrdinalIgnoreCase))
@@ -1698,7 +1761,7 @@ namespace Unity.AI.MCP.Editor
 
                     if (requestedHash == s_CurrentToolsHash)
                     {
-                        return JsonConvert.SerializeObject(new
+                        return ReturnResponse(JsonConvert.SerializeObject(new
                         {
                             status = "success",
                             result = new
@@ -1708,7 +1771,7 @@ namespace Unity.AI.MCP.Editor
                                 source = s_ToolSnapshotMode,
                                 reason = s_ToolSnapshotReason
                             }
-                        });
+                        }), "success");
                     }
 
                     var response = JsonConvert.SerializeObject(new
@@ -1723,13 +1786,13 @@ namespace Unity.AI.MCP.Editor
                         }
                     });
                     McpLog.Log($"Sending tools response with {s_ToolsSnapshot?.Length ?? 0} tools");
-                    return response;
+                    return ReturnResponse(response, "success");
                 }
 
                 // Handle MCP tool approval requests (from Codex via MCP)
                 if (command.type.Equals("mcp/request_tool_approval", StringComparison.OrdinalIgnoreCase))
                 {
-                    return await HandleMcpToolApprovalAsync(command);
+                    return ReturnResponse(await HandleMcpToolApprovalAsync(command), "success");
                 }
 
                 // Approval gate — accept-by-default policy.
@@ -1739,12 +1802,12 @@ namespace Unity.AI.MCP.Editor
                 var approvalState = GetApprovalState(client);
                 if (approvalState == ConnectionApprovalState.Denied)
                 {
-                    return JsonConvert.SerializeObject(new
+                    return ReturnResponse(JsonConvert.SerializeObject(new
                     {
                         status = "error",
                         error = "Connection revoked. Go to Unity Editor > Project Settings > AI > Unity MCP to change approval.",
                         isError = true
-                    });
+                    }), "error", "Connection revoked");
                 }
 
                 // Use JObject for parameters as the handlers expect this
@@ -1756,17 +1819,17 @@ namespace Unity.AI.MCP.Editor
                     result = Response.Success("Operation completed.");
 
                 // Standard success response format
-                return JsonConvert.SerializeObject(new { status = "success", result });
+                return ReturnResponse(JsonConvert.SerializeObject(new { status = "success", result }), "success");
             }
             catch (Exception ex)
             {
                 Debug.LogError($"Error executing command '{command?.type ?? "Unknown"}': {ex.Message}\\n{ex.StackTrace}");
-                return JsonConvert.SerializeObject(new
+                return ReturnResponse(JsonConvert.SerializeObject(new
                 {
                     status = "error",
                     error = ex.Message,
                     command = command?.type ?? "Unknown"
-                });
+                }), "error", ex.Message);
             }
         }
 

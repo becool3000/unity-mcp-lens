@@ -188,20 +188,22 @@ namespace Unity.AI.Assistant.Utils
         static readonly object s_Lock = new();
         static string s_FilePath;
 
-        public static void Record(string stage, string name, int rawBytes, int shapedBytes, int tokenEstimate, string hash)
+        public static void Record(string stage, string name, int rawBytes, int shapedBytes, int tokenEstimate, string hash, object meta = null)
         {
             try
             {
-                var payload = new
+                var payload = new Dictionary<string, object>
                 {
-                    timestampUtc = DateTime.UtcNow.ToString("O"),
-                    stage,
-                    name,
-                    rawBytes,
-                    shapedBytes,
-                    tokenEstimate,
-                    hash
+                    ["timestampUtc"] = DateTime.UtcNow.ToString("O"),
+                    ["stage"] = stage,
+                    ["name"] = name,
+                    ["rawBytes"] = rawBytes,
+                    ["shapedBytes"] = shapedBytes,
+                    ["tokenEstimate"] = tokenEstimate,
+                    ["hash"] = hash
                 };
+                if (meta != null)
+                    payload["meta"] = meta;
 
                 var filePath = GetFilePath();
                 if (string.IsNullOrEmpty(filePath))
@@ -241,6 +243,11 @@ namespace Unity.AI.Assistant.Utils
             {
                 return null;
             }
+        }
+
+        public static void RecordCoverage(string stage, string name, object meta = null, string hash = null)
+        {
+            Record(stage, name, 0, 0, 0, hash, meta);
         }
     }
 }
