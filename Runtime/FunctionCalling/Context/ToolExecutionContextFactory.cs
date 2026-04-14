@@ -22,6 +22,21 @@ namespace Unity.AI.Assistant.FunctionCalling
             return CreateForExternalCall(functionId, parameters, null, null, default);
         }
 
+        internal static IDisposable BeginExternalExecutionScope(string connectionId, string requestId)
+        {
+            return ExternalToolExecutionScope.Begin(connectionId, requestId);
+        }
+
+        internal static void ReleaseExternalConversation(string connectionId)
+        {
+            ExternalConversationContextRegistry.Release(connectionId);
+        }
+
+        internal static void CleanupExternalConversations()
+        {
+            ExternalConversationContextRegistry.CleanupAll();
+        }
+
         /// <summary>
         /// Creates a ToolExecutionContext for external tool calls (e.g., MCP).
         /// </summary>
@@ -56,9 +71,9 @@ namespace Unity.AI.Assistant.FunctionCalling
                 cancellationToken
             );
 
-            // For external calls, we don't have a conversation context
+            var conversationContext = ExternalConversationContextRegistry.ResolveForCurrentExecution(functionId);
             var context = new ToolExecutionContext(
-                conversationContext: null,
+                conversationContext: conversationContext,
                 callInfo: callInfo,
                 toolPermissions: toolPermissions,
                 toolInteractions: toolInteractions

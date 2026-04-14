@@ -221,10 +221,13 @@ namespace Unity.AI.MCP.Editor.Adapters
 
         async Task<object> ExecuteAsync(JObject parameters)
         {
+            ConversationContext ephemeralConversation = null;
             try
             {
                 // Create a ToolExecutionContext for MCP calls using the factory
                 var context = ToolExecutionContextFactory.CreateForExternalCall(m_ToolId, parameters);
+                if (context.Conversation is { RequiresExplicitClose: true })
+                    ephemeralConversation = context.Conversation;
 
                 // Use FunctionToolbox to execute the tool asynchronously
                 var result = await m_FunctionToolbox.RunToolByIDAsync(context);
@@ -236,6 +239,10 @@ namespace Unity.AI.MCP.Editor.Adapters
             {
                 Debug.LogError($"[AgentToolMcpWrapper] Tool '{m_ToolId}' error: {ex}");
                 return Response.Error($"Error executing tool: {ex.Message}");
+            }
+            finally
+            {
+                ephemeralConversation?.Close();
             }
         }
 

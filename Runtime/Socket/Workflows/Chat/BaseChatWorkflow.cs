@@ -14,6 +14,7 @@ using Unity.AI.Assistant.Data;
 using Unity.AI.Assistant.Backend;
 using Unity.AI.Assistant.Skills;
 using Unity.AI.Assistant.Utils;
+using Unity.AI.Tracing;
 
 namespace Unity.AI.Assistant.Socket.Workflows.Chat
 {
@@ -283,25 +284,143 @@ namespace Unity.AI.Assistant.Socket.Workflows.Chat
                 ("prompt", prompt)
             );
 
-            try
+            using var scope = PayloadStats.BeginScope(new PayloadStatScope(conversationId: ConversationId, workflowKind: GetType().Name));
+            var requestSpan = Trace.StartSpan("assistant.chat_request.send", new TraceEventOptions
             {
-                var contextJson = JsonConvert.SerializeObject(context, Formatting.None);
-                var contextBytes = PayloadBudgeting.GetUtf8ByteCount(contextJson);
-                PayloadStats.Record("chat_request", "attached_context", contextBytes, contextBytes, PayloadBudgeting.EstimateTokensFromBytes(contextBytes), PayloadBudgeting.ComputeSha256(contextJson));
-            }
-            catch
-            {
-                // Best effort metrics only.
-            }
+                Category = "assistant",
+                Data = new
+                {
+                    conversationId = ConversationId,
+                    contextCount = context?.Count ?? 0,
+                    assistantMode = assistantMode?.ToName()
+                }
+            });
 
-            await SendMessageInternal(new ChatRequestV1
+            var requestStartUtc = DateTime.UtcNow;
+            var request = new ChatRequestV1
             {
                 Markdown = prompt,
                 AttachedContext = context,
                 Agent = agent.ConvertToAgentDefinitionV1(),
                 Mode = assistantMode?.ToName(),
                 ModelSettings = modelConfiguration
-            }, ct);
+            };
+
+            try
+            {
+                var cachedContextCount = context?.Count(item =>
+                    item?.AdditionalProperties != null &&
+                    item.AdditionalProperties.TryGetValue("cached", out var cachedValue) &&
+                    cachedValue is bool cached &&
+                    cached) ?? 0;
+                var imageContextCount = context?.Count(item => item?.Body is ChatRequestV1.AttachedContextModel.ImageBodyModel) ?? 0;
+                PayloadStats.RecordText(
+                    "chat_request",
+                    "markdown",
+                    prompt,
+                    meta: new
+                    {
+                        contextCount = context?.Count ?? 0,
+                        cachedContextCount,
+                        imageContextCount,
+                        assistantMode = assistantMode?.ToName(),
+                        modelName = modelConfiguration?.Name
+                    },
+                    options: new PayloadStatOptions
+                    {
+                        EventKind = "chat_request",
+                        RepresentationKind = "full",
+                        PayloadClass = "prompt_markdown",
+                        ExtraFields = new
+                        {
+                            contextCount = context?.Count ?? 0,
+                            cachedContextCount,
+                            imageContextCount,
+                            assistantMode = assistantMode?.ToName(),
+                            modelName = modelConfiguration?.Name
+                        }
+                    });
+
+                var contextJson = JsonConvert.SerializeObject(context, Formatting.None);
+                PayloadStats.RecordText(
+                    "chat_request",
+                    "attached_context",
+                    contextJson,
+                    meta: new
+                    {
+                        contextCount = context?.Count ?? 0,
+                        cachedContextCount,
+                        imageContextCount
+                    },
+                    options: new PayloadStatOptions
+                    {
+                        EventKind = "chat_request",
+                        RepresentationKind = imageContextCount > 0 ? "mixed" : "full",
+                        PayloadClass = "attached_context",
+                        ExtraFields = new
+                        {
+                            contextCount = context?.Count ?? 0,
+                            cachedContextCount,
+                            imageContextCount
+                        }
+                    });
+
+                var requestJson = JsonConvert.SerializeObject(request, Formatting.None);
+                PayloadStats.RecordText(
+                    "chat_request",
+                    "ChatRequestV1",
+                    requestJson,
+                    meta: new
+                    {
+                        contextCount = context?.Count ?? 0,
+                        cachedContextCount,
+                        imageContextCount,
+                        hasAgent = agent != null,
+                        assistantMode = assistantMode?.ToName(),
+                        modelName = modelConfiguration?.Name
+                    },
+                    options: new PayloadStatOptions
+                    {
+                        EventKind = "chat_request",
+                        RepresentationKind = "full",
+                        PayloadClass = "chat_request_envelope",
+                        ExtraFields = new
+                        {
+                            contextCount = context?.Count ?? 0,
+                            cachedContextCount,
+                            imageContextCount,
+                            hasAgent = agent != null,
+                            assistantMode = assistantMode?.ToName(),
+                            modelName = modelConfiguration?.Name
+                        }
+                    });
+            }
+            catch
+            {
+                // Best effort metrics only.
+            }
+
+            try
+            {
+                await SendMessageInternal(request, ct);
+                requestSpan.End(new
+                {
+                    success = true,
+                    durationMs = (int)(DateTime.UtcNow - requestStartUtc).TotalMilliseconds,
+                    contextCount = context?.Count ?? 0
+                });
+            }
+            catch (Exception ex)
+            {
+                requestSpan.End(new
+                {
+                    success = false,
+                    durationMs = (int)(DateTime.UtcNow - requestStartUtc).TotalMilliseconds,
+                    error = ex.GetType().Name,
+                    message = ex.Message
+                });
+                throw;
+            }
 
             m_ChatRequestCancellationTokenSource = new();
 
@@ -466,7 +585,27 @@ namespace Unity.AI.Assistant.Socket.Workflows.Chat
             OnFunctionCallResult?.Invoke(callId, result);
             var resultText = result.Result?.ToString(Formatting.None) ?? string.Empty;
             var resultBytes = PayloadBudgeting.GetUtf8ByteCount(resultText);
-            PayloadStats.Record("function_call_response", "FunctionCallResponseV1", resultBytes, resultBytes, PayloadBudgeting.EstimateTokensFromBytes(resultBytes), PayloadBudgeting.ComputeSha256(resultText));
+            PayloadStats.RecordText(
+                "function_call_response",
+                "FunctionCallResponseV1",
+                resultText,
+                meta: new
+                {
+                    succeeded = result.HasFunctionCallSucceeded,
+                    isDone = result.IsDone
+                },
+                options: new PayloadStatOptions
+                {
+                    EventKind = "function_call_response",
+                    RepresentationKind = "full",
+                    PayloadClass = "tool_result",
+                    Success = result.HasFunctionCallSucceeded,
+                    ExtraFields = new
+                    {
+                        succeeded = result.HasFunctionCallSucceeded,
+                        isDone = result.IsDone
+                    }
+                });
             SendMessageInternal(new FunctionCallResponseV1
             {
                 CallId = callId,
@@ -497,18 +636,61 @@ namespace Unity.AI.Assistant.Socket.Workflows.Chat
         async Task HandleCapabilitiesRequestV1(CapabilitiesRequestV1 message)
         {
             InternalLog.LogToFile(ConversationId, ("event", "capabilities requested"));
+            var startedAt = DateTime.UtcNow;
             var functions = CapabilityRegistry.GetFunctionCapabilities();
             var agents = AgentRegistry.GetAgentDefinitions();
             var hash = PayloadBudgeting.ComputeSha256(JsonConvert.SerializeObject(new { functions, agents }, Formatting.None));
+            var stableHash = PayloadBudgeting.ComputeSha256(JsonConvert.SerializeObject(new
+            {
+                functions = functions.OrderBy(f => f.FunctionId ?? string.Empty).ThenBy(f => f.FunctionName ?? string.Empty).ToList(),
+                agents = agents.OrderBy(a => a.UniqueId ?? string.Empty).ThenBy(a => a.Name ?? string.Empty).ToList()
+            }, Formatting.None));
             var unchanged = string.Equals(message?.KnownHash, hash, StringComparison.Ordinal);
 
-            await SendMessageInternal(new CapabilitiesResponseV1()
+            var response = new CapabilitiesResponseV1()
             {
                 Functions = unchanged ? new List<FunctionsObject>() : functions,
                 Agents = unchanged ? new List<BaseAgentDefinitionV1>() : agents,
                 Hash = hash,
                 Unchanged = unchanged
-            }, default);
+            };
+
+            try
+            {
+                var responseJson = JsonConvert.SerializeObject(response, Formatting.None);
+                PayloadStats.RecordText(
+                    "capabilities_response",
+                    "CapabilitiesResponseV1",
+                    responseJson,
+                    meta: new
+                    {
+                        capabilityCount = functions.Count,
+                        agentCount = agents.Count,
+                        requestedHash = message?.KnownHash
+                    },
+                    options: new PayloadStatOptions
+                    {
+                        EventKind = "capabilities",
+                        RepresentationKind = unchanged ? "reference" : "full",
+                        PayloadClass = "capability_registry",
+                        Unchanged = unchanged,
+                        DurationMs = (int)(DateTime.UtcNow - startedAt).TotalMilliseconds,
+                        ExtraFields = new
+                        {
+                            capabilityCount = functions.Count,
+                            agentCount = agents.Count,
+                            requestedHash = message?.KnownHash,
+                            stableHash,
+                            orderingSensitive = !string.Equals(hash, stableHash, StringComparison.Ordinal)
+                        }
+                    });
+            }
+            catch
+            {
+                // Best effort metrics only.
+            }
+
+            await SendMessageInternal(response, default);
 
             InternalLog.LogToFile(ConversationId, ("event", "capabilities response sent"));
         }
@@ -516,17 +698,56 @@ namespace Unity.AI.Assistant.Socket.Workflows.Chat
         async Task HandleSkillsRequestV1(SkillsRequestV1 message)
         {
             InternalLog.LogToFile(ConversationId, ("event", "skills requested"));
+            var startedAt = DateTime.UtcNow;
 
             var skillMetadata = SkillsRegistry.GetSkillMetadata();
             var hash = SkillsRegistry.GetSkillsHash();
+            var stableHash = PayloadBudgeting.ComputeSha256(JsonConvert.SerializeObject(
+                skillMetadata.OrderBy(skill => skill.Name ?? string.Empty).ToList(),
+                Formatting.None));
             var unchanged = string.Equals(message?.KnownHash, hash, StringComparison.Ordinal);
 
-            await SendMessageInternal(new SkillsResponseV1()
+            var response = new SkillsResponseV1()
             {
                 Skills = unchanged ? new List<SkillMetaData>() : skillMetadata,
                 Hash = hash,
                 Unchanged = unchanged
-            }, default);
+            };
+
+            try
+            {
+                var responseJson = JsonConvert.SerializeObject(response, Formatting.None);
+                PayloadStats.RecordText(
+                    "skills_response",
+                    "SkillsResponseV1",
+                    responseJson,
+                    meta: new
+                    {
+                        skillCount = skillMetadata.Count,
+                        requestedHash = message?.KnownHash
+                    },
+                    options: new PayloadStatOptions
+                    {
+                        EventKind = "skills",
+                        RepresentationKind = unchanged ? "reference" : "full",
+                        PayloadClass = "skill_registry",
+                        Unchanged = unchanged,
+                        DurationMs = (int)(DateTime.UtcNow - startedAt).TotalMilliseconds,
+                        ExtraFields = new
+                        {
+                            skillCount = skillMetadata.Count,
+                            requestedHash = message?.KnownHash,
+                            stableHash,
+                            orderingSensitive = !string.Equals(hash, stableHash, StringComparison.Ordinal)
+                        }
+                    });
+            }
+            catch
+            {
+                // Best effort metrics only.
+            }
+
+            await SendMessageInternal(response, default);
 
             InternalLog.LogToFile(ConversationId, ("event", "skills response sent"));
         }

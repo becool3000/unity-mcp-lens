@@ -4,6 +4,7 @@ using Unity.AI.Assistant.ApplicationModels;
 using Unity.AI.Assistant.Data;
 using Unity.AI.Assistant.Editor.Context;
 using Unity.AI.Assistant.Utils;
+using Unity.AI.Tracing;
 using UnityEditor;
 
 namespace Unity.AI.Assistant.Editor.Utils
@@ -12,17 +13,55 @@ namespace Unity.AI.Assistant.Editor.Utils
     {
         public static EditorContextReport GetContextModel(int maxLength, AssistantPrompt prompt)
         {
-            // Initialize all context, if any context has changed, add it all
-            var contextBuilder = new ContextBuilder();
-            GetAttachedContextString(prompt, ref contextBuilder);
+            var startedAt = DateTime.UtcNow;
+            var span = Trace.StartSpan("assistant.prompt_context.build", new TraceEventOptions
+            {
+                Category = "assistant",
+                Data = new { maxLength }
+            });
 
-            var finalContext = contextBuilder.BuildContext(maxLength);
-            var json = finalContext.ToJson();
-            var jsonBytes = PayloadBudgeting.GetUtf8ByteCount(json);
-            PayloadStats.Record("prompt_context", "PromptUtils.GetContextModel", contextBuilder.PredictedLength, jsonBytes, PayloadBudgeting.EstimateTokensFromBytes(jsonBytes), PayloadBudgeting.ComputeSha256(json));
-            InternalLog.Log($"Final Context items={finalContext.AttachedContext?.Count ?? 0}, chars={contextBuilder.PredictedLength}, bytes={jsonBytes}, sha256={PayloadBudgeting.ComputeSha256(json)}, preview:\n{PayloadBudgeting.CreateTextPreview(json, 8, 1024, out _)}");
+            try
+            {
+                // Initialize all context, if any context has changed, add it all
+                var contextBuilder = new ContextBuilder();
+                GetAttachedContextString(prompt, ref contextBuilder);
 
-            return finalContext;
+                var finalContext = contextBuilder.BuildContext(maxLength);
+                var json = finalContext.ToJson();
+                var jsonBytes = PayloadBudgeting.GetUtf8ByteCount(json);
+                var attachedCount = finalContext.AttachedContext?.Count ?? 0;
+                PayloadStats.RecordText(
+                    "prompt_context",
+                    "PromptUtils.GetContextModel",
+                    json,
+                    meta: new
+                    {
+                        attachedCount,
+                        predictedChars = contextBuilder.PredictedLength,
+                        maxLength
+                    },
+                    options: new PayloadStatOptions
+                    {
+                        EventKind = "prompt_context",
+                        RepresentationKind = "full",
+                        PayloadClass = "attached_context",
+                        DurationMs = (int)(DateTime.UtcNow - startedAt).TotalMilliseconds,
+                        ExtraFields = new
+                        {
+                            attachedCount,
+                            predictedChars = contextBuilder.PredictedLength,
+                            maxLength
+                        }
+                    });
+                InternalLog.Log($"Final Context items={attachedCount}, chars={contextBuilder.PredictedLength}, bytes={jsonBytes}, sha256={PayloadBudgeting.ComputeSha256(json)}, preview:\n{PayloadBudgeting.CreateTextPreview(json, 8, 1024, out _)}");
+                span.End(new { attachedCount, predictedChars = contextBuilder.PredictedLength, bytes = jsonBytes, success = true });
+                return finalContext;
+            }
+            catch (Exception ex)
+            {
+                span.End(new { success = false, error = ex.GetType().Name, message = ex.Message });
+                throw;
+            }
         }
 
         /// <summary>

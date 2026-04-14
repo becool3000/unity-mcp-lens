@@ -287,6 +287,14 @@ namespace Unity.AI.Assistant.Editor
             IAgent agent = null,
             CancellationToken ct = default)
         {
+            var runId = PayloadBudgeting.CreateCorrelationId();
+            var taskId = PayloadBudgeting.CreateCorrelationId();
+            using var payloadScope = PayloadStats.BeginScope(new PayloadStatScope(
+                runId: runId,
+                taskId: taskId,
+                conversationId: conversationId.IsValid ? conversationId.Value : null,
+                workflowKind: "assistant_prompt"));
+
             // Warm up ScriptableSingleton from main thread, or it
             // will throw exceptions later when we access it, and it initializes itself from a thread later on:
             var _ = AssistantEnvironment.WebSocketApiUrl;
@@ -317,6 +325,27 @@ namespace Unity.AI.Assistant.Editor
             var maxContextSize = Mathf.Max(0, maxMessageSize - prompt.Value.Length);
             var attachedContext = PromptUtils.GetContextModel(maxContextSize, prompt);
             promptContext.Attached = OrchestrationDataUtilities.FromEditorContextReport(attachedContext);
+            PayloadStats.RecordCoverage(
+                "task_prompt",
+                "Assistant.ProcessPrompt",
+                meta: new
+                {
+                    promptChars = prompt.Value?.Length ?? 0,
+                    attachedContextCount = promptContext.Attached?.Count ?? 0
+                },
+                options: new PayloadStatOptions
+                {
+                    EventKind = "task_prompt",
+                    RepresentationKind = "reference",
+                    PayloadClass = "prompt_task",
+                    Success = true,
+                    ExtraFields = new
+                    {
+                        promptChars = prompt.Value?.Length ?? 0,
+                        attachedContextCount = promptContext.Attached?.Count ?? 0,
+                        isNewConversation = !conversationId.IsValid
+                    }
+                });
 
 #pragma warning disable CS4014 // Because this call is not awaited, execution of the current method continues before the call is completed
             Task.Run(() =>

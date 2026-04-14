@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using Unity.AI.Assistant.FunctionCalling;
 using Unity.AI.MCP.Editor.Connection;
 using Unity.AI.MCP.Editor.Helpers;
 using Unity.AI.MCP.Editor.Models;
@@ -16,6 +17,7 @@ using Unity.AI.MCP.Editor.ToolRegistry;
 using Unity.AI.MCP.Editor.UI;
 using Unity.AI.Assistant.Editor.Acp;
 using Unity.AI.Assistant.Utils;
+using Unity.AI.Tracing;
 using Unity.AI.Toolkit;
 using Unity.Relay;
 using Unity.Relay.Editor;
@@ -61,6 +63,7 @@ namespace Unity.AI.MCP.Editor
 
         // Tools
         string s_CurrentToolsHash;
+        string s_CurrentToolsFullHash;
         McpToolInfo[] s_ToolsSnapshot;
         bool s_ToolsSnapshotDirty = true;
         string s_ToolSnapshotMode = "uninitialized";
@@ -396,6 +399,8 @@ namespace Unity.AI.MCP.Editor
             {
                 try { c.Close(); c.Dispose(); } catch { }
             }
+
+            ToolExecutionContextFactory.CleanupExternalConversations();
 
             // Unblock any pending command waiters since ProcessCommands won't run after Stop()
             lock (lockObj)
@@ -993,6 +998,8 @@ namespace Unity.AI.MCP.Editor
                         transportApprovalState.Remove(transport);
                         transportValidationDecisions.Remove(transport);
                     }
+
+                    ToolExecutionContextFactory.ReleaseExternalConversation(transport.ConnectionId);
 
                     // Notify listeners on main thread that a client disconnected
                     if (clientRemoved)
@@ -1664,6 +1671,11 @@ namespace Unity.AI.MCP.Editor
                 status,
                 payloadBytes,
                 requestId = command?.requestId,
+                toolDiscoveryMode = s_ToolSnapshotMode,
+                toolCount = s_ToolsSnapshot?.Length ?? 0,
+                toolsHash = s_CurrentToolsHash,
+                toolsFullHash = s_CurrentToolsFullHash,
+                toolDiscoveryReason = s_ToolSnapshotReason,
                 clientName = clientInfo?.Name,
                 clientTitle = clientInfo?.Title,
                 clientVersion = clientInfo?.Version,
@@ -1671,6 +1683,57 @@ namespace Unity.AI.MCP.Editor
                 serverProcess,
                 error
             };
+        }
+
+        static object MergeFields(params object[] values)
+        {
+            var merged = new JObject();
+            foreach (var value in values)
+            {
+                if (value == null)
+                    continue;
+
+                foreach (var property in JObject.FromObject(value).Properties())
+                    merged[property.Name] = property.Value;
+            }
+
+            return merged;
+        }
+
+        static string BuildToolsSnapshotJson(McpToolInfo[] tools, bool includeExtendedFields)
+        {
+            if (tools == null || tools.Length == 0)
+                return "[]";
+
+            var snapshot = new object[tools.Length];
+            for (int i = 0; i < tools.Length; i++)
+            {
+                snapshot[i] = includeExtendedFields
+                    ? new
+                    {
+                        tools[i].name,
+                        tools[i].title,
+                        tools[i].description,
+                        tools[i].inputSchema,
+                        tools[i].outputSchema,
+                        tools[i].annotations
+                    }
+                    : new
+                    {
+                        tools[i].name,
+                        tools[i].description,
+                        tools[i].inputSchema
+                    };
+            }
+
+            return JsonConvert.SerializeObject(snapshot, Formatting.None);
+        }
+
+        static string ComputeToolsSnapshotHash(McpToolInfo[] tools, bool includeExtendedFields)
+        {
+            using var sha256 = System.Security.Cryptography.SHA256.Create();
+            var hashBytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(BuildToolsSnapshotJson(tools, includeExtendedFields)));
+            return Convert.ToBase64String(hashBytes);
         }
 
         async Task<string> ExecuteCommandAsync(Command command, IConnectionTransport client, CancellationToken cancellationToken = default)
@@ -1683,14 +1746,62 @@ namespace Unity.AI.MCP.Editor
                     requestId = command.requestId,
                     @params = command.@params
                 }, Formatting.None);
-
-            string ReturnResponse(string response, string status, string error = null)
+            var requestBytes = PayloadBudgeting.GetUtf8ByteCount(requestJson);
+            var startedAt = DateTime.UtcNow;
+            using var scope = PayloadStats.BeginScope(new PayloadStatScope(
+                connectionId: client?.ConnectionId,
+                requestId: command?.requestId,
+                operationId: command?.requestId,
+                workflowKind: "mcp_bridge"));
+            var commandSpan = Trace.StartSpan("mcp.bridge.command", new TraceEventOptions
             {
+                Category = "mcp",
+                Data = new
+                {
+                    commandType = command?.type ?? "(null)",
+                    connectionId = client?.ConnectionId,
+                    requestBytes
+                }
+            });
+
+            string ReturnResponse(string response, string status, string error = null, PayloadStatOptions responseOptions = null)
+            {
+                var responseBytes = PayloadBudgeting.GetUtf8ByteCount(response);
+                responseOptions ??= new PayloadStatOptions();
+                responseOptions.EventKind ??= "bridge_coverage";
+                responseOptions.DurationMs ??= (int)(DateTime.UtcNow - startedAt).TotalMilliseconds;
+                responseOptions.Success ??= string.Equals(status, "success", StringComparison.OrdinalIgnoreCase);
+                responseOptions.ErrorKind ??= string.IsNullOrWhiteSpace(error) ? null : "bridge_command_error";
+                responseOptions.ErrorMessageShort ??= error;
+                responseOptions.PayloadClass ??= "bridge_command_response";
+                responseOptions.ExtraFields = MergeFields(
+                    new
+                    {
+                        commandType = command?.type ?? "(null)",
+                        requestBytes,
+                        responseBytes,
+                        discoveryMode = s_ToolSnapshotMode,
+                        snapshotReason = s_ToolSnapshotReason,
+                        snapshotHashMinimal = s_CurrentToolsHash,
+                        snapshotHashFull = s_CurrentToolsFullHash,
+                        enabledToolCount = s_ToolsSnapshot?.Length ?? 0
+                    },
+                    responseOptions.ExtraFields);
                 PayloadStats.RecordCoverage(
                     "coverage_bridge_command_response",
                     command?.type ?? "(null)",
-                    BuildBridgeCoverageMeta(command, client, status, PayloadBudgeting.GetUtf8ByteCount(response), error),
-                    PayloadBudgeting.ComputeSha256(response ?? string.Empty));
+                    BuildBridgeCoverageMeta(command, client, status, responseBytes, error),
+                    PayloadBudgeting.ComputeSha256(response ?? string.Empty),
+                    responseOptions);
+                commandSpan.End(new
+                {
+                    success = responseOptions.Success,
+                    durationMs = responseOptions.DurationMs,
+                    commandType = command?.type ?? "(null)",
+                    requestBytes,
+                    responseBytes,
+                    error
+                });
                 return response;
             }
 
@@ -1699,8 +1810,25 @@ namespace Unity.AI.MCP.Editor
                 PayloadStats.RecordCoverage(
                     "coverage_bridge_command_request",
                     command?.type ?? "(null)",
-                    BuildBridgeCoverageMeta(command, client, "request", PayloadBudgeting.GetUtf8ByteCount(requestJson)),
-                    PayloadBudgeting.ComputeSha256(requestJson));
+                    BuildBridgeCoverageMeta(command, client, "request", requestBytes),
+                    PayloadBudgeting.ComputeSha256(requestJson),
+                    new PayloadStatOptions
+                    {
+                        EventKind = "bridge_coverage",
+                        RepresentationKind = "full",
+                        PayloadClass = "bridge_command_request",
+                        Success = true,
+                        ExtraFields = new
+                        {
+                            commandType = command?.type ?? "(null)",
+                            requestBytes,
+                            discoveryMode = s_ToolSnapshotMode,
+                            snapshotReason = s_ToolSnapshotReason,
+                            snapshotHashMinimal = s_CurrentToolsHash,
+                            snapshotHashFull = s_CurrentToolsFullHash,
+                            enabledToolCount = s_ToolsSnapshot?.Length ?? 0
+                        }
+                    });
 
                 if (string.IsNullOrEmpty(command.type))
                 {
@@ -1771,7 +1899,21 @@ namespace Unity.AI.MCP.Editor
                                 source = s_ToolSnapshotMode,
                                 reason = s_ToolSnapshotReason
                             }
-                        }), "success");
+                        }), "success", null, new PayloadStatOptions
+                        {
+                            RepresentationKind = "reference",
+                            PayloadClass = "tool_snapshot",
+                            Unchanged = true,
+                            ExtraFields = new
+                            {
+                                commandType = command.type,
+                                discoveryMode = s_ToolSnapshotMode,
+                                snapshotReason = s_ToolSnapshotReason,
+                                snapshotHashMinimal = s_CurrentToolsHash,
+                                snapshotHashFull = s_CurrentToolsFullHash,
+                                enabledToolCount = s_ToolsSnapshot?.Length ?? 0
+                            }
+                        });
                     }
 
                     var response = JsonConvert.SerializeObject(new
@@ -1786,7 +1928,21 @@ namespace Unity.AI.MCP.Editor
                         }
                     });
                     McpLog.Log($"Sending tools response with {s_ToolsSnapshot?.Length ?? 0} tools");
-                    return ReturnResponse(response, "success");
+                    return ReturnResponse(response, "success", null, new PayloadStatOptions
+                    {
+                        RepresentationKind = "full",
+                        PayloadClass = "tool_snapshot",
+                        Unchanged = false,
+                        ExtraFields = new
+                        {
+                            commandType = command.type,
+                            discoveryMode = s_ToolSnapshotMode,
+                            snapshotReason = s_ToolSnapshotReason,
+                            snapshotHashMinimal = s_CurrentToolsHash,
+                            snapshotHashFull = s_CurrentToolsFullHash,
+                            enabledToolCount = s_ToolsSnapshot?.Length ?? 0
+                        }
+                    });
                 }
 
                 // Handle MCP tool approval requests (from Codex via MCP)
@@ -1814,7 +1970,11 @@ namespace Unity.AI.MCP.Editor
                 JObject paramsObject = command.@params ?? new JObject();
 
                 // Route command through the registry
-                object result = await McpToolRegistry.ExecuteToolAsync(command.type, paramsObject);
+                object result;
+                using (ToolExecutionContextFactory.BeginExternalExecutionScope(client?.ConnectionId, command.requestId))
+                {
+                    result = await McpToolRegistry.ExecuteToolAsync(command.type, paramsObject);
+                }
                 if (result == null)
                     result = Response.Success("Operation completed.");
 
@@ -1829,7 +1989,7 @@ namespace Unity.AI.MCP.Editor
                     status = "error",
                     error = ex.Message,
                     command = command?.type ?? "Unknown"
-                }), "error", ex.Message);
+                    }), "error", ex.Message);
             }
         }
 
@@ -1999,6 +2159,88 @@ namespace Unity.AI.MCP.Editor
 
         void RefreshToolsSnapshotIfNeeded()
         {
+            var startedAt = DateTime.UtcNow;
+            var refreshSpan = Trace.StartSpan("mcp.tools.refresh", new TraceEventOptions
+            {
+                Category = "mcp",
+                Recurring = true,
+                Data = new
+                {
+                    dirty = s_ToolsSnapshotDirty,
+                    currentHash = s_CurrentToolsHash,
+                    currentFullHash = s_CurrentToolsFullHash
+                }
+            });
+
+            int GetRegisteredToolCountOrDefault()
+            {
+                try
+                {
+                    return McpToolRegistry.GetAvailableTools(ignoreEnabledState: true)?.Length ?? -1;
+                }
+                catch
+                {
+                    return -1;
+                }
+            }
+
+            void RecordSnapshotTelemetry(McpToolInfo[] snapshot, bool success, bool unchanged, string errorKind = null)
+            {
+                try
+                {
+                    var registeredToolCount = GetRegisteredToolCountOrDefault();
+                    var options = new PayloadStatOptions
+                    {
+                        EventKind = "tool_snapshot",
+                        RepresentationKind = unchanged || (snapshot?.Length ?? 0) == 0 ? "reference" : "full",
+                        PayloadClass = "tool_snapshot",
+                        DurationMs = (int)(DateTime.UtcNow - startedAt).TotalMilliseconds,
+                        Success = success,
+                        ErrorKind = errorKind,
+                        Unchanged = unchanged,
+                        ExtraFields = new
+                        {
+                            discoveryMode = s_ToolSnapshotMode,
+                            snapshotReason = s_ToolSnapshotReason,
+                            enabledToolCount = snapshot?.Length ?? 0,
+                            registeredToolCount,
+                            snapshotHashMinimal = s_CurrentToolsHash,
+                            snapshotHashFull = s_CurrentToolsFullHash
+                        }
+                    };
+
+                    var meta = new
+                    {
+                        toolCount = snapshot?.Length ?? 0,
+                        discoveryMode = s_ToolSnapshotMode,
+                        snapshotReason = s_ToolSnapshotReason
+                    };
+
+                    if (unchanged)
+                    {
+                        PayloadStats.RecordCoverage(
+                            "coverage_tool_snapshot",
+                            "Bridge.RefreshToolsSnapshotIfNeeded",
+                            meta: meta,
+                            hash: s_CurrentToolsFullHash ?? s_CurrentToolsHash,
+                            options: options);
+                        return;
+                    }
+
+                    var snapshotJson = BuildToolsSnapshotJson(snapshot, includeExtendedFields: true);
+                    PayloadStats.RecordText(
+                        "tool_snapshot",
+                        "Bridge.RefreshToolsSnapshotIfNeeded",
+                        snapshotJson,
+                        meta: meta,
+                        options: options);
+                }
+                catch
+                {
+                    // Best effort only.
+                }
+            }
+
             if (s_ToolsSnapshotDirty && s_ToolsSnapshot != null && EditorApplication.timeSinceStartup < s_NextToolsSnapshotRefreshAt)
             {
                 BridgeStatusTracker.SetToolDiscoveryState(
@@ -2006,11 +2248,23 @@ namespace Unity.AI.MCP.Editor
                     s_ToolsSnapshot.Length,
                     s_CurrentToolsHash,
                     s_ToolSnapshotReason ?? "reload_backoff");
+                    s_ToolSnapshotMode = "cache_only";
+                    s_ToolSnapshotReason ??= "reload_backoff";
+                RecordSnapshotTelemetry(s_ToolsSnapshot, success: true, unchanged: true);
+                refreshSpan.End(new
+                {
+                    success = true,
+                    durationMs = (int)(DateTime.UtcNow - startedAt).TotalMilliseconds,
+                    discoveryMode = s_ToolSnapshotMode,
+                    snapshotReason = s_ToolSnapshotReason,
+                    toolCount = s_ToolsSnapshot.Length
+                });
                 return;
             }
 
             McpToolInfo[] previousSnapshot = s_ToolsSnapshot;
             string previousHash = s_CurrentToolsHash;
+            string previousFullHash = s_CurrentToolsFullHash;
 
             McpToolInfo[] freshTools = null;
             try
@@ -2023,6 +2277,7 @@ namespace Unity.AI.MCP.Editor
                 {
                     s_ToolsSnapshot = previousSnapshot;
                     s_CurrentToolsHash = previousHash;
+                    s_CurrentToolsFullHash = previousFullHash;
                     s_ToolsSnapshotDirty = true;
                     s_ToolSnapshotMode = "cache_only";
                     s_ToolSnapshotReason = $"tool_refresh_error:{ex.GetType().Name}";
@@ -2032,9 +2287,27 @@ namespace Unity.AI.MCP.Editor
                         s_ToolsSnapshot.Length,
                         s_CurrentToolsHash,
                         s_ToolSnapshotReason);
+                    RecordSnapshotTelemetry(s_ToolsSnapshot, success: false, unchanged: true, errorKind: ex.GetType().Name);
+                    refreshSpan.End(new
+                    {
+                        success = false,
+                        durationMs = (int)(DateTime.UtcNow - startedAt).TotalMilliseconds,
+                        discoveryMode = s_ToolSnapshotMode,
+                        snapshotReason = s_ToolSnapshotReason,
+                        toolCount = s_ToolsSnapshot.Length,
+                        error = ex.GetType().Name
+                    });
                     return;
                 }
 
+                refreshSpan.End(new
+                {
+                    success = false,
+                    durationMs = (int)(DateTime.UtcNow - startedAt).TotalMilliseconds,
+                    discoveryMode = "error",
+                    error = ex.GetType().Name,
+                    message = ex.Message
+                });
                 throw;
             }
 
@@ -2044,6 +2317,7 @@ namespace Unity.AI.MCP.Editor
                 {
                     s_ToolsSnapshot = previousSnapshot;
                     s_CurrentToolsHash = previousHash;
+                    s_CurrentToolsFullHash = previousFullHash;
                     s_ToolsSnapshotDirty = true;
                     s_ToolSnapshotMode = "cache_only";
                     s_ToolSnapshotReason = "tool_registry_empty";
@@ -2053,11 +2327,21 @@ namespace Unity.AI.MCP.Editor
                         s_ToolsSnapshot.Length,
                         s_CurrentToolsHash,
                         s_ToolSnapshotReason);
+                    RecordSnapshotTelemetry(s_ToolsSnapshot, success: false, unchanged: true, errorKind: "tool_registry_empty");
+                    refreshSpan.End(new
+                    {
+                        success = false,
+                        durationMs = (int)(DateTime.UtcNow - startedAt).TotalMilliseconds,
+                        discoveryMode = s_ToolSnapshotMode,
+                        snapshotReason = s_ToolSnapshotReason,
+                        toolCount = s_ToolsSnapshot.Length
+                    });
                     return;
                 }
 
                 s_ToolsSnapshot = Array.Empty<McpToolInfo>();
                 s_CurrentToolsHash = null;
+                s_CurrentToolsFullHash = null;
                 s_ToolsSnapshotDirty = true;
                 s_ToolSnapshotMode = "empty";
                 s_ToolSnapshotReason = "tool_registry_empty";
@@ -2067,20 +2351,22 @@ namespace Unity.AI.MCP.Editor
                     0,
                     null,
                     s_ToolSnapshotReason);
+                RecordSnapshotTelemetry(s_ToolsSnapshot, success: false, unchanged: false, errorKind: "tool_registry_empty");
+                refreshSpan.End(new
+                {
+                    success = false,
+                    durationMs = (int)(DateTime.UtcNow - startedAt).TotalMilliseconds,
+                    discoveryMode = s_ToolSnapshotMode,
+                    snapshotReason = s_ToolSnapshotReason,
+                    toolCount = 0
+                });
                 return;
             }
 
             s_ToolsSnapshot = freshTools;
             var tools = s_ToolsSnapshot;
-            var minimal = new object[tools.Length];
-            for (int i = 0; i < tools.Length; i++)
-            {
-                minimal[i] = new { tools[i].name, tools[i].description, tools[i].inputSchema };
-            }
-            var json = JsonConvert.SerializeObject(minimal, Formatting.None);
-            using var sha256 = System.Security.Cryptography.SHA256.Create();
-            byte[] hashBytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(json));
-            s_CurrentToolsHash = Convert.ToBase64String(hashBytes);
+            s_CurrentToolsHash = ComputeToolsSnapshotHash(tools, includeExtendedFields: false);
+            s_CurrentToolsFullHash = ComputeToolsSnapshotHash(tools, includeExtendedFields: true);
             s_ToolsSnapshotDirty = false;
             s_ToolSnapshotMode = "live";
             s_ToolSnapshotReason = null;
@@ -2090,6 +2376,20 @@ namespace Unity.AI.MCP.Editor
                 tools.Length,
                 s_CurrentToolsHash,
                 null);
+            RecordSnapshotTelemetry(
+                tools,
+                success: true,
+                unchanged: string.Equals(previousHash, s_CurrentToolsHash, StringComparison.Ordinal) &&
+                    string.Equals(previousFullHash, s_CurrentToolsFullHash, StringComparison.Ordinal));
+            refreshSpan.End(new
+            {
+                success = true,
+                durationMs = (int)(DateTime.UtcNow - startedAt).TotalMilliseconds,
+                discoveryMode = s_ToolSnapshotMode,
+                toolCount = tools.Length,
+                snapshotHashMinimal = s_CurrentToolsHash,
+                snapshotHashFull = s_CurrentToolsFullHash
+            });
         }
 
         void LogConnectionDecision(ValidationDecision decision)

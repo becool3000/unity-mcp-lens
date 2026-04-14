@@ -6,6 +6,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Unity.AI.Assistant.Editor.Mcp.Transport.Models;
 using Unity.AI.Assistant.Utils;
+using Unity.AI.Tracing;
 using UnityEngine;
 using UnityEngine.Networking;
 
@@ -175,8 +176,18 @@ namespace Unity.AI.Assistant.Editor.Mcp.Transport
             CancellationToken cancellationToken)
             where TResponse : class
         {
+            var startedAt = DateTime.UtcNow;
             var jsonBody = JsonConvert.SerializeObject(requestBody);
             var bodyBytes = Encoding.UTF8.GetBytes(jsonBody);
+            var requestSpan = Trace.StartSpan("assistant.mcp_http.post", new TraceEventOptions
+            {
+                Category = "assistant",
+                Data = new
+                {
+                    url,
+                    requestBytes = bodyBytes.Length
+                }
+            });
 
             using var request = new UnityWebRequest(url, "POST");
             request.uploadHandler = new UploadHandlerRaw(bodyBytes);
@@ -187,42 +198,133 @@ namespace Unity.AI.Assistant.Editor.Mcp.Transport
 
             InternalLog.Log($"[UnityMcpHttpClient] Sending POST request to: {url}");
             InternalLog.Log($"[UnityMcpHttpClient] Request body bytes={bodyBytes.Length}, sha256={PayloadBudgeting.ComputeSha256(bodyBytes)}, preview={PayloadBudgeting.CreateTextPreview(jsonBody, 8, 1024, out _)}");
-
-            var operation = request.SendWebRequest();
-
-            // Wait for completion with cancellation support
-            while (!operation.isDone)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                await Task.Yield();
-            }
-
-            // Check for network or HTTP errors
-            if (request.result == UnityWebRequest.Result.ConnectionError ||
-                request.result == UnityWebRequest.Result.ProtocolError)
-            {
-                var error = $"HTTP {request.responseCode}: {request.error}";
-                if (!string.IsNullOrEmpty(request.downloadHandler.text))
+            PayloadStats.RecordText(
+                "mcp_http_request",
+                "UnityMcpHttpClient.SendPostRequestAsync",
+                jsonBody,
+                meta: new
                 {
-                    error += $" | Response: {request.downloadHandler.text}";
-                }
-                throw new InvalidOperationException(error);
-            }
-
-            var responseText = request.downloadHandler.text;
-            var responseBytes = PayloadBudgeting.GetUtf8ByteCount(responseText);
-            InternalLog.Log($"[UnityMcpHttpClient] Response bytes={responseBytes}, sha256={PayloadBudgeting.ComputeSha256(responseText ?? string.Empty)}, preview={PayloadBudgeting.CreateTextPreview(responseText, 8, 1024, out _)}");
-
-            if (string.IsNullOrEmpty(responseText))
-                return null;
+                    url,
+                    method = "POST"
+                },
+                options: new PayloadStatOptions
+                {
+                    EventKind = "mcp_http",
+                    RepresentationKind = "full",
+                    PayloadClass = "http_request",
+                    ExtraFields = new
+                    {
+                        url,
+                        method = "POST",
+                        requestBytes = bodyBytes.Length
+                    }
+                });
 
             try
             {
-                return JsonConvert.DeserializeObject<TResponse>(responseText);
+                var operation = request.SendWebRequest();
+
+                // Wait for completion with cancellation support
+                while (!operation.isDone)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    await Task.Yield();
+                }
+
+                // Check for network or HTTP errors
+                if (request.result == UnityWebRequest.Result.ConnectionError ||
+                    request.result == UnityWebRequest.Result.ProtocolError)
+                {
+                    var error = $"HTTP {request.responseCode}: {request.error}";
+                    if (!string.IsNullOrEmpty(request.downloadHandler.text))
+                    {
+                        error += $" | Response: {request.downloadHandler.text}";
+                    }
+
+                    requestSpan.End(new
+                    {
+                        success = false,
+                        durationMs = (int)(DateTime.UtcNow - startedAt).TotalMilliseconds,
+                        url,
+                        responseCode = request.responseCode,
+                        error
+                    });
+                    throw new InvalidOperationException(error);
+                }
+
+                var responseText = request.downloadHandler.text;
+                var responseBytes = PayloadBudgeting.GetUtf8ByteCount(responseText);
+                InternalLog.Log($"[UnityMcpHttpClient] Response bytes={responseBytes}, sha256={PayloadBudgeting.ComputeSha256(responseText ?? string.Empty)}, preview={PayloadBudgeting.CreateTextPreview(responseText, 8, 1024, out _)}");
+                PayloadStats.RecordText(
+                    "mcp_http_response",
+                    "UnityMcpHttpClient.SendPostRequestAsync",
+                    responseText ?? string.Empty,
+                    meta: new
+                    {
+                        url,
+                        method = "POST",
+                        responseCode = request.responseCode
+                    },
+                    options: new PayloadStatOptions
+                    {
+                        EventKind = "mcp_http",
+                        RepresentationKind = "full",
+                        PayloadClass = "http_response",
+                        DurationMs = (int)(DateTime.UtcNow - startedAt).TotalMilliseconds,
+                        Success = true,
+                        ExtraFields = new
+                        {
+                            url,
+                            method = "POST",
+                            requestBytes = bodyBytes.Length,
+                            responseBytes,
+                            responseCode = request.responseCode
+                        }
+                    });
+                requestSpan.End(new
+                {
+                    success = true,
+                    durationMs = (int)(DateTime.UtcNow - startedAt).TotalMilliseconds,
+                    url,
+                    responseCode = request.responseCode,
+                    responseBytes
+                });
+
+                if (string.IsNullOrEmpty(responseText))
+                    return null;
+
+                try
+                {
+                    return JsonConvert.DeserializeObject<TResponse>(responseText);
+                }
+                catch (JsonException ex)
+                {
+                    requestSpan.End(new
+                    {
+                        success = false,
+                        durationMs = (int)(DateTime.UtcNow - startedAt).TotalMilliseconds,
+                        url,
+                        error = "JsonParseFailure",
+                        message = ex.Message
+                    });
+                    throw new InvalidOperationException($"Failed to parse response JSON: {ex.Message}");
+                }
             }
-            catch (JsonException ex)
+            catch (Exception ex)
             {
-                throw new InvalidOperationException($"Failed to parse response JSON: {ex.Message}");
+                if (ex is not InvalidOperationException)
+                {
+                    requestSpan.End(new
+                    {
+                        success = false,
+                        durationMs = (int)(DateTime.UtcNow - startedAt).TotalMilliseconds,
+                        url,
+                        error = ex.GetType().Name,
+                        message = ex.Message
+                    });
+                }
+
+                throw;
             }
         }
     }

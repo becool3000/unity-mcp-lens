@@ -19,6 +19,9 @@ namespace Unity.AI.Assistant.FunctionCalling
         /// </summary>
         public PersistentStorage PersistentStorage { get; }
 
+        internal bool IsSynthetic { get; }
+        internal bool RequiresExplicitClose { get; }
+
         /// <summary>
         /// Event raised when the conversation connection is closed.
         /// </summary>
@@ -26,16 +29,36 @@ namespace Unity.AI.Assistant.FunctionCalling
         {
             add
             {
+                bool invokeImmediately = false;
+
                 lock (m_Lock)
                 {
-                    m_ConnectionClosedDelegates ??= new List<Action>();
-                    m_ConnectionClosedDelegates.Add(value);
+                    if (m_IsClosed)
+                        invokeImmediately = true;
 
-                    // Subscribe to workflow on first subscriber
-                    if (!m_IsSubscribed)
+                    if (!invokeImmediately)
                     {
-                        m_Workflow.OnWorkflowStateChanged += OnWorkflowStateChanged;
-                        m_IsSubscribed = true;
+                        m_ConnectionClosedDelegates ??= new List<Action>();
+                        m_ConnectionClosedDelegates.Add(value);
+
+                        // Subscribe to workflow on first subscriber
+                        if (m_Workflow != null && !m_IsSubscribed)
+                        {
+                            m_Workflow.OnWorkflowStateChanged += OnWorkflowStateChanged;
+                            m_IsSubscribed = true;
+                        }
+                    }
+                }
+
+                if (invokeImmediately && value != null)
+                {
+                    try
+                    {
+                        value();
+                    }
+                    catch (Exception ex)
+                    {
+                        UnityEngine.Debug.LogException(ex);
                     }
                 }
             }
@@ -50,7 +73,7 @@ namespace Unity.AI.Assistant.FunctionCalling
                     m_ConnectionClosedDelegates.Remove(value);
 
                     // Unsubscribe from workflow when last subscriber removed
-                    if (m_ConnectionClosedDelegates.Count == 0 && m_IsSubscribed)
+                    if (m_Workflow != null && m_ConnectionClosedDelegates.Count == 0 && m_IsSubscribed)
                     {
                         m_Workflow.OnWorkflowStateChanged -= OnWorkflowStateChanged;
                         m_IsSubscribed = false;
@@ -63,12 +86,67 @@ namespace Unity.AI.Assistant.FunctionCalling
         readonly object m_Lock = new object();
         List<Action> m_ConnectionClosedDelegates;
         bool m_IsSubscribed;
+        bool m_IsClosed;
 
         public ConversationContext(IChatWorkflow workflow)
+            : this(workflow, workflow?.ConversationId, isSynthetic: false, requiresExplicitClose: false)
         {
-            m_Workflow = workflow ?? throw new ArgumentNullException(nameof(workflow));
-            ConversationId = workflow.ConversationId;
+            if (workflow == null)
+                throw new ArgumentNullException(nameof(workflow));
+        }
+
+        ConversationContext(IChatWorkflow workflow, string conversationId, bool isSynthetic, bool requiresExplicitClose)
+        {
+            if (string.IsNullOrEmpty(conversationId))
+                throw new ArgumentException("Conversation ID cannot be null or empty", nameof(conversationId));
+
+            m_Workflow = workflow;
+            ConversationId = conversationId;
             PersistentStorage = new PersistentStorage(ConversationId);
+            IsSynthetic = isSynthetic;
+            RequiresExplicitClose = requiresExplicitClose;
+        }
+
+        internal static ConversationContext CreateExternal(string conversationId, bool requiresExplicitClose)
+        {
+            return new ConversationContext(null, conversationId, isSynthetic: true, requiresExplicitClose: requiresExplicitClose);
+        }
+
+        internal void Close()
+        {
+            Action[] delegatesToInvoke;
+            IChatWorkflow workflowToUnsubscribe = null;
+
+            lock (m_Lock)
+            {
+                if (m_IsClosed)
+                    return;
+
+                m_IsClosed = true;
+                delegatesToInvoke = m_ConnectionClosedDelegates?.ToArray() ?? Array.Empty<Action>();
+                m_ConnectionClosedDelegates?.Clear();
+
+                if (m_Workflow != null && m_IsSubscribed)
+                {
+                    workflowToUnsubscribe = m_Workflow;
+                    m_IsSubscribed = false;
+                }
+            }
+
+            if (workflowToUnsubscribe != null)
+                workflowToUnsubscribe.OnWorkflowStateChanged -= OnWorkflowStateChanged;
+
+            foreach (var del in delegatesToInvoke)
+            {
+                try
+                {
+                    del();
+                }
+                catch (Exception ex)
+                {
+                    UnityEngine.Debug.LogException(ex);
+                }
+            }
         }
 
         void OnWorkflowStateChanged(State state)
@@ -76,45 +154,7 @@ namespace Unity.AI.Assistant.FunctionCalling
             if (state != State.Closed)
                 return;
 
-            Action[] delegatesToInvoke;
-            bool shouldUnsubscribe;
-
-            // Hold lock only to copy delegates and check state
-            lock (m_Lock)
-            {
-                if (m_ConnectionClosedDelegates == null || m_ConnectionClosedDelegates.Count == 0)
-                {
-                    shouldUnsubscribe = m_IsSubscribed;
-                    delegatesToInvoke = null;
-                }
-                else
-                {
-                    delegatesToInvoke = m_ConnectionClosedDelegates.ToArray();
-                    shouldUnsubscribe = m_IsSubscribed;
-                }
-
-                // Mark as unsubscribed
-                if (shouldUnsubscribe)
-                    m_IsSubscribed = false;
-            }
-
-            if (shouldUnsubscribe)
-                m_Workflow.OnWorkflowStateChanged -= OnWorkflowStateChanged;
-
-            if (delegatesToInvoke != null)
-            {
-                foreach (var del in delegatesToInvoke)
-                {
-                    try
-                    {
-                        del();
-                    }
-                    catch (Exception ex)
-                    {
-                        UnityEngine.Debug.LogException(ex);
-                    }
-                }
-            }
+            Close();
         }
     }
 }

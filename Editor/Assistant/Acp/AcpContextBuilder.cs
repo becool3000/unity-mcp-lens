@@ -3,6 +3,9 @@ using System.Linq;
 using System.Text;
 using Unity.AI.Assistant.Bridge.Editor;
 using Unity.AI.Assistant.Editor.Context;
+using Unity.AI.Assistant.Utils;
+using Unity.AI.Tracing;
+using Newtonsoft.Json;
 
 namespace Unity.AI.Assistant.Editor.Acp
 {
@@ -13,7 +16,20 @@ namespace Unity.AI.Assistant.Editor.Acp
             IReadOnlyCollection<LogData> consoleAttachments,
             IReadOnlyCollection<VirtualAttachment> virtualAttachments)
         {
+            var startedAt = System.DateTime.UtcNow;
+            var span = Trace.StartSpan("assistant.acp_prompt.build", new TraceEventOptions
+            {
+                Category = "assistant",
+                Data = new
+                {
+                    consoleCount = consoleAttachments?.Count ?? 0,
+                    virtualCount = virtualAttachments?.Count ?? 0
+                }
+            });
             var content = new List<AcpContentBlock>();
+            var imageCount = 0;
+            var documentCount = 0;
+            var textAttachmentCount = 0;
 
             // 1. Add console logs as formatted text
             if (consoleAttachments?.Count > 0)
@@ -27,6 +43,7 @@ namespace Unity.AI.Assistant.Editor.Acp
             {
                 if (attachment.Metadata is ImageContextMetaData imageMeta)
                 {
+                    imageCount++;
                     content.Add(new AcpImageContent
                     {
                         MimeType = imageMeta.MimeType,
@@ -35,6 +52,7 @@ namespace Unity.AI.Assistant.Editor.Acp
                 }
                 else if (attachment.Type == "Document")
                 {
+                    documentCount++;
                     content.Add(new AcpResourceContent
                     {
                         Resource = new AcpResourceData
@@ -47,6 +65,7 @@ namespace Unity.AI.Assistant.Editor.Acp
                 }
                 else if (attachment.Type == "Text")
                 {
+                    textAttachmentCount++;
                     // Handle generic text attachments
                     content.Add(new AcpTextContent { Text = attachment.Payload });
                 }
@@ -54,6 +73,51 @@ namespace Unity.AI.Assistant.Editor.Acp
 
             // 3. Add user text last
             content.Add(new AcpTextContent { Text = userText });
+
+            try
+            {
+                var contentJson = JsonConvert.SerializeObject(content, Formatting.None);
+                PayloadStats.RecordText(
+                    "acp_prompt",
+                    "AcpContextBuilder.BuildPromptContent",
+                    contentJson,
+                    meta: new
+                    {
+                        blockCount = content.Count,
+                        consoleCount = consoleAttachments?.Count ?? 0,
+                        virtualCount = virtualAttachments?.Count ?? 0
+                    },
+                    options: new PayloadStatOptions
+                    {
+                        EventKind = "acp_prompt",
+                        RepresentationKind = imageCount > 0 ? "mixed" : "full",
+                        PayloadClass = "acp_prompt_content",
+                        DurationMs = (int)(System.DateTime.UtcNow - startedAt).TotalMilliseconds,
+                        ExtraFields = new
+                        {
+                            blockCount = content.Count,
+                            consoleCount = consoleAttachments?.Count ?? 0,
+                            virtualCount = virtualAttachments?.Count ?? 0,
+                            imageCount,
+                            documentCount,
+                            textAttachmentCount
+                        }
+                    });
+            }
+            catch
+            {
+                // Best effort metrics only.
+            }
+
+            span.End(new
+            {
+                success = true,
+                durationMs = (int)(System.DateTime.UtcNow - startedAt).TotalMilliseconds,
+                blockCount = content.Count,
+                imageCount,
+                documentCount,
+                textAttachmentCount
+            });
 
             return content;
         }

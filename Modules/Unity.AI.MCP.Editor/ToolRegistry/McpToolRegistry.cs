@@ -3,7 +3,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using System.Threading.Tasks;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using Unity.AI.Assistant.Utils;
 using Unity.AI.MCP.Editor.Helpers;
 using Unity.AI.MCP.Editor.Settings;
 using Unity.AI.Tracing;
@@ -237,6 +239,19 @@ namespace Unity.AI.MCP.Editor.ToolRegistry
                 throw new ArgumentException($"Tool '{toolName}' not found. Available tools: {availableTools}");
             }
 
+            var startedAt = DateTime.UtcNow;
+            var parametersJson = parameters?.ToString(Formatting.None) ?? "{}";
+            var parameterBytes = PayloadBudgeting.GetUtf8ByteCount(parametersJson);
+            var executionSpan = Trace.StartSpan("mcp.tool.execute", new TraceEventOptions
+            {
+                Category = "mcp",
+                Data = new
+                {
+                    toolName,
+                    requestBytes = parameterBytes
+                }
+            });
+
             try
             {
                 McpLog.Log($"[McpToolRegistry] Executing tool '{toolName}'", new() { Data = new { tool = toolName, @params = parameters } });
@@ -251,7 +266,41 @@ namespace Unity.AI.MCP.Editor.ToolRegistry
                     result = AddStructuredContent(result);
                 }
 
+                var resultJson = result == null ? string.Empty : JsonConvert.SerializeObject(result, Formatting.None);
+                var resultBytes = PayloadBudgeting.GetUtf8ByteCount(resultJson);
+                PayloadStats.RecordText(
+                    "tool_execution",
+                    toolName,
+                    resultJson,
+                    meta: new
+                    {
+                        toolName,
+                        hasOutputSchema = outputSchema != null
+                    },
+                    options: new PayloadStatOptions
+                    {
+                        EventKind = "tool_execution",
+                        RepresentationKind = "full",
+                        PayloadClass = "tool_result",
+                        DurationMs = (int)(DateTime.UtcNow - startedAt).TotalMilliseconds,
+                        Success = true,
+                        ExtraFields = new
+                        {
+                            toolName,
+                            requestBytes = parameterBytes,
+                            responseBytes = resultBytes,
+                            hasOutputSchema = outputSchema != null
+                        }
+                    });
                 McpLog.Log($"[McpToolRegistry] Tool '{toolName}' completed successfully", new() { Data = new { tool = toolName, result } });
+                executionSpan.End(new
+                {
+                    success = true,
+                    durationMs = (int)(DateTime.UtcNow - startedAt).TotalMilliseconds,
+                    toolName,
+                    requestBytes = parameterBytes,
+                    responseBytes = resultBytes
+                });
 
                 return result;
             }
@@ -259,11 +308,65 @@ namespace Unity.AI.MCP.Editor.ToolRegistry
             {
                 // Unwrap TargetInvocationException to get the actual exception
                 var actualException = ex.InnerException ?? ex;
+                PayloadStats.RecordCoverage(
+                    "tool_execution",
+                    toolName,
+                    meta: new { toolName },
+                    options: new PayloadStatOptions
+                    {
+                        EventKind = "tool_execution",
+                        RepresentationKind = "reference",
+                        PayloadClass = "tool_result",
+                        DurationMs = (int)(DateTime.UtcNow - startedAt).TotalMilliseconds,
+                        Success = false,
+                        ErrorKind = actualException.GetType().Name,
+                        ErrorMessageShort = actualException.Message,
+                        ExtraFields = new
+                        {
+                            toolName,
+                            requestBytes = parameterBytes
+                        }
+                    });
+                executionSpan.End(new
+                {
+                    success = false,
+                    durationMs = (int)(DateTime.UtcNow - startedAt).TotalMilliseconds,
+                    toolName,
+                    error = actualException.GetType().Name,
+                    message = actualException.Message
+                });
                 McpLog.Error($"[McpToolRegistry] Error executing tool '{toolName}': {actualException.Message}", new() { Data = new { tool = toolName, exception = actualException.ToString() } });
                 throw actualException;
             }
             catch (Exception ex)
             {
+                PayloadStats.RecordCoverage(
+                    "tool_execution",
+                    toolName,
+                    meta: new { toolName },
+                    options: new PayloadStatOptions
+                    {
+                        EventKind = "tool_execution",
+                        RepresentationKind = "reference",
+                        PayloadClass = "tool_result",
+                        DurationMs = (int)(DateTime.UtcNow - startedAt).TotalMilliseconds,
+                        Success = false,
+                        ErrorKind = ex.GetType().Name,
+                        ErrorMessageShort = ex.Message,
+                        ExtraFields = new
+                        {
+                            toolName,
+                            requestBytes = parameterBytes
+                        }
+                    });
+                executionSpan.End(new
+                {
+                    success = false,
+                    durationMs = (int)(DateTime.UtcNow - startedAt).TotalMilliseconds,
+                    toolName,
+                    error = ex.GetType().Name,
+                    message = ex.Message
+                });
                 McpLog.Error($"[McpToolRegistry] Error executing tool '{toolName}': {ex.Message}", new() { Data = new { tool = toolName, exception = ex.ToString() } });
                 throw;
             }
