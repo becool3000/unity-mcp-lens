@@ -27,6 +27,18 @@ namespace Unity.AI.Assistant.Integrations.Profiler.Editor
             string sessionPath = null
         )
         {
+            if (string.IsNullOrEmpty(sessionPath) && !ProfilerUtils.HasInMemorySession())
+            {
+                try
+                {
+                    await ProfilerToolBootstrap.EnsureFrameDataAvailableAsync();
+                }
+                catch (InvalidOperationException)
+                {
+                    // Fall back to the existing capture-selection flow when no active in-memory session can be bootstrapped.
+                }
+            }
+
             // If a profiler window is already open with an in-memory session, keep using it
             if (EditorWindow.HasOpenInstances<ProfilerWindow>() && ProfilerUtils.HasInMemorySession())
             {

@@ -58,6 +58,11 @@ namespace Unity.AI.Assistant.Integrations.Profiler.Editor
 
         public static string GetSummary(FrameDataCache frameDataCache, Range frameRange, float targetFrameTime)
         {
+            var normalizedRange = NormalizeFrameRange(frameDataCache, frameRange);
+            if (!normalizedRange.HasValue)
+                return "No frame data available for the specified range.";
+
+            frameRange = normalizedRange.Value;
             var frameTimes = GetFrameTimes(frameDataCache, frameRange);
             if (frameTimes == null || frameTimes.Count == 0)
             {
@@ -133,11 +138,6 @@ namespace Unity.AI.Assistant.Integrations.Profiler.Editor
         private static List<FrameTime> GetFrameTimes(FrameDataCache frameDataCache, Range frameRange)
         {
             var frameTimes = new List<FrameTime>();
-            if (frameDataCache.FirstFrameIndex > frameRange.Start.Value)
-                frameRange = new Range(new Index(frameDataCache.FirstFrameIndex), frameRange.End);
-            var lastFrameIndex = frameDataCache.LastFrameIndex;
-            if (frameRange.End.Value > lastFrameIndex)
-                frameRange = new Range(frameRange.Start, new Index(lastFrameIndex));
 
             for (int frameIndex = frameRange.Start.Value; frameIndex <= frameRange.End.Value; frameIndex++)
             {
@@ -206,6 +206,24 @@ namespace Unity.AI.Assistant.Integrations.Profiler.Editor
             }
 
             return false;
+        }
+
+        private static Range? NormalizeFrameRange(FrameDataCache frameDataCache, Range frameRange)
+        {
+            var firstFrameIndex = frameDataCache.FirstFrameIndex;
+            var lastFrameIndex = frameDataCache.LastFrameIndex;
+            if (firstFrameIndex < 0 || lastFrameIndex < firstFrameIndex)
+                return null;
+
+            var normalizedStart = Math.Max(frameRange.Start.Value, firstFrameIndex);
+            var normalizedEnd = Math.Min(frameRange.End.Value, lastFrameIndex);
+            if (normalizedEnd < normalizedStart)
+            {
+                normalizedStart = firstFrameIndex;
+                normalizedEnd = lastFrameIndex;
+            }
+
+            return new Range(new Index(normalizedStart), new Index(normalizedEnd));
         }
     }
 }

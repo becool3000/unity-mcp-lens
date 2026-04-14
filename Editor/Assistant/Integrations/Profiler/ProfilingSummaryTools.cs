@@ -1,4 +1,5 @@
 using System;
+using System.Threading.Tasks;
 using Unity.AI.Assistant.Data;
 using Unity.AI.Assistant.FunctionCalling;
 using UnityEditor;
@@ -24,7 +25,7 @@ namespace Unity.AI.Assistant.Integrations.Profiler.Editor
             "Unity.Profiler.GetFrameRangeTopTimeSummary",
             assistantMode: AssistantMode.Agent | AssistantMode.Ask,
             Mcp = McpAvailability.Available)]
-        public static string GetFrameRangeTopTimeSummary(
+        public static async Task<string> GetFrameRangeTopTimeSummary(
             ToolExecutionContext context,
             [Parameter("The index of the first frame from which to get the summary")]
             int startFrameIndex,
@@ -34,6 +35,7 @@ namespace Unity.AI.Assistant.Integrations.Profiler.Editor
             float targetFrameTime
         )
         {
+            await ProfilerToolBootstrap.EnsureFrameDataAvailableAsync();
             var frameDataCache = context.Conversation.GetFrameDataCache();
             return FrameRangeTimeSummaryProvider.GetSummary(frameDataCache, new Range(startFrameIndex, lastFrameIndex), targetFrameTime);
         }
@@ -42,7 +44,7 @@ namespace Unity.AI.Assistant.Integrations.Profiler.Editor
             "Unity.Profiler.GetFrameTopTimeSamplesSummary",
             assistantMode: AssistantMode.Agent | AssistantMode.Ask,
             Mcp = McpAvailability.Available)]
-        public static string GetFrameTopTimeSamplesSummary(
+        public static async Task<string> GetFrameTopTimeSamplesSummary(
             ToolExecutionContext context,
             [Parameter("The index of the frame from which to get the summary")]
             int frameIndex,
@@ -50,6 +52,7 @@ namespace Unity.AI.Assistant.Integrations.Profiler.Editor
             float targetFrameTime
         )
         {
+            await ProfilerToolBootstrap.EnsureFrameDataAvailableAsync();
             var frameDataCache = context.Conversation.GetFrameDataCache();
             return FrameTimeSummaryProvider.GetSummary(frameDataCache, frameIndex, targetFrameTime);
         }
@@ -58,12 +61,13 @@ namespace Unity.AI.Assistant.Integrations.Profiler.Editor
             "Unity.Profiler.GetFrameSelfTimeSamplesSummary",
             assistantMode: AssistantMode.Agent | AssistantMode.Ask,
             Mcp = McpAvailability.Available)]
-        public static string GetFrameSelfTimeSamplesSummary(
+        public static async Task<string> GetFrameSelfTimeSamplesSummary(
             ToolExecutionContext context,
             [Parameter("The index of the frame from which to get the summary")]
             int frameIndex
         )
         {
+            await ProfilerToolBootstrap.EnsureFrameDataAvailableAsync();
             var frameDataCache = context.Conversation.GetFrameDataCache();
             return MostExpensiveSamplesInFrameSummaryProvider.GetSummary(frameDataCache, frameIndex);
         }
@@ -72,7 +76,7 @@ namespace Unity.AI.Assistant.Integrations.Profiler.Editor
             "Unity.Profiler.GetSampleTimeSummary",
             assistantMode: AssistantMode.Agent | AssistantMode.Ask,
             Mcp = McpAvailability.Available)]
-        public static string GetSampleTimeSummary(
+        public static async Task<string> GetSampleTimeSummary(
             ToolExecutionContext context,
             [Parameter("The index of the frame the sample belongs to")]
             int frameIndex,
@@ -82,6 +86,7 @@ namespace Unity.AI.Assistant.Integrations.Profiler.Editor
             int sampleIndex
         )
         {
+            await ProfilerToolBootstrap.EnsureFrameDataAvailableAsync();
             var frameDataCache = context.Conversation.GetFrameDataCache();
             return SampleTimeSummaryProvider.GetSummary(frameDataCache, frameIndex, threadName, sampleIndex, false);
         }
@@ -90,7 +95,7 @@ namespace Unity.AI.Assistant.Integrations.Profiler.Editor
             "Unity.Profiler.GetBottomUpSampleTimeSummary",
             assistantMode: AssistantMode.Agent | AssistantMode.Ask,
             Mcp = McpAvailability.Available)]
-        public static string GetBottomUpSampleTimeSummary(
+        public static async Task<string> GetBottomUpSampleTimeSummary(
             ToolExecutionContext context,
             [Parameter("The index of the frame the sample belongs to")]
             int frameIndex,
@@ -100,6 +105,7 @@ namespace Unity.AI.Assistant.Integrations.Profiler.Editor
             int bottomUpSampleIndex
         )
         {
+            await ProfilerToolBootstrap.EnsureFrameDataAvailableAsync();
             var frameDataCache = context.Conversation.GetFrameDataCache();
             return SampleTimeSummaryProvider.GetSummary(frameDataCache, frameIndex, threadName, bottomUpSampleIndex, true);
         }
@@ -108,7 +114,7 @@ namespace Unity.AI.Assistant.Integrations.Profiler.Editor
             "Unity.Profiler.GetSampleTimeSummaryByMarkerPath",
             assistantMode: AssistantMode.Agent | AssistantMode.Ask,
             Mcp = McpAvailability.Available)]
-        public static string GetSampleTimeSummaryByMarkerPath(
+        public static async Task<string> GetSampleTimeSummaryByMarkerPath(
             ToolExecutionContext context,
             [Parameter("The index of the frame the sample belongs to")]
             int frameIndex,
@@ -118,6 +124,7 @@ namespace Unity.AI.Assistant.Integrations.Profiler.Editor
             string markerIdPath
         )
         {
+            await ProfilerToolBootstrap.EnsureFrameDataAvailableAsync();
             var frameDataCache = context.Conversation.GetFrameDataCache();
             return SampleTimeSummaryProvider.GetSummary(frameDataCache, frameIndex, threadName, markerIdPath);
         }
@@ -126,7 +133,7 @@ namespace Unity.AI.Assistant.Integrations.Profiler.Editor
             "Unity.Profiler.GetRelatedSamplesTimeSummary",
             assistantMode: AssistantMode.Agent | AssistantMode.Ask,
             Mcp = McpAvailability.Available)]
-        public static string GetRelatedSamplesTimeSummary(
+        public static async Task<string> GetRelatedSamplesTimeSummary(
             ToolExecutionContext context,
             [Parameter("The index of the frame the samples belongs to")]
             int frameIndex,
@@ -138,6 +145,7 @@ namespace Unity.AI.Assistant.Integrations.Profiler.Editor
             string relatedThreadName
         )
         {
+            await ProfilerToolBootstrap.EnsureFrameDataAvailableAsync();
             var frameDataCache = context.Conversation.GetFrameDataCache();
             return SampleTimeSummaryProvider.GetRelatedThreadSummary(frameDataCache, frameIndex, threadName, sampleIndex, relatedThreadName, false);
         }
@@ -148,8 +156,9 @@ namespace Unity.AI.Assistant.Integrations.Profiler.Editor
             "Unity.Profiler.GetOverallGcAllocationsSummary",
             assistantMode: AssistantMode.Agent | AssistantMode.Ask,
             Mcp = McpAvailability.Available)]
-        public static string GetOverallGcAllocationsSummary(ToolExecutionContext context)
+        public static async Task<string> GetOverallGcAllocationsSummary(ToolExecutionContext context)
         {
+            await ProfilerToolBootstrap.EnsureFrameDataAvailableAsync();
             var frameDataCache = context.Conversation.GetFrameDataCache();
             return FrameRangeGcAllocationSummaryProvider.GetSummary(frameDataCache, new Range(frameDataCache.FirstFrameIndex, frameDataCache.LastFrameIndex), k_GcMemoryAllocationThreshold);
         }
@@ -158,12 +167,13 @@ namespace Unity.AI.Assistant.Integrations.Profiler.Editor
             "Unity.Profiler.GetFrameGcAllocationsSummary",
             assistantMode: AssistantMode.Agent | AssistantMode.Ask,
             Mcp = McpAvailability.Available)]
-        public static string GetFrameGcAllocationsSummary(
+        public static async Task<string> GetFrameGcAllocationsSummary(
             ToolExecutionContext context,
             [Parameter("The index of the frame from which to get the summary")]
             int frameIndex
         )
         {
+            await ProfilerToolBootstrap.EnsureFrameDataAvailableAsync();
             var frameDataCache = context.Conversation.GetFrameDataCache();
             return FrameGcAllocationSummaryProvider.GetSummary(frameDataCache, frameIndex, k_GcMemoryAllocationThreshold);
         }
@@ -172,7 +182,7 @@ namespace Unity.AI.Assistant.Integrations.Profiler.Editor
             "Unity.Profiler.GetFrameRangeGcAllocationsSummary",
             assistantMode: AssistantMode.Agent | AssistantMode.Ask,
             Mcp = McpAvailability.Available)]
-        public static string GetFrameRangeGcAllocationsSummary(
+        public static async Task<string> GetFrameRangeGcAllocationsSummary(
             ToolExecutionContext context,
             [Parameter("The index of the first frame from which to get the summary")]
             int startFrameIndex,
@@ -180,6 +190,7 @@ namespace Unity.AI.Assistant.Integrations.Profiler.Editor
             int lastFrameIndex
         )
         {
+            await ProfilerToolBootstrap.EnsureFrameDataAvailableAsync();
             var frameDataCache = context.Conversation.GetFrameDataCache();
             return FrameRangeGcAllocationSummaryProvider.GetSummary(frameDataCache, new Range(startFrameIndex, lastFrameIndex), k_GcMemoryAllocationThreshold);
         }
@@ -188,7 +199,7 @@ namespace Unity.AI.Assistant.Integrations.Profiler.Editor
             "Unity.Profiler.GetSampleGcAllocationSummary",
             assistantMode: AssistantMode.Agent | AssistantMode.Ask,
             Mcp = McpAvailability.Available)]
-        public static string GetSampleGcAllocationSummary(
+        public static async Task<string> GetSampleGcAllocationSummary(
             ToolExecutionContext context,
             [Parameter("The index of the frame the sample belongs to")]
             int frameIndex,
@@ -198,6 +209,7 @@ namespace Unity.AI.Assistant.Integrations.Profiler.Editor
             int sampleIndex
         )
         {
+            await ProfilerToolBootstrap.EnsureFrameDataAvailableAsync();
             var frameDataCache = context.Conversation.GetFrameDataCache();
             return SampleGcAllocationSummaryProvider.GetSummary(frameDataCache, frameIndex, threadName, sampleIndex);
         }
@@ -206,7 +218,7 @@ namespace Unity.AI.Assistant.Integrations.Profiler.Editor
             "Unity.Profiler.GetSampleGcAllocationSummaryByMarkerPath",
             assistantMode: AssistantMode.Agent | AssistantMode.Ask,
             Mcp = McpAvailability.Available)]
-        public static string GetSampleGcAllocationSummaryByMarkerPath(
+        public static async Task<string> GetSampleGcAllocationSummaryByMarkerPath(
             ToolExecutionContext context,
             [Parameter("The index of the frame the sample belongs to")]
             int frameIndex,
@@ -216,6 +228,7 @@ namespace Unity.AI.Assistant.Integrations.Profiler.Editor
             string markerIdPath
         )
         {
+            await ProfilerToolBootstrap.EnsureFrameDataAvailableAsync();
             var frameDataCache = context.Conversation.GetFrameDataCache();
             return SampleGcAllocationSummaryProvider.GetSummary(frameDataCache, frameIndex, threadName, markerIdPath);
         }

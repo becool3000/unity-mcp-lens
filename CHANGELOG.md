@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [2.3.0-pre.2] - 2026-03-23
 
+### Added
+
+- Added MCP-safe headless tile tools for classic Tile assets, Unity 6 `.tileset` generation, tilemap stack setup, and batched tilemap painting.
+
 ### Fixed
 
 - Fixed What's new banner not loading correctly.

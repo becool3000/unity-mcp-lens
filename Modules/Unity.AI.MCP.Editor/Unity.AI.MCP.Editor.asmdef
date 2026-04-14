@@ -10,7 +10,8 @@
         "Unity.AI.Toolkit.Async",
         "Unity.AI.Assistant.Tools.Editor",
         "Unity.AI.Tracing",
-        "Unity.ugui"
+        "Unity.ugui",
+        "Unity.2D.Tilemap.Editor"
     ],
     "includePlatforms": [
         "Editor"
