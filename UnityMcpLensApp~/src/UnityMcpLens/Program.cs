@@ -1,8 +1,8 @@
 using System.Text.Json;
 
-namespace UnityMcpServer;
+namespace UnityMcpLens;
 
-sealed class UnityMcpServerHost
+sealed class UnityMcpLensHost
 {
     sealed class CachedToolSchema
     {
@@ -87,7 +87,7 @@ sealed class UnityMcpServerHost
                         },
                         serverInfo = new
                         {
-                            name = "unity-mcp-vnext",
+                            name = "unity-mcp-lens",
                             version = "0.1.0-alpha.1"
                         }
                     }
@@ -141,7 +141,7 @@ sealed class UnityMcpServerHost
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"[unity-mcp-vnext] tools/list bridge bootstrap failed: {ex.Message}");
+            Console.Error.WriteLine($"[unity-mcp-lens] tools/list bridge bootstrap failed: {ex.Message}");
         }
 
         var tools = m_ToolCache.Values
@@ -281,9 +281,9 @@ sealed class UnityMcpServerHost
         m_BridgeClient.ToolsChanged += HandleBridgeToolsChangedAsync;
         await m_BridgeClient.ConnectAsync(discoveryResult, cancellationToken).ConfigureAwait(false);
 
-        var registerEnvelope = await m_BridgeClient.RegisterClientAsync("unity-mcp-vnext", "0.1.0-alpha.1", "Unity MCP VNext", cancellationToken).ConfigureAwait(false);
+        var registerEnvelope = await m_BridgeClient.RegisterClientAsync("unity-mcp-lens", "0.1.0-alpha.1", "Unity MCP Lens", cancellationToken).ConfigureAwait(false);
         if (!string.Equals(registerEnvelope.Status, "success", StringComparison.OrdinalIgnoreCase) || registerEnvelope.Result == null)
-            throw new InvalidOperationException(registerEnvelope.Error ?? "Unity bridge rejected VNext client registration.");
+            throw new InvalidOperationException(registerEnvelope.Error ?? "Unity bridge rejected Lens client registration.");
 
         m_BridgeSessionId = registerEnvelope.Result.BridgeSessionId;
         m_ManifestVersion = registerEnvelope.Result.ManifestVersion;
@@ -313,7 +313,7 @@ sealed class UnityMcpServerHost
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"[unity-mcp-vnext] tools_changed refresh failed: {ex.Message}");
+            Console.Error.WriteLine($"[unity-mcp-lens] tools_changed refresh failed: {ex.Message}");
         }
     }
 
@@ -564,7 +564,7 @@ internal static class Program
             cts.Cancel();
         };
 
-        var host = new UnityMcpServerHost();
+        var host = new UnityMcpLensHost();
         await host.RunAsync(cts.Token).ConfigureAwait(false);
     }
 }

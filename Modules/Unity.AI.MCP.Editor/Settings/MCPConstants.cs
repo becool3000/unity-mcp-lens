@@ -46,7 +46,7 @@ namespace Unity.AI.MCP.Editor.Settings
         /// <summary>
         /// Path to the owned MCP-only server source/bundled assets directory.
         /// </summary>
-        public static string unityMcpServerAppPath = $"Packages/{packageName}/UnityMcpServerApp~";
+        public static string unityMcpLensAppPath = $"Packages/{packageName}/UnityMcpLensApp~";
 
         /// <summary>
         /// Path to the UI template files for settings.
@@ -59,7 +59,7 @@ namespace Unity.AI.MCP.Editor.Settings
         /// </summary>
         public static string jsonKeyIntegration = "unity-mcp";
         public static string jsonKeyIntegrationLegacy = "unity-mcp-legacy";
-        public static string jsonKeyIntegrationVNext = "unity-mcp-vnext";
+        public static string jsonKeyIntegrationLens = "unity-mcp-lens";
 
         // Relay Installation
         /// <summary>
@@ -67,7 +67,7 @@ namespace Unity.AI.MCP.Editor.Settings
         /// The relay binary is copied here so MCP clients can reference a stable location.
         /// </summary>
         public static string relayBaseDirectoryName = ".unity/relay";
-        public static string unityMcpBaseDirectoryName = ".unity/unity-mcp";
+        public static string unityMcpBaseDirectoryName = ".unity/unity-mcp-lens";
 
         /// <summary>
         /// Gets the relay installation directory (~/.unity/relay).
@@ -147,27 +147,27 @@ namespace Unity.AI.MCP.Editor.Settings
             }
         }
 
-        public static string VNextMetadataFileName => "unity-mcp-server.json";
+        public static string LensMetadataFileName => "unity-mcp-lens.json";
 
-        public static string VNextInstalledMetadataFile => Path.Combine(UnityMcpBaseDirectory, VNextMetadataFileName);
+        public static string LensInstalledMetadataFile => Path.Combine(UnityMcpBaseDirectory, LensMetadataFileName);
 
-        public static string VNextInstalledServerMainFile
+        public static string LensInstalledServerMainFile
         {
             get
             {
                 string serverPath = UnityMcpBaseDirectory;
 
                 if (PlatformUtils.IsWindows)
-                    return Path.Combine(serverPath, "unity_mcp_server_win.exe");
+                    return Path.Combine(serverPath, "unity_mcp_lens_win.exe");
                 if (PlatformUtils.IsLinux)
-                    return Path.Combine(serverPath, "unity_mcp_server_linux");
+                    return Path.Combine(serverPath, "unity_mcp_lens_linux");
                 if (PlatformUtils.IsMacOS)
                 {
                     string arch = RuntimeInformation.ProcessArchitecture == Architecture.Arm64 ? "arm64" : "x64";
-                    return Path.Combine(serverPath, $"unity_mcp_server_mac_{arch}");
+                    return Path.Combine(serverPath, $"unity_mcp_lens_mac_{arch}");
                 }
 
-                return Path.Combine(serverPath, "unity_mcp_server_linux");
+                return Path.Combine(serverPath, "unity_mcp_lens_linux");
             }
         }
 
@@ -195,11 +195,11 @@ namespace Unity.AI.MCP.Editor.Settings
             }
         }
 
-        internal static string BundledVNextProjectFile =>
-            Path.Combine(Path.GetFullPath(unityMcpServerAppPath), "src", "UnityMcpServer", "UnityMcpServer.csproj");
+        internal static string BundledLensProjectFile =>
+            Path.Combine(Path.GetFullPath(unityMcpLensAppPath), "src", "UnityMcpLens", "UnityMcpLens.csproj");
 
-        internal static string BundledVNextMetadataFile =>
-            Path.Combine(Path.GetFullPath(unityMcpServerAppPath), VNextMetadataFileName);
+        internal static string BundledLensMetadataFile =>
+            Path.Combine(Path.GetFullPath(unityMcpLensAppPath), LensMetadataFileName);
 
 
         /// <summary>

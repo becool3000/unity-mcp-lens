@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Unity.AI.Assistant.Utils;
 
-namespace Unity.AI.MCP.Editor.VNext
+namespace Unity.AI.MCP.Editor.Lens
 {
     sealed class ToolPackDefinition
     {

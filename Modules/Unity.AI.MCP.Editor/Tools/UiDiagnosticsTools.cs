@@ -7,7 +7,7 @@ using Unity.AI.Assistant.Editor.Context;
 using Unity.AI.Assistant.Utils;
 using Unity.AI.MCP.Editor.Helpers;
 using Unity.AI.MCP.Editor.ToolRegistry;
-using Unity.AI.MCP.Editor.VNext;
+using Unity.AI.MCP.Editor.Lens;
 using Unity.AI.MCP.Editor.Tools.Parameters;
 using UnityEditor;
 using UnityEngine;

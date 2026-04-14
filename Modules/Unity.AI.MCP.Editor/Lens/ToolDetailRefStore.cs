@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace Unity.AI.MCP.Editor.VNext
+namespace Unity.AI.MCP.Editor.Lens
 {
     sealed class StoredDetailPayload
     {

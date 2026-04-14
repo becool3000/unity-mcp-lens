@@ -1,7 +1,7 @@
 using System.Text;
 using System.Text.Json;
 
-namespace UnityMcpServer;
+namespace UnityMcpLens;
 
 static class StdioJsonRpc
 {

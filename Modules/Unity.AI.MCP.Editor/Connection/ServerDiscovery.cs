@@ -162,7 +162,7 @@ namespace Unity.AI.MCP.Editor.Helpers
             string bridgeSessionId = null,
             long manifestVersion = 0,
             string profileCatalogVersion = null,
-            bool supportsToolSyncVNext = false,
+            bool supportsToolSyncLens = false,
             string lastToolsChangedUtc = null)
         {
             try
@@ -187,7 +187,7 @@ namespace Unity.AI.MCP.Editor.Helpers
                     bridge_session_id = bridgeSessionId,
                     manifest_version = manifestVersion,
                     profile_catalog_version = profileCatalogVersion,
-                    supports_tool_sync_vnext = supportsToolSyncVNext,
+                    supports_tool_sync_lens = supportsToolSyncLens,
                     last_tools_changed_utc = lastToolsChangedUtc,
                     project_path = Application.dataPath,
                     last_heartbeat = DateTime.UtcNow.ToString("O"),

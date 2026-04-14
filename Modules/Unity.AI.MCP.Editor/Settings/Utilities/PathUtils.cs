@@ -34,7 +34,7 @@ namespace Unity.AI.MCP.Editor.Settings.Utilities
             }
         }
 
-        public static string GetVNextServerPath()
+        public static string GetLensServerPath()
         {
             try
             {
@@ -52,10 +52,10 @@ namespace Unity.AI.MCP.Editor.Settings.Utilities
 
 
         public static void OpenServerMainFile() => EditorUtility.RevealInFinder(GetServerMainFile());
-        public static void OpenVNextServerMainFile() => EditorUtility.RevealInFinder(GetVNextServerMainFile());
+        public static void OpenLensServerMainFile() => EditorUtility.RevealInFinder(GetLensServerMainFile());
 
         public static string GetServerMainFile() => MCPConstants.InstalledServerMainFile;
-        public static string GetVNextServerMainFile() => MCPConstants.VNextInstalledServerMainFile;
+        public static string GetLensServerMainFile() => MCPConstants.LensInstalledServerMainFile;
 
         public static string GetServerMainFile(string serverPath)
         {
@@ -69,9 +69,9 @@ namespace Unity.AI.MCP.Editor.Settings.Utilities
             return File.Exists(MCPConstants.InstalledServerMainFile);
         }
 
-        public static bool IsVNextServerInstalled()
+        public static bool IsLensServerInstalled()
         {
-            return File.Exists(MCPConstants.VNextInstalledServerMainFile);
+            return File.Exists(MCPConstants.LensInstalledServerMainFile);
         }
 
         public static string GetProjectDirectory()

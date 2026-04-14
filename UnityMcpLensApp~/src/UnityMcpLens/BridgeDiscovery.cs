@@ -1,6 +1,6 @@
 using System.Text.Json;
 
-namespace UnityMcpServer;
+namespace UnityMcpLens;
 
 sealed class BridgeDiscoveryResult
 {
@@ -44,7 +44,7 @@ static class BridgeDiscovery
             return null;
 
         return candidates
-            .OrderByDescending(candidate => candidate.StatusFile.SupportsToolSyncVNext)
+            .OrderByDescending(candidate => candidate.StatusFile.SupportsToolSyncLens)
             .ThenByDescending(candidate => IsHealthyStatus(candidate.StatusFile.Status))
             .ThenByDescending(candidate => IsPathMatch(candidate.ProjectRoot, normalizedCwd))
             .ThenByDescending(candidate => ParseUtc(candidate.StatusFile.LastHeartbeat))

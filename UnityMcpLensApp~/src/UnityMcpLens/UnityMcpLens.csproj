@@ -5,7 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
-    <AssemblyName>UnityMcpServer</AssemblyName>
-    <RootNamespace>UnityMcpServer</RootNamespace>
+    <AssemblyName>UnityMcpLens</AssemblyName>
+    <RootNamespace>UnityMcpLens</RootNamespace>
   </PropertyGroup>
 </Project>

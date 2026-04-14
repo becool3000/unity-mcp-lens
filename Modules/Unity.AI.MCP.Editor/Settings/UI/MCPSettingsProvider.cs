@@ -8,7 +8,7 @@ using Unity.AI.MCP.Editor.Models;
 using Unity.AI.MCP.Editor.Settings.Utilities;
 using Unity.AI.MCP.Editor.Settings.UI;
 using Unity.AI.MCP.Editor.ToolRegistry;
-using Unity.AI.MCP.Editor.VNext;
+using Unity.AI.MCP.Editor.Lens;
 using Unity.AI.MCP.Editor.Constants;
 using Unity.AI.MCP.Editor.Helpers;
 using Unity.AI.MCP.Editor.Security;
@@ -50,8 +50,8 @@ namespace Unity.AI.MCP.Editor.Settings
         Label m_LegacyRelayDescription;
         Label m_ConnectionPolicyLabel;
         Label m_ToolRegistrySummary;
-        Label m_DefaultVNextExportSummary;
-        Label m_ActiveVNextExportSummary;
+        Label m_DefaultLensExportSummary;
+        Label m_ActiveLensExportSummary;
         Button m_LocateServer;
 
         public MCPSettingsProvider(string path, SettingsScope scope = SettingsScope.Project)
@@ -150,8 +150,8 @@ namespace Unity.AI.MCP.Editor.Settings
             m_LegacyRelayDescription = m_RootElement.Q<Label>("legacyRelayDescription");
             m_ConnectionPolicyLabel = m_RootElement.Q<Label>("connectionPolicyLabel");
             m_ToolRegistrySummary = m_RootElement.Q<Label>("toolRegistrySummary");
-            m_DefaultVNextExportSummary = m_RootElement.Q<Label>("defaultVNextExportSummary");
-            m_ActiveVNextExportSummary = m_RootElement.Q<Label>("activeVNextExportSummary");
+            m_DefaultLensExportSummary = m_RootElement.Q<Label>("defaultLensExportSummary");
+            m_ActiveLensExportSummary = m_RootElement.Q<Label>("activeLensExportSummary");
 
             // Set initial values and bind events
             m_DebugLogsToggle.value = TraceCategories.IsEnabled("mcp");
@@ -288,15 +288,15 @@ namespace Unity.AI.MCP.Editor.Settings
                     : $"Internal registry: {bridgeFacingToolCount} enabled bridge-facing tools ({enabledCount} of {allTools.Length} currently enabled in settings).";
             }
 
-            if (m_DefaultVNextExportSummary != null)
+            if (m_DefaultLensExportSummary != null)
             {
-                m_DefaultVNextExportSummary.text = $"Default VNext export: {defaultExportCount} tools in the foundation pack.";
+                m_DefaultLensExportSummary.text = $"Default Lens export: {defaultExportCount} tools in the foundation pack.";
             }
 
-            if (m_ActiveVNextExportSummary != null)
+            if (m_ActiveLensExportSummary != null)
             {
-                var activeExports = BridgeVNextSessionRegistry.GetConnectionStatesSnapshot()
-                    .Where(state => state.Capabilities?.SupportsToolSyncVNext == true)
+                var activeExports = BridgeLensSessionRegistry.GetConnectionStatesSnapshot()
+                    .Where(state => state.Capabilities?.SupportsToolSyncLens == true)
                     .Select(state => new
                     {
                         state.ConnectionId,
@@ -307,20 +307,20 @@ namespace Unity.AI.MCP.Editor.Settings
 
                 if (activeExports.Length == 0)
                 {
-                    m_ActiveVNextExportSummary.text = "Active VNext export: no connected VNext clients. New sessions start with the foundation pack only.";
+                    m_ActiveLensExportSummary.text = "Active Lens export: no connected Lens clients. New sessions start with the foundation pack only.";
                 }
                 else if (activeExports.Length == 1)
                 {
                     var activeExport = activeExports[0];
-                    m_ActiveVNextExportSummary.text =
-                        $"Active VNext export: {activeExport.ExportedToolCount} tools for 1 connected VNext client ({string.Join(" + ", activeExport.ActiveToolPacks)}).";
+                    m_ActiveLensExportSummary.text =
+                        $"Active Lens export: {activeExport.ExportedToolCount} tools for 1 connected Lens client ({string.Join(" + ", activeExport.ActiveToolPacks)}).";
                 }
                 else
                 {
                     var summaries = activeExports.Select(activeExport =>
                         $"{activeExport.ConnectionId}: {activeExport.ExportedToolCount} tools ({string.Join(" + ", activeExport.ActiveToolPacks)})");
-                    m_ActiveVNextExportSummary.text =
-                        $"Active VNext exports: {activeExports.Length} connected clients. {string.Join(" | ", summaries)}";
+                    m_ActiveLensExportSummary.text =
+                        $"Active Lens exports: {activeExports.Length} connected clients. {string.Join(" | ", summaries)}";
                 }
             }
         }
@@ -573,7 +573,7 @@ namespace Unity.AI.MCP.Editor.Settings
 
             m_LegacyRelayDescription.text = enabled
                 ? "Assistant/Gateway relay install and auto-start are enabled for this project."
-                : "MCP-only mode is active for this project. The legacy Unity relay will not install or auto-start; Codex should use unity-mcp-vnext instead.";
+                : "MCP-only mode is active for this project. The legacy Unity relay will not install or auto-start; Codex should use unity-mcp-lens instead.";
         }
 
         void EnsureBridgeAutoStart()

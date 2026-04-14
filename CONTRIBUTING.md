@@ -30,7 +30,7 @@ Because the repository includes bundled binaries tracked with Git LFS, clone it 
 
 ```bash
 git lfs install
-git clone https://github.com/becool3000/unity-ai-assistant-patch.git
+git clone https://github.com/becool3000/unity-mcp-lens.git
 ```
 
 To use the package in a Unity project, point `Packages/manifest.json` at a local checkout:

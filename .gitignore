@@ -7,3 +7,7 @@ Thumbs.db
 .codex-temp/
 UnityMcpServerApp~/src/UnityMcpServer/bin/
 UnityMcpServerApp~/src/UnityMcpServer/obj/
+UnityMcpLensApp~/src/UnityMcpLens/bin/
+UnityMcpLensApp~/src/UnityMcpLens/obj/
+Tools~/UnityMcpLensPackSwitchBenchApp~/bin/
+Tools~/UnityMcpLensPackSwitchBenchApp~/obj/

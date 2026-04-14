@@ -5,7 +5,7 @@ using Newtonsoft.Json;
 using Unity.AI.Assistant.Utils;
 using Unity.AI.MCP.Editor.ToolRegistry;
 
-namespace Unity.AI.MCP.Editor.VNext
+namespace Unity.AI.MCP.Editor.Lens
 {
     sealed class BridgeToolDescriptor
     {
@@ -164,20 +164,20 @@ namespace Unity.AI.MCP.Editor.VNext
             {
                 EnsureCurrentSnapshotLocked();
 
-                var activeToolPacks = BridgeVNextSessionRegistry.GetActiveToolPacks(connectionId);
+                var activeToolPacks = BridgeLensSessionRegistry.GetActiveToolPacks(connectionId);
                 var filteredCurrent = FilterToolsForPacks(s_CurrentTools, activeToolPacks, includeSchemas);
                 var currentHashes = ComputeHashes(filteredCurrent);
 
                 if (!string.Equals(knownBridgeSessionId, s_BridgeSessionId, StringComparison.OrdinalIgnoreCase) ||
                     !knownManifestVersion.HasValue)
                 {
-                    BridgeVNextSessionRegistry.UpdateAcknowledgedManifest(connectionId, s_BridgeSessionId, s_ManifestVersion);
+                    BridgeLensSessionRegistry.UpdateAcknowledgedManifest(connectionId, s_BridgeSessionId, s_ManifestVersion);
                     return CreateFullResult(filteredCurrent, activeToolPacks, currentHashes, "bootstrap");
                 }
 
                 if (knownManifestVersion.Value == s_ManifestVersion)
                 {
-                    BridgeVNextSessionRegistry.UpdateAcknowledgedManifest(connectionId, s_BridgeSessionId, s_ManifestVersion);
+                    BridgeLensSessionRegistry.UpdateAcknowledgedManifest(connectionId, s_BridgeSessionId, s_ManifestVersion);
                     return new BridgeManifestResult
                     {
                         bridgeSessionId = s_BridgeSessionId,
@@ -194,13 +194,13 @@ namespace Unity.AI.MCP.Editor.VNext
                 var previousHistoryEntry = s_History.FirstOrDefault(entry => entry.Version == knownManifestVersion.Value);
                 if (previousHistoryEntry == null)
                 {
-                    BridgeVNextSessionRegistry.UpdateAcknowledgedManifest(connectionId, s_BridgeSessionId, s_ManifestVersion);
+                    BridgeLensSessionRegistry.UpdateAcknowledgedManifest(connectionId, s_BridgeSessionId, s_ManifestVersion);
                     return CreateFullResult(filteredCurrent, activeToolPacks, currentHashes, "history_miss");
                 }
 
                 var filteredPrevious = FilterToolsForPacks(previousHistoryEntry.Tools, activeToolPacks, includeSchemas);
                 var delta = BuildDelta(filteredPrevious, filteredCurrent);
-                BridgeVNextSessionRegistry.UpdateAcknowledgedManifest(connectionId, s_BridgeSessionId, s_ManifestVersion);
+                BridgeLensSessionRegistry.UpdateAcknowledgedManifest(connectionId, s_BridgeSessionId, s_ManifestVersion);
                 return new BridgeManifestResult
                 {
                     bridgeSessionId = s_BridgeSessionId,
@@ -223,7 +223,7 @@ namespace Unity.AI.MCP.Editor.VNext
             out string error)
         {
             error = null;
-            if (!BridgeVNextSessionRegistry.TrySetActiveToolPacks(connectionId, requestedPacks, out var normalizedPacks, out error))
+            if (!BridgeLensSessionRegistry.TrySetActiveToolPacks(connectionId, requestedPacks, out var normalizedPacks, out error))
                 return null;
 
             lock (s_Lock)
@@ -231,7 +231,7 @@ namespace Unity.AI.MCP.Editor.VNext
                 EnsureCurrentSnapshotLocked();
                 var filteredCurrent = FilterToolsForPacks(s_CurrentTools, normalizedPacks, includeSchemas);
                 var currentHashes = ComputeHashes(filteredCurrent);
-                BridgeVNextSessionRegistry.UpdateAcknowledgedManifest(connectionId, s_BridgeSessionId, s_ManifestVersion);
+                BridgeLensSessionRegistry.UpdateAcknowledgedManifest(connectionId, s_BridgeSessionId, s_ManifestVersion);
                 return CreateFullResult(filteredCurrent, normalizedPacks, currentHashes, "tool_packs_updated");
             }
         }
@@ -243,12 +243,12 @@ namespace Unity.AI.MCP.Editor.VNext
                 EnsureCurrentSnapshotLocked();
 
                 var requestedNames = new HashSet<string>(toolNames ?? Array.Empty<string>(), StringComparer.OrdinalIgnoreCase);
-                var activeToolPacks = BridgeVNextSessionRegistry.GetActiveToolPacks(connectionId);
+                var activeToolPacks = BridgeLensSessionRegistry.GetActiveToolPacks(connectionId);
                 var filteredTools = FilterToolsForPacks(s_CurrentTools, activeToolPacks, includeSchemas: true)
                     .Where(tool => requestedNames.Contains(tool.name))
                     .ToArray();
 
-                BridgeVNextSessionRegistry.UpdateAcknowledgedManifest(connectionId, s_BridgeSessionId, s_ManifestVersion);
+                BridgeLensSessionRegistry.UpdateAcknowledgedManifest(connectionId, s_BridgeSessionId, s_ManifestVersion);
                 return new BridgeToolSchemasResult
                 {
                     bridgeSessionId = s_BridgeSessionId,

@@ -15,7 +15,7 @@ using Unity.AI.Assistant.Utils;
 using Unity.AI.MCP.Editor.Helpers;
 using Unity.AI.MCP.Editor.ToolRegistry; // For Response class
 using Unity.AI.MCP.Editor.ToolRegistry.Parameters;
-using Unity.AI.MCP.Editor.VNext;
+using Unity.AI.MCP.Editor.Lens;
 using Unity.AI.MCP.Runtime.Serialization;
 
 namespace Unity.AI.MCP.Editor.Tools

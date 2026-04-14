@@ -15,7 +15,7 @@ using Unity.AI.MCP.Editor.Security;
 using Unity.AI.MCP.Editor.Settings;
 using Unity.AI.MCP.Editor.ToolRegistry;
 using Unity.AI.MCP.Editor.UI;
-using Unity.AI.MCP.Editor.VNext;
+using Unity.AI.MCP.Editor.Lens;
 using Unity.AI.Assistant.Editor.Acp;
 using Unity.AI.Assistant.Utils;
 using Unity.AI.Tracing;
@@ -400,7 +400,7 @@ namespace Unity.AI.MCP.Editor
             McpLog.ClearOnceKeys();
             foreach (var c in toClose)
             {
-                BridgeVNextSessionRegistry.ReleaseConnection(c.ConnectionId);
+                BridgeLensSessionRegistry.ReleaseConnection(c.ConnectionId);
                 try { c.Close(); c.Dispose(); } catch { }
             }
 
@@ -1004,7 +1004,7 @@ namespace Unity.AI.MCP.Editor
                     }
 
                     ToolExecutionContextFactory.ReleaseExternalConversation(transport.ConnectionId);
-                    BridgeVNextSessionRegistry.ReleaseConnection(transport.ConnectionId);
+                    BridgeLensSessionRegistry.ReleaseConnection(transport.ConnectionId);
 
                     // Notify listeners on main thread that a client disconnected
                     if (clientRemoved)
@@ -1714,15 +1714,15 @@ namespace Unity.AI.MCP.Editor
                 ConnectionRegistry.instance.UpdateClientInfo(identityKey, clientInfo);
         }
 
-        static BridgeVNextClientCapabilities ParseVNextCapabilities(JObject parameters)
+        static BridgeLensClientCapabilities ParseLensCapabilities(JObject parameters)
         {
             if (parameters == null)
-                return BridgeVNextClientCapabilities.Default;
+                return BridgeLensClientCapabilities.Default;
 
             var capabilitiesToken = parameters["capabilities"] as JObject ?? parameters;
-            return new BridgeVNextClientCapabilities
+            return new BridgeLensClientCapabilities
             {
-                SupportsToolSyncVNext = capabilitiesToken.Value<bool?>("supportsToolSyncVNext") ?? false,
+                SupportsToolSyncLens = capabilitiesToken.Value<bool?>("supportsToolSyncLens") ?? false,
                 SupportsToolDeltas = capabilitiesToken.Value<bool?>("supportsToolDeltas") ?? false,
                 SupportsToolProfiles = capabilitiesToken.Value<bool?>("supportsToolProfiles") ?? false,
                 SupportsLazySchemas = capabilitiesToken.Value<bool?>("supportsLazySchemas") ?? false
@@ -1736,23 +1736,23 @@ namespace Unity.AI.MCP.Editor
                 status.BridgeSessionId,
                 status.ManifestVersion,
                 status.ProfileCatalogVersion,
-                supportsToolSyncVNext: true,
+                supportsToolSyncLens: true,
                 status.LastToolsChangedUtc);
         }
 
-        async Task NotifyVNextClientsAsync(BridgeToolsChangedNotification notification, CancellationToken cancellationToken)
+        async Task NotifyLensClientsAsync(BridgeToolsChangedNotification notification, CancellationToken cancellationToken)
         {
             if (notification == null)
                 return;
 
             var notificationJson = JsonConvert.SerializeObject(notification, Formatting.None);
-            var vNextConnectionIds = new HashSet<string>(BridgeVNextSessionRegistry.GetToolSyncConnectionIds(), StringComparer.Ordinal);
+            var lensConnectionIds = new HashSet<string>(BridgeLensSessionRegistry.GetToolSyncConnectionIds(), StringComparer.Ordinal);
             IConnectionTransport[] transports;
 
             lock (clientsLock)
             {
                 transports = identityToTransportMap.Values
-                    .Where(transport => transport != null && vNextConnectionIds.Contains(transport.ConnectionId))
+                    .Where(transport => transport != null && lensConnectionIds.Contains(transport.ConnectionId))
                     .ToArray();
             }
 
@@ -1767,7 +1767,7 @@ namespace Unity.AI.MCP.Editor
                 }
                 catch (Exception ex)
                 {
-                    McpLog.LogDelayed($"Failed to notify VNext client {transport.ConnectionId} about tool changes: {ex.Message}", LogType.Warning);
+                    McpLog.LogDelayed($"Failed to notify Lens client {transport.ConnectionId} about tool changes: {ex.Message}", LogType.Warning);
                 }
             }
         }
@@ -1928,17 +1928,17 @@ namespace Unity.AI.MCP.Editor
 
                 if (command.type.Equals("register_client", StringComparison.OrdinalIgnoreCase))
                 {
-                    string name = command.@params?.Value<string>("name") ?? "unity-mcp-vnext";
+                    string name = command.@params?.Value<string>("name") ?? "unity-mcp-lens";
                     string version = command.@params?.Value<string>("version") ?? "unknown";
                     string title = command.@params?.Value<string>("title");
-                    var capabilities = ParseVNextCapabilities(command.@params);
+                    var capabilities = ParseLensCapabilities(command.@params);
 
                     UpdateClientInfoRecord(client, name, version, title);
-                    var state = BridgeVNextSessionRegistry.RegisterOrUpdateConnection(client.ConnectionId, name, version, title, capabilities);
+                    var state = BridgeLensSessionRegistry.RegisterOrUpdateConnection(client.ConnectionId, name, version, title, capabilities);
                     UpdateBridgeToolSyncStatus();
 
                     string displayName = string.IsNullOrEmpty(title) ? name : title;
-                    McpLog.Log($"Registered VNext MCP client: {displayName} v{version}");
+                    McpLog.Log($"Registered Lens MCP client: {displayName} v{version}");
 
                     var status = BridgeManifestBroker.GetStatus();
                     return ReturnResponse(JsonConvert.SerializeObject(new
@@ -1946,12 +1946,12 @@ namespace Unity.AI.MCP.Editor
                         status = "success",
                         result = new
                         {
-                            message = "VNext client registered",
+                            message = "Lens client registered",
                             bridgeSessionId = status.BridgeSessionId,
                             manifestVersion = status.ManifestVersion,
                             profileCatalogVersion = status.ProfileCatalogVersion,
                             activeToolPacks = state.ActiveToolPacks,
-                            supportsToolSyncVNext = true,
+                            supportsToolSyncLens = true,
                             supportsToolDeltas = true,
                             supportsToolProfiles = true,
                             supportsLazySchemas = true
@@ -2343,7 +2343,7 @@ namespace Unity.AI.MCP.Editor
                 s_ToolSnapshotReason);
             UpdateBridgeToolSyncStatus();
             if (isRunning)
-                _ = NotifyVNextClientsAsync(notification, cts?.Token ?? CancellationToken.None);
+                _ = NotifyLensClientsAsync(notification, cts?.Token ?? CancellationToken.None);
         }
 
         public void InvalidateToolsCache()

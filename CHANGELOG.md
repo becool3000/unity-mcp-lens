@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ### Added
 
 - Added MCP-safe headless tile tools for classic Tile assets, Unity 6 `.tileset` generation, tilemap stack setup, and batched tilemap painting.
-- Added an experimental `unity-mcp-vnext` owned MCP-only server path with event-driven bridge manifest sync, session-scoped tool packs, and `Unity.ListToolPacks` / `Unity.SetToolPacks` / `Unity.ReadDetailRef`.
+- Added an experimental `unity-mcp-lens` owned MCP-only server path with event-driven bridge manifest sync, session-scoped tool packs, and `Unity.ListToolPacks` / `Unity.SetToolPacks` / `Unity.ReadDetailRef`.
 
 ### Fixed
 

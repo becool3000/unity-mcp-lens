@@ -56,14 +56,14 @@ namespace Unity.AI.MCP.Editor.Settings.Integration
             }
 
             bool hasLegacyServer = PathUtils.IsServerInstalled();
-            bool hasVNextServer = PathUtils.IsVNextServerInstalled();
-            if (!hasLegacyServer && !hasVNextServer)
+            bool hasLensServer = PathUtils.IsLensServerInstalled();
+            if (!hasLegacyServer && !hasLensServer)
             {
                 UpdateStatus(McpStatus.Error, "No Unity MCP server installation was found");
                 return false;
             }
 
-            var result = WriteConfig(configPath, hasLegacyServer, hasVNextServer);
+            var result = WriteConfig(configPath, hasLegacyServer, hasLensServer);
             McpStatus status = result.Success ? McpStatus.Configured : McpStatus.Error;
             UpdateStatus(status, result.Message);
 
@@ -103,7 +103,7 @@ namespace Unity.AI.MCP.Editor.Settings.Integration
                     bool removedAny = false;
                     removedAny |= mcpServers.Remove(MCPConstants.jsonKeyIntegration);
                     removedAny |= mcpServers.Remove(MCPConstants.jsonKeyIntegrationLegacy);
-                    removedAny |= mcpServers.Remove(MCPConstants.jsonKeyIntegrationVNext);
+                    removedAny |= mcpServers.Remove(MCPConstants.jsonKeyIntegrationLens);
 
                     if (removedAny)
                     {
@@ -163,11 +163,11 @@ namespace Unity.AI.MCP.Editor.Settings.Integration
             return PlatformUtils.GetConfigPathForClient(Client);
         }
 
-        ConfigResult WriteConfig(string configPath, bool hasLegacyServer, bool hasVNextServer)
+        ConfigResult WriteConfig(string configPath, bool hasLegacyServer, bool hasLensServer)
         {
             try
             {
-                string config = CreateMcpClientConfig(Client, hasLegacyServer, hasVNextServer);
+                string config = CreateMcpClientConfig(Client, hasLegacyServer, hasLensServer);
                 if (string.IsNullOrWhiteSpace(config))
                     return new ConfigResult {Success = false, Message = "No Unity MCP server configuration could be generated"};
 
@@ -191,18 +191,18 @@ namespace Unity.AI.MCP.Editor.Settings.Integration
             }
         }
 
-        static string CreateMcpClientConfig(McpClient client, bool hasLegacyServer, bool hasVNextServer)
+        static string CreateMcpClientConfig(McpClient client, bool hasLegacyServer, bool hasLensServer)
         {
             try
             {
                 var mcpServers = new Newtonsoft.Json.Linq.JObject();
 
-                if (hasVNextServer)
+                if (hasLensServer)
                 {
-                    string mainFile = PathUtils.GetVNextServerMainFile();
+                    string mainFile = PathUtils.GetLensServerMainFile();
                     if (!string.IsNullOrEmpty(mainFile) && File.Exists(mainFile))
                     {
-                        mcpServers[MCPConstants.jsonKeyIntegrationVNext] = new Newtonsoft.Json.Linq.JObject
+                        mcpServers[MCPConstants.jsonKeyIntegrationLens] = new Newtonsoft.Json.Linq.JObject
                         {
                             ["command"] = mainFile,
                             ["args"] = new Newtonsoft.Json.Linq.JArray(),
@@ -263,7 +263,7 @@ namespace Unity.AI.MCP.Editor.Settings.Integration
                 var newMcpServers = (Newtonsoft.Json.Linq.JObject)newConfigObj["mcpServers"];
 
                 // Merge our unity-mcp entry into the existing mcpServers
-                foreach (string key in new[] { MCPConstants.jsonKeyIntegrationLegacy, MCPConstants.jsonKeyIntegrationVNext })
+                foreach (string key in new[] { MCPConstants.jsonKeyIntegrationLegacy, MCPConstants.jsonKeyIntegrationLens })
                 {
                     if (newMcpServers[key] != null)
                         mcpServers[key] = newMcpServers[key];
@@ -296,7 +296,7 @@ namespace Unity.AI.MCP.Editor.Settings.Integration
 
                 var config = Newtonsoft.Json.Linq.JObject.Parse(content);
                 var servers = config["mcpServers"] as Newtonsoft.Json.Linq.JObject;
-                return servers?[MCPConstants.jsonKeyIntegrationVNext] != null ||
+                return servers?[MCPConstants.jsonKeyIntegrationLens] != null ||
                     servers?[MCPConstants.jsonKeyIntegrationLegacy] != null ||
                     servers?[MCPConstants.jsonKeyIntegration] != null;
             }

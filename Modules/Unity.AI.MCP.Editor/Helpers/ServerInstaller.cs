@@ -21,7 +21,7 @@ namespace Unity.AI.MCP.Editor.Helpers
     static class ServerInstaller
     {
         const string k_RelayMetadataFileName = "relay.json";
-        const string k_VNextMetadataFileName = "unity-mcp-server.json";
+        const string k_LensMetadataFileName = "unity-mcp-lens.json";
 
         static ServerInstaller()
         {
@@ -36,7 +36,7 @@ namespace Unity.AI.MCP.Editor.Helpers
             }
             else
             {
-                McpLog.Log("Skipping legacy relay install because this project is configured for MCP-only / unity-mcp-vnext.");
+                McpLog.Log("Skipping legacy relay install because this project is configured for MCP-only / unity-mcp-lens.");
             }
 
             InstallOrUpdateOwnedMcpServer();
@@ -117,37 +117,37 @@ namespace Unity.AI.MCP.Editor.Helpers
         {
             try
             {
-                string sourceDir = Path.GetFullPath(MCPConstants.unityMcpServerAppPath);
+                string sourceDir = Path.GetFullPath(MCPConstants.unityMcpLensAppPath);
                 if (!Directory.Exists(sourceDir))
                 {
-                    McpLog.Warning($"Unity MCP VNext source directory not found at {sourceDir}");
+                    McpLog.Warning($"Unity MCP Lens source directory not found at {sourceDir}");
                     return;
                 }
 
-                string bundledVersion = ReadVersionFromMetadata(MCPConstants.BundledVNextMetadataFile);
-                string installedVersion = ReadVersionFromMetadata(MCPConstants.VNextInstalledMetadataFile);
+                string bundledVersion = ReadVersionFromMetadata(MCPConstants.BundledLensMetadataFile);
+                string installedVersion = ReadVersionFromMetadata(MCPConstants.LensInstalledMetadataFile);
 
-                if (!IsNewerVersion(bundledVersion, installedVersion) && File.Exists(MCPConstants.VNextInstalledServerMainFile))
+                if (!IsNewerVersion(bundledVersion, installedVersion) && File.Exists(MCPConstants.LensInstalledServerMainFile))
                 {
-                    McpLog.Log($"Unity MCP VNext server is up to date (bundled: {bundledVersion}, installed: {installedVersion})");
+                    McpLog.Log($"Unity MCP Lens server is up to date (bundled: {bundledVersion}, installed: {installedVersion})");
                     return;
                 }
 
                 if (!Directory.Exists(MCPConstants.UnityMcpBaseDirectory))
                     Directory.CreateDirectory(MCPConstants.UnityMcpBaseDirectory);
 
-                string stagingDirectory = Path.Combine(Path.GetTempPath(), $"unity-mcp-vnext-{Guid.NewGuid():N}");
+                string stagingDirectory = Path.Combine(Path.GetTempPath(), $"unity-mcp-lens-{Guid.NewGuid():N}");
                 try
                 {
                     PublishOwnedServer(stagingDirectory);
                     CopyDirectoryContents(stagingDirectory, MCPConstants.UnityMcpBaseDirectory);
                     ReconcileOwnedServerBinary(MCPConstants.UnityMcpBaseDirectory);
-                    File.Copy(MCPConstants.BundledVNextMetadataFile, MCPConstants.VNextInstalledMetadataFile, true);
+                    File.Copy(MCPConstants.BundledLensMetadataFile, MCPConstants.LensInstalledMetadataFile, true);
 
                     if (!PlatformUtils.IsWindows)
-                        SetExecutable(MCPConstants.VNextInstalledServerMainFile);
+                        SetExecutable(MCPConstants.LensInstalledServerMainFile);
 
-                    McpLog.Log($"Unity MCP VNext server installed to {MCPConstants.UnityMcpBaseDirectory} (version {bundledVersion})");
+                    McpLog.Log($"Unity MCP Lens server installed to {MCPConstants.UnityMcpBaseDirectory} (version {bundledVersion})");
                 }
                 finally
                 {
@@ -164,7 +164,7 @@ namespace Unity.AI.MCP.Editor.Helpers
             }
             catch (Exception ex)
             {
-                McpLog.Warning($"Could not install Unity MCP VNext server: {ex.Message}");
+                McpLog.Warning($"Could not install Unity MCP Lens server: {ex.Message}");
             }
         }
 
@@ -281,7 +281,7 @@ namespace Unity.AI.MCP.Editor.Helpers
         static void PublishOwnedServer(string stagingDirectory)
         {
             string runtimeIdentifier = GetCurrentRuntimeIdentifier();
-            string prebuiltDirectory = Path.Combine(Path.GetFullPath(MCPConstants.unityMcpServerAppPath), "prebuilt", runtimeIdentifier);
+            string prebuiltDirectory = Path.Combine(Path.GetFullPath(MCPConstants.unityMcpLensAppPath), "prebuilt", runtimeIdentifier);
             if (Directory.Exists(prebuiltDirectory))
             {
                 CopyDirectoryContents(prebuiltDirectory, stagingDirectory);
@@ -289,13 +289,13 @@ namespace Unity.AI.MCP.Editor.Helpers
                 return;
             }
 
-            string projectFile = MCPConstants.BundledVNextProjectFile;
+            string projectFile = MCPConstants.BundledLensProjectFile;
             if (!File.Exists(projectFile))
-                throw new FileNotFoundException("Unity MCP VNext project file not found.", projectFile);
+                throw new FileNotFoundException("Unity MCP Lens project file not found.", projectFile);
 
             string dotnetExecutable = ResolveDotNetExecutable();
             if (string.IsNullOrWhiteSpace(dotnetExecutable))
-                throw new InvalidOperationException("dotnet SDK/runtime executable was not found. Install .NET SDK 8+ or bundle a prebuilt unity-mcp-vnext binary.");
+                throw new InvalidOperationException("dotnet SDK/runtime executable was not found. Install .NET SDK 8+ or bundle a prebuilt unity-mcp-lens binary.");
 
             Directory.CreateDirectory(stagingDirectory);
             string arguments =
@@ -314,7 +314,7 @@ namespace Unity.AI.MCP.Editor.Helpers
 
             using var process = Process.Start(startInfo);
             if (process == null)
-                throw new InvalidOperationException("Failed to start dotnet publish for Unity MCP VNext server.");
+                throw new InvalidOperationException("Failed to start dotnet publish for Unity MCP Lens server.");
 
             string standardOutput = process.StandardOutput.ReadToEnd();
             string standardError = process.StandardError.ReadToEnd();
@@ -323,7 +323,7 @@ namespace Unity.AI.MCP.Editor.Helpers
             if (process.ExitCode != 0)
             {
                 throw new InvalidOperationException(
-                    $"dotnet publish failed for Unity MCP VNext server (exit {process.ExitCode}).\n{standardOutput}\n{standardError}".Trim());
+                    $"dotnet publish failed for Unity MCP Lens server (exit {process.ExitCode}).\n{standardOutput}\n{standardError}".Trim());
             }
 
             ReconcileOwnedServerBinary(stagingDirectory);
@@ -369,12 +369,12 @@ namespace Unity.AI.MCP.Editor.Helpers
                 };
             }
 
-            throw new PlatformNotSupportedException("Unsupported platform for Unity MCP VNext server installation.");
+            throw new PlatformNotSupportedException("Unsupported platform for Unity MCP Lens server installation.");
         }
 
         static void ReconcileOwnedServerBinary(string outputDirectory)
         {
-            string expectedPath = MCPConstants.VNextInstalledServerMainFile;
+            string expectedPath = MCPConstants.LensInstalledServerMainFile;
             string expectedFileName = Path.GetFileName(expectedPath);
             string installedExpectedPath = Path.Combine(outputDirectory, expectedFileName);
 
@@ -394,7 +394,7 @@ namespace Unity.AI.MCP.Editor.Helpers
 
         static string GetPublishedDefaultServerBinaryName()
         {
-            return PlatformUtils.IsWindows ? "UnityMcpServer.exe" : "UnityMcpServer";
+            return PlatformUtils.IsWindows ? "UnityMcpLens.exe" : "UnityMcpLens";
         }
 
         static void CopyDirectoryContents(string sourceDir, string targetDir)

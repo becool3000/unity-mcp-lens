@@ -1,7 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace UnityMcpServer;
+namespace UnityMcpLens;
 
 sealed class BridgeStatusFile
 {
@@ -32,8 +32,8 @@ sealed class BridgeStatusFile
     [JsonPropertyName("manifest_version")]
     public long ManifestVersion { get; set; }
 
-    [JsonPropertyName("supports_tool_sync_vnext")]
-    public bool SupportsToolSyncVNext { get; set; }
+    [JsonPropertyName("supports_tool_sync_lens")]
+    public bool SupportsToolSyncLens { get; set; }
 }
 
 sealed class BridgeEnvelope<T>

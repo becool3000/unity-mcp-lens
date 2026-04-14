@@ -36,8 +36,8 @@ namespace Unity.AI.MCP.Editor.Settings.Integration
         public bool Configure()
         {
             bool hasLegacyServer = PathUtils.IsServerInstalled();
-            bool hasVNextServer = PathUtils.IsVNextServerInstalled();
-            if (!hasLegacyServer && !hasVNextServer)
+            bool hasLensServer = PathUtils.IsLensServerInstalled();
+            if (!hasLegacyServer && !hasLensServer)
             {
                 UpdateClientStatus(McpStatus.Error, "No Unity MCP server installation was found");
                 return false;
@@ -50,7 +50,7 @@ namespace Unity.AI.MCP.Editor.Settings.Integration
                 return false;
             }
 
-            bool success = AddMcpServerToConfig(configPath, hasLegacyServer, hasVNextServer);
+            bool success = AddMcpServerToConfig(configPath, hasLegacyServer, hasLensServer);
             McpStatus status = success ? McpStatus.Configured : McpStatus.Error;
             string message = success ? "Successfully configured" : "Failed to update configuration";
 
@@ -116,7 +116,7 @@ namespace Unity.AI.MCP.Editor.Settings.Integration
             return PlatformUtils.GetConfigPathForClient(Client);
         }
 
-        bool AddMcpServerToConfig(string configPath, bool hasLegacyServer, bool hasVNextServer)
+        bool AddMcpServerToConfig(string configPath, bool hasLegacyServer, bool hasLensServer)
         {
             JObject config;
 
@@ -148,17 +148,17 @@ namespace Unity.AI.MCP.Editor.Settings.Integration
 
             mcpServers.Remove(MCPConstants.jsonKeyIntegration);
             mcpServers.Remove(MCPConstants.jsonKeyIntegrationLegacy);
-            mcpServers.Remove(MCPConstants.jsonKeyIntegrationVNext);
+            mcpServers.Remove(MCPConstants.jsonKeyIntegrationLens);
 
-            if (hasVNextServer)
+            if (hasLensServer)
             {
-                string vnextMainFile = PathUtils.GetVNextServerMainFile();
-                if (File.Exists(vnextMainFile))
+                string lensMainFile = PathUtils.GetLensServerMainFile();
+                if (File.Exists(lensMainFile))
                 {
-                    mcpServers[MCPConstants.jsonKeyIntegrationVNext] = new JObject
+                    mcpServers[MCPConstants.jsonKeyIntegrationLens] = new JObject
                     {
                         ["type"] = "stdio",
-                        ["command"] = vnextMainFile,
+                        ["command"] = lensMainFile,
                         ["args"] = new JArray(),
                         ["env"] = new JObject()
                     };
@@ -181,7 +181,7 @@ namespace Unity.AI.MCP.Editor.Settings.Integration
             }
 
             File.WriteAllText(configPath, config.ToString(Formatting.Indented));
-            return mcpServers[MCPConstants.jsonKeyIntegrationVNext] != null || mcpServers[MCPConstants.jsonKeyIntegrationLegacy] != null;
+            return mcpServers[MCPConstants.jsonKeyIntegrationLens] != null || mcpServers[MCPConstants.jsonKeyIntegrationLegacy] != null;
         }
 
         bool IsMcpServerConfigured(string configPath)
@@ -194,7 +194,7 @@ namespace Unity.AI.MCP.Editor.Settings.Integration
             string projectPath = PathUtils.GetProjectDirectory();
 
             var mcpServers = config["projects"]?[projectPath]?["mcpServers"];
-            return mcpServers?[MCPConstants.jsonKeyIntegrationVNext] != null ||
+            return mcpServers?[MCPConstants.jsonKeyIntegrationLens] != null ||
                 mcpServers?[MCPConstants.jsonKeyIntegrationLegacy] != null ||
                 mcpServers?[MCPConstants.jsonKeyIntegration] != null;
         }
@@ -213,7 +213,7 @@ namespace Unity.AI.MCP.Editor.Settings.Integration
                 {
                     mcpServers.Remove(MCPConstants.jsonKeyIntegration);
                     mcpServers.Remove(MCPConstants.jsonKeyIntegrationLegacy);
-                    mcpServers.Remove(MCPConstants.jsonKeyIntegrationVNext);
+                    mcpServers.Remove(MCPConstants.jsonKeyIntegrationLens);
 
                     if (!mcpServers.HasValues)
                         projectConfig.Remove("mcpServers");

@@ -2,48 +2,48 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace Unity.AI.MCP.Editor.VNext
+namespace Unity.AI.MCP.Editor.Lens
 {
-    sealed class BridgeVNextClientCapabilities
+    sealed class BridgeLensClientCapabilities
     {
-        public bool SupportsToolSyncVNext { get; set; }
+        public bool SupportsToolSyncLens { get; set; }
         public bool SupportsToolDeltas { get; set; }
         public bool SupportsToolProfiles { get; set; }
         public bool SupportsLazySchemas { get; set; }
 
-        public static BridgeVNextClientCapabilities Default => new()
+        public static BridgeLensClientCapabilities Default => new()
         {
-            SupportsToolSyncVNext = false,
+            SupportsToolSyncLens = false,
             SupportsToolDeltas = false,
             SupportsToolProfiles = false,
             SupportsLazySchemas = false
         };
     }
 
-    sealed class BridgeVNextConnectionState
+    sealed class BridgeLensConnectionState
     {
         public string ConnectionId { get; set; }
         public string ClientName { get; set; }
         public string ClientVersion { get; set; }
         public string ClientTitle { get; set; }
-        public BridgeVNextClientCapabilities Capabilities { get; set; } = BridgeVNextClientCapabilities.Default;
+        public BridgeLensClientCapabilities Capabilities { get; set; } = BridgeLensClientCapabilities.Default;
         public string[] ActiveToolPacks { get; set; } = ToolPackCatalog.DefaultActivePacks;
         public string LastKnownBridgeSessionId { get; set; }
         public long LastKnownManifestVersion { get; set; }
         public DateTime UpdatedUtc { get; set; } = DateTime.UtcNow;
     }
 
-    static class BridgeVNextSessionRegistry
+    static class BridgeLensSessionRegistry
     {
         static readonly object s_Lock = new();
-        static readonly Dictionary<string, BridgeVNextConnectionState> s_States = new(StringComparer.Ordinal);
+        static readonly Dictionary<string, BridgeLensConnectionState> s_States = new(StringComparer.Ordinal);
 
-        public static BridgeVNextConnectionState RegisterOrUpdateConnection(
+        public static BridgeLensConnectionState RegisterOrUpdateConnection(
             string connectionId,
             string clientName,
             string clientVersion,
             string clientTitle,
-            BridgeVNextClientCapabilities capabilities)
+            BridgeLensClientCapabilities capabilities)
         {
             if (string.IsNullOrWhiteSpace(connectionId))
                 throw new ArgumentException("Connection ID cannot be empty.", nameof(connectionId));
@@ -52,7 +52,7 @@ namespace Unity.AI.MCP.Editor.VNext
             {
                 if (!s_States.TryGetValue(connectionId, out var state))
                 {
-                    state = new BridgeVNextConnectionState
+                    state = new BridgeLensConnectionState
                     {
                         ConnectionId = connectionId,
                         ActiveToolPacks = ToolPackCatalog.DefaultActivePacks
@@ -63,13 +63,13 @@ namespace Unity.AI.MCP.Editor.VNext
                 state.ClientName = clientName;
                 state.ClientVersion = clientVersion;
                 state.ClientTitle = clientTitle;
-                state.Capabilities = capabilities ?? BridgeVNextClientCapabilities.Default;
+                state.Capabilities = capabilities ?? BridgeLensClientCapabilities.Default;
                 state.UpdatedUtc = DateTime.UtcNow;
                 return Clone(state);
             }
         }
 
-        public static bool TryGetConnectionState(string connectionId, out BridgeVNextConnectionState state)
+        public static bool TryGetConnectionState(string connectionId, out BridgeLensConnectionState state)
         {
             lock (s_Lock)
             {
@@ -84,11 +84,11 @@ namespace Unity.AI.MCP.Editor.VNext
             return false;
         }
 
-        public static BridgeVNextConnectionState EnsureConnectionState(string connectionId)
+        public static BridgeLensConnectionState EnsureConnectionState(string connectionId)
         {
             if (string.IsNullOrWhiteSpace(connectionId))
             {
-                return new BridgeVNextConnectionState
+                return new BridgeLensConnectionState
                 {
                     ConnectionId = connectionId,
                     ActiveToolPacks = ToolPackCatalog.DefaultActivePacks
@@ -99,7 +99,7 @@ namespace Unity.AI.MCP.Editor.VNext
             {
                 if (!s_States.TryGetValue(connectionId, out var state))
                 {
-                    state = new BridgeVNextConnectionState
+                    state = new BridgeLensConnectionState
                     {
                         ConnectionId = connectionId,
                         ActiveToolPacks = ToolPackCatalog.DefaultActivePacks
@@ -119,7 +119,7 @@ namespace Unity.AI.MCP.Editor.VNext
 
             if (string.IsNullOrWhiteSpace(connectionId))
             {
-                error = "A VNext bridge connection is required before tool packs can be changed.";
+                error = "A Lens bridge connection is required before tool packs can be changed.";
                 return false;
             }
 
@@ -130,7 +130,7 @@ namespace Unity.AI.MCP.Editor.VNext
             {
                 if (!s_States.TryGetValue(connectionId, out var state))
                 {
-                    state = new BridgeVNextConnectionState
+                    state = new BridgeLensConnectionState
                     {
                         ConnectionId = connectionId
                     };
@@ -176,13 +176,13 @@ namespace Unity.AI.MCP.Editor.VNext
             lock (s_Lock)
             {
                 return s_States.Values
-                    .Where(state => state.Capabilities?.SupportsToolSyncVNext == true)
+                    .Where(state => state.Capabilities?.SupportsToolSyncLens == true)
                     .Select(state => state.ConnectionId)
                     .ToArray();
             }
         }
 
-        public static BridgeVNextConnectionState[] GetConnectionStatesSnapshot()
+        public static BridgeLensConnectionState[] GetConnectionStatesSnapshot()
         {
             lock (s_Lock)
             {
@@ -206,22 +206,22 @@ namespace Unity.AI.MCP.Editor.VNext
             ToolDetailRefStore.ReleaseConnection(connectionId);
         }
 
-        static BridgeVNextConnectionState Clone(BridgeVNextConnectionState state)
+        static BridgeLensConnectionState Clone(BridgeLensConnectionState state)
         {
             if (state == null)
                 return null;
 
-            return new BridgeVNextConnectionState
+            return new BridgeLensConnectionState
             {
                 ConnectionId = state.ConnectionId,
                 ClientName = state.ClientName,
                 ClientVersion = state.ClientVersion,
                 ClientTitle = state.ClientTitle,
                 Capabilities = state.Capabilities == null
-                    ? BridgeVNextClientCapabilities.Default
-                    : new BridgeVNextClientCapabilities
+                    ? BridgeLensClientCapabilities.Default
+                    : new BridgeLensClientCapabilities
                     {
-                        SupportsToolSyncVNext = state.Capabilities.SupportsToolSyncVNext,
+                        SupportsToolSyncLens = state.Capabilities.SupportsToolSyncLens,
                         SupportsToolDeltas = state.Capabilities.SupportsToolDeltas,
                         SupportsToolProfiles = state.Capabilities.SupportsToolProfiles,
                         SupportsLazySchemas = state.Capabilities.SupportsLazySchemas

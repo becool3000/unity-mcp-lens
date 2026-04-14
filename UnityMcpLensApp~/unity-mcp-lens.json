@@ -1,9 +1,9 @@
 {
-  "name": "unity-mcp-vnext",
+  "name": "unity-mcp-lens",
   "version": "0.1.0-alpha.1",
   "protocolVersion": "1.0",
   "capabilities": [
     "mcp",
-    "tool-sync-vnext"
+    "tool-sync-lens"
   ]
 }

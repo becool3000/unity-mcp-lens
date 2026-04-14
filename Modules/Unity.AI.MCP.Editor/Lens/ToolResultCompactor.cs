@@ -1,7 +1,7 @@
 using Unity.AI.Assistant.FunctionCalling;
 using Unity.AI.Assistant.Utils;
 
-namespace Unity.AI.MCP.Editor.VNext
+namespace Unity.AI.MCP.Editor.Lens
 {
     static class ToolResultCompactor
     {
@@ -57,8 +57,8 @@ namespace Unity.AI.MCP.Editor.VNext
         {
             var execution = ExternalToolExecutionScope.Current;
             if (string.IsNullOrWhiteSpace(execution?.ConnectionId) ||
-                !BridgeVNextSessionRegistry.TryGetConnectionState(execution.ConnectionId, out var state) ||
-                state?.Capabilities?.SupportsToolSyncVNext != true)
+                !BridgeLensSessionRegistry.TryGetConnectionState(execution.ConnectionId, out var state) ||
+                state?.Capabilities?.SupportsToolSyncLens != true)
             {
                 return null;
             }

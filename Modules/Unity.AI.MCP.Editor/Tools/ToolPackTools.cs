@@ -4,7 +4,7 @@ using System.Threading.Tasks;
 using Unity.AI.Assistant.FunctionCalling;
 using Unity.AI.MCP.Editor.Helpers;
 using Unity.AI.MCP.Editor.ToolRegistry;
-using Unity.AI.MCP.Editor.VNext;
+using Unity.AI.MCP.Editor.Lens;
 
 namespace Unity.AI.MCP.Editor.Tools
 {
@@ -30,7 +30,7 @@ namespace Unity.AI.MCP.Editor.Tools
         public Task<object> ExecuteAsync(object parameters)
         {
             var connectionId = ExternalToolExecutionScope.Current?.ConnectionId;
-            var activeToolPacks = BridgeVNextSessionRegistry.GetActiveToolPacks(connectionId);
+            var activeToolPacks = BridgeLensSessionRegistry.GetActiveToolPacks(connectionId);
 
             return Task.FromResult<object>(Response.Success(
                 "Retrieved available Unity MCP tool packs.",
@@ -55,9 +55,9 @@ namespace Unity.AI.MCP.Editor.Tools
         {
             var connectionId = ExternalToolExecutionScope.Current?.ConnectionId;
             if (string.IsNullOrWhiteSpace(connectionId))
-                return Task.FromResult<object>(Response.Error("Unity.SetToolPacks requires an active VNext MCP bridge connection."));
+                return Task.FromResult<object>(Response.Error("Unity.SetToolPacks requires an active Lens MCP bridge connection."));
 
-            if (!BridgeVNextSessionRegistry.TrySetActiveToolPacks(connectionId, parameters?.Packs, out var normalizedPacks, out var error))
+            if (!BridgeLensSessionRegistry.TrySetActiveToolPacks(connectionId, parameters?.Packs, out var normalizedPacks, out var error))
                 return Task.FromResult<object>(Response.Error(error ?? "Failed to update active tool packs."));
 
             var manifest = BridgeManifestBroker.SetToolPacks(connectionId, normalizedPacks, includeSchemas: false, out error);
@@ -88,7 +88,7 @@ namespace Unity.AI.MCP.Editor.Tools
         {
             var connectionId = ExternalToolExecutionScope.Current?.ConnectionId;
             if (string.IsNullOrWhiteSpace(connectionId))
-                return Task.FromResult<object>(Response.Error("Unity.ReadDetailRef requires an active VNext MCP bridge connection."));
+                return Task.FromResult<object>(Response.Error("Unity.ReadDetailRef requires an active Lens MCP bridge connection."));
 
             if (string.IsNullOrWhiteSpace(parameters?.RefId))
                 return Task.FromResult<object>(Response.Error("A non-empty RefId is required."));

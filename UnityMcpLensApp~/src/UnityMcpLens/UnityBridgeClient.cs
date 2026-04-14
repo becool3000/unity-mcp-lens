@@ -4,7 +4,7 @@ using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
 
-namespace UnityMcpServer;
+namespace UnityMcpLens;
 
 sealed class UnityBridgeClient : IAsyncDisposable
 {
@@ -80,7 +80,7 @@ sealed class UnityBridgeClient : IAsyncDisposable
                 title,
                 capabilities = new
                 {
-                    supportsToolSyncVNext = true,
+                    supportsToolSyncLens = true,
                     supportsToolDeltas = true,
                     supportsToolProfiles = true,
                     supportsLazySchemas = true
@@ -216,7 +216,7 @@ sealed class UnityBridgeClient : IAsyncDisposable
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine($"[unity-mcp-vnext] Bridge read loop error: {ex.Message}");
+                Console.Error.WriteLine($"[unity-mcp-lens] Bridge read loop error: {ex.Message}");
                 break;
             }
             finally

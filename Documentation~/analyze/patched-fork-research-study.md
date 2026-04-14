@@ -20,6 +20,22 @@ This package now includes additive study hooks for benchmarking the patched `com
 
 5. For an in-editor view inside any host project using this local fork, open `Window/AI/Assistant Usage`.
 
+6. To benchmark Lens pack switching and schema-fetch volume against a live host project:
+
+```powershell
+.\Tools~\Benchmark-LensPackSwitch.ps1 -ProjectPath C:\Path\To\UnityProject
+```
+
+This runs three isolated same-process scenarios against `unity-mcp-lens`:
+
+- `foundation -> scene`
+- `scene -> console`
+- `scene -> foundation`
+
+The benchmark reports exported tool counts, `get_tool_schema` request and response volume, and total bridge traffic for each transition.
+
+The benchmark wrapper uses a small `net8.0` helper app under `Tools~`, so it requires a local .NET SDK install on the machine running the benchmark.
+
 ## Measurement scope
 
 The instrumented baseline emits:

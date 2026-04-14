@@ -27,7 +27,7 @@ Fork-specific behavior retained on top of the official `2.3` package:
 - Serializes managed MCP server startup and retries failed initial launches once after a short delay.
 - Preserves cached MCP tool snapshots when tool discovery temporarily fails or returns empty.
 - Publishes richer bridge status metadata for reload, recovery, and tool-discovery state.
-- Adds an owned `unity-mcp-vnext` stdio server path with event-driven tool manifest sync and bridge-owned manifest versioning while keeping the upstream relay path intact for migration.
+- Adds an owned `unity-mcp-lens` stdio server path with event-driven tool manifest sync and bridge-owned manifest versioning while keeping the upstream relay path intact for migration.
 - Adds session-scoped MCP tool packs with a narrow `foundation` default surface and explicit pack-control meta-tools (`Unity.ListToolPacks`, `Unity.SetToolPacks`, `Unity.ReadDetailRef`).
 - Keeps the custom MCP tools for sprite import, serialized property editing, runtime diagnostics, UI diagnostics, and project diagnostics.
 - Adds non-interactive tile pipeline MCP tools for headless tile asset creation, `.tileset` generation, tilemap setup, and batched painting.
@@ -43,9 +43,9 @@ Official `2.3` functionality now used as the base:
 Operational notes:
 - Clone with Git LFS enabled because the bundled relay binaries are stored through LFS.
 - The relay binaries are upstream Unity binaries; this fork only patches the Unity-side managed code around them.
-- The new owned MCP-only server source lives under `UnityMcpServerApp~` and installs to `~/.unity/unity-mcp/` as a separate path from the upstream relay under `~/.unity/relay/`.
-- Until prebuilt `unity-mcp-vnext` binaries are bundled, first-time VNext installation publishes the server from source on the local machine and therefore requires a local .NET SDK 8+.
-- Generated MCP config now writes side-by-side entries for `unity-mcp-vnext` and `unity-mcp-legacy` so external MCP clients can migrate without breaking the legacy path.
+- The new owned MCP-only server source lives under `UnityMcpLensApp~` and installs to `~/.unity/unity-mcp-lens/` as a separate path from the upstream relay under `~/.unity/relay/`.
+- Until prebuilt `unity-mcp-lens` binaries are bundled, first-time Lens installation publishes the server from source on the local machine and therefore requires a local .NET SDK 8+.
+- Generated MCP config now writes side-by-side entries for `unity-mcp-lens` and `unity-mcp-legacy` so external MCP clients can migrate without breaking the legacy path.
 - Keep the package version at the official upstream version and record fork-specific context in this repo rather than changing the package name or semver.
 - When Unity ships a newer package, diff this repo against the update and port forward only the still-needed fork behavior.
 - When searching this package during maintenance, treat `Editor/` and `Runtime/` as the live source tree and ignore `.codex-temp` snapshot content unless a note explicitly says otherwise.

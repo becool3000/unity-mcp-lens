@@ -9,7 +9,7 @@ using Unity.AI.MCP.Editor.Helpers;
 using Unity.AI.MCP.Editor.ToolRegistry; // For Response class
 using Unity.AI.MCP.Editor.Tools.Parameters;
 using Unity.AI.Assistant.Editor.Backend.Socket.Tools;
-using Unity.AI.MCP.Editor.VNext;
+using Unity.AI.MCP.Editor.Lens;
 
 namespace Unity.AI.MCP.Editor.Tools
 {

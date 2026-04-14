@@ -20,7 +20,7 @@ namespace Unity.AI.MCP.Editor.Helpers
         public readonly string BridgeSessionId;
         public readonly long ManifestVersion;
         public readonly string ProfileCatalogVersion;
-        public readonly bool SupportsToolSyncVNext;
+        public readonly bool SupportsToolSyncLens;
         public readonly string LastToolsChangedUtc;
 
         public BridgeStatusSnapshot(
@@ -39,7 +39,7 @@ namespace Unity.AI.MCP.Editor.Helpers
             string bridgeSessionId,
             long manifestVersion,
             string profileCatalogVersion,
-            bool supportsToolSyncVNext,
+            bool supportsToolSyncLens,
             string lastToolsChangedUtc)
         {
             Status = status;
@@ -57,7 +57,7 @@ namespace Unity.AI.MCP.Editor.Helpers
             BridgeSessionId = bridgeSessionId;
             ManifestVersion = manifestVersion;
             ProfileCatalogVersion = profileCatalogVersion;
-            SupportsToolSyncVNext = supportsToolSyncVNext;
+            SupportsToolSyncLens = supportsToolSyncLens;
             LastToolsChangedUtc = lastToolsChangedUtc;
         }
     }
@@ -83,7 +83,7 @@ namespace Unity.AI.MCP.Editor.Helpers
         static string s_BridgeSessionId;
         static long s_ManifestVersion;
         static string s_ProfileCatalogVersion;
-        static bool s_SupportsToolSyncVNext;
+        static bool s_SupportsToolSyncLens;
         static string s_LastToolsChangedUtc;
 
         public static void SetConnectionPath(string connectionPath)
@@ -114,7 +114,7 @@ namespace Unity.AI.MCP.Editor.Helpers
                     s_BridgeSessionId,
                     s_ManifestVersion,
                     s_ProfileCatalogVersion,
-                    s_SupportsToolSyncVNext,
+                    s_SupportsToolSyncLens,
                     s_LastToolsChangedUtc);
             }
         }
@@ -123,7 +123,7 @@ namespace Unity.AI.MCP.Editor.Helpers
             string bridgeSessionId,
             long manifestVersion,
             string profileCatalogVersion,
-            bool supportsToolSyncVNext,
+            bool supportsToolSyncLens,
             string lastToolsChangedUtc)
         {
             lock (s_Lock)
@@ -131,7 +131,7 @@ namespace Unity.AI.MCP.Editor.Helpers
                 s_BridgeSessionId = bridgeSessionId;
                 s_ManifestVersion = manifestVersion;
                 s_ProfileCatalogVersion = profileCatalogVersion;
-                s_SupportsToolSyncVNext = supportsToolSyncVNext;
+                s_SupportsToolSyncLens = supportsToolSyncLens;
                 s_LastToolsChangedUtc = lastToolsChangedUtc;
                 SaveLocked();
             }
@@ -287,7 +287,7 @@ namespace Unity.AI.MCP.Editor.Helpers
                 s_BridgeSessionId,
                 s_ManifestVersion,
                 s_ProfileCatalogVersion,
-                s_SupportsToolSyncVNext,
+                s_SupportsToolSyncLens,
                 s_LastToolsChangedUtc);
         }
     }
