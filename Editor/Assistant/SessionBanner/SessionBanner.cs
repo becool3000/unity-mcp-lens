@@ -4,6 +4,7 @@ using Unity.AI.Assistant.Editor;
 using Unity.AI.Toolkit.Accounts.Components;
 using Unity.AI.Toolkit.Accounts.Services;
 using Unity.Relay.Editor;
+using UnityEditor;
 using UnityEngine.UIElements;
 
 namespace Unity.AI.Assistant.Editor.SessionBanner
@@ -21,6 +22,7 @@ namespace Unity.AI.Assistant.Editor.SessionBanner
         UpdateAvailableBanner m_UpdateAvailableBanner;
         BasicBannerContent m_RelayStoppedBanner;
         BasicBannerContent m_RelayReconnectingBanner;
+        BasicBannerContent m_RelayDisabledBanner;
         bool m_IsAttached;
         bool m_RelayWasConnected;
 
@@ -86,6 +88,12 @@ namespace Unity.AI.Assistant.Editor.SessionBanner
 
         protected override VisualElement CurrentView()
         {
+            if (!AssistantProjectPreferences.LegacyRelayEnabled)
+            {
+                EnableInClassList("empty", false);
+                return m_RelayDisabledBanner ??= BuildRelayDisabledBanner();
+            }
+
             // Relay is required for all providers (chat routes through relay)
             var relayStatus = RelayService.Instance.State.Status;
             if (relayStatus == RelayStatus.Stopped || relayStatus == RelayStatus.Failed)
@@ -188,7 +196,19 @@ namespace Unity.AI.Assistant.Editor.SessionBanner
                 m_RelayWasConnected = true;
             m_RelayStoppedBanner = null;
             m_RelayReconnectingBanner = null;
+            m_RelayDisabledBanner = null;
             Refresh();
+        }
+
+        static BasicBannerContent BuildRelayDisabledBanner()
+        {
+            var message = "Chat is unavailable — legacy relay is disabled for this project.\n<link=open-unity-mcp-settings><color=#7BAEFA>Open Unity MCP project settings</color></link>";
+            var links = new List<LabelLink>
+            {
+                new LabelLink("open-unity-mcp-settings", () => SettingsService.OpenProjectSettings("Project/AI/Unity MCP"))
+            };
+
+            return new BasicBannerContent(message, links);
         }
 
         static BasicBannerContent BuildRelayStoppedBanner()

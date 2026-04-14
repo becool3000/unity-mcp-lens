@@ -9,11 +9,13 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ### Added
 
 - Added MCP-safe headless tile tools for classic Tile assets, Unity 6 `.tileset` generation, tilemap stack setup, and batched tilemap painting.
+- Added an experimental `unity-mcp-vnext` owned MCP-only server path with event-driven bridge manifest sync, session-scoped tool packs, and `Unity.ListToolPacks` / `Unity.SetToolPacks` / `Unity.ReadDetailRef`.
 
 ### Fixed
 
 - Fixed What's new banner not loading correctly.
 - Fixed `Unity_RunCommand` execution logs so composite scalar placeholders such as `{0:F3}` render correctly while Unity object references stay clickable.
+- Fixed repeated unchanged MCP tool snapshot payload logging by recording lightweight reference coverage rows instead of serializing the same full snapshot blob on every unchanged refresh.
 
 ## [2.3.0-pre.1] - 2026-03-23
 

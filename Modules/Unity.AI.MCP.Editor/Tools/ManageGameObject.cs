@@ -15,6 +15,7 @@ using Unity.AI.Assistant.Utils;
 using Unity.AI.MCP.Editor.Helpers;
 using Unity.AI.MCP.Editor.ToolRegistry; // For Response class
 using Unity.AI.MCP.Editor.ToolRegistry.Parameters;
+using Unity.AI.MCP.Editor.VNext;
 using Unity.AI.MCP.Runtime.Serialization;
 
 namespace Unity.AI.MCP.Editor.Tools
@@ -1305,23 +1306,7 @@ Returns:
 
         static object ShapeComponentPayload(object data, string summary, object detailRef)
         {
-            var serialized = JsonConvert.SerializeObject(data, Formatting.None);
-            var rawBytes = PayloadBudgeting.GetUtf8ByteCount(serialized);
-            if (rawBytes <= PayloadBudgetPolicy.MaxToolResultBytes)
-            {
-                PayloadStats.Record("tool_result", "Unity.ManageGameObject", rawBytes, rawBytes, PayloadBudgeting.EstimateTokensFromBytes(rawBytes), PayloadBudgeting.ComputeSha256(serialized));
-                return data;
-            }
-
-            var budgeted = PayloadBudgeting.CreateTextResult(
-                summary,
-                new { rawBytes },
-                serialized,
-                detailRef,
-                maxPreviewLines: 40,
-                maxPreviewBytes: PayloadBudgetPolicy.MaxToolResultBytes);
-            PayloadStats.Record("tool_result", "Unity.ManageGameObject", rawBytes, PayloadBudgeting.GetUtf8ByteCount(budgeted.Preview), PayloadBudgeting.EstimateTokensFromBytes(PayloadBudgeting.GetUtf8ByteCount(budgeted.Preview)), budgeted.Sha256);
-            return budgeted;
+            return ToolResultCompactor.ShapeJsonPayload("Unity.ManageGameObject", summary, data, detailRef);
         }
 
         static object AddComponentToTarget(

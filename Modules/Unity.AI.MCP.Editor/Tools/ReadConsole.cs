@@ -9,6 +9,7 @@ using Unity.AI.MCP.Editor.Helpers;
 using Unity.AI.MCP.Editor.ToolRegistry; // For Response class
 using Unity.AI.MCP.Editor.Tools.Parameters;
 using Unity.AI.Assistant.Editor.Backend.Socket.Tools;
+using Unity.AI.MCP.Editor.VNext;
 
 namespace Unity.AI.MCP.Editor.Tools
 {
@@ -531,7 +532,24 @@ Returns:
 
                 var rawJson = Newtonsoft.Json.JsonConvert.SerializeObject(formattedEntries, Newtonsoft.Json.Formatting.None);
                 var shapedJson = Newtonsoft.Json.JsonConvert.SerializeObject(grouped, Newtonsoft.Json.Formatting.None);
-                PayloadStats.Record("tool_result", "Unity.ReadConsole.summary", PayloadBudgeting.GetUtf8ByteCount(rawJson), PayloadBudgeting.GetUtf8ByteCount(shapedJson), PayloadBudgeting.EstimateTokensFromBytes(PayloadBudgeting.GetUtf8ByteCount(shapedJson)), PayloadBudgeting.ComputeSha256(rawJson));
+                int rawBytes = PayloadBudgeting.GetUtf8ByteCount(rawJson);
+                PayloadStats.Record("tool_result", "Unity.ReadConsole.summary", rawBytes, PayloadBudgeting.GetUtf8ByteCount(shapedJson), PayloadBudgeting.EstimateTokensFromBytes(PayloadBudgeting.GetUtf8ByteCount(shapedJson)), PayloadBudgeting.ComputeSha256(rawJson));
+                var detailRef = rawBytes > PayloadBudgetPolicy.MaxToolResultBytes
+                    ? ToolResultCompactor.CreateStoredDetailRef(
+                        "Unity.ReadConsole",
+                        new
+                        {
+                            cursor = totalEntries,
+                            scannedFrom = scanStart,
+                            entries = formattedEntries
+                        },
+                        rawBytes,
+                        new
+                        {
+                            format = "summary",
+                            entryCount = formattedEntries.Count
+                        })
+                    : null;
 
                 return Response.Success(
                     $"Retrieved {formattedEntries.Count} console entries in summary mode.",
@@ -540,23 +558,30 @@ Returns:
                         cursor = totalEntries,
                         scannedFrom = scanStart,
                         entryCount = formattedEntries.Count,
-                        groups = grouped
+                        groups = grouped,
+                        detailAvailable = detailRef != null,
+                        detailRef
                     }
                 );
             }
 
-            var resultJson = Newtonsoft.Json.JsonConvert.SerializeObject(formattedEntries, Newtonsoft.Json.Formatting.None);
-            PayloadStats.Record("tool_result", "Unity.ReadConsole", PayloadBudgeting.GetUtf8ByteCount(resultJson), PayloadBudgeting.GetUtf8ByteCount(resultJson), PayloadBudgeting.EstimateTokensFromBytes(PayloadBudgeting.GetUtf8ByteCount(resultJson)), PayloadBudgeting.ComputeSha256(resultJson));
-
             return Response.Success(
                 $"Retrieved {formattedEntries.Count} log entries.",
-                new
-                {
-                    cursor = totalEntries,
-                    scannedFrom = scanStart,
-                    entries = formattedEntries
-                }
-            );
+                ToolResultCompactor.ShapeJsonPayload(
+                    "Unity.ReadConsole",
+                    $"Retrieved {formattedEntries.Count} log entries.",
+                    new
+                    {
+                        cursor = totalEntries,
+                        scannedFrom = scanStart,
+                        entries = formattedEntries
+                    },
+                    new
+                    {
+                        format,
+                        includeStacktrace,
+                        entryCount = formattedEntries.Count
+                    }));
         }
 
         // --- Internal Helpers ---

@@ -5,3 +5,5 @@ Thumbs.db
 *.user
 *.swp
 .codex-temp/
+UnityMcpServerApp~/src/UnityMcpServer/bin/
+UnityMcpServerApp~/src/UnityMcpServer/obj/

@@ -5,6 +5,7 @@ using Newtonsoft.Json.Linq;
 using Unity.AI.Assistant.Utils;
 using Unity.AI.MCP.Editor.Helpers;
 using Unity.AI.MCP.Editor.ToolRegistry;
+using Unity.AI.MCP.Editor.VNext;
 using Unity.AI.MCP.Editor.Tools.Parameters;
 using UnityEditor;
 using UnityEngine;
@@ -309,18 +310,7 @@ Returns:
 
         static object ShapePayload(string toolName, string summary, object data, object detailRef)
         {
-            var serialized = Newtonsoft.Json.JsonConvert.SerializeObject(data, Newtonsoft.Json.Formatting.None);
-            var rawBytes = PayloadBudgeting.GetUtf8ByteCount(serialized);
-            if (rawBytes <= PayloadBudgetPolicy.MaxToolResultBytes)
-            {
-                PayloadStats.Record("tool_result", toolName, rawBytes, rawBytes, PayloadBudgeting.EstimateTokensFromBytes(rawBytes), PayloadBudgeting.ComputeSha256(serialized));
-                return data;
-            }
-
-            var budgeted = PayloadBudgeting.CreateTextResult(summary, new { rawBytes }, serialized, detailRef, maxPreviewLines: 40, maxPreviewBytes: PayloadBudgetPolicy.MaxToolResultBytes);
-            var previewBytes = PayloadBudgeting.GetUtf8ByteCount(budgeted.Preview);
-            PayloadStats.Record("tool_result", toolName, rawBytes, previewBytes, PayloadBudgeting.EstimateTokensFromBytes(previewBytes), budgeted.Sha256);
-            return budgeted;
+            return ToolResultCompactor.ShapeJsonPayload(toolName, summary, data, detailRef);
         }
     }
 }

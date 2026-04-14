@@ -15,6 +15,7 @@ namespace Unity.AI.Assistant.Editor
         public int GitInstanceTypeValue;
         public string CustomGitPath;
         public int CheckpointRetentionWeeks = 2;
+        public bool LegacyRelayEnabled = true;
     }
 
     static class AssistantProjectPreferences
@@ -25,6 +26,7 @@ namespace Unity.AI.Assistant.Editor
         internal static Action CustomInstructionsFilePathChanged;
         internal static Action CheckpointEnabledChanged;
         internal static Action GitInstanceTypeChanged;
+        public static event Action<bool> LegacyRelayEnabledChanged;
 
         static AssistantProjectSettings s_Settings;
 
@@ -45,6 +47,10 @@ namespace Unity.AI.Assistant.Editor
                         {
                             var json = File.ReadAllText(k_SettingsPath);
                             s_Settings = JsonUtility.FromJson<AssistantProjectSettings>(json);
+                            if (!json.Contains(nameof(AssistantProjectSettings.LegacyRelayEnabled), StringComparison.Ordinal))
+                            {
+                                s_Settings.LegacyRelayEnabled = true;
+                            }
                         }
                         catch (Exception ex)
                         {
@@ -155,6 +161,36 @@ namespace Unity.AI.Assistant.Editor
                 Settings.CheckpointRetentionWeeks = clampedValue;
                 Save();
             }
+        }
+
+        public static bool LegacyRelayEnabled
+        {
+            get => Settings.LegacyRelayEnabled;
+            set
+            {
+                if (Settings.LegacyRelayEnabled == value)
+                    return;
+
+                Settings.LegacyRelayEnabled = value;
+                Save();
+
+                LegacyRelayEnabledChanged?.Invoke(value);
+            }
+        }
+    }
+
+    public static class AssistantRelayProjectPreferences
+    {
+        public static event Action<bool> LegacyRelayEnabledChanged
+        {
+            add => AssistantProjectPreferences.LegacyRelayEnabledChanged += value;
+            remove => AssistantProjectPreferences.LegacyRelayEnabledChanged -= value;
+        }
+
+        public static bool LegacyRelayEnabled
+        {
+            get => AssistantProjectPreferences.LegacyRelayEnabled;
+            set => AssistantProjectPreferences.LegacyRelayEnabled = value;
         }
     }
 }

@@ -1,8 +1,11 @@
 using System;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Diagnostics;
 using Newtonsoft.Json.Linq;
+using Unity.AI.Assistant.Editor;
 using Unity.AI.MCP.Editor.Settings;
+using Unity.AI.MCP.Editor.Settings.Utilities;
 using UnityEditor;
 using UnityEngine;
 
@@ -18,10 +21,25 @@ namespace Unity.AI.MCP.Editor.Helpers
     static class ServerInstaller
     {
         const string k_RelayMetadataFileName = "relay.json";
+        const string k_VNextMetadataFileName = "unity-mcp-server.json";
 
         static ServerInstaller()
         {
-            InstallOrUpdateRelay();
+            RefreshInstalledServers();
+        }
+
+        public static void RefreshInstalledServers()
+        {
+            if (AssistantRelayProjectPreferences.LegacyRelayEnabled)
+            {
+                InstallOrUpdateRelay();
+            }
+            else
+            {
+                McpLog.Log("Skipping legacy relay install because this project is configured for MCP-only / unity-mcp-vnext.");
+            }
+
+            InstallOrUpdateOwnedMcpServer();
         }
 
         static void InstallOrUpdateRelay()
@@ -36,8 +54,8 @@ namespace Unity.AI.MCP.Editor.Helpers
                 }
 
                 string targetDir = MCPConstants.RelayBaseDirectory;
-                string bundledVersion = ReadRelayVersion(Path.Combine(sourceDir, k_RelayMetadataFileName));
-                string installedVersion = ReadRelayVersion(Path.Combine(targetDir, k_RelayMetadataFileName));
+                string bundledVersion = ReadVersionFromMetadata(Path.Combine(sourceDir, k_RelayMetadataFileName));
+                string installedVersion = ReadVersionFromMetadata(Path.Combine(targetDir, k_RelayMetadataFileName));
 
                 if (!IsNewerVersion(bundledVersion, installedVersion))
                 {
@@ -58,14 +76,14 @@ namespace Unity.AI.MCP.Editor.Helpers
             }
         }
 
-        static string ReadRelayVersion(string relayJsonPath)
+        static string ReadVersionFromMetadata(string metadataPath)
         {
             try
             {
-                if (!File.Exists(relayJsonPath))
+                if (!File.Exists(metadataPath))
                     return "0.0.0";
 
-                string json = File.ReadAllText(relayJsonPath);
+                string json = File.ReadAllText(metadataPath);
                 var jsonObj = JObject.Parse(json);
                 return jsonObj["version"]?.ToString() ?? "0.0.0";
             }
@@ -92,6 +110,61 @@ namespace Unity.AI.MCP.Editor.Helpers
             catch
             {
                 return true;
+            }
+        }
+
+        static void InstallOrUpdateOwnedMcpServer()
+        {
+            try
+            {
+                string sourceDir = Path.GetFullPath(MCPConstants.unityMcpServerAppPath);
+                if (!Directory.Exists(sourceDir))
+                {
+                    McpLog.Warning($"Unity MCP VNext source directory not found at {sourceDir}");
+                    return;
+                }
+
+                string bundledVersion = ReadVersionFromMetadata(MCPConstants.BundledVNextMetadataFile);
+                string installedVersion = ReadVersionFromMetadata(MCPConstants.VNextInstalledMetadataFile);
+
+                if (!IsNewerVersion(bundledVersion, installedVersion) && File.Exists(MCPConstants.VNextInstalledServerMainFile))
+                {
+                    McpLog.Log($"Unity MCP VNext server is up to date (bundled: {bundledVersion}, installed: {installedVersion})");
+                    return;
+                }
+
+                if (!Directory.Exists(MCPConstants.UnityMcpBaseDirectory))
+                    Directory.CreateDirectory(MCPConstants.UnityMcpBaseDirectory);
+
+                string stagingDirectory = Path.Combine(Path.GetTempPath(), $"unity-mcp-vnext-{Guid.NewGuid():N}");
+                try
+                {
+                    PublishOwnedServer(stagingDirectory);
+                    CopyDirectoryContents(stagingDirectory, MCPConstants.UnityMcpBaseDirectory);
+                    ReconcileOwnedServerBinary(MCPConstants.UnityMcpBaseDirectory);
+                    File.Copy(MCPConstants.BundledVNextMetadataFile, MCPConstants.VNextInstalledMetadataFile, true);
+
+                    if (!PlatformUtils.IsWindows)
+                        SetExecutable(MCPConstants.VNextInstalledServerMainFile);
+
+                    McpLog.Log($"Unity MCP VNext server installed to {MCPConstants.UnityMcpBaseDirectory} (version {bundledVersion})");
+                }
+                finally
+                {
+                    try
+                    {
+                        if (Directory.Exists(stagingDirectory))
+                            Directory.Delete(stagingDirectory, true);
+                    }
+                    catch
+                    {
+                        // Best-effort cleanup only.
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                McpLog.Warning($"Could not install Unity MCP VNext server: {ex.Message}");
             }
         }
 
@@ -189,7 +262,7 @@ namespace Unity.AI.MCP.Editor.Helpers
         {
             try
             {
-                var startInfo = new System.Diagnostics.ProcessStartInfo
+                var startInfo = new ProcessStartInfo
                 {
                     FileName = "chmod",
                     Arguments = $"+x \"{filePath}\"",
@@ -202,6 +275,146 @@ namespace Unity.AI.MCP.Editor.Helpers
             catch
             {
                 // chmod not available on this platform
+            }
+        }
+
+        static void PublishOwnedServer(string stagingDirectory)
+        {
+            string runtimeIdentifier = GetCurrentRuntimeIdentifier();
+            string prebuiltDirectory = Path.Combine(Path.GetFullPath(MCPConstants.unityMcpServerAppPath), "prebuilt", runtimeIdentifier);
+            if (Directory.Exists(prebuiltDirectory))
+            {
+                CopyDirectoryContents(prebuiltDirectory, stagingDirectory);
+                ReconcileOwnedServerBinary(stagingDirectory);
+                return;
+            }
+
+            string projectFile = MCPConstants.BundledVNextProjectFile;
+            if (!File.Exists(projectFile))
+                throw new FileNotFoundException("Unity MCP VNext project file not found.", projectFile);
+
+            string dotnetExecutable = ResolveDotNetExecutable();
+            if (string.IsNullOrWhiteSpace(dotnetExecutable))
+                throw new InvalidOperationException("dotnet SDK/runtime executable was not found. Install .NET SDK 8+ or bundle a prebuilt unity-mcp-vnext binary.");
+
+            Directory.CreateDirectory(stagingDirectory);
+            string arguments =
+                $"publish \"{projectFile}\" -c Release -r {runtimeIdentifier} --self-contained true /p:PublishSingleFile=true /p:DebugType=None /p:DebugSymbols=false -o \"{stagingDirectory}\"";
+
+            var startInfo = new ProcessStartInfo
+            {
+                FileName = dotnetExecutable,
+                Arguments = arguments,
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true,
+                WorkingDirectory = Path.GetDirectoryName(projectFile)
+            };
+
+            using var process = Process.Start(startInfo);
+            if (process == null)
+                throw new InvalidOperationException("Failed to start dotnet publish for Unity MCP VNext server.");
+
+            string standardOutput = process.StandardOutput.ReadToEnd();
+            string standardError = process.StandardError.ReadToEnd();
+            process.WaitForExit();
+
+            if (process.ExitCode != 0)
+            {
+                throw new InvalidOperationException(
+                    $"dotnet publish failed for Unity MCP VNext server (exit {process.ExitCode}).\n{standardOutput}\n{standardError}".Trim());
+            }
+
+            ReconcileOwnedServerBinary(stagingDirectory);
+        }
+
+        static string ResolveDotNetExecutable()
+        {
+            string bundledPath = Environment.GetEnvironmentVariable("DOTNET_ROOT");
+            if (!string.IsNullOrWhiteSpace(bundledPath))
+            {
+                string candidate = Path.Combine(bundledPath, PlatformUtils.IsWindows ? "dotnet.exe" : "dotnet");
+                if (File.Exists(candidate))
+                    return candidate;
+            }
+
+            return PlatformUtils.IsWindows ? "dotnet.exe" : "dotnet";
+        }
+
+        static string GetCurrentRuntimeIdentifier()
+        {
+            if (PlatformUtils.IsWindows)
+            {
+                return RuntimeInformation.ProcessArchitecture switch
+                {
+                    Architecture.Arm64 => "win-arm64",
+                    Architecture.X86 => "win-x86",
+                    _ => "win-x64"
+                };
+            }
+
+            if (PlatformUtils.IsMacOS)
+            {
+                return RuntimeInformation.ProcessArchitecture == Architecture.Arm64 ? "osx-arm64" : "osx-x64";
+            }
+
+            if (PlatformUtils.IsLinux)
+            {
+                return RuntimeInformation.ProcessArchitecture switch
+                {
+                    Architecture.Arm64 => "linux-arm64",
+                    Architecture.X86 => "linux-x86",
+                    _ => "linux-x64"
+                };
+            }
+
+            throw new PlatformNotSupportedException("Unsupported platform for Unity MCP VNext server installation.");
+        }
+
+        static void ReconcileOwnedServerBinary(string outputDirectory)
+        {
+            string expectedPath = MCPConstants.VNextInstalledServerMainFile;
+            string expectedFileName = Path.GetFileName(expectedPath);
+            string installedExpectedPath = Path.Combine(outputDirectory, expectedFileName);
+
+            string publishedDefaultPath = Path.Combine(outputDirectory, GetPublishedDefaultServerBinaryName());
+            if (!File.Exists(publishedDefaultPath))
+                return;
+
+            if (!File.Exists(installedExpectedPath) ||
+                File.GetLastWriteTimeUtc(publishedDefaultPath) >= File.GetLastWriteTimeUtc(installedExpectedPath))
+            {
+                File.Copy(publishedDefaultPath, installedExpectedPath, true);
+            }
+
+            if (!string.Equals(publishedDefaultPath, installedExpectedPath, StringComparison.OrdinalIgnoreCase))
+                File.Delete(publishedDefaultPath);
+        }
+
+        static string GetPublishedDefaultServerBinaryName()
+        {
+            return PlatformUtils.IsWindows ? "UnityMcpServer.exe" : "UnityMcpServer";
+        }
+
+        static void CopyDirectoryContents(string sourceDir, string targetDir)
+        {
+            Directory.CreateDirectory(targetDir);
+
+            foreach (string directory in Directory.GetDirectories(sourceDir, "*", SearchOption.AllDirectories))
+            {
+                string relativePath = Path.GetRelativePath(sourceDir, directory);
+                Directory.CreateDirectory(Path.Combine(targetDir, relativePath));
+            }
+
+            foreach (string file in Directory.GetFiles(sourceDir, "*", SearchOption.AllDirectories))
+            {
+                string relativePath = Path.GetRelativePath(sourceDir, file);
+                string destination = Path.Combine(targetDir, relativePath);
+                string destinationDirectory = Path.GetDirectoryName(destination);
+                if (!string.IsNullOrEmpty(destinationDirectory))
+                    Directory.CreateDirectory(destinationDirectory);
+                File.Copy(file, destination, true);
             }
         }
     }

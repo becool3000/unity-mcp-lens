@@ -17,6 +17,11 @@ namespace Unity.AI.MCP.Editor.Helpers
         public readonly string LastCommandSuccessUtc;
         public readonly string LastCommandFailureUtc;
         public readonly string LastCommandFailureReason;
+        public readonly string BridgeSessionId;
+        public readonly long ManifestVersion;
+        public readonly string ProfileCatalogVersion;
+        public readonly bool SupportsToolSyncVNext;
+        public readonly string LastToolsChangedUtc;
 
         public BridgeStatusSnapshot(
             string status,
@@ -30,7 +35,12 @@ namespace Unity.AI.MCP.Editor.Helpers
             string directCommandHealth,
             string lastCommandSuccessUtc,
             string lastCommandFailureUtc,
-            string lastCommandFailureReason)
+            string lastCommandFailureReason,
+            string bridgeSessionId,
+            long manifestVersion,
+            string profileCatalogVersion,
+            bool supportsToolSyncVNext,
+            string lastToolsChangedUtc)
         {
             Status = status;
             Reason = reason;
@@ -44,6 +54,11 @@ namespace Unity.AI.MCP.Editor.Helpers
             LastCommandSuccessUtc = lastCommandSuccessUtc;
             LastCommandFailureUtc = lastCommandFailureUtc;
             LastCommandFailureReason = lastCommandFailureReason;
+            BridgeSessionId = bridgeSessionId;
+            ManifestVersion = manifestVersion;
+            ProfileCatalogVersion = profileCatalogVersion;
+            SupportsToolSyncVNext = supportsToolSyncVNext;
+            LastToolsChangedUtc = lastToolsChangedUtc;
         }
     }
 
@@ -65,6 +80,11 @@ namespace Unity.AI.MCP.Editor.Helpers
         static string s_LastCommandSuccessUtc;
         static string s_LastCommandFailureUtc;
         static string s_LastCommandFailureReason;
+        static string s_BridgeSessionId;
+        static long s_ManifestVersion;
+        static string s_ProfileCatalogVersion;
+        static bool s_SupportsToolSyncVNext;
+        static string s_LastToolsChangedUtc;
 
         public static void SetConnectionPath(string connectionPath)
         {
@@ -90,7 +110,30 @@ namespace Unity.AI.MCP.Editor.Helpers
                     s_DirectCommandHealth,
                     s_LastCommandSuccessUtc,
                     s_LastCommandFailureUtc,
-                    s_LastCommandFailureReason);
+                    s_LastCommandFailureReason,
+                    s_BridgeSessionId,
+                    s_ManifestVersion,
+                    s_ProfileCatalogVersion,
+                    s_SupportsToolSyncVNext,
+                    s_LastToolsChangedUtc);
+            }
+        }
+
+        public static void SetToolSyncState(
+            string bridgeSessionId,
+            long manifestVersion,
+            string profileCatalogVersion,
+            bool supportsToolSyncVNext,
+            string lastToolsChangedUtc)
+        {
+            lock (s_Lock)
+            {
+                s_BridgeSessionId = bridgeSessionId;
+                s_ManifestVersion = manifestVersion;
+                s_ProfileCatalogVersion = profileCatalogVersion;
+                s_SupportsToolSyncVNext = supportsToolSyncVNext;
+                s_LastToolsChangedUtc = lastToolsChangedUtc;
+                SaveLocked();
             }
         }
 
@@ -240,7 +283,12 @@ namespace Unity.AI.MCP.Editor.Helpers
                 s_DirectCommandHealth,
                 s_LastCommandSuccessUtc,
                 s_LastCommandFailureUtc,
-                s_LastCommandFailureReason);
+                s_LastCommandFailureReason,
+                s_BridgeSessionId,
+                s_ManifestVersion,
+                s_ProfileCatalogVersion,
+                s_SupportsToolSyncVNext,
+                s_LastToolsChangedUtc);
         }
     }
 }

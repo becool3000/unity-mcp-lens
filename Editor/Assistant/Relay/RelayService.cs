@@ -9,6 +9,7 @@ using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
+using Unity.AI.Assistant.Editor;
 using Unity.AI.Tracing;
 using Unity.AI.Assistant.Editor.Utils;
 using Unity.AI.Assistant.Utils;
@@ -106,7 +107,18 @@ namespace Unity.Relay.Editor
         static void AutoStart()
         {
             InternalLog.Log("[RelayService] Initializing persistent Relay connection...");
-            Instance.Initialize();
+            var instance = Instance;
+            AssistantProjectPreferences.LegacyRelayEnabledChanged -= instance.OnLegacyRelayEnabledChanged;
+            AssistantProjectPreferences.LegacyRelayEnabledChanged += instance.OnLegacyRelayEnabledChanged;
+
+            if (!AssistantProjectPreferences.LegacyRelayEnabled)
+            {
+                instance.MarkSuppressedForProject();
+                InternalLog.Log("[RelayService] Legacy relay startup is disabled for this project.");
+                return;
+            }
+
+            instance.Initialize();
         }
 
         public static RelayService Instance
@@ -142,6 +154,7 @@ namespace Unity.Relay.Editor
         string[] m_Capabilities = Array.Empty<string>();
         string m_RelayVersion;
         string m_VersionMismatchError;
+        bool m_IsInitialized;
 
         /// <summary>
         /// Current state snapshot (thread-safe read).
@@ -287,6 +300,10 @@ namespace Unity.Relay.Editor
         /// </summary>
         public void Initialize()
         {
+            if (m_IsInitialized)
+                return;
+
+            m_IsInitialized = true;
             ProjectScriptCompilation.OnBeforeReload += SendWaitingDomainReloadMessage;
             ProjectScriptCompilation.OnRequestReload += SendWaitingDomainReloadMessage;
             EditorApplication.update += Update;
@@ -308,6 +325,13 @@ namespace Unity.Relay.Editor
         /// </summary>
         public Task StartAsync()
         {
+            if (!AssistantProjectPreferences.LegacyRelayEnabled)
+            {
+                TransitionTo(RelayStatus.Failed,
+                    "Legacy relay is disabled for this project. Re-enable it in Project/AI/Unity MCP if Assistant or Gateway chat is needed.");
+                return Task.CompletedTask;
+            }
+
             lock (m_StartLock)
             {
                 // If startup is already in progress, all callers await the same task
@@ -325,6 +349,31 @@ namespace Unity.Relay.Editor
                 m_StartTask = StartAsyncCore();
                 return m_StartTask;
             }
+        }
+
+        void OnLegacyRelayEnabledChanged(bool enabled)
+        {
+            if (enabled)
+            {
+                InternalLog.Log("[RelayService] Legacy relay re-enabled for this project.");
+                Initialize();
+                _ = StartAsync();
+                return;
+            }
+
+            InternalLog.Log("[RelayService] Legacy relay disabled for this project.");
+            if (m_State.Status == RelayStatus.NotStarted)
+            {
+                MarkSuppressedForProject();
+                return;
+            }
+
+            _ = StopAsync();
+        }
+
+        void MarkSuppressedForProject()
+        {
+            TransitionTo(RelayStatus.Stopped, "Legacy relay is disabled for this project.");
         }
 
         /// <summary>

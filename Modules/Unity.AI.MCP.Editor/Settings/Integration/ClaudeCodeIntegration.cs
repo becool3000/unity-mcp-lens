@@ -35,17 +35,11 @@ namespace Unity.AI.MCP.Editor.Settings.Integration
         /// <returns>True if configuration was successful, false otherwise.</returns>
         public bool Configure()
         {
-            string serverPath = PathUtils.GetServerPath();
-            if (string.IsNullOrEmpty(serverPath))
+            bool hasLegacyServer = PathUtils.IsServerInstalled();
+            bool hasVNextServer = PathUtils.IsVNextServerInstalled();
+            if (!hasLegacyServer && !hasVNextServer)
             {
-                UpdateClientStatus(McpStatus.Error, "Server not found");
-                return false;
-            }
-
-            string mainFile = PathUtils.GetServerMainFile(serverPath);
-            if (!File.Exists(mainFile))
-            {
-                UpdateClientStatus(McpStatus.Error, "Server main file not found");
+                UpdateClientStatus(McpStatus.Error, "No Unity MCP server installation was found");
                 return false;
             }
 
@@ -56,7 +50,7 @@ namespace Unity.AI.MCP.Editor.Settings.Integration
                 return false;
             }
 
-            bool success = AddMcpServerToConfig(configPath, mainFile);
+            bool success = AddMcpServerToConfig(configPath, hasLegacyServer, hasVNextServer);
             McpStatus status = success ? McpStatus.Configured : McpStatus.Error;
             string message = success ? "Successfully configured" : "Failed to update configuration";
 
@@ -122,7 +116,7 @@ namespace Unity.AI.MCP.Editor.Settings.Integration
             return PlatformUtils.GetConfigPathForClient(Client);
         }
 
-        bool AddMcpServerToConfig(string configPath, string mainFile)
+        bool AddMcpServerToConfig(string configPath, bool hasLegacyServer, bool hasVNextServer)
         {
             JObject config;
 
@@ -152,20 +146,42 @@ namespace Unity.AI.MCP.Editor.Settings.Integration
                 projectConfig["mcpServers"] = new JObject();
             var mcpServers = (JObject)projectConfig["mcpServers"];
 
-            // Relay binary with --mcp flag to run in MCP mode
-            var command = mainFile;
-            var args = new JArray { "--mcp" };
+            mcpServers.Remove(MCPConstants.jsonKeyIntegration);
+            mcpServers.Remove(MCPConstants.jsonKeyIntegrationLegacy);
+            mcpServers.Remove(MCPConstants.jsonKeyIntegrationVNext);
 
-            mcpServers[MCPConstants.jsonKeyIntegration] = new JObject
+            if (hasVNextServer)
             {
-                ["type"] = "stdio",
-                ["command"] = command,
-                ["args"] = args,
-                ["env"] = new JObject()
-            };
+                string vnextMainFile = PathUtils.GetVNextServerMainFile();
+                if (File.Exists(vnextMainFile))
+                {
+                    mcpServers[MCPConstants.jsonKeyIntegrationVNext] = new JObject
+                    {
+                        ["type"] = "stdio",
+                        ["command"] = vnextMainFile,
+                        ["args"] = new JArray(),
+                        ["env"] = new JObject()
+                    };
+                }
+            }
+
+            if (hasLegacyServer)
+            {
+                string legacyMainFile = PathUtils.GetServerMainFile();
+                if (File.Exists(legacyMainFile))
+                {
+                    mcpServers[MCPConstants.jsonKeyIntegrationLegacy] = new JObject
+                    {
+                        ["type"] = "stdio",
+                        ["command"] = legacyMainFile,
+                        ["args"] = new JArray { "--mcp" },
+                        ["env"] = new JObject()
+                    };
+                }
+            }
 
             File.WriteAllText(configPath, config.ToString(Formatting.Indented));
-            return true;
+            return mcpServers[MCPConstants.jsonKeyIntegrationVNext] != null || mcpServers[MCPConstants.jsonKeyIntegrationLegacy] != null;
         }
 
         bool IsMcpServerConfigured(string configPath)
@@ -177,7 +193,10 @@ namespace Unity.AI.MCP.Editor.Settings.Integration
             var config = JObject.Parse(content);
             string projectPath = PathUtils.GetProjectDirectory();
 
-            return config["projects"]?[projectPath]?["mcpServers"]?[MCPConstants.jsonKeyIntegration] != null;
+            var mcpServers = config["projects"]?[projectPath]?["mcpServers"];
+            return mcpServers?[MCPConstants.jsonKeyIntegrationVNext] != null ||
+                mcpServers?[MCPConstants.jsonKeyIntegrationLegacy] != null ||
+                mcpServers?[MCPConstants.jsonKeyIntegration] != null;
         }
 
         bool RemoveMcpServerFromConfig(string configPath)
@@ -193,6 +212,8 @@ namespace Unity.AI.MCP.Editor.Settings.Integration
                     projectConfig["mcpServers"] is JObject mcpServers)
                 {
                     mcpServers.Remove(MCPConstants.jsonKeyIntegration);
+                    mcpServers.Remove(MCPConstants.jsonKeyIntegrationLegacy);
+                    mcpServers.Remove(MCPConstants.jsonKeyIntegrationVNext);
 
                     if (!mcpServers.HasValues)
                         projectConfig.Remove("mcpServers");

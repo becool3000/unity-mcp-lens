@@ -24,6 +24,14 @@
                     <ui:Label text="Auto-approve in Batch Mode" class="umcp-setting-label" />
                     <ui:Toggle name="autoApproveBatchToggle" class="umcp-setting-control" />
                 </ui:VisualElement>
+                <ui:VisualElement class="umcp-setting-row">
+                    <ui:Label text="Enable Legacy Unity Relay" class="umcp-setting-label" />
+                    <ui:Toggle name="legacyRelayToggle" class="umcp-setting-control" />
+                </ui:VisualElement>
+                <ui:VisualElement class="umcp-setting-row umcp-description-row">
+                    <ui:Label class="umcp-setting-label" />
+                    <ui:Label name="legacyRelayDescription" text="Keeps the Assistant/Gateway relay installed and auto-started. Turn this off for MCP-only projects that use unity-mcp-vnext." />
+                </ui:VisualElement>
             </ui:VisualElement>
         </ui:VisualElement>
 
@@ -66,6 +74,9 @@
 
         <ui:VisualElement name="toolsSection" class="umcp-section">
             <ui:Foldout name="toolsFoldout" text="Tools" class="umcp-section-foldout">
+                <ui:Label name="toolRegistrySummary" class="umcp-connection-policy-label" text="Internal registry: checking..." />
+                <ui:Label name="defaultVNextExportSummary" class="umcp-connection-policy-label" text="Default VNext export: checking..." />
+                <ui:Label name="activeVNextExportSummary" class="umcp-connection-policy-label" text="Active VNext export: checking..." />
                 <ui:ScrollView name="toolsList" />
                 <ui:VisualElement class="umcp-setting-row">
                     <ui:Button name="resetToolsButton" text="Reset to Defaults" class="umcp-reset-button" />

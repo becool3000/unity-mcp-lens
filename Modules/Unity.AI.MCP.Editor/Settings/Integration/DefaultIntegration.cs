@@ -55,14 +55,15 @@ namespace Unity.AI.MCP.Editor.Settings.Integration
                 return false;
             }
 
-            string serverPath = PathUtils.GetServerPath();
-            if (string.IsNullOrEmpty(serverPath))
+            bool hasLegacyServer = PathUtils.IsServerInstalled();
+            bool hasVNextServer = PathUtils.IsVNextServerInstalled();
+            if (!hasLegacyServer && !hasVNextServer)
             {
-                UpdateStatus(McpStatus.Error, "Server not found");
+                UpdateStatus(McpStatus.Error, "No Unity MCP server installation was found");
                 return false;
             }
 
-            var result = WriteConfig(serverPath, configPath);
+            var result = WriteConfig(configPath, hasLegacyServer, hasVNextServer);
             McpStatus status = result.Success ? McpStatus.Configured : McpStatus.Error;
             UpdateStatus(status, result.Message);
 
@@ -99,12 +100,13 @@ namespace Unity.AI.MCP.Editor.Settings.Integration
                 {
                     var mcpServers = (Newtonsoft.Json.Linq.JObject)existingConfig["mcpServers"];
 
-                    if (mcpServers[MCPConstants.jsonKeyIntegration] != null)
-                    {
-                        // Remove our entry
-                        mcpServers.Remove(MCPConstants.jsonKeyIntegration);
+                    bool removedAny = false;
+                    removedAny |= mcpServers.Remove(MCPConstants.jsonKeyIntegration);
+                    removedAny |= mcpServers.Remove(MCPConstants.jsonKeyIntegrationLegacy);
+                    removedAny |= mcpServers.Remove(MCPConstants.jsonKeyIntegrationVNext);
 
-                        // Write back the modified config
+                    if (removedAny)
+                    {
                         string updatedConfig = existingConfig.ToString(Newtonsoft.Json.Formatting.Indented);
                         File.WriteAllText(configPath, updatedConfig);
 
@@ -161,17 +163,13 @@ namespace Unity.AI.MCP.Editor.Settings.Integration
             return PlatformUtils.GetConfigPathForClient(Client);
         }
 
-        ConfigResult WriteConfig(string serverPath, string configPath)
+        ConfigResult WriteConfig(string configPath, bool hasLegacyServer, bool hasVNextServer)
         {
             try
             {
-                string mainFile = PathUtils.GetServerMainFile(serverPath);
-                if (!File.Exists(mainFile))
-                {
-                    return new ConfigResult {Success = false, Message = "Server main file not found"};
-                }
-
-                string config = CreateMcpClientConfig(Client, serverPath);
+                string config = CreateMcpClientConfig(Client, hasLegacyServer, hasVNextServer);
+                if (string.IsNullOrWhiteSpace(config))
+                    return new ConfigResult {Success = false, Message = "No Unity MCP server configuration could be generated"};
 
                 if (File.Exists(configPath))
                 {
@@ -193,29 +191,49 @@ namespace Unity.AI.MCP.Editor.Settings.Integration
             }
         }
 
-        static string CreateMcpClientConfig(McpClient client, string serverPath)
+        static string CreateMcpClientConfig(McpClient client, bool hasLegacyServer, bool hasVNextServer)
         {
             try
             {
-                string mainFile = PathUtils.GetServerMainFile(serverPath);
-                if (string.IsNullOrEmpty(mainFile))
+                var mcpServers = new Newtonsoft.Json.Linq.JObject();
+
+                if (hasVNextServer)
+                {
+                    string mainFile = PathUtils.GetVNextServerMainFile();
+                    if (!string.IsNullOrEmpty(mainFile) && File.Exists(mainFile))
+                    {
+                        mcpServers[MCPConstants.jsonKeyIntegrationVNext] = new Newtonsoft.Json.Linq.JObject
+                        {
+                            ["command"] = mainFile,
+                            ["args"] = new Newtonsoft.Json.Linq.JArray(),
+                            ["env"] = new Newtonsoft.Json.Linq.JObject()
+                        };
+                    }
+                }
+
+                if (hasLegacyServer)
+                {
+                    string legacyMainFile = PathUtils.GetServerMainFile();
+                    if (!string.IsNullOrEmpty(legacyMainFile) && File.Exists(legacyMainFile))
+                    {
+                        mcpServers[MCPConstants.jsonKeyIntegrationLegacy] = new Newtonsoft.Json.Linq.JObject
+                        {
+                            ["command"] = legacyMainFile,
+                            ["args"] = new Newtonsoft.Json.Linq.JArray("--mcp"),
+                            ["env"] = new Newtonsoft.Json.Linq.JObject()
+                        };
+                    }
+                }
+
+                if (!mcpServers.HasValues)
                     return string.Empty;
 
-                // Escape backslashes for JSON
-                string escapedMainFile = mainFile.Replace("\\", "\\\\");
+                var root = new Newtonsoft.Json.Linq.JObject
+                {
+                    ["mcpServers"] = mcpServers
+                };
 
-                // Relay binary with --mcp flag to run in MCP mode
-                var command = escapedMainFile;
-
-                return $@"{{
-  ""mcpServers"": {{
-    ""{MCPConstants.jsonKeyIntegration}"": {{
-      ""command"": ""{command}"",
-      ""args"": [""--mcp""],
-      ""env"": {{}}
-    }}
-  }}
-}}";
+                return root.ToString(Newtonsoft.Json.Formatting.Indented);
             }
             catch
             {
@@ -245,7 +263,15 @@ namespace Unity.AI.MCP.Editor.Settings.Integration
                 var newMcpServers = (Newtonsoft.Json.Linq.JObject)newConfigObj["mcpServers"];
 
                 // Merge our unity-mcp entry into the existing mcpServers
-                mcpServers[MCPConstants.jsonKeyIntegration] = newMcpServers[MCPConstants.jsonKeyIntegration];
+                foreach (string key in new[] { MCPConstants.jsonKeyIntegrationLegacy, MCPConstants.jsonKeyIntegrationVNext })
+                {
+                    if (newMcpServers[key] != null)
+                        mcpServers[key] = newMcpServers[key];
+                    else
+                        mcpServers.Remove(key);
+                }
+
+                mcpServers.Remove(MCPConstants.jsonKeyIntegration);
 
                 // Write back with nice formatting
                 string mergedConfig = existingConfig.ToString(Newtonsoft.Json.Formatting.Indented);
@@ -268,9 +294,11 @@ namespace Unity.AI.MCP.Editor.Settings.Integration
                 string content = File.ReadAllText(configPath);
                 if (string.IsNullOrWhiteSpace(content)) return false;
 
-                // Basic validation - ensure it's valid JSON and contains expected structure
-                var config = Newtonsoft.Json.JsonConvert.DeserializeObject<dynamic>(content);
-                return config != null;
+                var config = Newtonsoft.Json.Linq.JObject.Parse(content);
+                var servers = config["mcpServers"] as Newtonsoft.Json.Linq.JObject;
+                return servers?[MCPConstants.jsonKeyIntegrationVNext] != null ||
+                    servers?[MCPConstants.jsonKeyIntegrationLegacy] != null ||
+                    servers?[MCPConstants.jsonKeyIntegration] != null;
             }
             catch
             {

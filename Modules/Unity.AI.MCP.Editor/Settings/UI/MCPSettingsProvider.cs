@@ -1,18 +1,21 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Unity.AI.Assistant.Editor;
 using UnityEditor;
 using UnityEngine.UIElements;
 using Unity.AI.MCP.Editor.Models;
 using Unity.AI.MCP.Editor.Settings.Utilities;
 using Unity.AI.MCP.Editor.Settings.UI;
 using Unity.AI.MCP.Editor.ToolRegistry;
+using Unity.AI.MCP.Editor.VNext;
 using Unity.AI.MCP.Editor.Constants;
 using Unity.AI.MCP.Editor.Helpers;
 using Unity.AI.MCP.Editor.Security;
 using Unity.AI.Toolkit;
 using Unity.AI.Tracing;
 using UnityEngine;
+using Unity.Relay.Editor;
 using GatewayConnectionRecord = Unity.AI.MCP.Editor.GatewayConnectionRecord;
 
 namespace Unity.AI.MCP.Editor.Settings
@@ -26,6 +29,7 @@ namespace Unity.AI.MCP.Editor.Settings
         // Cached UI elements
         Toggle m_DebugLogsToggle;
         Toggle m_AutoApproveBatchToggle;
+        Toggle m_LegacyRelayToggle;
         DropdownField m_ValidationLevelField;
         Button m_ToggleBridgeButton;
         VisualElement m_ClientList;
@@ -43,7 +47,11 @@ namespace Unity.AI.MCP.Editor.Settings
         VisualElement m_BridgeStatusIndicator;
         Label m_BridgeStatusLabel;
         Label m_ValidationDescription;
+        Label m_LegacyRelayDescription;
         Label m_ConnectionPolicyLabel;
+        Label m_ToolRegistrySummary;
+        Label m_DefaultVNextExportSummary;
+        Label m_ActiveVNextExportSummary;
         Button m_LocateServer;
 
         public MCPSettingsProvider(string path, SettingsScope scope = SettingsScope.Project)
@@ -119,6 +127,7 @@ namespace Unity.AI.MCP.Editor.Settings
             // Cache UI elements
             m_DebugLogsToggle = m_RootElement.Q<Toggle>("debugLogsToggle");
             m_ValidationLevelField = m_RootElement.Q<DropdownField>("validationLevelField");
+            m_LegacyRelayToggle = m_RootElement.Q<Toggle>("legacyRelayToggle");
             m_ToggleBridgeButton = m_RootElement.Q<Button>("toggleBridgeButton");
             m_ClientList = m_RootElement.Q<VisualElement>("clientList");
             m_ConnectedClientsList = m_RootElement.Q<ScrollView>("connectedClientsList");
@@ -138,7 +147,11 @@ namespace Unity.AI.MCP.Editor.Settings
             m_BridgeStatusIndicator = m_RootElement.Q<VisualElement>("bridgeStatusIndicator");
             m_BridgeStatusLabel = m_RootElement.Q<Label>("bridgeStatusLabel");
             m_ValidationDescription = m_RootElement.Q<Label>("validationDescription");
+            m_LegacyRelayDescription = m_RootElement.Q<Label>("legacyRelayDescription");
             m_ConnectionPolicyLabel = m_RootElement.Q<Label>("connectionPolicyLabel");
+            m_ToolRegistrySummary = m_RootElement.Q<Label>("toolRegistrySummary");
+            m_DefaultVNextExportSummary = m_RootElement.Q<Label>("defaultVNextExportSummary");
+            m_ActiveVNextExportSummary = m_RootElement.Q<Label>("activeVNextExportSummary");
 
             // Set initial values and bind events
             m_DebugLogsToggle.value = TraceCategories.IsEnabled("mcp");
@@ -152,6 +165,27 @@ namespace Unity.AI.MCP.Editor.Settings
                 settings.autoApproveInBatchMode = evt.newValue;
                 MCPSettingsManager.MarkDirty();
             });
+
+            if (m_LegacyRelayToggle != null)
+            {
+                m_LegacyRelayToggle.value = AssistantRelayProjectPreferences.LegacyRelayEnabled;
+                m_LegacyRelayToggle.RegisterValueChangedCallback(evt =>
+                {
+                    AssistantRelayProjectPreferences.LegacyRelayEnabled = evt.newValue;
+                    ServerInstaller.RefreshInstalledServers();
+
+                    if (evt.newValue)
+                    {
+                        _ = RelayService.Instance.StartAsync();
+                    }
+                    else
+                    {
+                        _ = RelayService.Instance.StopAsync();
+                    }
+
+                    UpdateLegacyRelayDescription(evt.newValue);
+                });
+            }
 
             var validationLevels = ToolDescriptions.ValidationLevels.ToList();
             var currentLevelIndex = validationLevels.IndexOf(settings.validationLevel);
@@ -190,6 +224,9 @@ namespace Unity.AI.MCP.Editor.Settings
             RefreshConnectionsList();
             RefreshToolCounts();
             UpdateValidationDescription(MCPSettingsManager.Settings.validationLevel);
+            if (m_LegacyRelayToggle != null)
+                m_LegacyRelayToggle.SetValueWithoutNotify(AssistantRelayProjectPreferences.LegacyRelayEnabled);
+            UpdateLegacyRelayDescription(AssistantRelayProjectPreferences.LegacyRelayEnabled);
         }
 
         void RefreshBridgeStatus()
@@ -240,7 +277,52 @@ namespace Unity.AI.MCP.Editor.Settings
         {
             var allTools = McpToolRegistry.GetAllToolsForSettings();
             int enabledCount = allTools.Count(t => t.IsEnabled);
-            m_ToolsFoldout.text = $"Tools ({enabledCount} of {allTools.Length} enabled)";
+            int bridgeFacingToolCount = BridgeManifestBroker.GetBridgeFacingToolCount();
+            int defaultExportCount = BridgeManifestBroker.GetExportedToolCount(ToolPackCatalog.DefaultActivePacks);
+            m_ToolsFoldout.text = $"Tools ({bridgeFacingToolCount} internal enabled, {defaultExportCount} foundation export)";
+
+            if (m_ToolRegistrySummary != null)
+            {
+                m_ToolRegistrySummary.text = bridgeFacingToolCount == enabledCount
+                    ? $"Internal registry: {bridgeFacingToolCount} enabled bridge-facing tools."
+                    : $"Internal registry: {bridgeFacingToolCount} enabled bridge-facing tools ({enabledCount} of {allTools.Length} currently enabled in settings).";
+            }
+
+            if (m_DefaultVNextExportSummary != null)
+            {
+                m_DefaultVNextExportSummary.text = $"Default VNext export: {defaultExportCount} tools in the foundation pack.";
+            }
+
+            if (m_ActiveVNextExportSummary != null)
+            {
+                var activeExports = BridgeVNextSessionRegistry.GetConnectionStatesSnapshot()
+                    .Where(state => state.Capabilities?.SupportsToolSyncVNext == true)
+                    .Select(state => new
+                    {
+                        state.ConnectionId,
+                        ActiveToolPacks = state.ActiveToolPacks ?? ToolPackCatalog.DefaultActivePacks,
+                        ExportedToolCount = BridgeManifestBroker.GetExportedToolCount(state.ActiveToolPacks ?? ToolPackCatalog.DefaultActivePacks)
+                    })
+                    .ToArray();
+
+                if (activeExports.Length == 0)
+                {
+                    m_ActiveVNextExportSummary.text = "Active VNext export: no connected VNext clients. New sessions start with the foundation pack only.";
+                }
+                else if (activeExports.Length == 1)
+                {
+                    var activeExport = activeExports[0];
+                    m_ActiveVNextExportSummary.text =
+                        $"Active VNext export: {activeExport.ExportedToolCount} tools for 1 connected VNext client ({string.Join(" + ", activeExport.ActiveToolPacks)}).";
+                }
+                else
+                {
+                    var summaries = activeExports.Select(activeExport =>
+                        $"{activeExport.ConnectionId}: {activeExport.ExportedToolCount} tools ({string.Join(" + ", activeExport.ActiveToolPacks)})");
+                    m_ActiveVNextExportSummary.text =
+                        $"Active VNext exports: {activeExports.Length} connected clients. {string.Join(" | ", summaries)}";
+                }
+            }
         }
 
         void SetupConnectionsList()
@@ -482,6 +564,16 @@ namespace Unity.AI.MCP.Editor.Settings
             };
 
             m_ValidationDescription.text = description;
+        }
+
+        void UpdateLegacyRelayDescription(bool enabled)
+        {
+            if (m_LegacyRelayDescription == null)
+                return;
+
+            m_LegacyRelayDescription.text = enabled
+                ? "Assistant/Gateway relay install and auto-start are enabled for this project."
+                : "MCP-only mode is active for this project. The legacy Unity relay will not install or auto-start; Codex should use unity-mcp-vnext instead.";
         }
 
         void EnsureBridgeAutoStart()

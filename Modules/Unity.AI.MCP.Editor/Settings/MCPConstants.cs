@@ -44,6 +44,11 @@ namespace Unity.AI.MCP.Editor.Settings
         public static string relayAppPath = $"Packages/{packageName}/RelayApp~";
 
         /// <summary>
+        /// Path to the owned MCP-only server source/bundled assets directory.
+        /// </summary>
+        public static string unityMcpServerAppPath = $"Packages/{packageName}/UnityMcpServerApp~";
+
+        /// <summary>
         /// Path to the UI template files for settings.
         /// </summary>
         public static string uiTemplatesPath = $"{modulePath}/Settings/UI";
@@ -53,6 +58,8 @@ namespace Unity.AI.MCP.Editor.Settings
         /// JSON key used to identify Unity MCP server in MCP client configuration files.
         /// </summary>
         public static string jsonKeyIntegration = "unity-mcp";
+        public static string jsonKeyIntegrationLegacy = "unity-mcp-legacy";
+        public static string jsonKeyIntegrationVNext = "unity-mcp-vnext";
 
         // Relay Installation
         /// <summary>
@@ -60,12 +67,16 @@ namespace Unity.AI.MCP.Editor.Settings
         /// The relay binary is copied here so MCP clients can reference a stable location.
         /// </summary>
         public static string relayBaseDirectoryName = ".unity/relay";
+        public static string unityMcpBaseDirectoryName = ".unity/unity-mcp";
 
         /// <summary>
         /// Gets the relay installation directory (~/.unity/relay).
         /// </summary>
         public static string RelayBaseDirectory =>
             Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), relayBaseDirectoryName);
+
+        public static string UnityMcpBaseDirectory =>
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), unityMcpBaseDirectoryName);
 
         // Status File Configuration
         /// <summary>
@@ -136,6 +147,30 @@ namespace Unity.AI.MCP.Editor.Settings
             }
         }
 
+        public static string VNextMetadataFileName => "unity-mcp-server.json";
+
+        public static string VNextInstalledMetadataFile => Path.Combine(UnityMcpBaseDirectory, VNextMetadataFileName);
+
+        public static string VNextInstalledServerMainFile
+        {
+            get
+            {
+                string serverPath = UnityMcpBaseDirectory;
+
+                if (PlatformUtils.IsWindows)
+                    return Path.Combine(serverPath, "unity_mcp_server_win.exe");
+                if (PlatformUtils.IsLinux)
+                    return Path.Combine(serverPath, "unity_mcp_server_linux");
+                if (PlatformUtils.IsMacOS)
+                {
+                    string arch = RuntimeInformation.ProcessArchitecture == Architecture.Arm64 ? "arm64" : "x64";
+                    return Path.Combine(serverPath, $"unity_mcp_server_mac_{arch}");
+                }
+
+                return Path.Combine(serverPath, "unity_mcp_server_linux");
+            }
+        }
+
         /// <summary>
         /// Gets the path to the relay binary bundled with the package (source for installation).
         /// </summary>
@@ -159,6 +194,12 @@ namespace Unity.AI.MCP.Editor.Settings
                 return Path.Combine(relayPath, "relay_linux");
             }
         }
+
+        internal static string BundledVNextProjectFile =>
+            Path.Combine(Path.GetFullPath(unityMcpServerAppPath), "src", "UnityMcpServer", "UnityMcpServer.csproj");
+
+        internal static string BundledVNextMetadataFile =>
+            Path.Combine(Path.GetFullPath(unityMcpServerAppPath), VNextMetadataFileName);
 
 
         /// <summary>

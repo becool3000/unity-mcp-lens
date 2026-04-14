@@ -34,10 +34,28 @@ namespace Unity.AI.MCP.Editor.Settings.Utilities
             }
         }
 
+        public static string GetVNextServerPath()
+        {
+            try
+            {
+                string serverPath = MCPConstants.UnityMcpBaseDirectory;
+                if (Directory.Exists(serverPath))
+                    return serverPath;
+
+                return string.Empty;
+            }
+            catch
+            {
+                return string.Empty;
+            }
+        }
+
 
         public static void OpenServerMainFile() => EditorUtility.RevealInFinder(GetServerMainFile());
+        public static void OpenVNextServerMainFile() => EditorUtility.RevealInFinder(GetVNextServerMainFile());
 
         public static string GetServerMainFile() => MCPConstants.InstalledServerMainFile;
+        public static string GetVNextServerMainFile() => MCPConstants.VNextInstalledServerMainFile;
 
         public static string GetServerMainFile(string serverPath)
         {
@@ -49,6 +67,11 @@ namespace Unity.AI.MCP.Editor.Settings.Utilities
         {
             // Check if the relay binary exists
             return File.Exists(MCPConstants.InstalledServerMainFile);
+        }
+
+        public static bool IsVNextServerInstalled()
+        {
+            return File.Exists(MCPConstants.VNextInstalledServerMainFile);
         }
 
         public static string GetProjectDirectory()

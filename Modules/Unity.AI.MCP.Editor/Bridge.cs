@@ -15,6 +15,7 @@ using Unity.AI.MCP.Editor.Security;
 using Unity.AI.MCP.Editor.Settings;
 using Unity.AI.MCP.Editor.ToolRegistry;
 using Unity.AI.MCP.Editor.UI;
+using Unity.AI.MCP.Editor.VNext;
 using Unity.AI.Assistant.Editor.Acp;
 using Unity.AI.Assistant.Utils;
 using Unity.AI.Tracing;
@@ -316,8 +317,10 @@ namespace Unity.AI.MCP.Editor
 
                     // Save discovery files
                     ServerDiscovery.SaveConnectionInfo(currentConnectionPath);
+                    BridgeManifestBroker.ResetSession("bridge_started");
                     heartbeatSeq++;
                     BridgeStatusTracker.MarkReady(resetCommandHealth: true);
+                    UpdateBridgeToolSyncStatus();
                     nextHeartbeatAt = EditorApplication.timeSinceStartup + PayloadBudgetPolicy.HeartbeatWriteIntervalSeconds;
 
                     // Pre-warm tools cache so handshake can include tools immediately
@@ -397,6 +400,7 @@ namespace Unity.AI.MCP.Editor
             McpLog.ClearOnceKeys();
             foreach (var c in toClose)
             {
+                BridgeVNextSessionRegistry.ReleaseConnection(c.ConnectionId);
                 try { c.Close(); c.Dispose(); } catch { }
             }
 
@@ -1000,6 +1004,7 @@ namespace Unity.AI.MCP.Editor
                     }
 
                     ToolExecutionContextFactory.ReleaseExternalConversation(transport.ConnectionId);
+                    BridgeVNextSessionRegistry.ReleaseConnection(transport.ConnectionId);
 
                     // Notify listeners on main thread that a client disconnected
                     if (clientRemoved)
@@ -1662,6 +1667,7 @@ namespace Unity.AI.MCP.Editor
             var clientInfo = record?.Info?.ClientInfo;
             var clientProcess = record?.Info?.Client?.ProcessName;
             var serverProcess = record?.Info?.Server?.ProcessName;
+            var toolSyncStatus = BridgeManifestBroker.GetStatus();
 
             return new
             {
@@ -1676,6 +1682,9 @@ namespace Unity.AI.MCP.Editor
                 toolsHash = s_CurrentToolsHash,
                 toolsFullHash = s_CurrentToolsFullHash,
                 toolDiscoveryReason = s_ToolSnapshotReason,
+                bridgeSessionId = toolSyncStatus.BridgeSessionId,
+                manifestVersion = toolSyncStatus.ManifestVersion,
+                profileCatalogVersion = toolSyncStatus.ProfileCatalogVersion,
                 clientName = clientInfo?.Name,
                 clientTitle = clientInfo?.Title,
                 clientVersion = clientInfo?.Version,
@@ -1683,6 +1692,84 @@ namespace Unity.AI.MCP.Editor
                 serverProcess,
                 error
             };
+        }
+
+        void UpdateClientInfoRecord(IConnectionTransport client, string name, string version, string title)
+        {
+            var clientInfo = new ClientInfo
+            {
+                Name = name,
+                Version = version,
+                Title = title,
+                ConnectionId = client.ConnectionId
+            };
+
+            string identityKey = null;
+            lock (clientsLock)
+            {
+                transportToIdentityMap.TryGetValue(client, out identityKey);
+            }
+
+            if (identityKey != null)
+                ConnectionRegistry.instance.UpdateClientInfo(identityKey, clientInfo);
+        }
+
+        static BridgeVNextClientCapabilities ParseVNextCapabilities(JObject parameters)
+        {
+            if (parameters == null)
+                return BridgeVNextClientCapabilities.Default;
+
+            var capabilitiesToken = parameters["capabilities"] as JObject ?? parameters;
+            return new BridgeVNextClientCapabilities
+            {
+                SupportsToolSyncVNext = capabilitiesToken.Value<bool?>("supportsToolSyncVNext") ?? false,
+                SupportsToolDeltas = capabilitiesToken.Value<bool?>("supportsToolDeltas") ?? false,
+                SupportsToolProfiles = capabilitiesToken.Value<bool?>("supportsToolProfiles") ?? false,
+                SupportsLazySchemas = capabilitiesToken.Value<bool?>("supportsLazySchemas") ?? false
+            };
+        }
+
+        void UpdateBridgeToolSyncStatus()
+        {
+            var status = BridgeManifestBroker.GetStatus();
+            BridgeStatusTracker.SetToolSyncState(
+                status.BridgeSessionId,
+                status.ManifestVersion,
+                status.ProfileCatalogVersion,
+                supportsToolSyncVNext: true,
+                status.LastToolsChangedUtc);
+        }
+
+        async Task NotifyVNextClientsAsync(BridgeToolsChangedNotification notification, CancellationToken cancellationToken)
+        {
+            if (notification == null)
+                return;
+
+            var notificationJson = JsonConvert.SerializeObject(notification, Formatting.None);
+            var vNextConnectionIds = new HashSet<string>(BridgeVNextSessionRegistry.GetToolSyncConnectionIds(), StringComparer.Ordinal);
+            IConnectionTransport[] transports;
+
+            lock (clientsLock)
+            {
+                transports = identityToTransportMap.Values
+                    .Where(transport => transport != null && vNextConnectionIds.Contains(transport.ConnectionId))
+                    .ToArray();
+            }
+
+            foreach (var transport in transports)
+            {
+                if (transport == null || !transport.IsConnected)
+                    continue;
+
+                try
+                {
+                    await WriteWithLockAsync(transport, notificationJson, cancellationToken);
+                }
+                catch (Exception ex)
+                {
+                    McpLog.LogDelayed($"Failed to notify VNext client {transport.ConnectionId} about tool changes: {ex.Message}", LogType.Warning);
+                }
+            }
         }
 
         static object MergeFields(params object[] values)
@@ -1839,31 +1926,188 @@ namespace Unity.AI.MCP.Editor
                     }), "error", "Command type cannot be empty");
                 }
 
+                if (command.type.Equals("register_client", StringComparison.OrdinalIgnoreCase))
+                {
+                    string name = command.@params?.Value<string>("name") ?? "unity-mcp-vnext";
+                    string version = command.@params?.Value<string>("version") ?? "unknown";
+                    string title = command.@params?.Value<string>("title");
+                    var capabilities = ParseVNextCapabilities(command.@params);
+
+                    UpdateClientInfoRecord(client, name, version, title);
+                    var state = BridgeVNextSessionRegistry.RegisterOrUpdateConnection(client.ConnectionId, name, version, title, capabilities);
+                    UpdateBridgeToolSyncStatus();
+
+                    string displayName = string.IsNullOrEmpty(title) ? name : title;
+                    McpLog.Log($"Registered VNext MCP client: {displayName} v{version}");
+
+                    var status = BridgeManifestBroker.GetStatus();
+                    return ReturnResponse(JsonConvert.SerializeObject(new
+                    {
+                        status = "success",
+                        result = new
+                        {
+                            message = "VNext client registered",
+                            bridgeSessionId = status.BridgeSessionId,
+                            manifestVersion = status.ManifestVersion,
+                            profileCatalogVersion = status.ProfileCatalogVersion,
+                            activeToolPacks = state.ActiveToolPacks,
+                            supportsToolSyncVNext = true,
+                            supportsToolDeltas = true,
+                            supportsToolProfiles = true,
+                            supportsLazySchemas = true
+                        }
+                    }), "success", null, new PayloadStatOptions
+                    {
+                        RepresentationKind = "reference",
+                        PayloadClass = "tool_manifest",
+                        ExtraFields = new
+                        {
+                            commandType = command.type,
+                            bridgeSessionId = status.BridgeSessionId,
+                            manifestVersion = status.ManifestVersion,
+                            activeToolPacks = state.ActiveToolPacks
+                        }
+                    });
+                }
+
+                if (command.type.Equals("get_manifest", StringComparison.OrdinalIgnoreCase))
+                {
+                    string knownBridgeSessionId = command.@params?.Value<string>("knownBridgeSessionId");
+                    long? knownManifestVersion = command.@params?.Value<long?>("knownManifestVersion");
+                    bool includeSchemas = command.@params?.Value<bool?>("includeSchemas") ?? false;
+
+                    var manifest = BridgeManifestBroker.GetManifest(client.ConnectionId, knownBridgeSessionId, knownManifestVersion, includeSchemas);
+                    UpdateBridgeToolSyncStatus();
+
+                    return ReturnResponse(JsonConvert.SerializeObject(new
+                    {
+                        status = "success",
+                        result = manifest
+                    }), "success", null, new PayloadStatOptions
+                    {
+                        RepresentationKind = manifest.kind == "unchanged" ? "reference" : includeSchemas ? "full" : "summary",
+                        PayloadClass = "tool_manifest",
+                        Unchanged = manifest.kind == "unchanged",
+                        ExtraFields = new
+                        {
+                            commandType = command.type,
+                            manifestKind = manifest.kind,
+                            bridgeSessionId = manifest.bridgeSessionId,
+                            manifestVersion = manifest.manifestVersion,
+                            activeToolPacks = manifest.activeToolPacks,
+                            deltaAdded = manifest.delta?.added?.Length ?? 0,
+                            deltaUpdated = manifest.delta?.updated?.Length ?? 0,
+                            deltaRemoved = manifest.delta?.removed?.Length ?? 0
+                        }
+                    });
+                }
+
+                if (command.type.Equals("set_tool_packs", StringComparison.OrdinalIgnoreCase))
+                {
+                    var requestedPacks = (command.@params?["packs"] as JArray)?.Values<string>().ToArray() ?? Array.Empty<string>();
+                    bool includeSchemas = command.@params?.Value<bool?>("includeSchemas") ?? false;
+                    var manifest = BridgeManifestBroker.SetToolPacks(client.ConnectionId, requestedPacks, includeSchemas, out var error);
+                    UpdateBridgeToolSyncStatus();
+
+                    if (manifest == null)
+                    {
+                        return ReturnResponse(JsonConvert.SerializeObject(new
+                        {
+                            status = "error",
+                            error = error ?? "Failed to update tool packs."
+                        }), "error", error ?? "Failed to update tool packs.");
+                    }
+
+                    return ReturnResponse(JsonConvert.SerializeObject(new
+                    {
+                        status = "success",
+                        result = manifest
+                    }), "success", null, new PayloadStatOptions
+                    {
+                        RepresentationKind = includeSchemas ? "full" : "summary",
+                        PayloadClass = "tool_manifest",
+                        ExtraFields = new
+                        {
+                            commandType = command.type,
+                            manifestKind = manifest.kind,
+                            bridgeSessionId = manifest.bridgeSessionId,
+                            manifestVersion = manifest.manifestVersion,
+                            activeToolPacks = manifest.activeToolPacks
+                        }
+                    });
+                }
+
+                if (command.type.Equals("get_tool_schema", StringComparison.OrdinalIgnoreCase))
+                {
+                    var toolNames = (command.@params?["toolNames"] as JArray)?.Values<string>().ToArray()
+                        ?? (command.@params?["names"] as JArray)?.Values<string>().ToArray()
+                        ?? Array.Empty<string>();
+                    var schemas = BridgeManifestBroker.GetToolSchemas(client.ConnectionId, toolNames);
+                    UpdateBridgeToolSyncStatus();
+
+                    return ReturnResponse(JsonConvert.SerializeObject(new
+                    {
+                        status = "success",
+                        result = schemas
+                    }), "success", null, new PayloadStatOptions
+                    {
+                        RepresentationKind = "full",
+                        PayloadClass = "tool_manifest",
+                        ExtraFields = new
+                        {
+                            commandType = command.type,
+                            bridgeSessionId = schemas.bridgeSessionId,
+                            manifestVersion = schemas.manifestVersion,
+                            schemaCount = schemas.tools?.Length ?? 0,
+                            activeToolPacks = schemas.activeToolPacks
+                        }
+                    });
+                }
+
+                if (command.type.Equals("read_detail_ref", StringComparison.OrdinalIgnoreCase))
+                {
+                    string refId = command.@params?.Value<string>("refId") ?? command.@params?.Value<string>("id");
+                    if (string.IsNullOrWhiteSpace(refId))
+                    {
+                        return ReturnResponse(JsonConvert.SerializeObject(new
+                        {
+                            status = "error",
+                            error = "A non-empty refId is required."
+                        }), "error", "A non-empty refId is required.");
+                    }
+
+                    if (!ToolDetailRefStore.TryRead(client.ConnectionId, refId, out var payload))
+                    {
+                        return ReturnResponse(JsonConvert.SerializeObject(new
+                        {
+                            status = "error",
+                            error = $"Detail ref '{refId}' was not found."
+                        }), "error", $"Detail ref '{refId}' was not found.");
+                    }
+
+                    return ReturnResponse(JsonConvert.SerializeObject(new
+                    {
+                        status = "success",
+                        result = payload
+                    }), "success", null, new PayloadStatOptions
+                    {
+                        RepresentationKind = "full",
+                        PayloadClass = "tool_result",
+                        ExtraFields = new
+                        {
+                            commandType = command.type,
+                            refId
+                        }
+                    });
+                }
+
                 if (command.type.Equals("set_client_info", StringComparison.OrdinalIgnoreCase))
                 {
                     string name = command.@params?.Value<string>("name") ?? "unknown";
                     string version = command.@params?.Value<string>("version") ?? "unknown";
                     string title = command.@params?.Value<string>("title");
 
-                    var clientInfo = new ClientInfo
-                    {
-                        Name = name,
-                        Version = version,
-                        Title = title,
-                        ConnectionId = client.ConnectionId
-                    };
-
-                    // Update ConnectionRegistry with client info
-                    string identityKey = null;
-                    lock (clientsLock)
-                    {
-                        transportToIdentityMap.TryGetValue(client, out identityKey);
-                    }
-
-                    if (identityKey != null)
-                    {
-                        ConnectionRegistry.instance.UpdateClientInfo(identityKey, clientInfo);
-                    }
+                    UpdateClientInfoRecord(client, name, version, title);
 
                     string displayName = string.IsNullOrEmpty(title) ? name : title;
                     McpLog.Log($"MCP client info: {displayName} v{version}");
@@ -2091,11 +2335,15 @@ namespace Unity.AI.MCP.Editor
             s_ToolSnapshotReason = args?.ChangeType == McpToolRegistry.ToolChangeType.Refreshed
                 ? "tool_registry_refreshed"
                 : "tool_registry_changed";
+            var notification = BridgeManifestBroker.MarkToolGraphChanged(s_ToolSnapshotReason);
             BridgeStatusTracker.SetToolDiscoveryState(
                 s_ToolSnapshotMode,
                 s_ToolsSnapshot?.Length ?? -1,
                 s_CurrentToolsHash,
                 s_ToolSnapshotReason);
+            UpdateBridgeToolSyncStatus();
+            if (isRunning)
+                _ = NotifyVNextClientsAsync(notification, cts?.Token ?? CancellationToken.None);
         }
 
         public void InvalidateToolsCache()
@@ -2104,11 +2352,13 @@ namespace Unity.AI.MCP.Editor
             s_NextToolsSnapshotRefreshAt = 0;
             s_ToolSnapshotMode = "reloading";
             s_ToolSnapshotReason = "tools_invalidated";
+            BridgeManifestBroker.MarkToolGraphChanged(s_ToolSnapshotReason);
             BridgeStatusTracker.SetToolDiscoveryState(
                 s_ToolSnapshotMode,
                 s_ToolsSnapshot?.Length ?? -1,
                 s_CurrentToolsHash,
                 s_ToolSnapshotReason);
+            UpdateBridgeToolSyncStatus();
         }
 
         /// <summary>

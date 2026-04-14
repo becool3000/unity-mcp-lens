@@ -158,7 +158,12 @@ namespace Unity.AI.MCP.Editor.Helpers
             string directCommandHealth = null,
             string lastCommandSuccessUtc = null,
             string lastCommandFailureUtc = null,
-            string lastCommandFailureReason = null)
+            string lastCommandFailureReason = null,
+            string bridgeSessionId = null,
+            long manifestVersion = 0,
+            string profileCatalogVersion = null,
+            bool supportsToolSyncVNext = false,
+            string lastToolsChangedUtc = null)
         {
             try
             {
@@ -179,6 +184,11 @@ namespace Unity.AI.MCP.Editor.Helpers
                     last_command_success_utc = lastCommandSuccessUtc,
                     last_command_failure_utc = lastCommandFailureUtc,
                     last_command_failure_reason = lastCommandFailureReason,
+                    bridge_session_id = bridgeSessionId,
+                    manifest_version = manifestVersion,
+                    profile_catalog_version = profileCatalogVersion,
+                    supports_tool_sync_vnext = supportsToolSyncVNext,
+                    last_tools_changed_utc = lastToolsChangedUtc,
                     project_path = Application.dataPath,
                     last_heartbeat = DateTime.UtcNow.ToString("O"),
                     protocol_version = "2.0",
