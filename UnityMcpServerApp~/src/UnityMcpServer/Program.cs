@@ -4,6 +4,14 @@ namespace UnityMcpServer;
 
 sealed class UnityMcpServerHost
 {
+    sealed class CachedToolSchema
+    {
+        public string? SchemaHash { get; init; }
+        public JsonElement InputSchema { get; init; }
+        public JsonElement OutputSchema { get; init; }
+        public JsonElement Annotations { get; init; }
+    }
+
     readonly JsonSerializerOptions m_JsonOptions = new(JsonSerializerDefaults.Web)
     {
         DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
@@ -11,6 +19,7 @@ sealed class UnityMcpServerHost
 
     readonly SemaphoreSlim m_StdoutLock = new(1, 1);
     readonly Dictionary<string, BridgeToolDescriptor> m_ToolCache = new(StringComparer.OrdinalIgnoreCase);
+    readonly Dictionary<string, CachedToolSchema> m_ToolSchemaCache = new(StringComparer.OrdinalIgnoreCase);
 
     UnityBridgeClient? m_BridgeClient;
     string? m_BridgeSessionId;
@@ -324,8 +333,7 @@ sealed class UnityMcpServerHost
             m_ToolCache.Clear();
             foreach (var tool in manifest.Tools ?? [])
             {
-                m_ToolCache[tool.Name] = tool;
-                toolsNeedingSchemas.Add(tool.Name);
+                m_ToolCache[tool.Name] = ResolveToolSchemas(tool, toolsNeedingSchemas);
             }
         }
         else if (string.Equals(manifest.Kind, "delta", StringComparison.OrdinalIgnoreCase) && manifest.Delta != null)
@@ -335,14 +343,12 @@ sealed class UnityMcpServerHost
 
             foreach (var addedTool in manifest.Delta.Added ?? [])
             {
-                m_ToolCache[addedTool.Name] = addedTool;
-                toolsNeedingSchemas.Add(addedTool.Name);
+                m_ToolCache[addedTool.Name] = ResolveToolSchemas(addedTool, toolsNeedingSchemas);
             }
 
             foreach (var updatedTool in manifest.Delta.Updated ?? [])
             {
-                m_ToolCache[updatedTool.Name] = updatedTool;
-                toolsNeedingSchemas.Add(updatedTool.Name);
+                m_ToolCache[updatedTool.Name] = ResolveToolSchemas(updatedTool, toolsNeedingSchemas);
             }
         }
 
@@ -362,7 +368,69 @@ sealed class UnityMcpServerHost
             cachedTool.OutputSchema = tool.OutputSchema;
             cachedTool.Annotations = tool.Annotations;
             m_ToolCache[tool.Name] = cachedTool;
+            RememberToolSchemas(tool);
         }
+    }
+
+    BridgeToolDescriptor ResolveToolSchemas(BridgeToolDescriptor tool, ISet<string> toolsNeedingSchemas)
+    {
+        if (HasInlineSchemas(tool))
+        {
+            RememberToolSchemas(tool);
+            return tool;
+        }
+
+        if (TryRestoreSchemasFromCache(tool, out var restoredTool))
+            return restoredTool;
+
+        toolsNeedingSchemas.Add(tool.Name);
+        return tool;
+    }
+
+    bool TryRestoreSchemasFromCache(BridgeToolDescriptor tool, out BridgeToolDescriptor restoredTool)
+    {
+        restoredTool = tool;
+        if (string.IsNullOrWhiteSpace(tool.Name) || string.IsNullOrWhiteSpace(tool.SchemaHash))
+            return false;
+
+        if (!m_ToolSchemaCache.TryGetValue(tool.Name, out var cachedSchema))
+            return false;
+
+        if (!string.Equals(cachedSchema.SchemaHash, tool.SchemaHash, StringComparison.Ordinal))
+            return false;
+
+        tool.InputSchema = cachedSchema.InputSchema;
+        tool.OutputSchema = cachedSchema.OutputSchema;
+        tool.Annotations = cachedSchema.Annotations;
+        restoredTool = tool;
+        return true;
+    }
+
+    void RememberToolSchemas(BridgeToolDescriptor tool)
+    {
+        if (string.IsNullOrWhiteSpace(tool.Name) || string.IsNullOrWhiteSpace(tool.SchemaHash))
+            return;
+
+        if (!HasSchemaPayload(tool.InputSchema))
+            return;
+
+        m_ToolSchemaCache[tool.Name] = new CachedToolSchema
+        {
+            SchemaHash = tool.SchemaHash,
+            InputSchema = tool.InputSchema,
+            OutputSchema = tool.OutputSchema,
+            Annotations = tool.Annotations
+        };
+    }
+
+    static bool HasInlineSchemas(BridgeToolDescriptor tool)
+    {
+        return HasSchemaPayload(tool.InputSchema) || HasSchemaPayload(tool.OutputSchema) || HasSchemaPayload(tool.Annotations);
+    }
+
+    static bool HasSchemaPayload(JsonElement element)
+    {
+        return element.ValueKind != JsonValueKind.Undefined && element.ValueKind != JsonValueKind.Null;
     }
 
     async Task SendToolsListChangedNotificationAsync(CancellationToken cancellationToken)
