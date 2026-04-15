@@ -138,6 +138,41 @@ namespace Unity.AI.MCP.Editor.Lens
             }
         }
 
+        public static bool TryGetPackEnforcementState(string connectionId, out string[] activeToolPacks)
+        {
+            if (BridgeLensSessionRegistry.TryGetConnectionState(connectionId, out var state) &&
+                state?.Capabilities?.SupportsToolSyncLens == true)
+            {
+                activeToolPacks = state.ActiveToolPacks?.Length > 0
+                    ? state.ActiveToolPacks.ToArray()
+                    : ToolPackCatalog.DefaultActivePacks;
+                return true;
+            }
+
+            activeToolPacks = ToolPackCatalog.DefaultActivePacks;
+            return false;
+        }
+
+        public static McpToolInfo[] FilterAvailableToolsForConnection(string connectionId, IEnumerable<McpToolInfo> tools)
+        {
+            var toolArray = tools?.ToArray() ?? Array.Empty<McpToolInfo>();
+            if (!TryGetPackEnforcementState(connectionId, out var activeToolPacks))
+                return toolArray;
+
+            return toolArray
+                .Where(tool => IsToolAllowedForPacks(tool?.name, activeToolPacks))
+                .OrderBy(tool => tool.name, StringComparer.Ordinal)
+                .ToArray();
+        }
+
+        public static bool IsToolAllowedForConnection(string connectionId, string toolName)
+        {
+            if (!TryGetPackEnforcementState(connectionId, out var activeToolPacks))
+                return true;
+
+            return IsToolAllowedForPacks(toolName, activeToolPacks);
+        }
+
         public static BridgeToolsChangedNotification MarkToolGraphChanged(string reason)
         {
             lock (s_Lock)
@@ -353,6 +388,16 @@ namespace Unity.AI.MCP.Editor.Lens
                 outputSchema = tool.outputSchema,
                 annotations = tool.annotations
             };
+        }
+
+        static bool IsToolAllowedForPacks(string toolName, IEnumerable<string> activeToolPacks)
+        {
+            if (string.IsNullOrWhiteSpace(toolName))
+                return false;
+
+            var handler = McpToolRegistry.GetTool(toolName);
+            var groups = handler?.Attribute?.Groups ?? Array.Empty<string>();
+            return ToolPackCatalog.ShouldIncludeTool(toolName, groups, activeToolPacks);
         }
 
         static BridgeManifestDelta BuildDelta(BridgeToolDescriptor[] previousTools, BridgeToolDescriptor[] currentTools)

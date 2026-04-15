@@ -2122,16 +2122,32 @@ namespace Unity.AI.MCP.Editor
                 if (command.type.Equals("get_available_tools", StringComparison.OrdinalIgnoreCase))
                 {
                     string requestedHash = command.@params?.Value<string>("hash");
+                    bool enforceToolPacks = BridgeManifestBroker.TryGetPackEnforcementState(client?.ConnectionId, out var activeToolPacks);
+
+                    McpToolInfo[] GetEffectiveTools()
+                    {
+                        var snapshot = s_ToolsSnapshot ?? Array.Empty<McpToolInfo>();
+                        return enforceToolPacks
+                            ? BridgeManifestBroker.FilterAvailableToolsForConnection(client?.ConnectionId, snapshot)
+                            : snapshot;
+                    }
 
                     // Refresh when the cached snapshot is dirty, missing, or differs from the caller hash.
-                    if (s_ToolsSnapshotDirty || string.IsNullOrEmpty(s_CurrentToolsHash) || s_CurrentToolsHash != requestedHash)
+                    var effectiveTools = GetEffectiveTools();
+                    var effectiveHash = ComputeToolsSnapshotHash(effectiveTools, includeExtendedFields: false);
+                    var effectiveFullHash = ComputeToolsSnapshotHash(effectiveTools, includeExtendedFields: true);
+
+                    if (s_ToolsSnapshotDirty || string.IsNullOrEmpty(effectiveHash) || effectiveHash != requestedHash)
                     {
                         RefreshToolsSnapshotIfNeeded();
+                        effectiveTools = GetEffectiveTools();
+                        effectiveHash = ComputeToolsSnapshotHash(effectiveTools, includeExtendedFields: false);
+                        effectiveFullHash = ComputeToolsSnapshotHash(effectiveTools, includeExtendedFields: true);
                         McpLog.Log($"Tools changed: hash={s_CurrentToolsHash}, count={s_ToolsSnapshot?.Length ?? 0}, mode={s_ToolSnapshotMode}");
                     }
                     // No logging for unchanged case - it's periodic polling noise
 
-                    if (requestedHash == s_CurrentToolsHash)
+                    if (requestedHash == effectiveHash)
                     {
                         return ReturnResponse(JsonConvert.SerializeObject(new
                         {
@@ -2139,7 +2155,7 @@ namespace Unity.AI.MCP.Editor
                             result = new
                             {
                                 unchanged = true,
-                                hash = s_CurrentToolsHash,
+                                hash = effectiveHash,
                                 source = s_ToolSnapshotMode,
                                 reason = s_ToolSnapshotReason
                             }
@@ -2153,9 +2169,11 @@ namespace Unity.AI.MCP.Editor
                                 commandType = command.type,
                                 discoveryMode = s_ToolSnapshotMode,
                                 snapshotReason = s_ToolSnapshotReason,
-                                snapshotHashMinimal = s_CurrentToolsHash,
-                                snapshotHashFull = s_CurrentToolsFullHash,
-                                enabledToolCount = s_ToolsSnapshot?.Length ?? 0
+                                snapshotHashMinimal = effectiveHash,
+                                snapshotHashFull = effectiveFullHash,
+                                enabledToolCount = s_ToolsSnapshot?.Length ?? 0,
+                                exportedToolCount = effectiveTools.Length,
+                                activeToolPacks = enforceToolPacks ? activeToolPacks : null
                             }
                         });
                     }
@@ -2165,13 +2183,13 @@ namespace Unity.AI.MCP.Editor
                         status = "success",
                         result = new
                         {
-                            hash = s_CurrentToolsHash,
+                            hash = effectiveHash,
                             source = s_ToolSnapshotMode,
                             reason = s_ToolSnapshotReason,
-                            tools = s_ToolsSnapshot ?? Array.Empty<McpToolInfo>()
+                            tools = effectiveTools
                         }
                     });
-                    McpLog.Log($"Sending tools response with {s_ToolsSnapshot?.Length ?? 0} tools");
+                    McpLog.Log($"Sending tools response with {effectiveTools.Length} tools");
                     return ReturnResponse(response, "success", null, new PayloadStatOptions
                     {
                         RepresentationKind = "full",
@@ -2182,9 +2200,11 @@ namespace Unity.AI.MCP.Editor
                             commandType = command.type,
                             discoveryMode = s_ToolSnapshotMode,
                             snapshotReason = s_ToolSnapshotReason,
-                            snapshotHashMinimal = s_CurrentToolsHash,
-                            snapshotHashFull = s_CurrentToolsFullHash,
-                            enabledToolCount = s_ToolsSnapshot?.Length ?? 0
+                            snapshotHashMinimal = effectiveHash,
+                            snapshotHashFull = effectiveFullHash,
+                            enabledToolCount = s_ToolsSnapshot?.Length ?? 0,
+                            exportedToolCount = effectiveTools.Length,
+                            activeToolPacks = enforceToolPacks ? activeToolPacks : null
                         }
                     });
                 }
@@ -2212,6 +2232,18 @@ namespace Unity.AI.MCP.Editor
 
                 // Use JObject for parameters as the handlers expect this
                 JObject paramsObject = command.@params ?? new JObject();
+
+                if (BridgeManifestBroker.TryGetPackEnforcementState(client?.ConnectionId, out var executionToolPacks) &&
+                    !BridgeManifestBroker.IsToolAllowedForConnection(client?.ConnectionId, command.type))
+                {
+                    string packSummary = string.Join(", ", executionToolPacks ?? Array.Empty<string>());
+                    return ReturnResponse(JsonConvert.SerializeObject(new
+                    {
+                        status = "error",
+                        error = $"Tool '{command.type}' is not available in the active Lens packs [{packSummary}]. Use Unity.SetToolPacks to widen the exported tool surface.",
+                        isError = true
+                    }), "error", $"Tool '{command.type}' not allowed by active Lens packs.");
+                }
 
                 // Route command through the registry
                 object result;
