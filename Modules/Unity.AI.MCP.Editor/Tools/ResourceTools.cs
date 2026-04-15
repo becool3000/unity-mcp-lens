@@ -247,7 +247,7 @@ Returns:
                     {
                         Sha256 = fullSha,
                         LengthBytes = fileBytes.Length,
-                        DetailAvailable = true
+                        DetailAvailable = false
                     }
                 };
 
@@ -339,8 +339,8 @@ Returns:
                     requireDetailRefForCompaction: selectionRequested);
 
                 response.Text = shapedText.Preview;
-                response.Metadata.DetailAvailable = response.Metadata.DetailAvailable || shapedText.DetailAvailable;
                 response.Metadata.DetailRef = shapedText.DetailRef;
+                response.Metadata.DetailAvailable = response.Metadata.DetailRef != null;
                 response.Metadata.Truncated = response.Metadata.Truncated || shapedText.Truncated;
                 response.Metadata.ReturnedLineCount = string.IsNullOrEmpty(response.Text) ? 0 : response.Text.Split('\n').Length;
 
