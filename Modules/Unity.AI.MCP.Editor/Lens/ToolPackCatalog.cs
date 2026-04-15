@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Unity.AI.Assistant.Utils;
+using Unity.AI.MCP.Editor.ToolRegistry;
 
 namespace Unity.AI.MCP.Editor.Lens
 {
