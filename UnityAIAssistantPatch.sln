@@ -1,0 +1,44 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.5.2.0
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Tools~", "Tools~", "{D7CDA2B5-FF37-6781-DEE3-AB86BD4E7ECD}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "UnityMcpLensApp~", "UnityMcpLensApp~", "{2F297DB9-CD0A-8AF2-5269-DCCD88B0B40C}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "UnityMcpLensPackSwitchBenchApp~", "UnityMcpLensPackSwitchBenchApp~", "{A6CF1EBA-3C38-3799-A524-B53A13D27620}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "UnityMcpLensPackSwitchBench", "Tools~\UnityMcpLensPackSwitchBenchApp~\UnityMcpLensPackSwitchBench.csproj", "{E753680E-7DA7-B0BD-04D2-B21D9036FC5B}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{C5A51319-928A-A3DC-4F03-0627957F2969}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "UnityMcpLens", "UnityMcpLensApp~\src\UnityMcpLens\UnityMcpLens.csproj", "{E77207FE-EF7B-671F-9800-72CF2FF19F56}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{E753680E-7DA7-B0BD-04D2-B21D9036FC5B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E753680E-7DA7-B0BD-04D2-B21D9036FC5B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E753680E-7DA7-B0BD-04D2-B21D9036FC5B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E753680E-7DA7-B0BD-04D2-B21D9036FC5B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E77207FE-EF7B-671F-9800-72CF2FF19F56}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E77207FE-EF7B-671F-9800-72CF2FF19F56}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E77207FE-EF7B-671F-9800-72CF2FF19F56}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E77207FE-EF7B-671F-9800-72CF2FF19F56}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{A6CF1EBA-3C38-3799-A524-B53A13D27620} = {D7CDA2B5-FF37-6781-DEE3-AB86BD4E7ECD}
+		{E753680E-7DA7-B0BD-04D2-B21D9036FC5B} = {A6CF1EBA-3C38-3799-A524-B53A13D27620}
+		{C5A51319-928A-A3DC-4F03-0627957F2969} = {2F297DB9-CD0A-8AF2-5269-DCCD88B0B40C}
+		{E77207FE-EF7B-671F-9800-72CF2FF19F56} = {C5A51319-928A-A3DC-4F03-0627957F2969}
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {137F8FE9-E5AF-4979-A84F-BEE025EB5EC9}
+	EndGlobalSection
+EndGlobal
