@@ -8,6 +8,7 @@ namespace Unity.AI.MCP.Editor.Helpers
         public readonly string Status;
         public readonly string Reason;
         public readonly bool ExpectedRecovery;
+        public readonly string ExpectedRecoveryExpiresUtc;
         public readonly string ToolDiscoveryMode;
         public readonly int ToolCount;
         public readonly string ToolsHash;
@@ -27,6 +28,7 @@ namespace Unity.AI.MCP.Editor.Helpers
             string status,
             string reason,
             bool expectedRecovery,
+            string expectedRecoveryExpiresUtc,
             string toolDiscoveryMode,
             int toolCount,
             string toolsHash,
@@ -45,6 +47,7 @@ namespace Unity.AI.MCP.Editor.Helpers
             Status = status;
             Reason = reason;
             ExpectedRecovery = expectedRecovery;
+            ExpectedRecoveryExpiresUtc = expectedRecoveryExpiresUtc;
             ToolDiscoveryMode = toolDiscoveryMode;
             ToolCount = toolCount;
             ToolsHash = toolsHash;
@@ -65,6 +68,7 @@ namespace Unity.AI.MCP.Editor.Helpers
     static class BridgeStatusTracker
     {
         const double DefaultTransitionTtlSeconds = 10.0;
+        const double DefaultEditorReloadTtlSeconds = 15.0;
         static readonly object s_Lock = new();
         static string s_ConnectionPath;
         static string s_Status = "idle";
@@ -98,10 +102,15 @@ namespace Unity.AI.MCP.Editor.Helpers
         {
             lock (s_Lock)
             {
+                string expectedRecoveryExpiresUtc = s_ExpectedRecovery && s_TransitionExpiresAt > 0
+                    ? DateTime.UtcNow.AddSeconds(Math.Max(0d, s_TransitionExpiresAt - EditorApplication.timeSinceStartup)).ToString("O")
+                    : null;
+
                 return new BridgeStatusSnapshot(
                     s_Status,
                     s_Reason,
                     s_ExpectedRecovery,
+                    expectedRecoveryExpiresUtc,
                     s_ToolDiscoveryMode,
                     s_ToolCount,
                     s_ToolsHash,
@@ -181,7 +190,7 @@ namespace Unity.AI.MCP.Editor.Helpers
             }
         }
 
-        public static void MarkEditorReloading(string reason = "compile_reload", double ttlSeconds = 60.0)
+        public static void MarkEditorReloading(string reason = "compile_reload", double ttlSeconds = DefaultEditorReloadTtlSeconds)
         {
             lock (s_Lock)
             {
@@ -270,6 +279,10 @@ namespace Unity.AI.MCP.Editor.Helpers
             if (string.IsNullOrWhiteSpace(s_ConnectionPath))
                 return;
 
+            string expectedRecoveryExpiresUtc = s_ExpectedRecovery && s_TransitionExpiresAt > 0
+                ? DateTime.UtcNow.AddSeconds(Math.Max(0d, s_TransitionExpiresAt - EditorApplication.timeSinceStartup)).ToString("O")
+                : null;
+
             ServerDiscovery.SaveStatusFile(
                 s_ConnectionPath,
                 s_Status,
@@ -284,6 +297,7 @@ namespace Unity.AI.MCP.Editor.Helpers
                 s_LastCommandSuccessUtc,
                 s_LastCommandFailureUtc,
                 s_LastCommandFailureReason,
+                expectedRecoveryExpiresUtc,
                 s_BridgeSessionId,
                 s_ManifestVersion,
                 s_ProfileCatalogVersion,

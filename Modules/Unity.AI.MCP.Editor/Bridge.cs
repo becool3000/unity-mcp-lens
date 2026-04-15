@@ -2233,23 +2233,26 @@ namespace Unity.AI.MCP.Editor
                 // Use JObject for parameters as the handlers expect this
                 JObject paramsObject = command.@params ?? new JObject();
 
+                string requestedToolName = command.type;
+                string normalizedToolName = McpToolRegistry.SanitizeToolName(requestedToolName);
+
                 if (BridgeManifestBroker.TryGetPackEnforcementState(client?.ConnectionId, out var executionToolPacks) &&
-                    !BridgeManifestBroker.IsToolAllowedForConnection(client?.ConnectionId, command.type))
+                    !BridgeManifestBroker.IsToolAllowedForConnection(client?.ConnectionId, normalizedToolName))
                 {
                     string packSummary = string.Join(", ", executionToolPacks ?? Array.Empty<string>());
                     return ReturnResponse(JsonConvert.SerializeObject(new
                     {
                         status = "error",
-                        error = $"Tool '{command.type}' is not available in the active Lens packs [{packSummary}]. Use Unity.SetToolPacks to widen the exported tool surface.",
+                        error = $"Tool '{requestedToolName}' is not available in the active Lens packs [{packSummary}]. Use Unity.SetToolPacks to widen the exported tool surface.",
                         isError = true
-                    }), "error", $"Tool '{command.type}' not allowed by active Lens packs.");
+                    }), "error", $"Tool '{requestedToolName}' not allowed by active Lens packs.");
                 }
 
                 // Route command through the registry
                 object result;
                 using (ToolExecutionContextFactory.BeginExternalExecutionScope(client?.ConnectionId, command.requestId))
                 {
-                    result = await McpToolRegistry.ExecuteToolAsync(command.type, paramsObject);
+                    result = await McpToolRegistry.ExecuteToolAsync(normalizedToolName, paramsObject);
                 }
                 if (result == null)
                     result = Response.Success("Operation completed.");
@@ -2335,7 +2338,7 @@ namespace Unity.AI.MCP.Editor
         {
             // Stop cleanly before reload
             preserveStatusOnStop = true;
-            BridgeStatusTracker.MarkEditorReloading("compile_reload");
+            BridgeStatusTracker.MarkEditorReloading("compile_reload", ttlSeconds: 20.0);
             try { Stop(); } catch { }
             // Avoid file I/O or heavy work here
         }
@@ -2343,7 +2346,7 @@ namespace Unity.AI.MCP.Editor
         void OnAfterAssemblyReload()
         {
             BridgeStatusTracker.SetConnectionPath(currentConnectionPath ?? ServerDiscovery.GetConnectionPath());
-            BridgeStatusTracker.MarkEditorReloading("compile_reload");
+            BridgeStatusTracker.MarkEditorReloading("compile_reload_restart", ttlSeconds: 12.0);
             LogBreadcrumb("Idle");
             // Schedule a safe restart after reload to avoid races during compilation
             ScheduleInitRetry();

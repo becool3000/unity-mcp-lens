@@ -68,19 +68,9 @@ namespace Unity.AI.MCP.Editor.Lens
         public const string SetToolPacksToolName = "Unity.SetToolPacks";
         public const string ReadDetailRefToolName = "Unity.ReadDetailRef";
 
-        static string NormalizeToolName(string toolName)
-        {
-            return string.IsNullOrWhiteSpace(toolName)
-                ? string.Empty
-                : toolName.Replace('.', '_');
-        }
+        static string NormalizeToolName(string toolName) => McpToolRegistry.NormalizeToolName(toolName) ?? string.Empty;
 
-        static string NormalizeToolPrefix(string toolPrefix)
-        {
-            return string.IsNullOrWhiteSpace(toolPrefix)
-                ? string.Empty
-                : toolPrefix.Replace('.', '_');
-        }
+        static string NormalizeToolPrefix(string toolPrefix) => McpToolRegistry.NormalizeToolName(toolPrefix) ?? string.Empty;
 
         static readonly string[] k_FoundationToolNames =
         {
@@ -111,7 +101,7 @@ namespace Unity.AI.MCP.Editor.Lens
                 ConsolePackId,
                 "Console Diagnostics",
                 "Console reads, health checks, and lightweight troubleshooting.",
-                includeTools: new[] { NormalizeToolName("Unity.ReadConsole"), NormalizeToolName("Unity.GetConsoleLogs"), NormalizeToolName("Unity.ManageEditor") },
+                includeTools: new[] { NormalizeToolName("Unity.ReadConsole"), NormalizeToolName("Unity.GetConsoleLogs"), NormalizeToolName("Unity.ManageEditor"), NormalizeToolName("Unity.ManageMenuItem") },
                 recommendedNextPacks: new[] { ProjectPackId, DebugPackId }),
             [ProjectPackId] = new(
                 ProjectPackId,

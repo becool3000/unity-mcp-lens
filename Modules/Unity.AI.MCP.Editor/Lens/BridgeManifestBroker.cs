@@ -277,10 +277,14 @@ namespace Unity.AI.MCP.Editor.Lens
             {
                 EnsureCurrentSnapshotLocked();
 
-                var requestedNames = new HashSet<string>(toolNames ?? Array.Empty<string>(), StringComparer.OrdinalIgnoreCase);
+                var requestedNames = new HashSet<string>(
+                    (toolNames ?? Array.Empty<string>())
+                        .Select(McpToolRegistry.NormalizeToolName)
+                        .Where(name => !string.IsNullOrWhiteSpace(name)),
+                    StringComparer.OrdinalIgnoreCase);
                 var activeToolPacks = BridgeLensSessionRegistry.GetActiveToolPacks(connectionId);
                 var filteredTools = FilterToolsForPacks(s_CurrentTools, activeToolPacks, includeSchemas: true)
-                    .Where(tool => requestedNames.Contains(tool.name))
+                    .Where(tool => requestedNames.Contains(McpToolRegistry.NormalizeToolName(tool.name)))
                     .ToArray();
 
                 BridgeLensSessionRegistry.UpdateAcknowledgedManifest(connectionId, s_BridgeSessionId, s_ManifestVersion);

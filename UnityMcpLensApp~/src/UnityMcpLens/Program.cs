@@ -187,6 +187,7 @@ sealed class UnityMcpLensHost
         }
 
         string toolName = toolNameElement.GetString() ?? string.Empty;
+        string canonicalToolName = CanonicalizeToolName(toolName);
         JsonElement argumentsElement = paramsElement.TryGetProperty("arguments", out var arguments) ? arguments : JsonSerializer.SerializeToElement(new { }, m_JsonOptions);
 
         try
@@ -194,7 +195,7 @@ sealed class UnityMcpLensHost
             await EnsureBridgeReadyAsync(cancellationToken).ConfigureAwait(false);
 
             object result;
-            if (MatchesToolName(toolName, "Unity.SetToolPacks"))
+            if (ToolNamesMatch(toolName, "Unity.SetToolPacks"))
             {
                 string[] requestedPacks = ExtractPacks(argumentsElement);
                 var manifestEnvelope = await m_BridgeClient!.SetToolPacksAsync(requestedPacks, includeSchemas: false, cancellationToken).ConfigureAwait(false);
@@ -222,7 +223,7 @@ sealed class UnityMcpLensHost
                     }, m_JsonOptions));
                 }
             }
-            else if (MatchesToolName(toolName, "Unity.ReadDetailRef"))
+            else if (ToolNamesMatch(toolName, "Unity.ReadDetailRef"))
             {
                 string refId = ExtractRefId(argumentsElement);
                 var detailEnvelope = await m_BridgeClient!.ReadDetailRefAsync(refId, cancellationToken).ConfigureAwait(false);
@@ -237,7 +238,7 @@ sealed class UnityMcpLensHost
             }
             else
             {
-                var toolEnvelope = await m_BridgeClient!.CallToolAsync(toolName, argumentsElement, cancellationToken).ConfigureAwait(false);
+                var toolEnvelope = await m_BridgeClient!.CallToolAsync(canonicalToolName, argumentsElement, cancellationToken).ConfigureAwait(false);
                 if (!string.Equals(toolEnvelope.Status, "success", StringComparison.OrdinalIgnoreCase))
                 {
                     result = BuildToolCallResult(CreateErrorPayload(toolEnvelope.Error ?? $"Tool '{toolName}' failed."), isError: true);
@@ -483,15 +484,18 @@ sealed class UnityMcpLensHost
         return string.Empty;
     }
 
-    static bool MatchesToolName(string actualToolName, string expectedToolName)
+    static string CanonicalizeToolName(string toolName)
     {
-        static string Normalize(string toolName) => string.IsNullOrWhiteSpace(toolName)
+        return string.IsNullOrWhiteSpace(toolName)
             ? string.Empty
             : toolName.Replace('.', '_');
+    }
 
+    static bool ToolNamesMatch(string actualToolName, string expectedToolName)
+    {
         return string.Equals(
-            Normalize(actualToolName),
-            Normalize(expectedToolName),
+            CanonicalizeToolName(actualToolName),
+            CanonicalizeToolName(expectedToolName),
             StringComparison.OrdinalIgnoreCase);
     }
 

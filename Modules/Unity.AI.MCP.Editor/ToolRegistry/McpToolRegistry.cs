@@ -62,6 +62,31 @@ namespace Unity.AI.MCP.Editor.ToolRegistry
         const int k_HashSuffixLength = 9; // "_" + 8 hex chars
 
         /// <summary>
+        /// Normalizes a tool name to the registry's canonical underscore form without applying
+        /// length limits or hashing.
+        /// </summary>
+        /// <param name="name">The tool name to normalize.</param>
+        /// <returns>The normalized tool name, or null if <paramref name="name"/> is null.</returns>
+        public static string NormalizeToolName(string name)
+        {
+            if (name == null)
+                return null;
+
+            return name.Replace('.', '_');
+        }
+
+        /// <summary>
+        /// Compares two tool names using the registry's canonical underscore form.
+        /// </summary>
+        public static bool ToolNamesMatch(string left, string right)
+        {
+            return string.Equals(
+                NormalizeToolName(left),
+                NormalizeToolName(right),
+                StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
         /// Sanitize a tool name for cross-provider compatibility.
         /// Replaces periods with underscores (OpenAI requires ^[a-zA-Z0-9_-]+$) and enforces
         /// a maximum length of <see cref="k_MaxToolNameLength"/> characters. Names that exceed
@@ -71,10 +96,9 @@ namespace Unity.AI.MCP.Editor.ToolRegistry
         /// <returns>The sanitized tool name, or null if <paramref name="name"/> is null.</returns>
         public static string SanitizeToolName(string name)
         {
-            if (name == null)
+            var sanitized = NormalizeToolName(name);
+            if (sanitized == null)
                 return null;
-
-            var sanitized = name.Replace('.', '_');
 
             if (sanitized.Length <= k_MaxToolNameLength)
                 return sanitized;
@@ -233,7 +257,8 @@ namespace Unity.AI.MCP.Editor.ToolRegistry
             if (string.IsNullOrEmpty(toolName))
                 throw new ArgumentException("Tool name cannot be null or empty", nameof(toolName));
 
-            if (!k_Tools.TryGetValue(toolName, out var handler))
+            var sanitizedToolName = SanitizeToolName(toolName);
+            if (!k_Tools.TryGetValue(sanitizedToolName, out var handler))
             {
                 var availableTools = string.Join(", ", k_Tools.Keys.OrderBy(k => k));
                 throw new ArgumentException($"Tool '{toolName}' not found. Available tools: {availableTools}");
@@ -247,14 +272,15 @@ namespace Unity.AI.MCP.Editor.ToolRegistry
                 Category = "mcp",
                 Data = new
                 {
-                    toolName,
+                    toolName = sanitizedToolName,
+                    requestedToolName = toolName,
                     requestBytes = parameterBytes
                 }
             });
 
             try
             {
-                McpLog.Log($"[McpToolRegistry] Executing tool '{toolName}'", new() { Data = new { tool = toolName, @params = parameters } });
+                McpLog.Log($"[McpToolRegistry] Executing tool '{sanitizedToolName}'", new() { Data = new { tool = sanitizedToolName, requestedToolName = toolName, @params = parameters } });
 
                 var result = await handler.ExecuteAsync(parameters);
 
@@ -274,10 +300,11 @@ namespace Unity.AI.MCP.Editor.ToolRegistry
                     resultJson,
                     meta: new
                     {
-                        toolName,
-                        hasOutputSchema = outputSchema != null
-                    },
-                    options: new PayloadStatOptions
+                    toolName,
+                    requestedToolName = toolName,
+                    hasOutputSchema = outputSchema != null
+                },
+                options: new PayloadStatOptions
                     {
                         EventKind = "tool_execution",
                         RepresentationKind = "full",
@@ -286,7 +313,8 @@ namespace Unity.AI.MCP.Editor.ToolRegistry
                         Success = true,
                         ExtraFields = new
                         {
-                            toolName,
+                            toolName = sanitizedToolName,
+                            requestedToolName = toolName,
                             requestBytes = parameterBytes,
                             responseBytes = resultBytes,
                             hasOutputSchema = outputSchema != null
@@ -297,7 +325,8 @@ namespace Unity.AI.MCP.Editor.ToolRegistry
                 {
                     success = true,
                     durationMs = (int)(DateTime.UtcNow - startedAt).TotalMilliseconds,
-                    toolName,
+                    toolName = sanitizedToolName,
+                    requestedToolName = toolName,
                     requestBytes = parameterBytes,
                     responseBytes = resultBytes
                 });
@@ -323,7 +352,8 @@ namespace Unity.AI.MCP.Editor.ToolRegistry
                         ErrorMessageShort = actualException.Message,
                         ExtraFields = new
                         {
-                            toolName,
+                            toolName = sanitizedToolName,
+                            requestedToolName = toolName,
                             requestBytes = parameterBytes
                         }
                     });
@@ -331,11 +361,12 @@ namespace Unity.AI.MCP.Editor.ToolRegistry
                 {
                     success = false,
                     durationMs = (int)(DateTime.UtcNow - startedAt).TotalMilliseconds,
-                    toolName,
+                    toolName = sanitizedToolName,
+                    requestedToolName = toolName,
                     error = actualException.GetType().Name,
                     message = actualException.Message
                 });
-                McpLog.Error($"[McpToolRegistry] Error executing tool '{toolName}': {actualException.Message}", new() { Data = new { tool = toolName, exception = actualException.ToString() } });
+                McpLog.Error($"[McpToolRegistry] Error executing tool '{sanitizedToolName}': {actualException.Message}", new() { Data = new { tool = sanitizedToolName, requestedToolName = toolName, exception = actualException.ToString() } });
                 throw actualException;
             }
             catch (Exception ex)
@@ -355,7 +386,8 @@ namespace Unity.AI.MCP.Editor.ToolRegistry
                         ErrorMessageShort = ex.Message,
                         ExtraFields = new
                         {
-                            toolName,
+                            toolName = sanitizedToolName,
+                            requestedToolName = toolName,
                             requestBytes = parameterBytes
                         }
                     });
@@ -363,11 +395,12 @@ namespace Unity.AI.MCP.Editor.ToolRegistry
                 {
                     success = false,
                     durationMs = (int)(DateTime.UtcNow - startedAt).TotalMilliseconds,
-                    toolName,
+                    toolName = sanitizedToolName,
+                    requestedToolName = toolName,
                     error = ex.GetType().Name,
                     message = ex.Message
                 });
-                McpLog.Error($"[McpToolRegistry] Error executing tool '{toolName}': {ex.Message}", new() { Data = new { tool = toolName, exception = ex.ToString() } });
+                McpLog.Error($"[McpToolRegistry] Error executing tool '{sanitizedToolName}': {ex.Message}", new() { Data = new { tool = sanitizedToolName, requestedToolName = toolName, exception = ex.ToString() } });
                 throw;
             }
         }
@@ -472,7 +505,7 @@ namespace Unity.AI.MCP.Editor.ToolRegistry
         /// <returns>true if the tool exists in the registry; otherwise, false</returns>
         public static bool HasTool(string toolName)
         {
-            return !string.IsNullOrEmpty(toolName) && k_Tools.ContainsKey(toolName);
+            return !string.IsNullOrEmpty(toolName) && k_Tools.ContainsKey(SanitizeToolName(toolName));
         }
 
         /// <summary>
@@ -484,7 +517,7 @@ namespace Unity.AI.MCP.Editor.ToolRegistry
         /// </remarks>
         /// <param name="toolName">The name of the tool to retrieve</param>
         /// <returns>The IToolHandler for the tool, or null if not found</returns>
-        internal static IToolHandler GetTool(string toolName) => k_Tools.GetValueOrDefault(toolName);
+        internal static IToolHandler GetTool(string toolName) => k_Tools.GetValueOrDefault(SanitizeToolName(toolName));
 
         // === API-based Tool Registration ===
 

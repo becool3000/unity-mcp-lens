@@ -140,11 +140,13 @@ namespace Unity.AI.MCP.Editor.ToolRegistry
         public static McpToolInfo[] GetAvailableTools(bool ignoreEnabledState = false);
         public static bool HasTool(string toolName);
         [UnityEditor.InitializeOnLoadMethod] public static void Initialize();
+        public static string NormalizeToolName(string name);
         public static void NotifyToolAvailabilityChanged(string toolName);
         public static void RefreshTools();
         public static void RegisterTool(string toolName, IUnityMcpTool toolInstance, string description = default(string), bool enabledByDefault = false, string[] groups = default(string[]));
         public static void RegisterTool<TParams>(string toolName, Unity.AI.MCP.Editor.ToolRegistry.IUnityMcpTool<TParams> toolInstance, string description = default(string), bool enabledByDefault = false, string[] groups = default(string[])) where TParams : class;
         public static string SanitizeToolName(string name);
+        public static bool ToolNamesMatch(string left, string right);
         public static bool UnregisterTool(string toolName);
         public class ToolChangeEventArgs
         {
