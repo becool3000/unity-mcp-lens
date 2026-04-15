@@ -3,33 +3,54 @@ using System.Text;
 using System.Text.Json;
 
 var options = BenchmarkOptions.Parse(args);
-var benchmark = new PackSwitchBenchmark(options);
-var report = await benchmark.RunAsync();
-
-if (options.AsJson)
+try
 {
-    Console.WriteLine(JsonSerializer.Serialize(report, JsonOptions.Output));
-    return;
-}
+    var benchmark = new PackSwitchBenchmark(options);
+    var report = await benchmark.RunAsync();
 
-Console.WriteLine();
-Console.WriteLine("Lens pack switch benchmark");
-Console.WriteLine($"Project: {report.ProjectPath}");
-Console.WriteLine($"Stats:   {report.StatsPath}");
-Console.WriteLine($"Server:  {report.ServerPath}");
-Console.WriteLine();
+    if (options.AsJson)
+    {
+        Console.WriteLine(JsonSerializer.Serialize(report, JsonOptions.Output));
+        return;
+    }
 
-foreach (var scenario in report.Scenarios)
-{
-    Console.WriteLine($"{scenario.Scenario} ({scenario.From} -> {scenario.To})");
-    Console.WriteLine($"  Exported tools:     {scenario.ToolCountBefore} -> {scenario.ToolCountAfter}");
-    Console.WriteLine($"  Active packs:       {string.Join(", ", scenario.ActiveToolPacks)}");
-    Console.WriteLine($"  Bridge requests:    {scenario.BridgeRequestCount}");
-    Console.WriteLine($"  Bridge responses:   {scenario.BridgeResponseCount}");
-    Console.WriteLine($"  Bridge bytes:       {scenario.BridgeRequestBytes} request, {scenario.BridgeResponseBytes} response");
-    Console.WriteLine($"  list_changed notif: {scenario.ListChangedNotifications}");
-    Console.WriteLine($"  get_tool_schema:    {scenario.SchemaRequestCount} requests, {scenario.SchemaRequestBytes} request bytes, {scenario.SchemaResponseCount} responses, {scenario.SchemaResponseBytes} response bytes, {scenario.SchemaCount} schemas");
     Console.WriteLine();
+    Console.WriteLine("Lens pack switch benchmark");
+    Console.WriteLine($"Project: {report.ProjectPath}");
+    Console.WriteLine($"Stats:   {report.StatsPath}");
+    Console.WriteLine($"Server:  {report.ServerPath}");
+    Console.WriteLine();
+
+    foreach (var scenario in report.Scenarios)
+    {
+        Console.WriteLine($"{scenario.Scenario} ({scenario.From} -> {scenario.To})");
+        Console.WriteLine($"  Exported tools:     {scenario.ToolCountBefore} -> {scenario.ToolCountAfter}");
+        Console.WriteLine($"  Active packs:       {string.Join(", ", scenario.ActiveToolPacks)}");
+        Console.WriteLine($"  Bridge requests:    {scenario.BridgeRequestCount}");
+        Console.WriteLine($"  Bridge responses:   {scenario.BridgeResponseCount}");
+        Console.WriteLine($"  Bridge bytes:       {scenario.BridgeRequestBytes} request, {scenario.BridgeResponseBytes} response");
+        Console.WriteLine($"  list_changed notif: {scenario.ListChangedNotifications}");
+        Console.WriteLine($"  get_tool_schema:    {scenario.SchemaRequestCount} requests, {scenario.SchemaRequestBytes} request bytes, {scenario.SchemaResponseCount} responses, {scenario.SchemaResponseBytes} response bytes, {scenario.SchemaCount} schemas");
+        Console.WriteLine();
+    }
+}
+catch (Exception ex)
+{
+    if (options.AsJson)
+    {
+        Console.WriteLine(JsonSerializer.Serialize(new
+        {
+            success = false,
+            error = ex.Message,
+            detail = ex.ToString()
+        }, JsonOptions.Output));
+    }
+    else
+    {
+        Console.Error.WriteLine(ex.ToString());
+    }
+
+    Environment.ExitCode = 1;
 }
 
 static class JsonOptions
@@ -48,6 +69,7 @@ sealed class BenchmarkOptions
     public string ServerPath { get; init; } = string.Empty;
     public int RpcTimeoutSeconds { get; init; } = 30;
     public int StatsSettleMilliseconds { get; init; } = 800;
+    public int ScenarioRetryCount { get; init; } = 2;
     public bool AsJson { get; init; }
 
     public static BenchmarkOptions Parse(string[] args)
@@ -56,6 +78,7 @@ sealed class BenchmarkOptions
         string? serverPath = null;
         int rpcTimeoutSeconds = 30;
         int statsSettleMilliseconds = 800;
+        int scenarioRetryCount = 2;
         bool asJson = false;
 
         for (var i = 0; i < args.Length; i++)
@@ -73,6 +96,9 @@ sealed class BenchmarkOptions
                     break;
                 case "--stats-settle-ms":
                     statsSettleMilliseconds = int.Parse(args[++i]);
+                    break;
+                case "--scenario-retry-count":
+                    scenarioRetryCount = int.Parse(args[++i]);
                     break;
                 case "--json":
                     asJson = true;
@@ -93,6 +119,7 @@ sealed class BenchmarkOptions
             ServerPath = Path.GetFullPath(serverPath),
             RpcTimeoutSeconds = Math.Max(1, rpcTimeoutSeconds),
             StatsSettleMilliseconds = Math.Max(250, statsSettleMilliseconds),
+            ScenarioRetryCount = Math.Max(1, scenarioRetryCount),
             AsJson = asJson
         };
     }
@@ -124,6 +151,32 @@ sealed class PackSwitchBenchmark(BenchmarkOptions options)
     }
 
     async Task<ScenarioResult> RunScenarioAsync(ScenarioDefinition definition)
+    {
+        Exception? lastError = null;
+        for (var attempt = 1; attempt <= options.ScenarioRetryCount; attempt++)
+        {
+            try
+            {
+                return await RunScenarioAttemptAsync(definition);
+            }
+            catch (Exception ex) when (attempt < options.ScenarioRetryCount && IsTransientScenarioFailure(ex))
+            {
+                lastError = ex;
+                await Task.Delay(TimeSpan.FromSeconds(Math.Min(5, attempt))).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                lastError = ex;
+                break;
+            }
+        }
+
+        throw new InvalidOperationException(
+            $"Scenario '{definition.Name}' failed after {options.ScenarioRetryCount} attempt(s). Last error: {lastError?.Message}",
+            lastError);
+    }
+
+    async Task<ScenarioResult> RunScenarioAttemptAsync(ScenarioDefinition definition)
     {
         await using var session = await LensSession.StartAsync(options.ServerPath, options.ProjectPath, TimeSpan.FromSeconds(options.RpcTimeoutSeconds));
         await session.InitializeAsync();
@@ -164,6 +217,24 @@ sealed class PackSwitchBenchmark(BenchmarkOptions options)
             sliceSummary.SchemaResponseCount,
             sliceSummary.SchemaResponseBytes,
             sliceSummary.SchemaCount);
+    }
+
+    static bool IsTransientScenarioFailure(Exception ex)
+    {
+        for (Exception? current = ex; current != null; current = current.InnerException)
+        {
+            var message = current.Message ?? string.Empty;
+            if (message.Contains("timed out", StringComparison.OrdinalIgnoreCase) ||
+                message.Contains("connection closed", StringComparison.OrdinalIgnoreCase) ||
+                message.Contains("closed stdout", StringComparison.OrdinalIgnoreCase) ||
+                message.Contains("UNITY_MCP_ERROR", StringComparison.OrdinalIgnoreCase) ||
+                message.Contains("No active Unity MCP bridge status file", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     async Task WaitForStatsToSettleAsync()
@@ -419,9 +490,11 @@ sealed class LensSession : IAsyncDisposable
         if (response.Response.TryGetProperty("error", out var error))
             throw new InvalidOperationException($"Unity_SetToolPacks failed: {error}");
 
-        var structuredContent = response.Response
-            .GetProperty("result")
-            .GetProperty("structuredContent");
+        var result = response.Response.GetProperty("result");
+        var structuredContent = result.GetProperty("structuredContent");
+        if (TryGetToolError(structuredContent, out var toolError))
+            throw new LensToolCallException("Unity_SetToolPacks", toolError, response.Response.GetRawText());
+
         if (structuredContent.ValueKind != JsonValueKind.Object ||
             !structuredContent.TryGetProperty("data", out var dataElement) ||
             !dataElement.TryGetProperty("activeToolPacks", out var activeToolPacksElement))
@@ -436,6 +509,26 @@ sealed class LensSession : IAsyncDisposable
 
         var listChangedNotifications = response.Notifications.Count(notification => notification.Method == "notifications/tools/list_changed");
         return new SetToolPacksResult(activeToolPacks, listChangedNotifications);
+    }
+
+    static bool TryGetToolError(JsonElement structuredContent, out string error)
+    {
+        error = string.Empty;
+        if (structuredContent.ValueKind != JsonValueKind.Object)
+            return false;
+
+        if (structuredContent.TryGetProperty("success", out var successElement) &&
+            successElement.ValueKind == JsonValueKind.False)
+        {
+            if (structuredContent.TryGetProperty("error", out var errorElement) && errorElement.ValueKind == JsonValueKind.String)
+                error = errorElement.GetString() ?? "Unity tool call failed.";
+            else
+                error = "Unity tool call failed.";
+
+            return true;
+        }
+
+        return false;
     }
 
     async Task SendNotificationAsync(string method, object payload)
@@ -566,3 +659,10 @@ sealed class LensSession : IAsyncDisposable
 sealed record RpcNotification(string Method, JsonElement Payload);
 sealed record RpcResponseEnvelope(JsonElement Response, IReadOnlyList<RpcNotification> Notifications);
 sealed record SetToolPacksResult(string[] ActiveToolPacks, int ListChangedNotifications);
+
+sealed class LensToolCallException(string toolName, string message, string rawResponse)
+    : InvalidOperationException($"{toolName} failed: {message}")
+{
+    public string ToolName { get; } = toolName;
+    public string RawResponse { get; } = rawResponse;
+}

@@ -16,7 +16,8 @@ param(
     [string]$ServerPath,
     [switch]$AsJson,
     [int]$RpcTimeoutSeconds = 30,
-    [int]$StatsSettleMilliseconds = 800
+    [int]$StatsSettleMilliseconds = 800,
+    [int]$ScenarioRetryCount = 2
 )
 
 $ErrorActionPreference = "Stop"
@@ -60,7 +61,8 @@ $arguments = @(
     "--project-path", $resolvedProjectPath,
     "--server-path", $resolvedServerPath,
     "--rpc-timeout-seconds", [string]$RpcTimeoutSeconds,
-    "--stats-settle-ms", [string]$StatsSettleMilliseconds
+    "--stats-settle-ms", [string]$StatsSettleMilliseconds,
+    "--scenario-retry-count", [string]$ScenarioRetryCount
 )
 
 if ($AsJson) {

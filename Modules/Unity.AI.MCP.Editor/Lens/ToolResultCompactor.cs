@@ -5,6 +5,61 @@ namespace Unity.AI.MCP.Editor.Lens
 {
     static class ToolResultCompactor
     {
+        public static BudgetedToolResult ShapeTextPayload(
+            string toolName,
+            string summary,
+            string text,
+            object detailRefMeta = null,
+            int maxPreviewLines = PayloadBudgetPolicy.MaxPreviewFileLines,
+            int maxPreviewBytes = PayloadBudgetPolicy.MaxToolResultBytes,
+            bool requireDetailRefForCompaction = false)
+        {
+            text ??= string.Empty;
+
+            var rawBytes = PayloadBudgeting.GetUtf8ByteCount(text);
+            var detailRef = rawBytes > maxPreviewBytes
+                ? CreateStoredDetailRef(toolName, text, rawBytes, detailRefMeta)
+                : null;
+
+            if (rawBytes > maxPreviewBytes && requireDetailRefForCompaction && detailRef == null)
+            {
+                var fullResult = PayloadBudgeting.CreateTextResult(
+                    summary,
+                    new { rawBytes },
+                    text,
+                    detailRef: null,
+                    maxPreviewLines: int.MaxValue,
+                    maxPreviewBytes: int.MaxValue);
+
+                PayloadStats.Record(
+                    "tool_result",
+                    toolName,
+                    rawBytes,
+                    rawBytes,
+                    PayloadBudgeting.EstimateTokensFromBytes(rawBytes),
+                    fullResult.Sha256);
+                return fullResult;
+            }
+
+            var budgeted = PayloadBudgeting.CreateTextResult(
+                summary,
+                new { rawBytes },
+                text,
+                detailRef,
+                maxPreviewLines: maxPreviewLines,
+                maxPreviewBytes: maxPreviewBytes);
+
+            var previewBytes = PayloadBudgeting.GetUtf8ByteCount(budgeted.Preview);
+            PayloadStats.Record(
+                "tool_result",
+                toolName,
+                rawBytes,
+                previewBytes,
+                PayloadBudgeting.EstimateTokensFromBytes(previewBytes),
+                budgeted.Sha256);
+            return budgeted;
+        }
+
         public static object ShapeJsonPayload(
             string toolName,
             string summary,

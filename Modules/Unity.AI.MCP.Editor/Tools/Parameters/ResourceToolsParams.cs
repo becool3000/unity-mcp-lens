@@ -197,6 +197,8 @@ namespace Unity.AI.MCP.Editor.ToolRegistry.Parameters
 
         public bool DetailAvailable { get; set; }
 
+        public object DetailRef { get; set; }
+
         public int ReturnedStartLine { get; set; }
 
         public int ReturnedLineCount { get; set; }

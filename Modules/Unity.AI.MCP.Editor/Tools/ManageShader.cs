@@ -3,7 +3,9 @@ using System.IO;
 using System.Text.RegularExpressions;
 using UnityEditor;
 using UnityEngine;
+using Unity.AI.Assistant.Utils;
 using Unity.AI.MCP.Editor.Helpers;
+using Unity.AI.MCP.Editor.Lens;
 using Unity.AI.MCP.Editor.ToolRegistry;
 using Unity.AI.MCP.Editor.Tools.Parameters;
 
@@ -53,7 +55,12 @@ Returns:
                             name = new { type = "string", description = "Shader name" },
                             path = new { type = "string", description = "Relative path to shader file" },
                             contents = new { type = "string", description = "Shader source code (for read operations)" },
-                            encodedContents = new { type = "string", description = "Base64-encoded shader contents" }
+                            encodedContents = new { type = "string", description = "Base64-encoded shader contents when the legacy full-inline path is used" },
+                            sha256 = new { type = "string", description = "SHA-256 of the full shader contents" },
+                            length_bytes = new { type = "integer", description = "Full shader length in bytes" },
+                            truncated = new { type = "boolean", description = "Whether the inline contents were truncated to a preview" },
+                            detailAvailable = new { type = "boolean", description = "Whether full contents can be resolved through Unity.ReadDetailRef" },
+                            detailRef = new { type = "object", description = "Stored detail ref for the full shader contents when compacted" }
                         }
                     }
                 },
@@ -244,6 +251,18 @@ Returns:
             try
             {
                 string contents = File.ReadAllText(fullPath);
+                var budgeted = ToolResultCompactor.ShapeTextPayload(
+                    "Unity.ManageShader.read",
+                    $"Read shader '{Path.GetFileName(relativePath)}' successfully.",
+                    contents,
+                    detailRefMeta: new
+                    {
+                        tool = "Unity.ManageShader.read",
+                        path = relativePath
+                    },
+                    maxPreviewLines: PayloadBudgetPolicy.MaxPreviewFileLines,
+                    maxPreviewBytes: PayloadBudgetPolicy.MaxPreviewFileBytes,
+                    requireDetailRefForCompaction: true);
 
                 // Return both normal and encoded contents for larger files
                 //TODO: Consider a threshold for large files
@@ -253,8 +272,13 @@ Returns:
                 {
                     name = Path.GetFileNameWithoutExtension(relativePath),
                     path = relativePath,
-                    contents = contents,
-                    encodedContents = isLarge ? EncodeBase64(contents) : null
+                    contents = budgeted.Preview,
+                    encodedContents = budgeted.DetailAvailable ? null : isLarge ? EncodeBase64(contents) : null,
+                    sha256 = budgeted.Sha256,
+                    length_bytes = budgeted.Bytes,
+                    truncated = budgeted.Truncated,
+                    detailAvailable = budgeted.DetailAvailable,
+                    detailRef = budgeted.DetailRef
                 };
 
                 return Response.Success(

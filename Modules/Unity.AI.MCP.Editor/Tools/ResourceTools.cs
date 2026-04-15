@@ -8,6 +8,7 @@ using UnityEditor;
 using UnityEngine;
 using Unity.AI.Assistant.Utils;
 using Unity.AI.MCP.Editor.Helpers;
+using Unity.AI.MCP.Editor.Lens;
 using Unity.AI.MCP.Editor.ToolRegistry; // For McpTool attribute
 using Unity.AI.MCP.Editor.ToolRegistry.Parameters;
 
@@ -250,6 +251,7 @@ Returns:
                     }
                 };
 
+                string selectedText;
                 if (selectionRequested)
                 {
                     // Apply windowing based on precedence: head_bytes > tail_lines > start_line+line_count
@@ -258,7 +260,7 @@ Returns:
                         var headBytes = Math.Min(effectiveHeadBytes, fileBytes.Length);
                         var headData = new byte[headBytes];
                         Array.Copy(fileBytes, headData, headBytes);
-                        response.Text = Encoding.UTF8.GetString(headData);
+                        selectedText = Encoding.UTF8.GetString(headData);
                         response.Metadata.Truncated = headBytes < fileBytes.Length;
                     }
                     else
@@ -270,7 +272,7 @@ Returns:
                         {
                             var tailCount = Math.Min(effectiveTailLines, lines.Length);
                             var tailLines = lines.Skip(lines.Length - tailCount).ToArray();
-                            response.Text = string.Join("\n", tailLines);
+                            selectedText = string.Join("\n", tailLines);
                             response.Metadata.ReturnedStartLine = Math.Max(1, lines.Length - tailCount + 1);
                             response.Metadata.ReturnedLineCount = tailLines.Length;
                             response.Metadata.Truncated = tailCount < lines.Length;
@@ -283,7 +285,7 @@ Returns:
                             {
                                 // Read from startLine to end of file
                                 var selectedLines = lines.Skip(startIdx).ToArray();
-                                response.Text = string.Join("\n", selectedLines);
+                                selectedText = string.Join("\n", selectedLines);
                                 response.Metadata.ReturnedStartLine = startIdx + 1;
                                 response.Metadata.ReturnedLineCount = selectedLines.Length;
                                 response.Metadata.Truncated = startIdx > 0;
@@ -293,7 +295,7 @@ Returns:
                                 // Read specific number of lines from startLine
                                 var endIdx = Math.Min(lines.Length, startIdx + effectiveLineCount);
                                 var selectedLines = lines.Skip(startIdx).Take(endIdx - startIdx).ToArray();
-                                response.Text = string.Join("\n", selectedLines);
+                                selectedText = string.Join("\n", selectedLines);
                                 response.Metadata.ReturnedStartLine = startIdx + 1;
                                 response.Metadata.ReturnedLineCount = selectedLines.Length;
                                 response.Metadata.Truncated = startIdx > 0 || endIdx < lines.Length;
@@ -301,22 +303,46 @@ Returns:
                         }
                         else
                         {
-                            response.Text = PayloadBudgeting.CreateTextPreview(fileText, PayloadBudgetPolicy.MaxPreviewFileLines, PayloadBudgetPolicy.MaxPreviewFileBytes, out var truncated);
+                            selectedText = fileText;
                             response.Metadata.ReturnedStartLine = 1;
-                            response.Metadata.ReturnedLineCount = response.Text.Split('\n').Length;
-                            response.Metadata.Truncated = truncated;
+                            response.Metadata.ReturnedLineCount = fileText.Split('\n').Length;
+                            response.Metadata.Truncated = false;
                         }
                     }
                 }
                 else
                 {
-                    response.Text = PayloadBudgeting.CreateTextPreview(Encoding.UTF8.GetString(fileBytes), PayloadBudgetPolicy.MaxPreviewFileLines, PayloadBudgetPolicy.MaxPreviewFileBytes, out var truncated);
+                    selectedText = Encoding.UTF8.GetString(fileBytes);
                     response.Metadata.ReturnedStartLine = 1;
-                    response.Metadata.ReturnedLineCount = response.Text.Split('\n').Length;
-                    response.Metadata.Truncated = truncated;
+                    response.Metadata.ReturnedLineCount = selectedText.Split('\n').Length;
+                    response.Metadata.Truncated = false;
                 }
 
-                PayloadStats.Record("tool_result", "Unity.ReadResource", fileBytes.Length, PayloadBudgeting.GetUtf8ByteCount(response.Text), PayloadBudgeting.EstimateTokensFromBytes(PayloadBudgeting.GetUtf8ByteCount(response.Text)), fullSha);
+                var shapedText = ToolResultCompactor.ShapeTextPayload(
+                    "Unity.ReadResource",
+                    $"Read resource '{parameters.Uri}' successfully.",
+                    selectedText,
+                    detailRefMeta: new
+                    {
+                        tool = "Unity.ReadResource",
+                        parameters.Uri,
+                        parameters.Full,
+                        parameters.Request,
+                        effectiveStartLine,
+                        effectiveLineCount,
+                        effectiveHeadBytes,
+                        effectiveTailLines,
+                        fileSha256 = fullSha
+                    },
+                    maxPreviewLines: PayloadBudgetPolicy.MaxPreviewFileLines,
+                    maxPreviewBytes: PayloadBudgetPolicy.MaxPreviewFileBytes,
+                    requireDetailRefForCompaction: selectionRequested);
+
+                response.Text = shapedText.Preview;
+                response.Metadata.DetailAvailable = response.Metadata.DetailAvailable || shapedText.DetailAvailable;
+                response.Metadata.DetailRef = shapedText.DetailRef;
+                response.Metadata.Truncated = response.Metadata.Truncated || shapedText.Truncated;
+                response.Metadata.ReturnedLineCount = string.IsNullOrEmpty(response.Text) ? 0 : response.Text.Split('\n').Length;
 
                 return Response.Success("Resource read successfully", response);
             }

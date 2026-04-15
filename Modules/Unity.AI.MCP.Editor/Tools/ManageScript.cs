@@ -14,6 +14,7 @@ using Unity.AI.Toolkit;
 using System.Threading;
 using System.Security.Cryptography;
 using Unity.AI.Assistant.Utils;
+using Unity.AI.MCP.Editor.Lens;
 
 #if USE_ROSLYN
 using Microsoft.CodeAnalysis;
@@ -578,21 +579,34 @@ Returns:
             {
                 string contents = File.ReadAllText(fullPath);
                 var uri = $"unity://path/{relativePath}";
-                var sha256 = PayloadBudgeting.ComputeSha256(contents);
-                var preview = PayloadBudgeting.CreateTextPreview(contents, PayloadBudgetPolicy.MaxPreviewFileLines, PayloadBudgetPolicy.MaxPreviewFileBytes, out var truncated);
+                var budgeted = ToolResultCompactor.ShapeTextPayload(
+                    "Unity.ManageScript.read",
+                    $"Read script '{Path.GetFileName(relativePath)}' successfully.",
+                    contents,
+                    detailRefMeta: new
+                    {
+                        tool = "Unity.ManageScript.read",
+                        uri,
+                        path = relativePath,
+                        requestedFull = full
+                    },
+                    maxPreviewLines: PayloadBudgetPolicy.MaxPreviewFileLines,
+                    maxPreviewBytes: PayloadBudgetPolicy.MaxPreviewFileBytes,
+                    requireDetailRefForCompaction: full);
+
                 var responseData = new
                 {
                     uri,
                     path = relativePath,
-                    contents = full ? contents : preview,
-                    sha256,
-                    length_bytes = PayloadBudgeting.GetUtf8ByteCount(contents),
-                    truncated = truncated,
+                    contents = budgeted.Preview,
+                    sha256 = budgeted.Sha256,
+                    length_bytes = budgeted.Bytes,
+                    truncated = budgeted.Truncated,
                     full = full,
-                    detail_available = true
+                    compacted = budgeted.DetailAvailable && budgeted.Truncated,
+                    detail_available = true,
+                    detail_ref = budgeted.DetailRef
                 };
-
-                PayloadStats.Record("tool_result", "Unity.ManageScript.read", PayloadBudgeting.GetUtf8ByteCount(contents), PayloadBudgeting.GetUtf8ByteCount(full ? contents : preview), PayloadBudgeting.EstimateTokensFromBytes(PayloadBudgeting.GetUtf8ByteCount(full ? contents : preview)), sha256);
 
                 return Response.Success(
                     $"Script '{Path.GetFileName(relativePath)}' read successfully.",
