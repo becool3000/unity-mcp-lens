@@ -33,7 +33,7 @@ namespace Unity.AI.Assistant.Editor.Mcp
             if (m_IsInitializationAttemptRunning)
                 return;
 
-            if (EditorApplication.timeSinceStartup < m_NextInitializationAttemptTime)
+            if (MonotonicClock.NowSeconds < m_NextInitializationAttemptTime)
                 return;
 
             if (!IsEditorStableForInitialization())
@@ -84,7 +84,7 @@ namespace Unity.AI.Assistant.Editor.Mcp
                                  "correctly. A reinitialization is being attempted now. Retrying in " +
                                  $"{m_RetrySeconds} seconds. Reason: {reason}");
 
-            m_NextInitializationAttemptTime = EditorApplication.timeSinceStartup + m_RetrySeconds;
+            m_NextInitializationAttemptTime = MonotonicClock.NowSeconds + m_RetrySeconds;
             m_RetrySeconds = Math.Min(m_RetrySeconds * 2, k_MaxRetrySeconds);
 
             if (m_IsInitializeHookInstalled)

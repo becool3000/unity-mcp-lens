@@ -25,7 +25,7 @@ namespace Unity.AI.Search.Editor.Utilities
             m_SaveAction = saveAction;
             m_IntervalSeconds = intervalSeconds;
             m_LogPrefix = logPrefix;
-            m_LastSaveTime = (float)EditorApplication.timeSinceStartup;
+            m_LastSaveTime = (float)MonotonicClock.NowSeconds;
             Register();
         }
 
@@ -67,7 +67,7 @@ namespace Unity.AI.Search.Editor.Utilities
             if (!m_IsDirty) return;
 
             m_IsDirty = false;
-            m_LastSaveTime = (float)EditorApplication.timeSinceStartup;
+            m_LastSaveTime = (float)MonotonicClock.NowSeconds;
             m_SaveAction();
         }
 
@@ -75,7 +75,7 @@ namespace Unity.AI.Search.Editor.Utilities
         {
             if (!m_IsDirty) return;
 
-            var currentTime = (float)EditorApplication.timeSinceStartup;
+            var currentTime = (float)MonotonicClock.NowSeconds;
             if (currentTime - m_LastSaveTime >= m_IntervalSeconds)
                 SaveIfDirty();
         }

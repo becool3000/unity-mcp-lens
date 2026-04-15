@@ -1,4 +1,5 @@
 using System;
+using Unity.AI.Assistant.Utils;
 using UnityEditor;
 
 namespace Unity.AI.MCP.Editor.Helpers
@@ -103,7 +104,7 @@ namespace Unity.AI.MCP.Editor.Helpers
             lock (s_Lock)
             {
                 string expectedRecoveryExpiresUtc = s_ExpectedRecovery && s_TransitionExpiresAt > 0
-                    ? DateTime.UtcNow.AddSeconds(Math.Max(0d, s_TransitionExpiresAt - EditorApplication.timeSinceStartup)).ToString("O")
+                    ? DateTime.UtcNow.AddSeconds(Math.Max(0d, s_TransitionExpiresAt - MonotonicClock.NowSeconds)).ToString("O")
                     : null;
 
                 return new BridgeStatusSnapshot(
@@ -185,7 +186,7 @@ namespace Unity.AI.MCP.Editor.Helpers
                 s_Status = status;
                 s_Reason = reason;
                 s_ExpectedRecovery = true;
-                s_TransitionExpiresAt = EditorApplication.timeSinceStartup + Math.Max(1.0, ttlSeconds);
+                s_TransitionExpiresAt = MonotonicClock.NowSeconds + Math.Max(1.0, ttlSeconds);
                 SaveLocked();
             }
         }
@@ -198,7 +199,7 @@ namespace Unity.AI.MCP.Editor.Helpers
                 s_Status = "editor_reloading";
                 s_Reason = reason;
                 s_ExpectedRecovery = true;
-                s_TransitionExpiresAt = EditorApplication.timeSinceStartup + Math.Max(1.0, ttlSeconds);
+                s_TransitionExpiresAt = MonotonicClock.NowSeconds + Math.Max(1.0, ttlSeconds);
                 SaveLocked();
             }
         }
@@ -236,13 +237,25 @@ namespace Unity.AI.MCP.Editor.Helpers
         {
             lock (s_Lock)
             {
-                s_DirectCommandHealth = "failed";
                 s_LastCommandFailureUtc = DateTime.UtcNow.ToString("O");
                 s_LastCommandFailureReason = string.IsNullOrWhiteSpace(reason) ? "direct_command_failed" : reason;
-                s_Status = "transport_recovering";
-                s_Reason = s_LastCommandFailureReason;
-                s_ExpectedRecovery = true;
-                s_TransitionExpiresAt = EditorApplication.timeSinceStartup + Math.Max(1.0, ttlSeconds);
+
+                if (IsTransientLoadThreadClockFailure(s_LastCommandFailureReason))
+                {
+                    s_DirectCommandHealth = "recovering";
+                    s_Status = "editor_reloading";
+                    s_Reason = "compile_reload_main_thread_clock";
+                    s_ExpectedRecovery = true;
+                    s_TransitionExpiresAt = MonotonicClock.NowSeconds + Math.Max(5.0, ttlSeconds);
+                }
+                else
+                {
+                    s_DirectCommandHealth = "failed";
+                    s_Status = "transport_recovering";
+                    s_Reason = s_LastCommandFailureReason;
+                    s_ExpectedRecovery = true;
+                    s_TransitionExpiresAt = MonotonicClock.NowSeconds + Math.Max(1.0, ttlSeconds);
+                }
                 SaveLocked();
             }
         }
@@ -251,7 +264,7 @@ namespace Unity.AI.MCP.Editor.Helpers
         {
             lock (s_Lock)
             {
-                bool transitionActive = s_ExpectedRecovery && s_TransitionExpiresAt > EditorApplication.timeSinceStartup;
+                bool transitionActive = s_ExpectedRecovery && s_TransitionExpiresAt > MonotonicClock.NowSeconds;
                 if (!transitionActive)
                 {
                     if (string.Equals(s_DirectCommandHealth, "failed", StringComparison.OrdinalIgnoreCase))
@@ -280,7 +293,7 @@ namespace Unity.AI.MCP.Editor.Helpers
                 return;
 
             string expectedRecoveryExpiresUtc = s_ExpectedRecovery && s_TransitionExpiresAt > 0
-                ? DateTime.UtcNow.AddSeconds(Math.Max(0d, s_TransitionExpiresAt - EditorApplication.timeSinceStartup)).ToString("O")
+                ? DateTime.UtcNow.AddSeconds(Math.Max(0d, s_TransitionExpiresAt - MonotonicClock.NowSeconds)).ToString("O")
                 : null;
 
             ServerDiscovery.SaveStatusFile(
@@ -303,6 +316,15 @@ namespace Unity.AI.MCP.Editor.Helpers
                 s_ProfileCatalogVersion,
                 s_SupportsToolSyncLens,
                 s_LastToolsChangedUtc);
+        }
+
+        static bool IsTransientLoadThreadClockFailure(string reason)
+        {
+            if (string.IsNullOrWhiteSpace(reason))
+                return false;
+
+            return reason.IndexOf("timeSinceStartup can only be called from the main thread", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                reason.IndexOf("loading thread", StringComparison.OrdinalIgnoreCase) >= 0;
         }
     }
 }

@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using Unity.AI.Search.Editor.Knowledge;
 using Unity.AI.Search.Editor.Services;
 using Unity.AI.Search.Editor.Services.Models;
+using Unity.AI.Assistant.Utils;
 using Unity.AI.Toolkit.Utility;
 using UnityEditor;
 
@@ -91,12 +92,12 @@ namespace Unity.AI.Search.Editor.Embeddings
             if (shouldFire == null) throw new ArgumentNullException(nameof(shouldFire));
             if (flushAction == null) throw new ArgumentNullException(nameof(flushAction));
 
-            var scheduledAt = EditorApplication.timeSinceStartup;
+            var scheduledAt = MonotonicClock.NowSeconds;
             EventHandlerRegistration registration = null;
 
             void Update()
             {
-                var elapsed = EditorApplication.timeSinceStartup - scheduledAt;
+                var elapsed = MonotonicClock.SecondsSince(scheduledAt);
                 if (shouldFire() || elapsed >= maxDelayMs / 1000.0)
                 {
                     registration?.Dispose();

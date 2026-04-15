@@ -142,7 +142,7 @@ namespace Unity.Relay.Editor
         Process m_ProcessHandle;
         WebSocketRelayClient m_Client;
         RelayBus m_Bus;
-        float m_LastConnectionAttemptTime;
+        double m_LastConnectionAttemptTime;
         bool m_IsReconnecting;
         bool m_IsConnectedToExternalServer;
         Task m_StartTask;
@@ -766,7 +766,7 @@ namespace Unity.Relay.Editor
 
                 try
                 {
-                    m_LastConnectionAttemptTime = (float)EditorApplication.timeSinceStartup;
+                    m_LastConnectionAttemptTime = MonotonicClock.NowSeconds;
 
                     if (m_Client != null)
                     {
@@ -1281,14 +1281,14 @@ namespace Unity.Relay.Editor
                 return true;
 
             InternalLog.Log($"[RelayService] Waiting for editor stability before {context}");
-            var startTime = EditorApplication.timeSinceStartup;
+            var startTime = MonotonicClock.NowSeconds;
 
             while (!IsEditorStableForRelayActivity())
             {
                 if (m_State.Status == RelayStatus.Stopping || m_State.Status == RelayStatus.Stopped)
                     return false;
 
-                if ((EditorApplication.timeSinceStartup - startTime) * 1000d >= k_MaxEditorStateWaitMs)
+                if (MonotonicClock.SecondsSince(startTime) * 1000d >= k_MaxEditorStateWaitMs)
                     return false;
 
                 await Task.Delay(k_EditorStatePollDelayMs);
@@ -1309,7 +1309,7 @@ namespace Unity.Relay.Editor
             // Handle automatic reconnection with throttling
             if (!m_IsReconnecting)
             {
-                float currentTime = (float)EditorApplication.timeSinceStartup;
+                double currentTime = MonotonicClock.NowSeconds;
                 if (currentTime - m_LastConnectionAttemptTime > k_ReconnectIntervalSeconds)
                 {
                     _ = ReconnectAsync();
