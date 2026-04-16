@@ -20,7 +20,7 @@ namespace Unity.AI.MCP.Editor.Utils.Graphics
                 RenderTextureFormat.Default,
                 RenderTextureReadWrite.Linear);
 
-            Graphics.Blit(texture, renderTexture);
+            UnityEngine.Graphics.Blit(texture, renderTexture);
 
             var previousActive = RenderTexture.active;
             RenderTexture.active = renderTexture;
