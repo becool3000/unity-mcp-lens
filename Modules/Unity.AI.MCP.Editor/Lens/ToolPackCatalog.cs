@@ -65,6 +65,7 @@ namespace Unity.AI.MCP.Editor.Lens
         public const string FullPackId = "full";
         public const int MaxAdditionalPacks = 2;
 
+        public const string GetLensHealthToolName = "Unity.GetLensHealth";
         public const string ListToolPacksToolName = "Unity.ListToolPacks";
         public const string SetToolPacksToolName = "Unity.SetToolPacks";
         public const string ReadDetailRefToolName = "Unity.ReadDetailRef";
@@ -75,6 +76,7 @@ namespace Unity.AI.MCP.Editor.Lens
 
         static readonly string[] k_FoundationToolNames =
         {
+            NormalizeToolName(GetLensHealthToolName),
             NormalizeToolName(ListToolPacksToolName),
             NormalizeToolName(SetToolPacksToolName),
             NormalizeToolName(ReadDetailRefToolName),

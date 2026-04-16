@@ -1,10 +1,12 @@
 using System;
 using System.Linq;
 using System.Threading.Tasks;
+using Unity.AI.Assistant.Editor;
 using Unity.AI.Assistant.FunctionCalling;
 using Unity.AI.MCP.Editor.Helpers;
 using Unity.AI.MCP.Editor.ToolRegistry;
 using Unity.AI.MCP.Editor.Lens;
+using UnityEditor;
 
 namespace Unity.AI.MCP.Editor.Tools
 {
@@ -18,6 +20,124 @@ namespace Unity.AI.MCP.Editor.Tools
     {
         [McpDescription("The stored detail ref identifier to resolve.")]
         public string RefId { get; set; }
+    }
+
+    [McpTool(ToolPackCatalog.GetLensHealthToolName,
+        "Returns a compact Lens health summary for the current Unity bridge connection, including active packs, exported tool count, bridge status, editor stability, and the recommended next action.",
+        "Get Unity Lens Health",
+        Groups = new[] { "core", "assistant" },
+        EnabledByDefault = true)]
+    class GetLensHealthTool : IUnityMcpTool
+    {
+        public Task<object> ExecuteAsync(object parameters)
+        {
+            var connectionId = ExternalToolExecutionScope.Current?.ConnectionId;
+            var activeToolPacks = BridgeLensSessionRegistry.GetActiveToolPacks(connectionId);
+            var bridgeSnapshot = BridgeStatusTracker.GetSnapshot();
+            var blockingReasons = EditorStabilityUtility.GetBlockingReasons();
+            bool isStable = blockingReasons.Count == 0;
+            bool expectedRecoveryActive = IsExpectedRecoveryActive(bridgeSnapshot.ExpectedRecovery, bridgeSnapshot.ExpectedRecoveryExpiresUtc);
+
+            return Task.FromResult<object>(Response.Success(
+                "Retrieved Unity Lens health summary.",
+                new
+                {
+                    activeToolPacks,
+                    exportedToolCount = BridgeManifestBroker.GetExportedToolCount(activeToolPacks),
+                    internalRegistryToolCount = BridgeManifestBroker.GetBridgeFacingToolCount(),
+                    bridgeStatus = new
+                    {
+                        status = bridgeSnapshot.Status,
+                        reason = bridgeSnapshot.Reason,
+                        commandHealth = bridgeSnapshot.DirectCommandHealth,
+                        toolDiscoveryMode = bridgeSnapshot.ToolDiscoveryMode,
+                        manifestVersion = bridgeSnapshot.ManifestVersion,
+                        profileCatalogVersion = bridgeSnapshot.ProfileCatalogVersion,
+                        supportsToolSyncLens = bridgeSnapshot.SupportsToolSyncLens,
+                        lastToolsChangedUtc = bridgeSnapshot.LastToolsChangedUtc,
+                    },
+                    editorStability = new
+                    {
+                        isStable,
+                        state = ClassifyEditorStability(blockingReasons),
+                        blockingReasons,
+                        isCompiling = EditorApplication.isCompiling,
+                        isUpdating = EditorApplication.isUpdating,
+                        isPlayingOrWillChangePlaymode = EditorApplication.isPlayingOrWillChangePlaymode,
+                        isBuildingPlayer = BuildPipeline.isBuildingPlayer,
+                    },
+                    expectedRecovery = new
+                    {
+                        isExpected = bridgeSnapshot.ExpectedRecovery,
+                        isActive = expectedRecoveryActive,
+                        expiresUtc = bridgeSnapshot.ExpectedRecoveryExpiresUtc,
+                    },
+                    lastCommandFailure = new
+                    {
+                        utc = bridgeSnapshot.LastCommandFailureUtc,
+                        reason = bridgeSnapshot.LastCommandFailureReason,
+                    },
+                    recommendedNextAction = GetRecommendedNextAction(bridgeSnapshot, isStable, expectedRecoveryActive),
+                }));
+        }
+
+        static bool IsExpectedRecoveryActive(bool expectedRecovery, string expectedRecoveryExpiresUtc)
+        {
+            if (!expectedRecovery)
+                return false;
+
+            if (string.IsNullOrWhiteSpace(expectedRecoveryExpiresUtc))
+                return true;
+
+            return DateTime.TryParse(expectedRecoveryExpiresUtc, null, System.Globalization.DateTimeStyles.RoundtripKind, out var expiresUtc) &&
+                expiresUtc > DateTime.UtcNow;
+        }
+
+        static string ClassifyEditorStability(System.Collections.Generic.IReadOnlyCollection<string> blockingReasons)
+        {
+            if (blockingReasons == null || blockingReasons.Count == 0)
+                return "stable";
+
+            if (blockingReasons.Contains("compiling"))
+                return "compiling";
+
+            if (blockingReasons.Contains("updating"))
+                return "updating";
+
+            if (blockingReasons.Contains("building_player"))
+                return "building_player";
+
+            if (blockingReasons.Contains("play_transition"))
+                return "play_transition";
+
+            return "unstable";
+        }
+
+        static string GetRecommendedNextAction(BridgeStatusSnapshot bridgeSnapshot, bool isStable, bool expectedRecoveryActive)
+        {
+            if (expectedRecoveryActive)
+                return "Wait for Unity compile/reload recovery to finish before retrying broader Lens tool calls.";
+
+            if (!isStable)
+                return "Wait for the editor to reach a stable idle state before widening packs or running heavier Lens tools.";
+
+            if (string.Equals(bridgeSnapshot.Status, "disconnected", StringComparison.OrdinalIgnoreCase))
+                return "Reconnect or restart the Unity MCP bridge before using Lens tools.";
+
+            if (string.Equals(bridgeSnapshot.DirectCommandHealth, "failed", StringComparison.OrdinalIgnoreCase))
+                return "Retry one lightweight Lens probe. If it still fails, reconnect the Unity MCP bridge.";
+
+            if (string.Equals(bridgeSnapshot.Status, "transport_degraded", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(bridgeSnapshot.Status, "transport_recovering", StringComparison.OrdinalIgnoreCase))
+            {
+                return "Retry a lightweight Lens probe or wait briefly for bridge recovery before using broader tools.";
+            }
+
+            if (string.Equals(bridgeSnapshot.Status, "ready", StringComparison.OrdinalIgnoreCase))
+                return "Proceed with Lens tools. Activate additional packs only when they are needed.";
+
+            return "Use a lightweight Lens probe before broader Unity operations.";
+        }
     }
 
     [McpTool(ToolPackCatalog.ListToolPacksToolName,
