@@ -1,5 +1,13 @@
-com.unity.ai.assistant copyright © 2025 Unity Technologies.
+License Notice
 
-This software is subject to, and made available under, the Unity Terms of Service (see https://unity.com/legal). Your use of this software constitutes your acceptance of such terms.
+This repository includes code derived from Unity's com.unity.ai.assistant package.
 
-Unless expressly provided otherwise, the software under this license is made available strictly on an “AS IS” BASIS WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED. Please review the Terms of Service for details on these and other terms and conditions.
+Unity-owned portions of this repository remain subject to the Unity Terms of Service and any related Unity licensing notices included with the original package or retained in this repository.
+
+Original additions and modifications in this repository are authored by James Kanawyer.
+
+Unless explicitly stated otherwise, no separate open-source license is granted for any Unity-owned code or for any portions of this repository derived from Unity's com.unity.ai.assistant package.
+
+Except where a file or subdirectory expressly states otherwise, this repository is provided on an "AS IS" basis, without warranties or conditions of any kind, express or implied.
+
+If wholly original components are later split into standalone repositories or clearly separable subprojects, those components may be released under separate license terms.
