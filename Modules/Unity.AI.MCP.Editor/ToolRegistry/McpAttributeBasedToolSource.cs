@@ -37,14 +37,14 @@ namespace Unity.AI.MCP.Editor.ToolRegistry
                         var methods = type.GetMethods(BindingFlags.Public | BindingFlags.Static);
                         foreach (var method in methods)
                         {
-                            var attribute = method.GetCustomAttribute<AgentToolAttribute>();
+                            var attribute = method.GetCustomAttribute<McpToolAttribute>();
                             if (attribute == null)
                                 continue;
 
                             // Validate method signature
                             if (!IsValidToolMethod(method))
                             {
-                                Debug.LogWarning($"Method '{type.FullName}.{method.Name}' has @AgentTool but invalid signature. Must return non-void.");
+                                Debug.LogWarning($"Method '{type.FullName}.{method.Name}' has @McpTool but invalid signature. Must return non-void.");
                                 continue;
                             }
 
@@ -87,11 +87,11 @@ namespace Unity.AI.MCP.Editor.ToolRegistry
             return true;
         }
 
-        private IToolDefinition CreateToolDefinition(MethodInfo method, AgentToolAttribute attribute)
+        private IToolDefinition CreateToolDefinition(MethodInfo method, McpToolAttribute attribute)
         {
             try
             {
-                var toolId = !string.IsNullOrEmpty(attribute.Id) ? attribute.Id : GenerateToolId(method);
+                var toolId = !string.IsNullOrEmpty(attribute.Name) ? attribute.Name : GenerateToolId(method);
                 var description = attribute.Description ?? $"Tool: {method.Name}";
 
                 return new McpToolDefinitionImpl(
@@ -99,7 +99,7 @@ namespace Unity.AI.MCP.Editor.ToolRegistry
                     method.Name,
                     description,
                     GenerateInputSchema(method),
-                    attribute.Tags ?? Array.Empty<string>()
+                    attribute.Groups ?? Array.Empty<string>()
                 );
             }
             catch (Exception ex)
