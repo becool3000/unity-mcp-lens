@@ -6,8 +6,8 @@ using UnityEngine;
 namespace Unity.AI.MCP.Editor.ToolRegistry
 {
     /// <summary>
-    /// Discovers MCP tools via the @AgentTool attribute
-    /// Tools must be static methods with the [AgentTool] attribute
+    /// Discovers MCP tools via the @McpTool attribute
+    /// Tools must be static methods with the [McpTool] attribute
     /// </summary>
     internal class McpAttributeBasedToolSource
     {
