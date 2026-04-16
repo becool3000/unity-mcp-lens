@@ -2,10 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using System.Text;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using Unity.AI.Assistant.Utils;
 using Unity.AI.MCP.Editor.Helpers;
 using Unity.AI.MCP.Editor.Settings;
 using Unity.AI.Tracing;
@@ -266,7 +266,7 @@ namespace Unity.AI.MCP.Editor.ToolRegistry
 
             var startedAt = DateTime.UtcNow;
             var parametersJson = parameters?.ToString(Formatting.None) ?? "{}";
-            var parameterBytes = PayloadBudgeting.GetUtf8ByteCount(parametersJson);
+            var parameterBytes = Encoding.UTF8.GetByteCount(parametersJson);
             var executionSpan = Trace.StartSpan("mcp.tool.execute", new TraceEventOptions
             {
                 Category = "mcp",
@@ -293,7 +293,7 @@ namespace Unity.AI.MCP.Editor.ToolRegistry
                 }
 
                 var resultJson = result == null ? string.Empty : JsonConvert.SerializeObject(result, Formatting.None);
-                var resultBytes = PayloadBudgeting.GetUtf8ByteCount(resultJson);
+                var resultBytes = Encoding.UTF8.GetByteCount(resultJson);
                 PayloadStats.RecordText(
                     "tool_execution",
                     toolName,
