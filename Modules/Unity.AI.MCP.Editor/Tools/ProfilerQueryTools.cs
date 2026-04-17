@@ -38,13 +38,13 @@ namespace Unity.AI.MCP.Editor.Tools
                     action,
                     hint = "Use Unity.Profiler.Query gc_summary for compact memory totals."
                 }),
-                "top_samples" or "sample" => Response.Success("Profiler sample queries are not available without opening an Assistant profiler session.", new
+                "top_samples" or "sample" => Response.Success("Profiler sample queries are not available through the compact Lens profiler surface.", new
                 {
                     available = false,
                     action,
                     parameters.Sample,
                     limit = Math.Clamp(parameters.Limit, 1, 200),
-                    hint = "Lens intentionally exposes compact local metrics and does not port Assistant profiler UI session tooling."
+                    hint = "Lens intentionally exposes compact local metrics and does not port legacy profiler UI session tooling."
                 }),
                 _ => Response.Error("INVALID_PROFILER_ACTION: action must be initialize, summary, top_samples, sample, gc_summary, or gc_allocations.")
             };

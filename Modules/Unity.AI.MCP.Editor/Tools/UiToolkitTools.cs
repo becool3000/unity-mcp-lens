@@ -172,7 +172,7 @@ namespace Unity.AI.MCP.Editor.Tools
                 return Response.Success("UXML schema generation API is not available in this Unity version.", new
                 {
                     available = false,
-                    hint = "Unity.UI.Toolkit keeps this action as a canonical compatibility surface without porting Assistant-specific schema helpers."
+                    hint = "Unity.UI.Toolkit keeps this action as a canonical compatibility surface without porting legacy schema helper UI."
                 });
             }
 

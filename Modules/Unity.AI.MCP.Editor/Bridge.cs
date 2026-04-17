@@ -2210,7 +2210,7 @@ namespace Unity.AI.MCP.Editor
                     return ReturnResponse(JsonConvert.SerializeObject(new
                     {
                         status = "error",
-                        error = "Connection revoked. Go to Unity Editor > Project Settings > AI > Unity MCP to change approval.",
+                        error = "Connection revoked. Go to Unity Editor > Project Settings > Tools > Unity MCP Lens to change approval.",
                         isError = true
                     }), "error", "Connection revoked");
                 }

@@ -23,7 +23,7 @@ namespace Unity.AI.MCP.Editor.Settings
         /// <summary>
         /// Path to MCP server settings in Unity's Project Settings window.
         /// </summary>
-        public const string projectSettingsPath = "Project/AI/Unity MCP";
+        public const string projectSettingsPath = "Project/Tools/Unity MCP Lens";
 
         // Package Configuration
         /// <summary>

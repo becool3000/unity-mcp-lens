@@ -112,7 +112,7 @@ namespace Unity.AI.MCP.Editor.Settings
             }
             else
             {
-                var fallbackLabel = new Label("Unity MCP Settings - UI template not found");
+                var fallbackLabel = new Label("Unity MCP Lens Settings - UI template not found");
                 fallbackLabel.AddToClassList("umcp-header-title");
                 m_RootElement.Add(fallbackLabel);
             }
@@ -139,7 +139,7 @@ namespace Unity.AI.MCP.Editor.Settings
             m_ResetToolsButton = m_RootElement.Q<Button>("resetToolsButton");
             m_ResetToolsButton.clicked += OnResetToolsToDefaults;
             m_LocateServer = m_RootElement.Q<Button>("locateServer");
-            m_LocateServer.clicked += PathUtils.OpenServerMainFile;
+            m_LocateServer.clicked += PathUtils.OpenLensServerMainFile;
 
             // Cache status UI elements
             m_BridgeStatusIndicator = m_RootElement.Q<VisualElement>("bridgeStatusIndicator");
@@ -192,7 +192,7 @@ namespace Unity.AI.MCP.Editor.Settings
             // Bind buttons
             m_ToggleBridgeButton.clicked += ToggleBridge;
 
-            // Setup foldouts - Tools expanded by default, Integrations and Other Connections collapsed
+            // Setup foldouts - tool registry expanded by default, client configs and other connections collapsed
             m_ToolsFoldout.value = true;
             m_ClientsFoldout.value = false;
             m_OtherConnectionsFoldout.value = false;
@@ -268,7 +268,7 @@ namespace Unity.AI.MCP.Editor.Settings
             int enabledCount = allTools.Count(t => t.IsEnabled);
             int bridgeFacingToolCount = BridgeManifestBroker.GetBridgeFacingToolCount();
             int defaultExportCount = BridgeManifestBroker.GetExportedToolCount(ToolPackCatalog.DefaultActivePacks);
-            m_ToolsFoldout.text = $"Tools ({bridgeFacingToolCount} internal enabled, {defaultExportCount} foundation export)";
+            m_ToolsFoldout.text = $"Tool Packs & Registry ({bridgeFacingToolCount} internal enabled, {defaultExportCount} foundation export)";
 
             if (m_ToolRegistrySummary != null)
             {
@@ -561,7 +561,7 @@ namespace Unity.AI.MCP.Editor.Settings
                 return;
 
             m_LegacyRelayDescription.text = enabled
-                ? "Assistant/Gateway relay install and auto-start are enabled for this project."
+                ? "Legacy Unity relay install and auto-start are enabled for this project."
                 : "MCP-only mode is active for this project. The legacy Unity relay will not install or auto-start; Codex should use unity-mcp-lens instead.";
         }
 

@@ -12,7 +12,7 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts
 {
     class PayloadStatsWindow : EditorWindow
     {
-        const string k_WindowName = "Assistant Usage";
+        const string k_WindowName = "Lens Usage";
         const int k_TopCount = 8;
         const double k_CoverageDominatedThresholdPct = 95.0d;
 
@@ -22,7 +22,7 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts
         bool m_ShowMissingFileHelp;
         DateTime m_LastRefreshUtc;
 
-        [MenuItem("Window/AI/Assistant Usage")]
+        [MenuItem("Tools/Unity MCP Lens/Usage Report", false, 1040)]
         static PayloadStatsWindow ShowWindow()
         {
             var window = GetWindow<PayloadStatsWindow>();
@@ -130,7 +130,7 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts
                 return;
 
             EditorGUIUtility.systemCopyBuffer = BuildClipboardReport(m_Report);
-            ShowNotification(new GUIContent("Assistant usage summary copied"));
+            ShowNotification(new GUIContent("Lens usage summary copied"));
         }
 
         void ResetStatsFile()
@@ -140,8 +140,8 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts
                 return;
 
             var confirmed = EditorUtility.DisplayDialog(
-                "Reset Assistant Usage",
-                $"Clear the Assistant usage log for the current project?\n\n{statsPath}\n\nThis only resets the current project's telemetry file.",
+                "Reset Lens Usage",
+                $"Clear the Lens usage log for the current project?\n\n{statsPath}\n\nThis only resets the current project's telemetry file.",
                 "Reset",
                 "Cancel");
 
@@ -156,12 +156,12 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts
 
                 File.WriteAllText(statsPath, string.Empty, new UTF8Encoding(false));
                 RefreshReport();
-                ShowNotification(new GUIContent("Assistant usage log reset"));
+                ShowNotification(new GUIContent("Lens usage log reset"));
             }
             catch (Exception ex)
             {
                 m_Report = null;
-                m_ErrorMessage = $"Failed to reset Assistant usage stats.\n{ex.Message}";
+                m_ErrorMessage = $"Failed to reset Lens usage stats.\n{ex.Message}";
                 m_ShowMissingFileHelp = false;
             }
         }
@@ -289,13 +289,13 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts
             {
                 EditorGUILayout.LabelField("What this means", EditorStyles.boldLabel);
                 EditorGUILayout.LabelField("This package writes usage stats per host project to Library/AI.Gateway.PayloadStats.jsonl.");
-                EditorGUILayout.LabelField("If the file is missing, either this project is not resolving the local fork yet, or no instrumented Assistant/MCP/tool path has run.");
+                EditorGUILayout.LabelField("If the file is missing, either this project is not resolving the local fork yet, or no instrumented Lens/MCP/tool path has run.");
                 EditorGUILayout.Space(4f);
                 EditorGUILayout.LabelField("Check", EditorStyles.boldLabel);
                 EditorGUILayout.LabelField("1. Packages/manifest.json points com.unity.ai.assistant at this local fork.");
                 EditorGUILayout.LabelField("2. Unity finished recompiling after the package change.");
-                EditorGUILayout.LabelField("3. Window/AI/Assistant opens in this project.");
-                EditorGUILayout.LabelField("4. You trigger Assistant chat, MCP bridge activity, or an instrumented tool call at least once.");
+                EditorGUILayout.LabelField("3. Tools/Unity MCP Lens/Usage Report opens in this project.");
+                EditorGUILayout.LabelField("4. You trigger MCP bridge activity or an instrumented Lens tool call at least once.");
             }
         }
 
@@ -316,7 +316,7 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts
                 if (new FileInfo(statsPath).Length == 0)
                 {
                     m_Report = null;
-                    m_ErrorMessage = $"Assistant usage log is empty for the current project.\nTrigger Assistant or MCP activity to collect fresh data at:\n{statsPath}";
+                    m_ErrorMessage = $"Lens usage log is empty for the current project.\nTrigger MCP bridge activity or an instrumented Lens tool call to collect fresh data at:\n{statsPath}";
                     m_ShowMissingFileHelp = false;
                     return;
                 }
@@ -328,7 +328,7 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts
             catch (Exception ex)
             {
                 m_Report = null;
-                m_ErrorMessage = $"Failed to read Assistant usage stats.\n{ex.Message}";
+                m_ErrorMessage = $"Failed to read Lens usage stats.\n{ex.Message}";
                 m_ShowMissingFileHelp = false;
             }
         }
@@ -609,7 +609,7 @@ namespace Unity.AI.Assistant.UI.Editor.Scripts
         static string BuildClipboardReport(PayloadStatsReport report)
         {
             var builder = new StringBuilder();
-            builder.AppendLine("Assistant Usage Report");
+            builder.AppendLine("Unity MCP Lens Usage Report");
             builder.AppendLine($"Stats path: {report.StatsPath}");
             builder.AppendLine("Scope: current Unity project");
             builder.AppendLine($"Entries: {FormatNumber(report.EntryCount)} total, {FormatNumber(report.PayloadEntryCount)} payload, {FormatNumber(report.CoverageEntryCount)} coverage");

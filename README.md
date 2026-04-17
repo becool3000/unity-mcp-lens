@@ -18,6 +18,7 @@ This repo currently serves two roles at once:
    - cleaner recovery behavior during Unity reload/build/import windows
 
 The package name stays `com.unity.ai.assistant` for compatibility with Unity projects, but the repo direction is now explicitly `unity-mcp-lens`.
+In the Unity Editor, the MCP-facing surface is presented as **Unity MCP Lens** under `Tools > Unity MCP Lens` and `Project Settings > Tools > Unity MCP Lens`.
 
 ## Why This Exists
 
@@ -91,6 +92,15 @@ Or with an absolute path:
 - For MCP-only projects, the package can suppress legacy relay install/startup and use Lens as the primary path.
 - Until prebuilt Lens binaries are bundled in-repo, first-time local installation may publish from source and therefore needs a local .NET SDK 8+.
 
+## Current Packaging Boundary
+
+Lens is currently in **package-name compatibility mode**:
+
+- The Unity package manifest still uses `com.unity.ai.assistant` so existing local-project references keep resolving.
+- The editor presentation is Lens-first: menu items and settings live under `Tools > Unity MCP Lens`.
+- Official Assistant side-by-side installation requires a future package rename/split, because Unity cannot install two packages with the same package name.
+- Assistant UI, cloud, and chat functionality should come from the official Assistant package once Lens has an independent package identity. Lens owns the MCP bridge, MCP server, tool packs, compact outputs, and local editor/dev tool surface.
+
 ## Project Structure
 
 The live Unity package source is primarily under:
@@ -113,13 +123,13 @@ When maintaining this repo, treat the live package folders as the source of trut
 
 The medium-term plan is straightforward:
 
-1. Keep the package usable as a local fork of Unity Assistant.
+1. Keep the package usable in compatibility mode while Lens gets its own editor identity.
 2. Keep evolving `unity-mcp-lens` beside the upstream relay path instead of trying to replace everything at once.
 3. Reduce bridge chatter further through event-driven sync and caching.
 4. Keep shrinking the model-facing tool surface through pack-based export.
 5. Compact large tool outputs by default and expose full detail only on demand.
 6. Improve observability so changes are measured instead of guessed.
-7. Stay close enough to upstream that useful updates can still be merged selectively.
+7. Split Lens into an independent package identity before claiming official Assistant side-by-side support.
 
 Longer term, I want this repo to become a more robust Unity MCP foundation:
 

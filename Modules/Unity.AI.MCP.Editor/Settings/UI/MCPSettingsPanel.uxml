@@ -2,7 +2,7 @@
     <Style src="MCPSettings.tss" />
     <ui:ScrollView class="umcp-root-scroll">
         <ui:VisualElement name="header">
-            <ui:Label text="Unity MCP" name="title" />
+            <ui:Label text="Unity MCP Lens" name="title" />
         </ui:VisualElement>
 
         <ui:VisualElement name="generalSection" class="umcp-section">
@@ -24,19 +24,11 @@
                     <ui:Label text="Auto-approve in Batch Mode" class="umcp-setting-label" />
                     <ui:Toggle name="autoApproveBatchToggle" class="umcp-setting-control" />
                 </ui:VisualElement>
-                <ui:VisualElement class="umcp-setting-row">
-                    <ui:Label text="Enable Legacy Unity Relay" class="umcp-setting-label" />
-                    <ui:Toggle name="legacyRelayToggle" class="umcp-setting-control" />
-                </ui:VisualElement>
-                <ui:VisualElement class="umcp-setting-row umcp-description-row">
-                    <ui:Label class="umcp-setting-label" />
-                    <ui:Label name="legacyRelayDescription" text="Keeps the Assistant/Gateway relay installed and auto-started. Turn this off for MCP-only projects that use unity-mcp-lens." />
-                </ui:VisualElement>
             </ui:VisualElement>
         </ui:VisualElement>
 
         <ui:VisualElement name="bridgeSection" class="umcp-section">
-            <ui:Label text="Unity Bridge" class="umcp-section-header" />
+            <ui:Label text="Lens Bridge" class="umcp-section-header" />
             <ui:VisualElement class="umcp-section-content">
                 <ui:VisualElement class="umcp-setting-row">
                     <ui:Label text="Status" class="umcp-setting-label" />
@@ -73,7 +65,7 @@
         </ui:VisualElement>
 
         <ui:VisualElement name="toolsSection" class="umcp-section">
-            <ui:Foldout name="toolsFoldout" text="Tools" class="umcp-section-foldout">
+            <ui:Foldout name="toolsFoldout" text="Tool Packs &amp; Registry" class="umcp-section-foldout">
                 <ui:Label name="toolRegistrySummary" class="umcp-connection-policy-label" text="Internal registry: checking..." />
                 <ui:Label name="defaultLensExportSummary" class="umcp-connection-policy-label" text="Default Lens export: checking..." />
                 <ui:Label name="activeLensExportSummary" class="umcp-connection-policy-label" text="Active Lens export: checking..." />
@@ -85,11 +77,25 @@
         </ui:VisualElement>
 
         <ui:VisualElement name="clientsSection" class="umcp-section">
-            <ui:Foldout name="clientsFoldout" text="Integrations" class="umcp-section-foldout">
+            <ui:Foldout name="clientsFoldout" text="MCP Client Configs" class="umcp-section-foldout">
                 <ui:VisualElement name="clientList" />
             </ui:Foldout>
             <ui:VisualElement class="umcp-setting-row">
-                <ui:Button name="locateServer" text="Locate Server"/>
+                <ui:Button name="locateServer" text="Open Lens Server"/>
+            </ui:VisualElement>
+        </ui:VisualElement>
+
+        <ui:VisualElement name="legacyCompatibilitySection" class="umcp-section">
+            <ui:Label text="Advanced / Legacy Compatibility" class="umcp-section-header" />
+            <ui:VisualElement class="umcp-section-content">
+                <ui:VisualElement class="umcp-setting-row">
+                    <ui:Label text="Enable Legacy Unity Relay" class="umcp-setting-label" />
+                    <ui:Toggle name="legacyRelayToggle" class="umcp-setting-control" />
+                </ui:VisualElement>
+                <ui:VisualElement class="umcp-setting-row umcp-description-row">
+                    <ui:Label class="umcp-setting-label" />
+                    <ui:Label name="legacyRelayDescription" text="Keeps the legacy Unity relay installed and auto-started. Turn this off for MCP-only projects that use unity-mcp-lens." />
+                </ui:VisualElement>
             </ui:VisualElement>
         </ui:VisualElement>
     </ui:ScrollView>

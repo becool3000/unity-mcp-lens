@@ -183,7 +183,7 @@ namespace Unity.AI.MCP.Editor.Settings.UI
                 }
             }
 
-            // Add AI Gateway connections (with purple indicator)
+            // Add legacy relay connections (with dedicated indicator)
             var gatewayClients = GetGatewayClients();
             clients.AddRange(gatewayClients);
 
@@ -233,7 +233,7 @@ namespace Unity.AI.MCP.Editor.Settings.UI
         {
             Connected,
             Partial,
-            Gateway  // AI Gateway connections (purple indicator)
+            Gateway  // Legacy relay connections
         }
 
         /// <summary>
@@ -262,7 +262,7 @@ namespace Unity.AI.MCP.Editor.Settings.UI
 
             foreach (var connection in gatewayConnections)
             {
-                var displayName = GetProviderDisplayName(connection.Provider) + " (Gateway)";
+                var displayName = GetProviderDisplayName(connection.Provider) + " (Legacy Relay)";
                 clients.Add((displayName, ClientConnectionStatus.Gateway));
             }
 

@@ -53,7 +53,7 @@ namespace Unity.AI.MCP.Editor.ToolRegistry
         /// <summary>Debug and diagnostic tools (logging, profiling, troubleshooting).</summary>
         Debug = 1 << 10,
 
-        /// <summary>AI Assistant tools exposed via MCP (tools originating from AgentTool attributes).</summary>
+        /// <summary>Legacy compatibility tools retained under the historical category identifier.</summary>
         Assistant = 1 << 11
     }
 
@@ -188,7 +188,7 @@ namespace Unity.AI.MCP.Editor.ToolRegistry
             { ToolCategory.External, new CategoryInfo("External Tools", "External tool integrations and imports", false, false) },
             { ToolCategory.Validation, new CategoryInfo("Validation", "Code validation, analysis, and quality tools", true, false) },
             { ToolCategory.Debug, new CategoryInfo("Debug & Diagnostics", "Debugging, diagnostics, and troubleshooting tools", false, false) },
-            { ToolCategory.Assistant, new CategoryInfo("Assistant", "AI Assistant tools exposed via MCP", true, false) }
+            { ToolCategory.Assistant, new CategoryInfo("Legacy Compatibility", "Legacy compatibility tools exposed through Lens", true, false) }
         };
 
         /// <summary>
