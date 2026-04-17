@@ -1,10 +1,23 @@
 using System;
 using System.Collections.Generic;
 using Unity.AI.MCP.Editor.Helpers;
-using Unity.Relay;
 
 namespace Unity.AI.MCP.Editor.Security
 {
+    readonly struct McpSessionRegistration
+    {
+        public string SessionId { get; }
+        public string Token { get; }
+        public string Provider { get; }
+
+        public McpSessionRegistration(string sessionId, string token, string provider = null)
+        {
+            SessionId = sessionId;
+            Token = token;
+            Provider = provider;
+        }
+    }
+
     /// <summary>
     /// Result of token validation attempt.
     /// </summary>

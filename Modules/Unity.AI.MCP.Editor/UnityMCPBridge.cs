@@ -2,7 +2,6 @@ using System;
 using System.Linq;
 using System.Text;
 using Newtonsoft.Json;
-using Unity.AI.Assistant.Editor;
 using Unity.AI.MCP.Editor.Models;
 using Unity.AI.MCP.Editor.Settings;
 using Unity.AI.MCP.Editor.ToolRegistry;
@@ -100,13 +99,10 @@ namespace Unity.AI.MCP.Editor
         public static void Init()
         {
             s_DefaultMaxDirectConnectionsResolver = () =>
-                AssistantEditorPreferences.AiGatewayEnabled
-                    ? -1
-                    : MCPSettingsManager.Settings.connectionPolicies.maxDirectConnections;
+                MCPSettingsManager.Settings.connectionPolicies.maxDirectConnections;
 
             MaxDirectConnectionsResolver = s_DefaultMaxDirectConnectionsResolver;
 
-            AssistantEditorPreferences.AiGatewayEnabledChanged += NotifyMaxDirectConnectionsPolicyChanged;
             MCPSettingsManager.OnSettingsChanged += NotifyMaxDirectConnectionsPolicyChanged;
 
             if (!IsAllowed) return;

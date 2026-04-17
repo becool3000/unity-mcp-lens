@@ -97,8 +97,8 @@ Returns:
                         description = "Operation to perform",
                         @enum = new[]
                         {
-                            "create", "modify", "delete", "find", "get_components", "get_component",
-                            "add_component", "remove_component", "set_component_property"
+                            "create", "modify", "delete", "find", "get_selection", "get_bounds", "get_builtin_assets",
+                            "get_components", "get_component", "add_component", "remove_component", "set_component_property"
                         }
                     },
                     // Targeting and search
@@ -297,6 +297,12 @@ Returns:
                         return DeleteGameObject(targetToken, searchMethod);
                     case "find":
                         return FindGameObjects(@params, targetToken, searchMethod);
+                    case "get_selection":
+                        return GetSelection();
+                    case "get_bounds":
+                        return GetBounds(targetToken, searchMethod);
+                    case "get_builtin_assets":
+                        return GetBuiltinAssets();
                     case "get_components":
                         string getCompTarget = targetToken?.ToString(); // Expect name, path, or ID string
                         if (getCompTarget == null)
@@ -1137,6 +1143,94 @@ Returns:
             //var results = foundObjects.Select(go => GetGameObjectData(go)).ToList();
             var results = foundObjects.Select(go => GameObjectSerializer.GetGameObjectData(go)).ToList();
             return Response.Success($"Found {results.Count} GameObject(s).", results);
+        }
+
+        static object GetSelection()
+        {
+            var objects = Selection.gameObjects
+                .Select(GameObjectSerializer.GetGameObjectData)
+                .ToArray();
+
+            return Response.Success("Retrieved current Unity selection.", new
+            {
+                count = objects.Length,
+                objects
+            });
+        }
+
+        static object GetBounds(JToken targetToken, string searchMethod)
+        {
+            if (targetToken == null)
+                return Response.Error("'target' parameter required for get_bounds.");
+
+            GameObject targetGo = ObjectsHelper.FindObject(targetToken, searchMethod);
+            if (targetGo == null)
+                return Response.Error($"Target GameObject ('{targetToken}') not found using method '{searchMethod ?? "default"}'.");
+
+            var renderers = targetGo.GetComponentsInChildren<Renderer>(includeInactive: true);
+            var colliders = targetGo.GetComponentsInChildren<Collider>(includeInactive: true);
+            bool hasBounds = false;
+            Bounds bounds = new Bounds(targetGo.transform.position, Vector3.zero);
+
+            foreach (var renderer in renderers)
+            {
+                if (renderer == null)
+                    continue;
+
+                if (!hasBounds)
+                {
+                    bounds = renderer.bounds;
+                    hasBounds = true;
+                }
+                else
+                {
+                    bounds.Encapsulate(renderer.bounds);
+                }
+            }
+
+            foreach (var collider in colliders)
+            {
+                if (collider == null)
+                    continue;
+
+                if (!hasBounds)
+                {
+                    bounds = collider.bounds;
+                    hasBounds = true;
+                }
+                else
+                {
+                    bounds.Encapsulate(collider.bounds);
+                }
+            }
+
+            return Response.Success("Retrieved GameObject bounds.", new
+            {
+                target = targetGo.name,
+                instanceID = targetGo.GetInstanceID(),
+                hasRendererOrColliderBounds = hasBounds,
+                center = new { x = bounds.center.x, y = bounds.center.y, z = bounds.center.z },
+                size = new { x = bounds.size.x, y = bounds.size.y, z = bounds.size.z },
+                extents = new { x = bounds.extents.x, y = bounds.extents.y, z = bounds.extents.z },
+                rendererCount = renderers.Length,
+                colliderCount = colliders.Length
+            });
+        }
+
+        static object GetBuiltinAssets()
+        {
+            return Response.Success("Retrieved builtin GameObject asset hints.", new
+            {
+                primitiveTypes = Enum.GetNames(typeof(PrimitiveType)),
+                builtinResources = new[]
+                {
+                    "Default-Material",
+                    "Sprites-Default",
+                    "UI/Skin/Background.psd",
+                    "UI/Skin/Knob.psd"
+                },
+                note = "Use create with primitive_type for primitives, or Unity.Asset.Search for project assets."
+            });
         }
 
         static object GetComponentsFromTarget(string target, string searchMethod, bool includeNonPublicSerialized = true)

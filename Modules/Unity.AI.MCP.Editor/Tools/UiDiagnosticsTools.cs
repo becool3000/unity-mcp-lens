@@ -3,12 +3,11 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
-using Unity.AI.Assistant.Editor.Context;
-using Unity.AI.Assistant.Utils;
 using Unity.AI.MCP.Editor.Helpers;
 using Unity.AI.MCP.Editor.ToolRegistry;
 using Unity.AI.MCP.Editor.Lens;
 using Unity.AI.MCP.Editor.Tools.Parameters;
+using Unity.AI.MCP.Editor.Utils;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.UI;
@@ -331,18 +330,7 @@ Returns:
 
                 await Task.Delay(100);
 
-                var screenContext = ScreenContextUtility.CaptureScreenContext(includeScreenshots: true, saveToFile: false);
-                if (screenContext.Screenshot == null || screenContext.Screenshot.Length == 0)
-                {
-                    return Response.Error("CAPTURE_FAILED", new
-                    {
-                        relativeOutputPath,
-                        absoluteOutputPath,
-                        error = "Focused Game view capture returned no image data."
-                    });
-                }
-
-                File.WriteAllBytes(absoluteOutputPath, screenContext.Screenshot);
+                ScreenCapture.CaptureScreenshot(absoluteOutputPath);
 
                 FileInfo writtenInfo = new(absoluteOutputPath);
                 if (writtenInfo.Exists && writtenInfo.Length > 0)

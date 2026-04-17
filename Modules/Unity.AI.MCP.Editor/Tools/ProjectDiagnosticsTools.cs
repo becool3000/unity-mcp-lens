@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Newtonsoft.Json.Linq;
-using Unity.AI.Assistant.Utils;
+using Unity.AI.MCP.Editor.Utils;
 using Unity.AI.MCP.Editor.Helpers;
 using Unity.AI.MCP.Editor.ToolRegistry;
 using Unity.AI.MCP.Editor.Lens;

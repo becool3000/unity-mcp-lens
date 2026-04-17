@@ -8,6 +8,12 @@ namespace Unity.AI.MCP.Editor.Tools.Parameters
     public record RunCommandParams
     {
         /// <summary>
+        /// Gets or sets whether the command should only be validated or compiled and executed.
+        /// </summary>
+        [McpDescription("Execution mode: 'execute' compiles and runs the command; 'validate' compiles only and does not execute.", Required = false)]
+        public string Mode { get; set; } = "execute";
+
+        /// <summary>
         /// Gets or sets the C# script code to compile and execute.
         /// </summary>
         [McpDescription("The C# script code to compile and execute. Should implement IRunCommand interface or be a valid C# script.", Required = true)]

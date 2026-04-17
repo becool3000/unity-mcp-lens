@@ -3,10 +3,6 @@
     "rootNamespace": "Unity.AI.MCP.Editor",
     "references": [
         "Unity.AI.MCP.Runtime",
-        "Unity.AI.Assistant.Utils",
-        "Unity.AI.Assistant.Editor",
-        "Unity.AI.Assistant.Runtime",
-        "Unity.AI.Assistant.Tools.Editor",
         "Unity.AI.Toolkit.Async",
         "Unity.AI.Tracing",
         "Unity.Serialization",
@@ -18,8 +14,14 @@
     ],
     "excludePlatforms": [],
     "allowUnsafeCode": false,
-    "overrideReferences": false,
-    "precompiledReferences": [],
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "System.Runtime.CompilerServices.Unsafe.dll",
+        "Newtonsoft.Json.dll",
+        "Microsoft.CodeAnalysis.dll",
+        "Microsoft.CodeAnalysis.CSharp.dll",
+        "System.Collections.Immutable.dll"
+    ],
     "autoReferenced": true,
     "defineConstraints": [],
     "versionDefines": [],

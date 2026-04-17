@@ -3,7 +3,6 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Diagnostics;
 using Newtonsoft.Json.Linq;
-using Unity.AI.Assistant.Editor;
 using Unity.AI.MCP.Editor.Settings;
 using Unity.AI.MCP.Editor.Settings.Utilities;
 using UnityEditor;
@@ -30,7 +29,7 @@ namespace Unity.AI.MCP.Editor.Helpers
 
         public static void RefreshInstalledServers()
         {
-            if (AssistantRelayProjectPreferences.LegacyRelayEnabled)
+            if (McpProjectPreferences.LegacyRelayEnabled)
             {
                 InstallOrUpdateRelay();
             }

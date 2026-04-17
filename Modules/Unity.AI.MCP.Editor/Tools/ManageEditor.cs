@@ -7,11 +7,11 @@ using UnityEditor;
 using UnityEditor.SceneManagement; // Required for PrefabStage
 using UnityEditorInternal; // Required for tag management
 using UnityEngine;
-using Unity.AI.Assistant.Editor;
 using Unity.AI.MCP.Runtime;
 using Unity.AI.MCP.Editor.Helpers;
 using Unity.AI.MCP.Editor.ToolRegistry; // For Response class
 using Unity.AI.MCP.Editor.Tools.Parameters;
+using Unity.AI.MCP.Editor.Utils;
 
 namespace Unity.AI.MCP.Editor.Tools
 {

@@ -1,11 +1,10 @@
 using System;
 using System.Linq;
 using System.Threading.Tasks;
-using Unity.AI.Assistant.Editor;
-using Unity.AI.Assistant.FunctionCalling;
 using Unity.AI.MCP.Editor.Helpers;
 using Unity.AI.MCP.Editor.ToolRegistry;
 using Unity.AI.MCP.Editor.Lens;
+using Unity.AI.MCP.Editor.Utils;
 using UnityEditor;
 
 namespace Unity.AI.MCP.Editor.Tools
@@ -31,7 +30,7 @@ namespace Unity.AI.MCP.Editor.Tools
     {
         public Task<object> ExecuteAsync(object parameters)
         {
-            var connectionId = ExternalToolExecutionScope.Current?.ConnectionId;
+            var connectionId = McpToolExecutionScope.Current?.ConnectionId;
             var activeToolPacks = BridgeLensSessionRegistry.GetActiveToolPacks(connectionId);
             var bridgeSnapshot = BridgeStatusTracker.GetSnapshot();
             var blockingReasons = EditorStabilityUtility.GetBlockingReasons();
@@ -149,7 +148,7 @@ namespace Unity.AI.MCP.Editor.Tools
     {
         public Task<object> ExecuteAsync(object parameters)
         {
-            var connectionId = ExternalToolExecutionScope.Current?.ConnectionId;
+            var connectionId = McpToolExecutionScope.Current?.ConnectionId;
             var activeToolPacks = BridgeLensSessionRegistry.GetActiveToolPacks(connectionId);
 
             return Task.FromResult<object>(Response.Success(
@@ -173,7 +172,7 @@ namespace Unity.AI.MCP.Editor.Tools
     {
         public Task<object> ExecuteAsync(SetToolPacksParams parameters)
         {
-            var connectionId = ExternalToolExecutionScope.Current?.ConnectionId;
+            var connectionId = McpToolExecutionScope.Current?.ConnectionId;
             if (string.IsNullOrWhiteSpace(connectionId))
                 return Task.FromResult<object>(Response.Error("Unity.SetToolPacks requires an active Lens MCP bridge connection."));
 
@@ -206,7 +205,7 @@ namespace Unity.AI.MCP.Editor.Tools
     {
         public Task<object> ExecuteAsync(ReadDetailRefParams parameters)
         {
-            var connectionId = ExternalToolExecutionScope.Current?.ConnectionId;
+            var connectionId = McpToolExecutionScope.Current?.ConnectionId;
             if (string.IsNullOrWhiteSpace(connectionId))
                 return Task.FromResult<object>(Response.Error("Unity.ReadDetailRef requires an active Lens MCP bridge connection."));
 
@@ -216,7 +215,7 @@ namespace Unity.AI.MCP.Editor.Tools
             if (!ToolDetailRefStore.TryRead(connectionId, parameters.RefId, out var payload))
             {
                 return Task.FromResult<object>(Response.Error(
-                    $"Detail ref '{parameters.RefId}' was not found for the current connection.",
+                    $"Detail ref '{parameters.RefId}' was not found in the active Lens detail cache.",
                     new { refId = parameters.RefId, availableRefs = ToolDetailRefStore.GetStoredRefIds(connectionId) }));
             }
 

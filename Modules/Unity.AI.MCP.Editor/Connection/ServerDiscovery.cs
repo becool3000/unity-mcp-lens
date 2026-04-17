@@ -6,7 +6,7 @@ using System.Text;
 using System.Runtime.InteropServices;
 using Newtonsoft.Json;
 using Unity.AI.MCP.Editor.Settings;
-using Unity.AI.Assistant.Utils;
+using Unity.AI.MCP.Editor.Utils;
 using UnityEngine;
 
 namespace Unity.AI.MCP.Editor.Helpers

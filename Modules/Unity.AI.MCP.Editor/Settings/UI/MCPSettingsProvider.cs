@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Unity.AI.Assistant.Editor;
 using UnityEditor;
 using UnityEngine.UIElements;
 using Unity.AI.MCP.Editor.Models;
@@ -15,7 +14,6 @@ using Unity.AI.MCP.Editor.Security;
 using Unity.AI.Toolkit;
 using Unity.AI.Tracing;
 using UnityEngine;
-using Unity.Relay.Editor;
 using GatewayConnectionRecord = Unity.AI.MCP.Editor.GatewayConnectionRecord;
 
 namespace Unity.AI.MCP.Editor.Settings
@@ -168,20 +166,11 @@ namespace Unity.AI.MCP.Editor.Settings
 
             if (m_LegacyRelayToggle != null)
             {
-                m_LegacyRelayToggle.value = AssistantRelayProjectPreferences.LegacyRelayEnabled;
+                m_LegacyRelayToggle.value = McpProjectPreferences.LegacyRelayEnabled;
                 m_LegacyRelayToggle.RegisterValueChangedCallback(evt =>
                 {
-                    AssistantRelayProjectPreferences.LegacyRelayEnabled = evt.newValue;
+                    McpProjectPreferences.LegacyRelayEnabled = evt.newValue;
                     ServerInstaller.RefreshInstalledServers();
-
-                    if (evt.newValue)
-                    {
-                        _ = RelayService.Instance.StartAsync();
-                    }
-                    else
-                    {
-                        _ = RelayService.Instance.StopAsync();
-                    }
 
                     UpdateLegacyRelayDescription(evt.newValue);
                 });
@@ -225,8 +214,8 @@ namespace Unity.AI.MCP.Editor.Settings
             RefreshToolCounts();
             UpdateValidationDescription(MCPSettingsManager.Settings.validationLevel);
             if (m_LegacyRelayToggle != null)
-                m_LegacyRelayToggle.SetValueWithoutNotify(AssistantRelayProjectPreferences.LegacyRelayEnabled);
-            UpdateLegacyRelayDescription(AssistantRelayProjectPreferences.LegacyRelayEnabled);
+                m_LegacyRelayToggle.SetValueWithoutNotify(McpProjectPreferences.LegacyRelayEnabled);
+            UpdateLegacyRelayDescription(McpProjectPreferences.LegacyRelayEnabled);
         }
 
         void RefreshBridgeStatus()

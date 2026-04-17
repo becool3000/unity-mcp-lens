@@ -13,7 +13,7 @@ using Unity.AI.MCP.Editor.Settings;
 using Unity.AI.Toolkit;
 using System.Threading;
 using System.Security.Cryptography;
-using Unity.AI.Assistant.Utils;
+using Unity.AI.MCP.Editor.Utils;
 using Unity.AI.MCP.Editor.Lens;
 
 #if USE_ROSLYN

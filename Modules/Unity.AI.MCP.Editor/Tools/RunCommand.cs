@@ -4,17 +4,14 @@ using Newtonsoft.Json.Linq;
 using Unity.AI.MCP.Editor.Helpers;
 using Unity.AI.MCP.Editor.ToolRegistry;
 using Unity.AI.MCP.Editor.Tools.Parameters;
-using Unity.AI.Assistant.Editor.Backend.Socket.Tools;
-using Unity.AI.Assistant.FunctionCalling;
-using Unity.AI.Assistant.Tools.Editor;
+using Unity.AI.MCP.Editor.Tools.RunCommandSupport;
 using UnityEditor;
 
 namespace Unity.AI.MCP.Editor.Tools
 {
     /// <summary>
     /// Handles compilation and execution of C# scripts in the Unity environment.
-    /// Combines validation and execution into a single operation by delegating to
-    /// RunCommandValidatorTool and RunCommandTool.
+    /// Combines validation and execution through MCP-owned Lens command support.
     /// </summary>
     public static class RunCommand
     {
@@ -130,12 +127,20 @@ internal class CommandScript : IRunCommand
         /// <param name="parameters">Parameters containing the script code and optional title.</param>
         /// <returns>A response object indicating success or failure with compilation and execution details.</returns>
         [McpTool(ToolName, Description, Groups = new string[] { "core", "scripting" }, EnabledByDefault = true)]
-        public static async Task<object> HandleCommand(RunCommandParams parameters)
+        public static Task<object> HandleCommand(RunCommandParams parameters)
         {
             string code = parameters?.Code;
             if (string.IsNullOrWhiteSpace(code))
             {
-                return Response.Error("CODE_REQUIRED: code parameter cannot be empty.");
+                return Task.FromResult<object>(Response.Error("CODE_REQUIRED: code parameter cannot be empty."));
+            }
+
+            string mode = string.IsNullOrWhiteSpace(parameters?.Mode)
+                ? "execute"
+                : parameters.Mode.Trim().ToLowerInvariant();
+            if (mode != "execute" && mode != "validate")
+            {
+                return Task.FromResult<object>(Response.Error("INVALID_MODE: mode must be 'execute' or 'validate'."));
             }
 
             bool wasPlaying = EditorApplication.isPlaying;
@@ -148,17 +153,17 @@ internal class CommandScript : IRunCommand
             bool responseSuccess = false;
             string responseMessage;
             object responseData = null;
-            RunCommandValidatorTool.CompileOutput validationResult = default;
+            LensCompileOutput validationResult = default;
             bool validationCompleted = false;
-            RunCommandTool.ExecutionOutput executionResult = default;
+            LensExecutionOutput executionResult = default;
             string failureStage = "unknown";
             string exceptionType = null;
             string exceptionMessage = null;
 
             try
             {
-                // Step 1: Validate the code using RunCommandValidatorTool
-                validationResult = RunCommandValidatorTool.RunCommandValidator(code);
+                // Step 1: Validate the code using MCP-owned Lens command support.
+                validationResult = LensRunCommandValidator.Validate(code);
                 validationCompleted = true;
 
                 if (!validationResult.IsCompilationSuccessful)
@@ -187,6 +192,35 @@ internal class CommandScript : IRunCommand
                     goto ReturnResponse;
                 }
 
+                if (mode == "validate")
+                {
+                    failureStage = null;
+                    responseSuccess = true;
+                    responseMessage = "Command validation succeeded.";
+                    responseData = new
+                    {
+                        mode,
+                        isCompilationSuccessful = true,
+                        isExecutionSuccessful = false,
+                        executionSkipped = true,
+                        compilationLogs = validationResult.CompilationLogs,
+                        executionLogs = string.Empty,
+                        consoleLogs = string.Empty,
+                        localFixedCode = validationResult.LocalFixedCode,
+                        result = responseMessage,
+                        failureStage = (string)null,
+                        exceptionType = (string)null,
+                        exceptionMessage = (string)null,
+                        validationSummary = new
+                        {
+                            isCompilationSuccessful = true,
+                            localFixedCodeChanged = !string.Equals(validationResult.LocalFixedCode, code, StringComparison.Ordinal),
+                            compilationLogLength = validationResult.CompilationLogs?.Length ?? 0
+                        }
+                    };
+                    goto ReturnResponse;
+                }
+
                 if (shouldPauseForExecution)
                 {
                     EditorApplication.isPaused = true;
@@ -207,21 +241,7 @@ internal class CommandScript : IRunCommand
                     }
                 }
 
-                // Step 2: Execute the command using RunCommandTool
-                // Create a ToolExecutionContext for MCP calls using the factory
-                var toolParams = new JObject
-                {
-                    ["code"] = code,
-                    ["title"] = parameters?.Title ?? string.Empty
-                };
-                var context = ToolExecutionContextFactory.CreateForExternalCall(
-                    RunCommandTool.k_FunctionId,
-                    toolParams);
-
-                executionResult = await RunCommandTool.ExecuteCommand(
-                    context,
-                    code,
-                    parameters?.Title);
+                executionResult = LensRunCommandExecutor.Execute(code, parameters?.Title);
 
                 // Return combined result
                 failureStage = executionResult.IsExecutionSuccessful ? null : "execution";
@@ -237,6 +257,8 @@ internal class CommandScript : IRunCommand
                 {
                     isCompilationSuccessful = true,
                     isExecutionSuccessful = executionResult.IsExecutionSuccessful,
+                    mode,
+                    executionSkipped = false,
                     executionId = executionResult.ExecutionId,
                     compilationLogs = validationResult.CompilationLogs,
                     executionLogs = executionResult.ExecutionLogs,
@@ -319,7 +341,7 @@ internal class CommandScript : IRunCommand
                 return combined;
             }
 
-            return BuildResponse(responseSuccess, responseMessage, responseData);
+            return Task.FromResult(BuildResponse(responseSuccess, responseMessage, responseData));
         }
     }
 }

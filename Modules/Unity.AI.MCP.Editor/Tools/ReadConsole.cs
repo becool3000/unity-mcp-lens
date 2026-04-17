@@ -4,11 +4,10 @@ using System.Linq;
 using System.Reflection;
 using UnityEditor;
 using UnityEngine;
-using Unity.AI.Assistant.Utils;
+using Unity.AI.MCP.Editor.Utils;
 using Unity.AI.MCP.Editor.Helpers;
 using Unity.AI.MCP.Editor.ToolRegistry; // For Response class
 using Unity.AI.MCP.Editor.Tools.Parameters;
-using Unity.AI.Assistant.Editor.Backend.Socket.Tools;
 using Unity.AI.MCP.Editor.Lens;
 
 namespace Unity.AI.MCP.Editor.Tools

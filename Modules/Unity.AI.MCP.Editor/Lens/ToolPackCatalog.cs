@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Unity.AI.Assistant.Utils;
+using Unity.AI.MCP.Editor.Utils;
 using Unity.AI.MCP.Editor.ToolRegistry;
 
 namespace Unity.AI.MCP.Editor.Lens
@@ -87,8 +87,7 @@ namespace Unity.AI.MCP.Editor.Lens
             NormalizeToolName("Unity.GetSha"),
             NormalizeToolName("Unity.ValidateScript"),
             NormalizeToolName("Unity.ManageScript_capabilities"),
-            NormalizeToolName("Unity.GetProjectData"),
-            NormalizeToolName("Unity.GetUserGuidelines")
+            NormalizeToolName("Unity.Project.GetInfo")
         };
 
         static readonly Dictionary<string, ToolPackDefinition> k_Definitions = new(StringComparer.OrdinalIgnoreCase)
@@ -104,14 +103,14 @@ namespace Unity.AI.MCP.Editor.Lens
                 ConsolePackId,
                 "Console Diagnostics",
                 "Console reads, health checks, and lightweight troubleshooting.",
-                includeTools: new[] { NormalizeToolName("Unity.ReadConsole"), NormalizeToolName("Unity.GetConsoleLogs"), NormalizeToolName("Unity.ManageEditor"), NormalizeToolName("Unity.ManageMenuItem") },
+                includeTools: new[] { NormalizeToolName("Unity.ReadConsole"), NormalizeToolName("Unity.ManageEditor"), NormalizeToolName("Unity.ManageMenuItem") },
                 recommendedNextPacks: new[] { ProjectPackId, DebugPackId }),
             [ProjectPackId] = new(
                 ProjectPackId,
                 "Project Diagnostics",
                 "Project-wide scans, guidelines, and lightweight validation.",
                 includeGroups: new[] { "project", "validation" },
-                includeTools: new[] { NormalizeToolName("Unity.GetProjectData"), NormalizeToolName("Unity.GetUserGuidelines") },
+                includeTools: new[] { NormalizeToolName("Unity.Project.GetInfo"), NormalizeToolName("Unity.Project.GetPackages") },
                 recommendedNextPacks: new[] { ScriptingPackId, AssetsPackId }),
             [ScenePackId] = new(
                 ScenePackId,
@@ -141,7 +140,7 @@ namespace Unity.AI.MCP.Editor.Lens
                 DebugPackId,
                 "Debug",
                 "Profiler, diagnostics, and deeper troubleshooting tools.",
-                includeGroups: new[] { "debug", "diagnostics" },
+                includeGroups: new[] { "debug", "diagnostics", "profiler" },
                 recommendedNextPacks: new[] { ConsolePackId, ScenePackId }),
             [FullPackId] = new(
                 FullPackId,
@@ -316,7 +315,10 @@ namespace Unity.AI.MCP.Editor.Lens
                 normalizedToolName.StartsWith(NormalizeToolPrefix("Unity.Project.Scan"), StringComparison.OrdinalIgnoreCase) ||
                 normalizedToolName.StartsWith(NormalizeToolPrefix("Unity.Runtime.Get"), StringComparison.OrdinalIgnoreCase) ||
                 normalizedToolName.StartsWith(NormalizeToolPrefix("Unity.UI.Get"), StringComparison.OrdinalIgnoreCase) ||
-                normalizedToolName.StartsWith(NormalizeToolPrefix("Unity.UI.Raycast"), StringComparison.OrdinalIgnoreCase);
+                normalizedToolName.StartsWith(NormalizeToolPrefix("Unity.UI.Raycast"), StringComparison.OrdinalIgnoreCase) ||
+                normalizedToolName.StartsWith(NormalizeToolPrefix("Unity.Asset.Search"), StringComparison.OrdinalIgnoreCase) ||
+                normalizedToolName.StartsWith(NormalizeToolPrefix("Unity.Project.Get"), StringComparison.OrdinalIgnoreCase) ||
+                normalizedToolName.StartsWith(NormalizeToolPrefix("Unity.Profiler.Query"), StringComparison.OrdinalIgnoreCase);
         }
 
         static bool MatchesDefinition(ToolPackDefinition definition, string toolName, IReadOnlyCollection<string> groups)

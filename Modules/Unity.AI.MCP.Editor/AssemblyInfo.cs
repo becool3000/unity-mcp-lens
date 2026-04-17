@@ -4,7 +4,6 @@ using System.Runtime.CompilerServices;
 [assembly: InternalsVisibleTo("Unity.AI.MCP.Editor.Tests")]
 [assembly: InternalsVisibleTo("Unity.AI.MCP.Editor.Test.Unity2021")]
 [assembly: InternalsVisibleTo("Unity.AI.MCP.Editor.Tests.Services")]
-[assembly: InternalsVisibleTo("Unity.AI.Assistant.DeveloperTools")]
 
 // We need to add this to make the record type work in Unity with the init keyword
 // The type System.Runtime.CompilerServices.IsExternalInit is defined in .NET 5 and later, which Unity does not support yet

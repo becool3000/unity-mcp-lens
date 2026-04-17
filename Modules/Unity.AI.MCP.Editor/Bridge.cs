@@ -7,7 +7,6 @@ using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using Unity.AI.Assistant.FunctionCalling;
 using Unity.AI.MCP.Editor.Connection;
 using Unity.AI.MCP.Editor.Helpers;
 using Unity.AI.MCP.Editor.Models;
@@ -16,12 +15,9 @@ using Unity.AI.MCP.Editor.Settings;
 using Unity.AI.MCP.Editor.ToolRegistry;
 using Unity.AI.MCP.Editor.UI;
 using Unity.AI.MCP.Editor.Lens;
-using Unity.AI.Assistant.Editor.Acp;
-using Unity.AI.Assistant.Utils;
+using Unity.AI.MCP.Editor.Utils;
 using Unity.AI.Tracing;
 using Unity.AI.Toolkit;
-using Unity.Relay;
-using Unity.Relay.Editor;
 using UnityEditor;
 using UnityEngine;
 using ClientInfo = Unity.AI.MCP.Editor.Models.ClientInfo;
@@ -251,17 +247,6 @@ namespace Unity.AI.MCP.Editor
             UnityMCPBridge.MaxDirectConnectionsPolicyChanged += RefreshCachedMaxDirectConnections;
             RefreshCachedMaxDirectConnections();
 
-            // Subscribe to MCP session events from Relay for auto-approval
-            RelayService.Instance.OnMcpSessionRegister += OnMcpSessionRegister;
-            RelayService.Instance.OnMcpSessionUnregister += OnMcpSessionUnregister;
-
-            // Catch any registrations that happened before we subscribed (race condition fix)
-            // McpSessionBuffer subscribes via [InitializeOnLoadMethod] and buffers all registrations
-            foreach (var registration in McpSessionBuffer.GetAll())
-            {
-                OnMcpSessionRegister(registration);
-            }
-
             // Load validation configuration
             validationConfig = ValidatedConfigs.Unity;
 
@@ -404,7 +389,7 @@ namespace Unity.AI.MCP.Editor
                 try { c.Close(); c.Dispose(); } catch { }
             }
 
-            ToolExecutionContextFactory.CleanupExternalConversations();
+            McpToolExecutionScope.CleanupAll();
 
             // Unblock any pending command waiters since ProcessCommands won't run after Stop()
             lock (lockObj)
@@ -1003,7 +988,7 @@ namespace Unity.AI.MCP.Editor
                         transportValidationDecisions.Remove(transport);
                     }
 
-                    ToolExecutionContextFactory.ReleaseExternalConversation(transport.ConnectionId);
+                    McpToolExecutionScope.ReleaseConnection(transport.ConnectionId);
                     BridgeLensSessionRegistry.ReleaseConnection(transport.ConnectionId);
 
                     // Notify listeners on main thread that a client disconnected
@@ -2250,7 +2235,7 @@ namespace Unity.AI.MCP.Editor
 
                 // Route command through the registry
                 object result;
-                using (ToolExecutionContextFactory.BeginExternalExecutionScope(client?.ConnectionId, command.requestId))
+                using (McpToolExecutionScope.Begin(client?.ConnectionId, command.requestId))
                 {
                     result = await McpToolRegistry.ExecuteToolAsync(normalizedToolName, paramsObject);
                 }
@@ -2281,14 +2266,13 @@ namespace Unity.AI.MCP.Editor
         }
 
         /// <summary>
-        /// Handle MCP tool approval requests from Codex.
-        /// Routes through McpToolApprovalHandler for permission UI, or auto-approves.
+        /// Handle MCP tool approval requests from clients that support approval callbacks.
+        /// Lens owns the MCP boundary now, so approval is resolved by bridge connection policy.
         /// </summary>
-        async Task<string> HandleMcpToolApprovalAsync(Command command)
+        Task<string> HandleMcpToolApprovalAsync(Command command)
         {
             var token = command.@params?.Value<string>("token");
             var toolName = command.@params?.Value<string>("toolName");
-            var args = command.@params?["args"]?.ToString() ?? "{}";
             var toolCallId = command.@params?.Value<string>("toolCallId") ?? Guid.NewGuid().ToString();
 
             McpLog.Log($"[MCP Approval] Received tool approval request: {toolName}");
@@ -2299,39 +2283,27 @@ namespace Unity.AI.MCP.Editor
             {
                 // No valid session - auto-approve (standalone MCP connection or expired token)
                 McpLog.Log($"[MCP Approval] No valid session for token - auto-approving: {toolName}");
-                return JsonConvert.SerializeObject(new
+                return Task.FromResult(JsonConvert.SerializeObject(new
                 {
                     status = "success",
                     result = new { approved = true, reason = "No active session (auto-approved)" }
-                });
+                }));
             }
 
             var (sessionId, provider) = sessionInfo.Value;
-            McpLog.Log($"[MCP Approval] Session found: {sessionId} (provider: {provider})");
+            McpLog.Log($"[MCP Approval] Session found: {sessionId} (provider: {provider}); approving through Lens bridge policy.");
 
-            try
+            return Task.FromResult(JsonConvert.SerializeObject(new
             {
-                // Route to the approval handler
-                var request = new McpToolApprovalRequest(sessionId, provider, toolName, args, toolCallId);
-                var response = await McpToolApprovalHandler.RequestApprovalAsync(request);
-
-                McpLog.Log($"[MCP Approval] Tool {toolName}: {(response.Approved ? "approved" : "rejected")} - {response.Reason}");
-
-                return JsonConvert.SerializeObject(new
+                status = "success",
+                result = new
                 {
-                    status = "success",
-                    result = new { approved = response.Approved, reason = response.Reason, alwaysAllow = response.AlwaysAllow }
-                });
-            }
-            catch (Exception ex)
-            {
-                McpLog.Warning($"[MCP Approval] Error processing approval for {toolName}: {ex.Message}");
-                return JsonConvert.SerializeObject(new
-                {
-                    status = "success",
-                    result = new { approved = false, reason = $"Approval error: {ex.Message}" }
-                });
-            }
+                    approved = true,
+                    reason = "Approved by Unity MCP Lens bridge policy",
+                    alwaysAllow = true,
+                    toolCallId
+                }
+            }));
         }
 
         void OnBeforeAssemblyReload()

@@ -1,5 +1,5 @@
-using Unity.AI.Assistant.FunctionCalling;
-using Unity.AI.Assistant.Utils;
+using Unity.AI.MCP.Editor.ToolRegistry;
+using Unity.AI.MCP.Editor.Utils;
 
 namespace Unity.AI.MCP.Editor.Lens
 {
@@ -110,7 +110,7 @@ namespace Unity.AI.MCP.Editor.Lens
 
         public static object CreateStoredDetailRef(string toolName, object data, int rawBytes, object meta = null)
         {
-            var execution = ExternalToolExecutionScope.Current;
+            var execution = McpToolExecutionScope.Current;
             if (string.IsNullOrWhiteSpace(execution?.ConnectionId) ||
                 !BridgeLensSessionRegistry.TryGetConnectionState(execution.ConnectionId, out var state) ||
                 state?.Capabilities?.SupportsToolSyncLens != true)

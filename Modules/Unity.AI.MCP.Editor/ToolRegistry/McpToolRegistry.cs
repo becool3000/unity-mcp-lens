@@ -9,7 +9,7 @@ using Newtonsoft.Json.Linq;
 using Unity.AI.MCP.Editor.Helpers;
 using Unity.AI.MCP.Editor.Settings;
 using Unity.AI.Tracing;
-using Unity.AI.Assistant.Utils;
+using Unity.AI.MCP.Editor.Utils;
 using UnityEditor;
 
 namespace Unity.AI.MCP.Editor.ToolRegistry

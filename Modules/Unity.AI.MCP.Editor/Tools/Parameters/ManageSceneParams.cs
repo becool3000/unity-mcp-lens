@@ -36,7 +36,22 @@ namespace Unity.AI.MCP.Editor.Tools.Parameters
         /// <summary>
         /// Get the build settings for scenes.
         /// </summary>
-        GetBuildSettings
+        GetBuildSettings,
+
+        /// <summary>
+        /// Get compact information about loaded scenes.
+        /// </summary>
+        GetInfo,
+
+        /// <summary>
+        /// Search objects in loaded scenes.
+        /// </summary>
+        FindObjects,
+
+        /// <summary>
+        /// Get objects visible to a camera frustum.
+        /// </summary>
+        GetVisibleObjects
     }
 
     /// <summary>
@@ -73,5 +88,17 @@ namespace Unity.AI.MCP.Editor.Tools.Parameters
         /// </summary>
         [McpDescription("Hierarchy depth limit (-1 for full hierarchy, 0 for root objects only, 1+ for limited depth)", Required = false, Default = -1)]
         public int? Depth { get; set; } = -1;
+
+        [McpDescription("Search term for FindObjects.", Required = false)]
+        public string SearchTerm { get; set; }
+
+        [McpDescription("Include inactive objects in search results.", Required = false, Default = false)]
+        public bool IncludeInactive { get; set; }
+
+        [McpDescription("Maximum object results to return.", Required = false, Default = 80)]
+        public int? Limit { get; set; } = 80;
+
+        [McpDescription("Optional camera name for GetVisibleObjects.", Required = false)]
+        public string CameraName { get; set; }
     }
 }

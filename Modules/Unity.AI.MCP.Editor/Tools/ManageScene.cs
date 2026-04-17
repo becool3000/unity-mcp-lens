@@ -155,10 +155,16 @@ Returns:
                     return GetActiveSceneInfo();
                 case SceneAction.GetBuildSettings:
                     return GetBuildSettingsScenes();
+                case SceneAction.GetInfo:
+                    return GetSceneInfo();
+                case SceneAction.FindObjects:
+                    return FindSceneObjects(@params.SearchTerm, @params.IncludeInactive, @params.Limit ?? 80);
+                case SceneAction.GetVisibleObjects:
+                    return GetVisibleObjects(@params.CameraName, @params.IncludeInactive, @params.Limit ?? 80);
                 // Add cases for modifying build settings, additive loading, unloading etc.
                 default:
                     return Response.Error(
-                        $"Unknown action: '{@params.Action}'. Valid actions: Create, Load, Save, GetHierarchy, GetActive, GetBuildSettings."
+                        $"Unknown action: '{@params.Action}'. Valid actions: Create, Load, Save, GetHierarchy, GetActive, GetBuildSettings, GetInfo, FindObjects, GetVisibleObjects."
                     );
             }
         }
@@ -398,6 +404,155 @@ Returns:
             {
                 return Response.Error($"Error getting scenes from Build Settings: {e.Message}");
             }
+        }
+
+        static object GetSceneInfo()
+        {
+            try
+            {
+                var scenes = new List<object>();
+                for (int i = 0; i < SceneManager.sceneCount; i++)
+                {
+                    var scene = SceneManager.GetSceneAt(i);
+                    scenes.Add(new
+                    {
+                        scene.name,
+                        scene.path,
+                        scene.buildIndex,
+                        scene.isLoaded,
+                        scene.isDirty,
+                        scene.rootCount
+                    });
+                }
+
+                var active = EditorSceneManager.GetActiveScene();
+                return Response.Success("Retrieved loaded scene information.", new
+                {
+                    activeScene = new { active.name, active.path, active.buildIndex, active.isLoaded, active.isDirty, active.rootCount },
+                    loadedSceneCount = SceneManager.sceneCount,
+                    scenes
+                });
+            }
+            catch (Exception e)
+            {
+                return Response.Error($"Error getting scene info: {e.Message}");
+            }
+        }
+
+        static object FindSceneObjects(string searchTerm, bool includeInactive, int limit)
+        {
+            try
+            {
+                string query = (searchTerm ?? string.Empty).Trim();
+                int max = Math.Clamp(limit, 1, 500);
+                var inactiveMode = includeInactive ? FindObjectsInactive.Include : FindObjectsInactive.Exclude;
+                var objects = UnityEngine.Object.FindObjectsByType<GameObject>(inactiveMode, FindObjectsSortMode.None)
+                    .Where(go => string.IsNullOrEmpty(query) ||
+                        go.name.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        GetHierarchyPath(go.transform).IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        string.Equals(go.tag, query, StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(LayerMask.LayerToName(go.layer), query, StringComparison.OrdinalIgnoreCase))
+                    .OrderBy(go => go.scene.path, StringComparer.OrdinalIgnoreCase)
+                    .ThenBy(go => GetHierarchyPath(go.transform), StringComparer.OrdinalIgnoreCase)
+                    .Take(max)
+                    .Select(go => new
+                    {
+                        go.name,
+                        path = GetHierarchyPath(go.transform),
+                        scenePath = go.scene.path,
+                        instanceID = go.GetInstanceID(),
+                        go.tag,
+                        layer = LayerMask.LayerToName(go.layer),
+                        go.activeSelf,
+                        go.activeInHierarchy,
+                        componentCount = go.GetComponents<Component>().Count(component => component != null)
+                    })
+                    .ToArray();
+
+                return Response.Success("Scene object search completed.", new
+                {
+                    searchTerm = query,
+                    includeInactive,
+                    returned = objects.Length,
+                    truncated = objects.Length == max,
+                    objects
+                });
+            }
+            catch (Exception e)
+            {
+                return Response.Error($"Error finding scene objects: {e.Message}");
+            }
+        }
+
+        static object GetVisibleObjects(string cameraName, bool includeInactive, int limit)
+        {
+            try
+            {
+                var camera = ResolveCamera(cameraName);
+                if (camera == null)
+                    return Response.Error("No camera found for visibility query.");
+
+                int max = Math.Clamp(limit, 1, 500);
+                var planes = GeometryUtility.CalculateFrustumPlanes(camera);
+                var inactiveMode = includeInactive ? FindObjectsInactive.Include : FindObjectsInactive.Exclude;
+                var objects = UnityEngine.Object.FindObjectsByType<Renderer>(inactiveMode, FindObjectsSortMode.None)
+                    .Where(renderer => renderer != null && renderer.gameObject.scene.IsValid() && GeometryUtility.TestPlanesAABB(planes, renderer.bounds))
+                    .Take(max)
+                    .Select(renderer => new
+                    {
+                        renderer.gameObject.name,
+                        path = GetHierarchyPath(renderer.transform),
+                        scenePath = renderer.gameObject.scene.path,
+                        instanceID = renderer.gameObject.GetInstanceID(),
+                        rendererType = renderer.GetType().FullName,
+                        bounds = new
+                        {
+                            center = new { x = renderer.bounds.center.x, y = renderer.bounds.center.y, z = renderer.bounds.center.z },
+                            size = new { x = renderer.bounds.size.x, y = renderer.bounds.size.y, z = renderer.bounds.size.z }
+                        }
+                    })
+                    .ToArray();
+
+                return Response.Success("Visible object query completed.", new
+                {
+                    camera = camera.name,
+                    returned = objects.Length,
+                    truncated = objects.Length == max,
+                    objects
+                });
+            }
+            catch (Exception e)
+            {
+                return Response.Error($"Error getting visible objects: {e.Message}");
+            }
+        }
+
+        static Camera ResolveCamera(string cameraName)
+        {
+            var cameras = UnityEngine.Object.FindObjectsByType<Camera>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            if (!string.IsNullOrWhiteSpace(cameraName))
+            {
+                var named = cameras.FirstOrDefault(camera => string.Equals(camera.name, cameraName, StringComparison.OrdinalIgnoreCase));
+                if (named != null)
+                    return named;
+            }
+
+            return Camera.main ?? cameras.FirstOrDefault();
+        }
+
+        static string GetHierarchyPath(Transform transform)
+        {
+            if (transform == null)
+                return string.Empty;
+
+            var names = new Stack<string>();
+            while (transform != null)
+            {
+                names.Push(transform.name);
+                transform = transform.parent;
+            }
+
+            return string.Join("/", names);
         }
 
         static object GetSceneHierarchy(int depth = -1)
