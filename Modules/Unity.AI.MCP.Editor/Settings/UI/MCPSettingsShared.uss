@@ -10,7 +10,7 @@
     --mcp-color-client-connected: #4CAF50;
     --mcp-color-client-error: #ff4444;
     --mcp-color-client-partial: #ffaa44;
-    --mcp-color-client-gateway: #5B9BD5;  /* Blue for AI Gateway connections */
+    --mcp-color-client-gateway: #5B9BD5;  /* Blue for legacy relay connections */
 
     /* Text Colors */
     --mcp-color-text-accent: #ff8000;

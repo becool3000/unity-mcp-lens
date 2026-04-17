@@ -3,7 +3,7 @@
         <ui:VisualElement class="umcp-gateway-connection-header">
             <ui:VisualElement class="umcp-gateway-connection-left">
                 <ui:VisualElement name="statusIndicator" class="umcp-status-indicator gateway" />
-                <ui:Label name="providerName" text="Claude Code (Gateway)" class="umcp-gateway-provider-name" />
+                <ui:Label name="providerName" text="Claude Code (Legacy Relay)" class="umcp-gateway-provider-name" />
             </ui:VisualElement>
             <ui:VisualElement class="umcp-gateway-connection-right">
                 <ui:Label name="timestamp" text="Just now" class="umcp-gateway-timestamp" />

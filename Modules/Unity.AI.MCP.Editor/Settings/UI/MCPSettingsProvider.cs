@@ -354,7 +354,7 @@ namespace Unity.AI.MCP.Editor.Settings
                 .OrderByDescending(c => c.Info?.Timestamp ?? DateTime.MinValue)
                 .ToList();
 
-            // Get gateway connections (AI Gateway auto-approved connections)
+            // Get legacy relay auto-approved connections.
             var gatewayConnections = ConnectionRegistry.instance.GetGatewayConnections();
 
             // Setup Connected Clients section (always visible)
@@ -368,7 +368,7 @@ namespace Unity.AI.MCP.Editor.Settings
             }
             else
             {
-                // Add gateway connections first (with purple indicator)
+                // Add legacy relay connections first.
                 foreach (var gateway in gatewayConnections)
                 {
                     var gatewayItem = new GatewayConnectionItemControl(gateway);

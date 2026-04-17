@@ -6,8 +6,8 @@ using GatewayConnectionRecord = Unity.AI.MCP.Editor.GatewayConnectionRecord;
 namespace Unity.AI.MCP.Editor.Settings.UI
 {
     /// <summary>
-    /// UI control for displaying an AI Gateway connection.
-    /// Shows provider name with purple indicator and auto-approved status.
+    /// UI control for displaying a legacy relay connection.
+    /// Shows provider name with a dedicated indicator and auto-approved status.
     /// </summary>
     class GatewayConnectionItemControl : VisualElement
     {
@@ -59,8 +59,8 @@ namespace Unity.AI.MCP.Editor.Settings.UI
 
         void PopulateData()
         {
-            // Provider name with (Gateway) suffix
-            var displayName = GetProviderDisplayName(m_Record.Provider) + " (Gateway)";
+            // Provider name with legacy relay suffix
+            var displayName = GetProviderDisplayName(m_Record.Provider) + " (Legacy Relay)";
             m_ProviderName.text = displayName;
 
             // Timestamp
@@ -68,7 +68,7 @@ namespace Unity.AI.MCP.Editor.Settings.UI
                 ? GetRelativeTime(m_Record.ConnectedAt)
                 : "Just now";
 
-            // Status is always "Auto-approved" for gateway connections
+            // Status is always "Auto-approved" for legacy relay connections
             m_StatusLabel.text = "Auto-approved";
         }
 
