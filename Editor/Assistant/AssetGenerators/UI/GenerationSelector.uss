@@ -1,4 +1,0 @@
-#open-generator-window:hover,
-#spritesheet-settings-button:hover {
-    background-color: var(--muse-chat-backgrounds-50);
-}

@@ -1,3 +1,0 @@
-<UXML xmlns="UnityEngine.UIElements">
-    <Toggle tooltip="Retains original image size" label="Keep Image Size" class="pixelate-keep-image-size-toggle"/>
-</UXML>

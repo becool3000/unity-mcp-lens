@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "codex_side_mcp_client_for_unity": {
+      "command": "dotnet",
+      "args": [
+        "run",
+        "--no-restore",
+        "--project",
+        "../../../UnityMcpLensApp~/src/UnityMcpLens/UnityMcpLens.csproj"
+      ],
+      "enabled": false
+    }
+  }
+}

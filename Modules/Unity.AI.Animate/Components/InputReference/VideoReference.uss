@@ -1,7 +1,0 @@
-#delete-input-reference {
-    display: none;
-}
-
-.input-reference {
-    margin-bottom: 8px;
-}

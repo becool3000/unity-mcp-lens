@@ -1,0 +1,7 @@
+interface:
+  display_name: "Unity Dev Assistant"
+  short_description: "Run Unity editor, build preflight, long-build monitoring, runtime probe, and playtest workflows"
+  default_prompt: "Use $unity-dev-assistant for Unity editor mutations, exact build-scene preflight, long WebGL build monitoring, deterministic sprite imports, compile-idle gating, play-mode verification, runtime probes, autoplay smoke tests, screenshot-assisted validation, and edit-mode versus play-mode ownership-drift diagnosis. Invoke $unity-mcp-bridge first for connection health and recovery."
+
+policy:
+  allow_implicit_invocation: true

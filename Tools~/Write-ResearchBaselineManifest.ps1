@@ -100,7 +100,7 @@ function Get-ManifestDependency {
 $repoRoot = Get-RepoRoot
 $resolvedHostProjectRoot = if ([string]::IsNullOrWhiteSpace($HostProjectRoot)) { $null } else { [System.IO.Path]::GetFullPath($HostProjectRoot) }
 $resolvedOutputPath = if ([string]::IsNullOrWhiteSpace($OutputPath)) {
-    Join-Path $repoRoot "Documentation~\analyze\patched-baseline-manifest.json"
+    Join-Path $repoRoot "Documentation~\benchmarks\lens-baseline-manifest.json"
 } else {
     [System.IO.Path]::GetFullPath($OutputPath)
 }
@@ -113,7 +113,7 @@ $diffStat = Invoke-Git -Arguments @("diff", "--stat=200", "--", ".")
 $diffStatStaged = Invoke-Git -Arguments @("diff", "--cached", "--stat=200", "--", ".")
 $repoRelativePath = "."
 
-$manifestDependency = Get-ManifestDependency -ProjectRoot $resolvedHostProjectRoot -PackageName "com.unity.ai.assistant"
+$manifestDependency = Get-ManifestDependency -ProjectRoot $resolvedHostProjectRoot -PackageName "com.becool3000.unity-mcp-lens"
 $unityVersion = Get-UnityVersion -ProjectRoot $resolvedHostProjectRoot
 $hostStatsPath = if ($resolvedHostProjectRoot) {
     Join-Path $resolvedHostProjectRoot "Library\AI.Gateway.PayloadStats.jsonl"

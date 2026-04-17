@@ -1,13 +1,11 @@
-License Notice
+# License Notice
 
-This repository includes code derived from Unity's com.unity.ai.assistant package.
+Original Unity MCP Lens additions and modifications in this repository are authored by James Kanawyer.
 
-Unity-owned portions of this repository remain subject to the Unity Terms of Service and any related Unity licensing notices included with the original package or retained in this repository.
+This package was created from a prior Unity Assistant-derived working tree. The current standalone split removes the Assistant UI, Assistant runtime, cloud generation modules, legacy relay bundle, and Assistant assembly identities from the shipped Lens package surface.
 
-Original additions and modifications in this repository are authored by James Kanawyer.
+Until every remaining file is audited for provenance, this repository should be treated as source-available rather than broadly open licensed. Do not assume Unity-owned upstream material is relicensed by its presence here.
 
-Unless explicitly stated otherwise, no separate open-source license is granted for any Unity-owned code or for any portions of this repository derived from Unity's com.unity.ai.assistant package.
+Wholly original components may be released under separate license terms after audit.
 
-Except where a file or subdirectory expressly states otherwise, this repository is provided on an "AS IS" basis, without warranties or conditions of any kind, express or implied.
-
-If wholly original components are later split into standalone repositories or clearly separable subprojects, those components may be released under separate license terms.
+This repository is provided on an "AS IS" basis, without warranties or conditions of any kind, express or implied.

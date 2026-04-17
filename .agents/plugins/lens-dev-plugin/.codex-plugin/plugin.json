@@ -1,0 +1,41 @@
+{
+  "name": "lens-dev-plugin",
+  "version": "0.1.0",
+  "description": "Unity MCP Lens development workflow bundle for Codex.",
+  "author": {
+    "name": "kanaw",
+    "email": "",
+    "url": ""
+  },
+  "homepage": "https://github.com/becool3000/unity-mcp-lens",
+  "repository": "https://github.com/becool3000/unity-mcp-lens.git",
+  "license": "",
+  "keywords": [
+    "unity",
+    "mcp",
+    "lens",
+    "codex"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Lens Dev Plugin",
+    "shortDescription": "Unity MCP Lens development workflows and bridge access.",
+    "longDescription": "Bundles Unity MCP Bridge, Unity Dev Assistant, Unity MCP Lens Development, and the local Lens MCP server config for Codex.",
+    "developerName": "kanaw",
+    "category": "Productivity",
+    "capabilities": [
+      "Interactive",
+      "Write"
+    ],
+    "websiteURL": "",
+    "privacyPolicyURL": "",
+    "termsOfServiceURL": "",
+    "defaultPrompt": [
+      "Check the Unity MCP Lens bridge.",
+      "Start a Unity dev session with Lens.",
+      "Review Lens tool pack behavior."
+    ],
+    "brandColor": "#2563EB"
+  }
+}

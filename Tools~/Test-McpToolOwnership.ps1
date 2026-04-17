@@ -4,7 +4,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$mcpRoot = Join-Path $PackageRoot "Modules/Unity.AI.MCP.Editor"
+$mcpRoot = Join-Path $PackageRoot "Editor/Lens"
 $catalogPath = Join-Path $mcpRoot "Lens/ToolPackCatalog.cs"
 $auditPath = Join-Path $PackageRoot "docs/lens-assistant-tool-ownership-audit.md"
 $failures = New-Object System.Collections.Generic.List[string]
@@ -56,6 +56,32 @@ $catalogRefs = New-Object 'System.Collections.Generic.HashSet[string]' ([StringC
 foreach ($toolName in $catalogRefs) {
     if (-not $definedTools.Contains($toolName)) {
         $failures.Add("ToolPackCatalog references missing tool: $toolName")
+    }
+}
+
+$requiredEnabledTools = @(
+    "Unity.ApplyTextEdits",
+    "Unity.CreateScript",
+    "Unity.DeleteScript",
+    "Unity.ImportExternalModel",
+    "Unity.ManageAsset",
+    "Unity.ManageEditor",
+    "Unity.ManageGameObject",
+    "Unity.ManageMenuItem",
+    "Unity.ManageScene",
+    "Unity.ManageScript",
+    "Unity.ManageShader",
+    "Unity.ScriptApplyEdits"
+)
+
+$allMcpSource = (Get-ChildItem -Path $mcpRoot -Recurse -Filter "*.cs" | ForEach-Object {
+    Get-Content -Path $_.FullName -Raw
+}) -join "`n"
+
+foreach ($toolName in $requiredEnabledTools) {
+    $pattern = '\[McpTool\([^\r\n]*' + [regex]::Escape($toolName) + '[^\r\n]*EnabledByDefault\s*=\s*true'
+    if ($allMcpSource -notmatch $pattern) {
+        $failures.Add("Pack-owned canonical tool must be EnabledByDefault=true so manifests can export it: $toolName")
     }
 }
 

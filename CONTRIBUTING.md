@@ -1,45 +1,44 @@
 # Contributing
 
-This repository is a narrow patch fork of `com.unity.ai.assistant`. Contributions are welcome, but changes should stay focused on stability, interoperability, and public-repo hygiene.
+This repository is the Unity MCP Lens package. Contributions should keep the package standalone, MCP-first, and side-by-side safe with Unity's official Assistant package.
 
 ## Scope
 
 Good candidates for pull requests:
 
-- MCP and relay startup stability fixes
-- Bug fixes with clear regressions or reproducible failures
-- Documentation improvements for local package use
-- Public-readiness cleanup such as metadata, comments, or repo policy files
+- MCP bridge reliability fixes.
+- Tool-pack, schema-cache, and compact-output improvements.
+- Unity editor/dev tools that fit the Lens pack model.
+- Documentation and migration guidance.
+- Static gates that prevent package identity regressions.
 
-Changes that are usually out of scope unless they directly support the patch goal:
+Usually out of scope:
 
-- Large feature additions unrelated to stability
-- Broad product redesigns
-- Replacing bundled upstream binaries without a strong justification
-
-## Before Opening a PR
-
-1. Keep the diff focused.
-2. Explain the user-visible problem and the fix.
-3. Note any tradeoffs or compatibility risks.
-4. Include verification steps you actually ran.
+- Assistant chat UI.
+- Cloud asset generation.
+- Assistant Gateway or ACP product workflows.
+- Reintroducing `Unity.AI.Assistant.*` runtime or editor dependencies.
+- Broad old-name aliases for Assistant tools.
 
 ## Local Setup
 
-Because the repository includes bundled binaries tracked with Git LFS, clone it with Git LFS enabled:
+Clone with Git LFS enabled if this repository contains any binary artifacts:
 
 ```bash
 git lfs install
 git clone https://github.com/becool3000/unity-mcp-lens.git
 ```
 
-To use the package in a Unity project, point `Packages/manifest.json` at a local checkout:
+Use the package from a Unity project with:
 
 ```json
-"com.unity.ai.assistant": "file:../UnityAIAssistantPatch"
+"com.becool3000.unity-mcp-lens": "file:../UnityAIAssistantPatch"
 ```
 
-## Notes
+## Before Opening A PR
 
-- This fork is not an official Unity release channel.
-- Upstream package updates may supersede some patches here. When possible, keep changes easy to diff against upstream.
+1. Keep the diff focused.
+2. Explain the Unity/MCP behavior change.
+3. Note compatibility risks for existing Lens users.
+4. Run the relevant `Tools~/Test-*.ps1` gates.
+5. If the change touches Unity editor code, smoke it in a Unity project before merging.

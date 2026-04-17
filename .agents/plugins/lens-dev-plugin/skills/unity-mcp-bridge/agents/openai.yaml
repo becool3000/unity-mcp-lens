@@ -1,0 +1,7 @@
+interface:
+  display_name: "Unity MCP Bridge"
+  short_description: "Stabilize Unity MCP checks, long-build detection, recovery, and notifications"
+  default_prompt: "Use $unity-mcp-bridge to verify the local Unity MCP bridge, inspect failure signals including active WebGL builds, and recover safely before Unity editor work."
+
+policy:
+  allow_implicit_invocation: true

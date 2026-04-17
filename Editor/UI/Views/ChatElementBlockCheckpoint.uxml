@@ -1,5 +1,0 @@
-<UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" xmlns="UnityEngine.UIElements" xmlns:assistant="Unity.AI.Assistant.UI.Editor.Scripts.Components" editor-extension-mode="False">
-    <ui:VisualElement name="checkpointBlockSection" class="mui-chat-checkpoint-block-section">
-        <assistant:ChatElementCheckpoint/>
-    </ui:VisualElement>
-</UXML>

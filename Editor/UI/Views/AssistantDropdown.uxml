@@ -1,5 +1,0 @@
-<UXML xmlns:ui="UnityEngine.UIElements">
-    <ui:VisualElement name="assistantDropdownRoot" class="assistant-dropdown">
-        <ui:ScrollView name="assistantDropdownScroll" class="assistant-dropdown-scroll" mode="Vertical" />
-    </ui:VisualElement>
-</UXML>

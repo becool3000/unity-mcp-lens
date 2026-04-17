@@ -1,3 +1,0 @@
-<UXML xmlns="UnityEngine.UIElements">
-    <EnumField tooltip="Mode for downscaling for Pixelate" label="Pixelate Mode" class="pixelate-mode-dropdown"  />
-</UXML>

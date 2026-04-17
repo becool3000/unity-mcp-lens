@@ -1,52 +1,61 @@
-# Technical Fork Notes
+# Codex And Lens Notes
 
-This file is the technical companion to the main repo README.
+Unity MCP Lens is the supported MCP path for Codex in this repository.
 
-Primary project overview, ownership, and direction now live in:
+Preferred topology:
 
-- [README.md](README.md)
-
-## Baseline
-
-This repository is still rooted in Unity's official `com.unity.ai.assistant 2.3.0-pre.2` package.
-
-The fork strategy is:
-
-- keep Unity's official package as the compatibility baseline
-- keep fork-only MCP and relay stability work that upstream still does not cover
-- evolve the owned `unity-mcp-lens` path beside the legacy relay path
-
-## Local Package Use
-
-Use this folder as a local Unity package source:
-
-```json
-"com.unity.ai.assistant": "file:C:/UnityAIAssistantPatch"
+```text
+Codex or other MCP client -> unity-mcp-lens stdio server -> Unity Lens bridge
 ```
 
-Or relatively:
+The Lens server is installed under:
 
-```json
-"com.unity.ai.assistant": "file:../UnityAIAssistantPatch"
+```text
+~/.unity/unity-mcp-lens/
 ```
 
-## Fork-Specific Behavior Retained
+Codex MCP settings should launch the Lens binary directly with no arguments.
 
-- Delays MCP initialization until the editor is stable and retries with backoff.
-- Delays relay startup and reconnect while Unity is compiling, importing, building, or changing play mode.
-- Serializes managed MCP server startup and retries failed initial launches once after a short delay.
-- Preserves cached MCP tool snapshots when discovery temporarily fails or returns empty.
-- Publishes richer bridge status metadata for reload, recovery, and tool-discovery state.
-- Adds the owned `unity-mcp-lens` stdio server path with event-driven manifest sync and bridge-owned manifest versioning.
-- Adds session-scoped MCP tool packs with a narrow `foundation` default surface and explicit pack-control meta-tools.
-- Keeps custom MCP tools for sprite import, serialized property editing, runtime diagnostics, UI diagnostics, project diagnostics, and tile workflows.
-- Adds payload/bridge telemetry and assistant usage tooling for benchmark work.
+## Important Constraints
 
-## Operational Notes
+- Keep helper scripts on the Lens path.
+- Do not use the manual wrapper or legacy relay as the normal Codex transport.
+- Keep the default pack surface narrow and expand packs explicitly.
+- Use `Unity.ReadDetailRef` only when a compact preview is insufficient.
+- Treat Unity compile/import/reload windows as expected recovery windows, not as reasons to spam tool discovery.
 
-- Clone with Git LFS enabled because the bundled relay binaries are tracked through LFS.
-- The upstream relay binaries are still Unity binaries; this fork patches the managed Unity-side code and now adds a separate owned Lens server path.
-- The owned Lens server source lives under `UnityMcpLensApp~` and installs to `~/.unity/unity-mcp-lens/`.
-- The legacy relay path remains under `~/.unity/relay/` when enabled.
-- Generated MCP config writes side-by-side entries for Lens and legacy so clients can migrate without breaking fallback compatibility.
-- Keep the package version at the upstream version unless there is a strong reason not to; carry fork identity in repo docs and tooling instead of inventing a fake package semver.
+## Maintenance
+
+When changing package identity or tool exposure, run:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File Tools~/Test-McpPackageIdentity.ps1
+powershell -ExecutionPolicy Bypass -File Tools~/Test-McpStandaloneBoundary.ps1
+powershell -ExecutionPolicy Bypass -File Tools~/Test-McpToolOwnership.ps1
+powershell -ExecutionPolicy Bypass -File Tools~/Test-McpLensPresentation.ps1
+```
+
+## Repo-local Codex Plugin
+
+The Codex plugin source for Lens is vendored at:
+
+```text
+.agents/plugins/lens-dev-plugin/
+```
+
+The repo-local marketplace entry is:
+
+```text
+.agents/plugins/marketplace.json
+```
+
+The plugin bundles the `unity-mcp-bridge`, `unity-dev-assistant`, and
+`unity-mcp-lens-development` skills. The vendored `.mcp.json` intentionally uses
+a disabled source-run template so this repo does not commit a machine-specific
+absolute path. For daily use, install or refresh the Lens server from Unity
+first so `~/.unity/unity-mcp-lens/` contains the platform-specific binary. For
+an Intel Mac, the installed command is:
+
+```text
+~/.unity/unity-mcp-lens/unity_mcp_lens_mac_x64
+```

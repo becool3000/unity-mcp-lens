@@ -1,3 +1,0 @@
-<UXML class="height-128px" xmlns="UnityEngine.UIElements" xmlns:ui="Unity.AI.Image.Components">
-    <ui:DoodlePad class="rounded-4px flex-grow-100pct p-0 m-0" modifier-state="1" />
-</UXML>

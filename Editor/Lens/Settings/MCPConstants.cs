@@ -1,0 +1,211 @@
+using System;
+using System.IO;
+using System.Linq;
+using System.Runtime.InteropServices;
+using Becool.UnityMcpLens.Editor.Settings.Utilities;
+using UnityEngine;
+
+namespace Becool.UnityMcpLens.Editor.Settings
+{
+    /// <summary>
+    /// Contains constants used throughout the Unity MCP package for configuration,
+    /// file paths, and system integration.
+    /// </summary>
+    static class MCPConstants
+    {
+        // EditorPrefs Keys
+        /// <summary>
+        /// EditorPrefs key for storing MCP project settings.
+        /// </summary>
+        public const string prefProjectSettings = "Becool.UnityMcpLens.ProjectSettings.v1";
+
+        // Unity Paths and Namespaces
+        /// <summary>
+        /// Path to MCP server settings in Unity's Project Settings window.
+        /// </summary>
+        public const string projectSettingsPath = "Project/Tools/Unity MCP Lens";
+
+        // Package Configuration
+        /// <summary>
+        /// The Unity package name for MCP integration.
+        /// </summary>
+        public static string packageName = "com.becool3000.unity-mcp-lens";
+
+        public static string moduleName = "Editor/Lens";
+
+        /// <summary>
+        /// Path to the package's Editor directory.
+        /// </summary>
+        public static string modulePath = $"Packages/{packageName}/{moduleName}";
+
+        /// <summary>
+        /// Path to the owned MCP-only server source/bundled assets directory.
+        /// </summary>
+        public static string unityMcpLensAppPath = $"Packages/{packageName}/UnityMcpLensApp~";
+
+        /// <summary>
+        /// Path to the UI template files for settings.
+        /// </summary>
+        public static string uiTemplatesPath = $"{modulePath}/Settings/UI";
+
+        // Client Configuration
+        /// <summary>
+        /// JSON key used to identify Unity MCP server in MCP client configuration files.
+        /// </summary>
+        public static string jsonKeyIntegration = "unity-mcp";
+        public static string jsonKeyIntegrationLegacy = "unity-mcp-legacy";
+        public static string jsonKeyIntegrationLens = "unity-mcp-lens";
+
+        // Relay Installation
+        /// <summary>
+        /// Name of the relay installation directory relative to the user's home directory.
+        /// The relay binary is copied here so MCP clients can reference a stable location.
+        /// </summary>
+        public static string relayBaseDirectoryName = ".unity/relay";
+        public static string unityMcpBaseDirectoryName = ".unity/unity-mcp-lens";
+
+        /// <summary>
+        /// Gets the relay installation directory (~/.unity/relay).
+        /// </summary>
+        public static string RelayBaseDirectory =>
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), relayBaseDirectoryName);
+
+        public static string UnityMcpBaseDirectory =>
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), unityMcpBaseDirectoryName);
+
+        // Status File Configuration
+        /// <summary>
+        /// Name of the base MCP directory relative to the user's home directory.
+        /// </summary>
+        public static string mcpBaseDirectoryName = ".unity/mcp";
+
+        /// <summary>
+        /// Subdirectory within the MCP base directory for connection status files.
+        /// </summary>
+        public static string connectionsSubdirectory = "connections";
+
+        /// <summary>
+        /// File pattern for locating bridge status JSON files.
+        /// </summary>
+        public static string statusFilePattern = "bridge-status-*.json";
+
+        /// <summary>
+        /// Environment variable name for overriding the status directory location.
+        /// </summary>
+        public static string statusDirEnvVar = "UNITY_MCP_STATUS_DIR";
+
+        /// <summary>
+        /// Gets the base MCP directory (~/.unity/mcp)
+        /// </summary>
+        public static string McpBaseDirectory =>
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), mcpBaseDirectoryName);
+
+        /// <summary>
+        /// Gets the full path to the connections directory where bridge status files are stored.
+        /// Can be overridden via UNITY_MCP_STATUS_DIR environment variable.
+        /// </summary>
+        public static string StatusDirectory
+        {
+            get
+            {
+                string dir = Environment.GetEnvironmentVariable(statusDirEnvVar);
+                if (string.IsNullOrWhiteSpace(dir))
+                {
+                    dir = Path.Combine(McpBaseDirectory, connectionsSubdirectory);
+                }
+                return dir;
+            }
+        }
+
+        /// <summary>
+        /// Gets the path to the relay binary installed at ~/.unity/relay.
+        /// MCP client configurations reference this stable location.
+        /// </summary>
+        public static string InstalledServerMainFile
+        {
+            get
+            {
+                string relayPath = RelayBaseDirectory;
+
+                if (PlatformUtils.IsWindows)
+                    return Path.Combine(relayPath, "relay_win.exe");
+                if (PlatformUtils.IsLinux)
+                    return Path.Combine(relayPath, "relay_linux");
+                if (PlatformUtils.IsMacOS)
+                {
+                    string arch = RuntimeInformation.ProcessArchitecture ==
+                        Architecture.Arm64 ? "arm64" : "x64";
+                    return Path.Combine(relayPath, $"relay_mac_{arch}.app/Contents/MacOS/relay_mac_{arch}");
+                }
+
+                return Path.Combine(relayPath, "relay_linux");
+            }
+        }
+
+        public static string LensMetadataFileName => "unity-mcp-lens.json";
+
+        public static string LensInstalledMetadataFile => Path.Combine(UnityMcpBaseDirectory, LensMetadataFileName);
+
+        public static string LensInstalledServerMainFile
+        {
+            get
+            {
+                string serverPath = UnityMcpBaseDirectory;
+
+                if (PlatformUtils.IsWindows)
+                    return Path.Combine(serverPath, "unity_mcp_lens_win.exe");
+                if (PlatformUtils.IsLinux)
+                    return Path.Combine(serverPath, "unity_mcp_lens_linux");
+                if (PlatformUtils.IsMacOS)
+                {
+                    string arch = RuntimeInformation.ProcessArchitecture == Architecture.Arm64 ? "arm64" : "x64";
+                    return Path.Combine(serverPath, $"unity_mcp_lens_mac_{arch}");
+                }
+
+                return Path.Combine(serverPath, "unity_mcp_lens_linux");
+            }
+        }
+
+        internal static string BundledLensProjectFile =>
+            Path.Combine(Path.GetFullPath(unityMcpLensAppPath), "src", "UnityMcpLens", "UnityMcpLens.csproj");
+
+        internal static string BundledLensMetadataFile =>
+            Path.Combine(Path.GetFullPath(unityMcpLensAppPath), LensMetadataFileName);
+
+
+        /// <summary>
+        /// Gets all bridge status files in the status directory, ordered by most recently modified.
+        /// </summary>
+        public static string[] StatusFiles =>
+            Directory.GetFiles(StatusDirectory, statusFilePattern)
+                .OrderByDescending(f => File.GetLastWriteTime(f))
+                .ToArray();
+
+        /// <summary>
+        /// Gets the path to the heartbeat file for the current Unity project.
+        /// </summary>
+        public static string HeartbeatFilePath =>
+            Path.Combine(StatusDirectory, $"bridge-status-{ComputeProjectHash(Application.dataPath)}.json");
+
+        /// <summary>
+        /// Gets the path to the port registry file for the current Unity project.
+        /// </summary>
+        public static string PortRegistryFilePath =>
+            Path.Combine(StatusDirectory, $"bridge-port-{ComputeProjectHash(Application.dataPath)}.json");
+
+        /// <summary>
+        /// Computes a stable hash for a project path.
+        /// </summary>
+        /// <param name="projectPath">The project path to hash.</param>
+        /// <returns>A 16-character lowercase hexadecimal hash string.</returns>
+        static string ComputeProjectHash(string projectPath)
+        {
+            using (var sha = System.Security.Cryptography.SHA256.Create())
+            {
+                var bytes = System.Text.Encoding.UTF8.GetBytes(projectPath);
+                var hash = sha.ComputeHash(bytes);
+                return BitConverter.ToString(hash).Replace("-", "").Substring(0, 16).ToLowerInvariant();
+            }
+        }
+    }
+}

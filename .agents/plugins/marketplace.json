@@ -1,0 +1,20 @@
+{
+  "name": "unity-mcp-lens",
+  "interface": {
+    "displayName": "Unity MCP Lens"
+  },
+  "plugins": [
+    {
+      "name": "lens-dev-plugin",
+      "source": {
+        "source": "local",
+        "path": "./.agents/plugins/lens-dev-plugin"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

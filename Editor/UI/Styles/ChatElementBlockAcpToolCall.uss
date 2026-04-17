@@ -1,7 +1,0 @@
-#functionCallSectionTitle {
-    color: var(--muse-chat-text-secondary);
-}
-
-.function-call-text-secondary {
-    color: var(--muse-chat-text-secondary);
-}

@@ -41,16 +41,16 @@ function Add-ScanTarget {
     Add-Failure "Presentation scan target not found: $Target"
 }
 
-$mcpRoot = Join-Path $PackageRoot "Modules/Unity.AI.MCP.Editor"
+$mcpRoot = Join-Path $PackageRoot "Editor/Lens"
 $settingsRoot = Join-Path $mcpRoot "Settings"
 $oldUsageWindowPath = Join-Path $PackageRoot "Editor/UI/Scripts/PayloadStatsWindow.cs"
-$usageWindowPath = Join-Path $PackageRoot "Modules/Unity.AI.MCP.Editor/Lens/Usage/PayloadStatsWindow.cs"
+$usageWindowPath = Join-Path $PackageRoot "Editor/Lens/Lens/Usage/PayloadStatsWindow.cs"
 
 if (Test-Path $oldUsageWindowPath) {
     Add-Failure "Usage report window must not live under Assistant UI path: Editor/UI/Scripts/PayloadStatsWindow.cs"
 }
 
-if (Test-Path (Join-Path $PackageRoot "Modules/Unity.AI.MCP.Editor/Settings/UI/GatewayConnectionItemControl.cs")) {
+if (Test-Path (Join-Path $PackageRoot "Editor/Lens/Settings/UI/GatewayConnectionItemControl.cs")) {
     Add-Failure "Legacy relay UI control must use Lens naming: GatewayConnectionItemControl.cs still exists"
 }
 
@@ -94,26 +94,26 @@ foreach ($file in $scanFiles) {
 }
 
 $requiredText = @(
-    @{ Path = "Modules/Unity.AI.MCP.Editor/Settings/MCPConstants.cs"; Text = 'Project/Tools/Unity MCP Lens'; Reason = "Lens Project Settings path" },
-    @{ Path = "Modules/Unity.AI.MCP.Editor/Settings/UI/MCPSettingsPanel.uxml"; Text = 'text="Unity MCP Lens"'; Reason = "Lens settings panel title" },
-    @{ Path = "Modules/Unity.AI.MCP.Editor/Settings/UI/MCPSettingsPanel.uxml"; Text = 'text="Lens Bridge"'; Reason = "Lens bridge section title" },
-    @{ Path = "Modules/Unity.AI.MCP.Editor/Settings/UI/MCPSettingsPanel.uxml"; Text = 'text="Tool Packs &amp; Registry"'; Reason = "Lens tool surface foldout title" },
-    @{ Path = "Modules/Unity.AI.MCP.Editor/Settings/UI/MCPSettingsPanel.uxml"; Text = 'text="MCP Client Configs"'; Reason = "Lens client config foldout title" },
-    @{ Path = "Modules/Unity.AI.MCP.Editor/Settings/UI/MCPSettingsPanel.uxml"; Text = 'text="Advanced / Legacy Compatibility"'; Reason = "legacy compatibility section" },
-    @{ Path = "Modules/Unity.AI.MCP.Editor/Settings/UI/MCPSettingsPanel.uxml"; Text = 'text="Open Lens Server"'; Reason = "Lens server button label" },
-    @{ Path = "Modules/Unity.AI.MCP.Editor/Settings/UI/LensMenuItems.cs"; Text = 'Tools/Unity MCP Lens/'; Reason = "Lens menu root" },
-    @{ Path = "Modules/Unity.AI.MCP.Editor/Settings/UI/LensMenuItems.cs"; Text = 'Open Settings'; Reason = "Open Settings menu command" },
-    @{ Path = "Modules/Unity.AI.MCP.Editor/Settings/UI/LensMenuItems.cs"; Text = 'Start Bridge'; Reason = "Start Bridge menu command" },
-    @{ Path = "Modules/Unity.AI.MCP.Editor/Settings/UI/LensMenuItems.cs"; Text = 'Stop Bridge'; Reason = "Stop Bridge menu command" },
-    @{ Path = "Modules/Unity.AI.MCP.Editor/Settings/UI/LensMenuItems.cs"; Text = 'Install/Refresh Lens Server'; Reason = "Install/Refresh Lens Server menu command" },
-    @{ Path = "Modules/Unity.AI.MCP.Editor/Settings/UI/LensMenuItems.cs"; Text = 'Open Server Folder'; Reason = "Open Server Folder menu command" },
-    @{ Path = "Modules/Unity.AI.MCP.Editor/Settings/UI/LensMenuItems.cs"; Text = 'Open Status Folder'; Reason = "Open Status Folder menu command" },
-    @{ Path = "Modules/Unity.AI.MCP.Editor/Lens/Usage/PayloadStatsWindow.cs"; Text = 'namespace Unity.AI.MCP.Editor.Lens.Usage'; Reason = "Lens-owned usage report namespace" },
-    @{ Path = "Modules/Unity.AI.MCP.Editor/Lens/Usage/PayloadStatsWindow.cs"; Text = 'Tools/Unity MCP Lens/Usage Report'; Reason = "Lens Usage Report menu command" },
-    @{ Path = "Modules/Unity.AI.MCP.Editor/Lens/Usage/PayloadStatsWindow.cs"; Text = 'Unity MCP Lens Usage Report'; Reason = "Lens usage clipboard report heading" },
-    @{ Path = "Modules/Unity.AI.MCP.Editor/Settings/UI/ConnectedClientsControl.cs"; Text = '(Legacy Relay)'; Reason = "legacy relay connected-client label" },
-    @{ Path = "Modules/Unity.AI.MCP.Editor/Settings/UI/LegacyRelayConnectionItemControl.cs"; Text = 'class LegacyRelayConnectionItemControl'; Reason = "legacy relay connection item class name" },
-    @{ Path = "Modules/Unity.AI.MCP.Editor/Settings/UI/LegacyRelayConnectionItemControl.cs"; Text = '(Legacy Relay)'; Reason = "legacy relay connection item label" }
+    @{ Path = "Editor/Lens/Settings/MCPConstants.cs"; Text = 'Project/Tools/Unity MCP Lens'; Reason = "Lens Project Settings path" },
+    @{ Path = "Editor/Lens/Settings/UI/MCPSettingsPanel.uxml"; Text = 'text="Unity MCP Lens"'; Reason = "Lens settings panel title" },
+    @{ Path = "Editor/Lens/Settings/UI/MCPSettingsPanel.uxml"; Text = 'text="Lens Bridge"'; Reason = "Lens bridge section title" },
+    @{ Path = "Editor/Lens/Settings/UI/MCPSettingsPanel.uxml"; Text = 'text="Tool Packs &amp; Registry"'; Reason = "Lens tool surface foldout title" },
+    @{ Path = "Editor/Lens/Settings/UI/MCPSettingsPanel.uxml"; Text = 'text="MCP Client Configs"'; Reason = "Lens client config foldout title" },
+    @{ Path = "Editor/Lens/Settings/UI/MCPSettingsPanel.uxml"; Text = 'text="Advanced / Legacy Compatibility"'; Reason = "legacy compatibility section" },
+    @{ Path = "Editor/Lens/Settings/UI/MCPSettingsPanel.uxml"; Text = 'text="Open Lens Server"'; Reason = "Lens server button label" },
+    @{ Path = "Editor/Lens/Settings/UI/LensMenuItems.cs"; Text = 'Tools/Unity MCP Lens/'; Reason = "Lens menu root" },
+    @{ Path = "Editor/Lens/Settings/UI/LensMenuItems.cs"; Text = 'Open Settings'; Reason = "Open Settings menu command" },
+    @{ Path = "Editor/Lens/Settings/UI/LensMenuItems.cs"; Text = 'Start Bridge'; Reason = "Start Bridge menu command" },
+    @{ Path = "Editor/Lens/Settings/UI/LensMenuItems.cs"; Text = 'Stop Bridge'; Reason = "Stop Bridge menu command" },
+    @{ Path = "Editor/Lens/Settings/UI/LensMenuItems.cs"; Text = 'Install/Refresh Lens Server'; Reason = "Install/Refresh Lens Server menu command" },
+    @{ Path = "Editor/Lens/Settings/UI/LensMenuItems.cs"; Text = 'Open Server Folder'; Reason = "Open Server Folder menu command" },
+    @{ Path = "Editor/Lens/Settings/UI/LensMenuItems.cs"; Text = 'Open Status Folder'; Reason = "Open Status Folder menu command" },
+    @{ Path = "Editor/Lens/Lens/Usage/PayloadStatsWindow.cs"; Text = 'namespace Becool.UnityMcpLens.Editor.Lens.Usage'; Reason = "Lens-owned usage report namespace" },
+    @{ Path = "Editor/Lens/Lens/Usage/PayloadStatsWindow.cs"; Text = 'Tools/Unity MCP Lens/Usage Report'; Reason = "Lens Usage Report menu command" },
+    @{ Path = "Editor/Lens/Lens/Usage/PayloadStatsWindow.cs"; Text = 'Unity MCP Lens Usage Report'; Reason = "Lens usage clipboard report heading" },
+    @{ Path = "Editor/Lens/Settings/UI/ConnectedClientsControl.cs"; Text = '(Legacy Relay)'; Reason = "legacy relay connected-client label" },
+    @{ Path = "Editor/Lens/Settings/UI/LegacyRelayConnectionItemControl.cs"; Text = 'class LegacyRelayConnectionItemControl'; Reason = "legacy relay connection item class name" },
+    @{ Path = "Editor/Lens/Settings/UI/LegacyRelayConnectionItemControl.cs"; Text = '(Legacy Relay)'; Reason = "legacy relay connection item label" }
 )
 
 foreach ($entry in $requiredText) {

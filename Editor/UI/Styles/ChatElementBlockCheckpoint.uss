@@ -1,9 +1,0 @@
-.mui-chat-checkpoint-block-section {
-    margin-left: 20px;
-    margin-right: 20px;
-}
-
-#checkpointBlockSection {
-    margin-left: 20px;
-    margin-right: 20px;
-}

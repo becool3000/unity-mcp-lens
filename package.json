@@ -1,27 +1,21 @@
 {
-  "name": "com.unity.ai.assistant",
-  "displayName": "Assistant",
+  "name": "com.becool3000.unity-mcp-lens",
+  "displayName": "Unity MCP Lens",
   "version": "2.3.0-pre.2",
   "unity": "6000.0",
-  "description": "Maintained fork of com.unity.ai.assistant with unity-mcp-lens, an owned Unity MCP bridge focused on lower-noise tool sync, narrow model-facing tool exposure, compact outputs, and practical local-package use inside real Unity projects.",
+  "description": "Standalone Unity MCP bridge and tool-surface package focused on low-noise tool sync, narrow model-facing packs, compact outputs, and owned MCP server integration for external agents.",
   "dependencies": {
     "com.unity.nuget.newtonsoft-json": "3.2.1",
     "com.unity.modules.unitywebrequest": "1.0.0",
     "com.unity.modules.uielements": "1.0.0",
-    "com.unity.serialization": "3.1.1",
     "com.unity.2d.sprite": "1.0.0",
-    "com.unity.2d.tilemap": "1.0.0",
-    "com.unity.cloud.gltfast": "6.14.1",
-    "com.unity.mathematics": "1.3.2"
+    "com.unity.2d.tilemap": "1.0.0"
   },
   "unityRelease": "60f1",
   "_upm": {
-    "changelog": "### Fixed\n\n- Fixed What's new banner not loading correctly."
+    "changelog": "### Changed\n\n- Split Unity MCP Lens into a standalone package identity."
   },
-  "upmCi": {
-    "footprint": "65979b5355892256ca0dfa460a63afc3ae77ecbd"
-  },
-  "documentationUrl": "https://docs.unity3d.com/Packages/com.unity.ai.assistant@2.3/manual/index.html",
+  "documentationUrl": "https://github.com/becool3000/unity-mcp-lens#readme",
   "repository": {
     "url": "https://github.com/becool3000/unity-mcp-lens.git",
     "type": "git"

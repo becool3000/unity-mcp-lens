@@ -1,5 +1,0 @@
-<UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" xmlns="UnityEngine.UIElements" editor-extension-mode="False">
-    <ui:VisualElement name="planContainer" class="mui-chat-plan-container">
-        <ui:VisualElement name="planEntries" class="mui-chat-plan-entries"/>
-    </ui:VisualElement>
-</UXML>

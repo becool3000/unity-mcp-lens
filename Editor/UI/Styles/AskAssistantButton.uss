@@ -1,9 +1,0 @@
-.askassistantbutton__element {
-    align-self: center;
-    flex-shrink: 0;
-
-}
-
-#askAssistantButton{
-    flex-direction: row;
-}

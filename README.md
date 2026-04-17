@@ -1,157 +1,91 @@
 # unity-mcp-lens
 
-`unity-mcp-lens` is my maintained fork of Unity's `com.unity.ai.assistant` package, evolved into a focused Unity MCP bridge and tool-surface project.
+`unity-mcp-lens` is a standalone Unity package for running a focused MCP bridge between the Unity Editor and external agents such as Codex, Claude Code, Cursor, and other standard MCP clients.
 
-This repository started as a patch fork of `com.unity.ai.assistant 2.3.0-pre.2`. It still tracks that upstream package closely enough to stay usable as a local Unity package source, but it is no longer just a small patch mirror. The main direction now is to build a cleaner, quieter, more controllable MCP path for external agents while preserving compatibility with the existing Unity Assistant package where that still helps.
-
-## What This Is
-
-This repo currently serves two roles at once:
-
-1. It is still a drop-in local package source for `com.unity.ai.assistant` inside Unity projects.
-2. It is the home of `unity-mcp-lens`, an owned MCP bridge/server direction focused on:
-   - lower bridge noise
-   - narrower model-facing tool exposure
-   - event-driven tool sync instead of constant polling
-   - more compact tool outputs
-   - better telemetry and benchmarking
-   - cleaner recovery behavior during Unity reload/build/import windows
-
-The package name stays `com.unity.ai.assistant` for compatibility with Unity projects, but the repo direction is now explicitly `unity-mcp-lens`.
-In the Unity Editor, the MCP-facing surface is presented as **Unity MCP Lens** under `Tools > Unity MCP Lens` and `Project Settings > Tools > Unity MCP Lens`.
-
-## Why This Exists
-
-Unity's official package is the baseline, but it does not fully cover the workflow I care about:
-
-- Codex-oriented Unity MCP usage
-- low-noise bridge behavior
-- deterministic, session-scoped tool exposure
-- payload and latency measurement
-- practical operation during compile/import/reload churn
-- custom Unity tools that are useful for real project work
-
-This repo exists to make that path better now, instead of waiting for upstream convergence. When upstream improves, I want to adopt the parts that help and keep the parts that are specific to this bridge direction.
-
-## Current Direction
-
-`unity-mcp-lens` is the quality lane.
-
-That means:
-
-- the legacy Unity relay path can still exist for compatibility
-- the Lens path is where new MCP architecture work goes first
-- the bridge is treated as a real product surface, not just a temporary experiment
-
-The most important architectural ideas already in motion are:
-
-- an owned MCP-only stdio server path
-- bridge-owned manifest versioning
-- event-driven tool sync
-- narrow default tool exposure through pack-based export
-- explicit pack control tools such as `Unity.ListToolPacks`, `Unity.SetToolPacks`, and `Unity.ReadDetailRef`
-- detail-ref based compact output for noisy tools
-- per-project MCP telemetry and benchmark tooling
-
-## Status
-
-Today this repo is:
-
-- based on `com.unity.ai.assistant 2.3.0-pre.2`
-- compatible with Unity `6000.3` and later in the same general range as the upstream package
-- usable as a local package source
-- able to install the owned `unity-mcp-lens` server alongside the legacy relay path
-
-The Lens path is real and usable, but it is still under active iteration. Expect continued changes in:
-
-- bridge/session protocol details
-- pack definitions
-- schema caching
-- output compaction
-- project settings and generated MCP config
-
-## Installing In A Unity Project
-
-Use this repo as a local package source from another Unity project:
+The package id is:
 
 ```json
-"com.unity.ai.assistant": "file:../UnityAIAssistantPatch"
+"com.becool3000.unity-mcp-lens"
 ```
 
-Or with an absolute path:
+Editor UI is Lens-owned and lives under **Tools > Unity MCP Lens** and **Project Settings > Tools > Unity MCP Lens**.
+
+## What Lens Owns
+
+- An owned MCP-only stdio server named `unity-mcp-lens`.
+- A Unity-side bridge with event-driven manifest sync.
+- Session-scoped tool packs with a narrow `foundation` default.
+- Compact tool outputs with `detailRef` expansion for large payloads.
+- Local Unity editor/dev tools for console, project, scene, UI, scripting, assets, diagnostics, and package workflows.
+- Payload and bridge telemetry for measuring context and control-plane noise.
+
+Lens does not own Unity's official Assistant chat UI, cloud asset generation, Assistant Gateway workflows, or Assistant-specific UI. Install the official Assistant package separately if you want those features.
+
+## Install In A Unity Project
+
+Use this repo as a local package source:
 
 ```json
-"com.unity.ai.assistant": "file:C:/UnityAIAssistantPatch"
+"com.becool3000.unity-mcp-lens": "file:C:/UnityAIAssistantPatch"
 ```
 
-## Lens Installation Notes
+or with a relative path:
 
-- The owned Lens server installs separately from Unity's legacy relay.
-- Lens currently installs under `~/.unity/unity-mcp-lens/`.
-- The legacy relay still installs under `~/.unity/relay/` when enabled.
-- For MCP-only projects, the package can suppress legacy relay install/startup and use Lens as the primary path.
-- Until prebuilt Lens binaries are bundled in-repo, first-time local installation may publish from source and therefore needs a local .NET SDK 8+.
+```json
+"com.becool3000.unity-mcp-lens": "file:../UnityAIAssistantPatch"
+```
 
-## Current Packaging Boundary
+If an older project points this checkout at the Assistant package id, replace that dependency with the Lens package id above.
 
-Lens is currently in **package-name compatibility mode**:
+## MCP Server
 
-- The Unity package manifest still uses `com.unity.ai.assistant` so existing local-project references keep resolving.
-- The editor presentation is Lens-first: menu items and settings live under `Tools > Unity MCP Lens`.
-- Official Assistant side-by-side installation requires a future package rename/split, because Unity cannot install two packages with the same package name.
-- Assistant UI, cloud, and chat functionality should come from the official Assistant package once Lens has an independent package identity. Lens owns the MCP bridge, MCP server, tool packs, compact outputs, and local editor/dev tool surface.
+The owned Lens server installs under:
+
+```text
+~/.unity/unity-mcp-lens/
+```
+
+The MCP client command should point directly at the installed Lens binary, for example on Windows:
+
+```text
+C:\Users\<you>\.unity\unity-mcp-lens\unity_mcp_lens_win.exe
+```
+
+Do not pass `--mcp` to the Lens server. That argument belongs to the legacy Unity relay path, not Lens.
+
+## Side-by-side With Official Assistant
+
+Lens now uses its own package id and owned assembly names so it can coexist with the official `com.unity.ai.assistant` package.
+
+Expected split:
+
+- Official Assistant package: Assistant UI, cloud/generation features, official Unity workflows.
+- Unity MCP Lens: MCP bridge, MCP server, tool packs, compact outputs, local editor/dev tools.
+
+Standalone Lens does not bundle or install the legacy Unity relay. If a project still needs the legacy relay, use the official Assistant package for that lane.
 
 ## Project Structure
 
-The live Unity package source is primarily under:
+- `Editor/Lens/`: Unity editor bridge, settings UI, tool registry, tool packs, and Lens tools.
+- `Runtime/`: small runtime helpers used by Lens tools.
+- `UnityMcpLensApp~/`: owned MCP-only stdio server source.
+- `Tools~/`: benchmark and static validation scripts.
+- `Documentation~/`: package docs.
+- `docs/`: repo-maintenance notes and audits.
 
-- `Editor/`
-- `Runtime/`
-- `Modules/`
+## Validation
 
-The owned Lens server source lives under:
+Useful static checks:
 
-- `UnityMcpLensApp~`
+```powershell
+powershell -ExecutionPolicy Bypass -File Tools~/Test-McpPackageIdentity.ps1
+powershell -ExecutionPolicy Bypass -File Tools~/Test-McpStandaloneBoundary.ps1
+powershell -ExecutionPolicy Bypass -File Tools~/Test-McpToolOwnership.ps1
+powershell -ExecutionPolicy Bypass -File Tools~/Test-McpLensPresentation.ps1
+```
 
-Benchmark and helper tooling lives under:
+## Status
 
-- `Tools~/`
-
-When maintaining this repo, treat the live package folders as the source of truth and ignore `.codex-temp` snapshots unless a task explicitly says otherwise.
-
-## Roadmap
-
-The medium-term plan is straightforward:
-
-1. Keep the package usable in compatibility mode while Lens gets its own editor identity.
-2. Keep evolving `unity-mcp-lens` beside the upstream relay path instead of trying to replace everything at once.
-3. Reduce bridge chatter further through event-driven sync and caching.
-4. Keep shrinking the model-facing tool surface through pack-based export.
-5. Compact large tool outputs by default and expose full detail only on demand.
-6. Improve observability so changes are measured instead of guessed.
-7. Split Lens into an independent package identity before claiming official Assistant side-by-side support.
-
-Longer term, I want this repo to become a more robust Unity MCP foundation:
-
-- better for Codex
-- better for other MCP clients
-- better for noisy real-world Unity projects
-- and easier to reason about than the current poll-heavy bridge flow
-
-## Relationship To Upstream
+Lens is usable but still evolving. The high-priority direction is to keep reducing bridge chatter, keep the default tool surface narrow, and make tool output compact and recoverable by default.
 
 This is not an official Unity release channel.
-
-It is an independently maintained fork that:
-
-- keeps upstream as an important baseline
-- adopts upstream improvements when they are useful
-- carries local bridge/tooling work where upstream is not enough yet
-
-The goal is not to diverge for its own sake. The goal is to build a better Unity MCP path while keeping the fork understandable and maintainable.
-
-## More Technical Notes
-
-For technical compatibility and fork-history notes, see:
-
-- [README-CODEX-PATCH.md](README-CODEX-PATCH.md)

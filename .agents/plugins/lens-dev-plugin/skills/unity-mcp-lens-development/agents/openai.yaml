@@ -1,0 +1,4 @@
+interface:
+  display_name: "Unity MCP Lens Development"
+  short_description: "Build Lens tools through Lens."
+  default_prompt: "Use $unity-mcp-lens-development when developing or validating Lens tools, packs, bridge behavior, or Unity editor automation."

@@ -1,3 +1,0 @@
-<ui:UXML xmlns:ui="UnityEngine.UIElements">
-    <ui:Button tooltip="Restore the recommended defaults" helptext="Autodetect" class="bg-transparent border-none size-16px p-0 icon-tint-primary-color-button" icon-image="/Packages/com.unity.ai.assistant/Modules/Unity.AI.Pbr/Icons/Autodetect.png" />
-</ui:UXML>
