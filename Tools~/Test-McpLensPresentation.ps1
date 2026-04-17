@@ -43,7 +43,16 @@ function Add-ScanTarget {
 
 $mcpRoot = Join-Path $PackageRoot "Modules/Unity.AI.MCP.Editor"
 $settingsRoot = Join-Path $mcpRoot "Settings"
-$usageWindowPath = Join-Path $PackageRoot "Editor/UI/Scripts/PayloadStatsWindow.cs"
+$oldUsageWindowPath = Join-Path $PackageRoot "Editor/UI/Scripts/PayloadStatsWindow.cs"
+$usageWindowPath = Join-Path $PackageRoot "Modules/Unity.AI.MCP.Editor/Lens/Usage/PayloadStatsWindow.cs"
+
+if (Test-Path $oldUsageWindowPath) {
+    Add-Failure "Usage report window must not live under Assistant UI path: Editor/UI/Scripts/PayloadStatsWindow.cs"
+}
+
+if (Test-Path (Join-Path $PackageRoot "Modules/Unity.AI.MCP.Editor/Settings/UI/GatewayConnectionItemControl.cs")) {
+    Add-Failure "Legacy relay UI control must use Lens naming: GatewayConnectionItemControl.cs still exists"
+}
 
 Add-ScanTarget $settingsRoot
 Add-ScanTarget (Join-Path $mcpRoot "Bridge.cs")
@@ -70,7 +79,9 @@ $bannedPatterns = @(
     @{ Pattern = 'text="Integrations"'; Reason = "old integrations foldout title" },
     @{ Pattern = 'text="Locate Server"'; Reason = "old server button label" },
     @{ Pattern = '\(Gateway\)'; Reason = "old gateway display suffix" },
-    @{ Pattern = 'AI Gateway connections'; Reason = "old gateway connection UI wording" }
+    @{ Pattern = 'AI Gateway connections'; Reason = "old gateway connection UI wording" },
+    @{ Pattern = 'namespace Unity\.AI\.Assistant\.UI\.Editor\.Scripts'; Reason = "usage window must not use Assistant UI namespace" },
+    @{ Pattern = 'GatewayConnectionItemControl'; Reason = "old legacy relay UI control name" }
 )
 
 foreach ($file in $scanFiles) {
@@ -97,10 +108,12 @@ $requiredText = @(
     @{ Path = "Modules/Unity.AI.MCP.Editor/Settings/UI/LensMenuItems.cs"; Text = 'Install/Refresh Lens Server'; Reason = "Install/Refresh Lens Server menu command" },
     @{ Path = "Modules/Unity.AI.MCP.Editor/Settings/UI/LensMenuItems.cs"; Text = 'Open Server Folder'; Reason = "Open Server Folder menu command" },
     @{ Path = "Modules/Unity.AI.MCP.Editor/Settings/UI/LensMenuItems.cs"; Text = 'Open Status Folder'; Reason = "Open Status Folder menu command" },
-    @{ Path = "Editor/UI/Scripts/PayloadStatsWindow.cs"; Text = 'Tools/Unity MCP Lens/Usage Report'; Reason = "Lens Usage Report menu command" },
-    @{ Path = "Editor/UI/Scripts/PayloadStatsWindow.cs"; Text = 'Unity MCP Lens Usage Report'; Reason = "Lens usage clipboard report heading" },
+    @{ Path = "Modules/Unity.AI.MCP.Editor/Lens/Usage/PayloadStatsWindow.cs"; Text = 'namespace Unity.AI.MCP.Editor.Lens.Usage'; Reason = "Lens-owned usage report namespace" },
+    @{ Path = "Modules/Unity.AI.MCP.Editor/Lens/Usage/PayloadStatsWindow.cs"; Text = 'Tools/Unity MCP Lens/Usage Report'; Reason = "Lens Usage Report menu command" },
+    @{ Path = "Modules/Unity.AI.MCP.Editor/Lens/Usage/PayloadStatsWindow.cs"; Text = 'Unity MCP Lens Usage Report'; Reason = "Lens usage clipboard report heading" },
     @{ Path = "Modules/Unity.AI.MCP.Editor/Settings/UI/ConnectedClientsControl.cs"; Text = '(Legacy Relay)'; Reason = "legacy relay connected-client label" },
-    @{ Path = "Modules/Unity.AI.MCP.Editor/Settings/UI/GatewayConnectionItemControl.cs"; Text = '(Legacy Relay)'; Reason = "legacy relay connection item label" }
+    @{ Path = "Modules/Unity.AI.MCP.Editor/Settings/UI/LegacyRelayConnectionItemControl.cs"; Text = 'class LegacyRelayConnectionItemControl'; Reason = "legacy relay connection item class name" },
+    @{ Path = "Modules/Unity.AI.MCP.Editor/Settings/UI/LegacyRelayConnectionItemControl.cs"; Text = '(Legacy Relay)'; Reason = "legacy relay connection item label" }
 )
 
 foreach ($entry in $requiredText) {

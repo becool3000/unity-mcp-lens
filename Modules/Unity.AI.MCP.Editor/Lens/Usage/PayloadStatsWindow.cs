@@ -8,7 +8,7 @@ using Newtonsoft.Json.Linq;
 using UnityEditor;
 using UnityEngine;
 
-namespace Unity.AI.Assistant.UI.Editor.Scripts
+namespace Unity.AI.MCP.Editor.Lens.Usage
 {
     class PayloadStatsWindow : EditorWindow
     {

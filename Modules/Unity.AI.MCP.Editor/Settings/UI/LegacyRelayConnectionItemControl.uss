@@ -1,4 +1,4 @@
-/* Gateway Connection Item Container */
+/* Legacy relay connection item container */
 .umcp-gateway-connection-item {
     flex-direction: column;
     margin: 2px;

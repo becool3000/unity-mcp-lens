@@ -371,7 +371,7 @@ namespace Unity.AI.MCP.Editor.Settings
                 // Add legacy relay connections first.
                 foreach (var gateway in gatewayConnections)
                 {
-                    var gatewayItem = new GatewayConnectionItemControl(gateway);
+                    var gatewayItem = new LegacyRelayConnectionItemControl(gateway);
                     m_ConnectedClientsList.Add(gatewayItem);
                 }
 

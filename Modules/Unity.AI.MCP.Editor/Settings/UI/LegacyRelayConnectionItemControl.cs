@@ -9,10 +9,10 @@ namespace Unity.AI.MCP.Editor.Settings.UI
     /// UI control for displaying a legacy relay connection.
     /// Shows provider name with a dedicated indicator and auto-approved status.
     /// </summary>
-    class GatewayConnectionItemControl : VisualElement
+    class LegacyRelayConnectionItemControl : VisualElement
     {
-        static readonly string UxmlPath = MCPConstants.uiTemplatesPath + "/GatewayConnectionItemControl.uxml";
-        static readonly string UssPath = MCPConstants.uiTemplatesPath + "/GatewayConnectionItemControl.uss";
+        static readonly string UxmlPath = MCPConstants.uiTemplatesPath + "/LegacyRelayConnectionItemControl.uxml";
+        static readonly string UssPath = MCPConstants.uiTemplatesPath + "/LegacyRelayConnectionItemControl.uss";
 
         readonly GatewayConnectionRecord m_Record;
 
@@ -21,7 +21,7 @@ namespace Unity.AI.MCP.Editor.Settings.UI
         Label m_Timestamp;
         Label m_StatusLabel;
 
-        public GatewayConnectionItemControl(GatewayConnectionRecord record)
+        public LegacyRelayConnectionItemControl(GatewayConnectionRecord record)
         {
             m_Record = record ?? throw new ArgumentNullException(nameof(record));
 
