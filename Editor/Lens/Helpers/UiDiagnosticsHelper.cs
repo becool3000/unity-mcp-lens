@@ -46,7 +46,7 @@ namespace Becool.UnityMcpLens.Editor.Helpers
             FindObjectsInactive inactiveMode = includeInactive
                 ? FindObjectsInactive.Include
                 : FindObjectsInactive.Exclude;
-            foreach (Canvas canvas in UnityEngine.Object.FindObjectsByType<Canvas>(inactiveMode, FindObjectsSortMode.None))
+            foreach (Canvas canvas in UnityApiAdapter.FindObjectsByType<Canvas>(inactiveMode))
             {
                 if (canvas != null && canvas.isRootCanvas)
                 {

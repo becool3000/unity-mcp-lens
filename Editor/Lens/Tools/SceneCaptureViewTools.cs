@@ -120,7 +120,7 @@ namespace Becool.UnityMcpLens.Editor.Tools
         {
             if (!string.IsNullOrWhiteSpace(cameraName))
             {
-                var named = UnityEngine.Object.FindObjectsByType<Camera>(FindObjectsInactive.Include, FindObjectsSortMode.None)
+                var named = UnityApiAdapter.FindObjectsByType<Camera>(FindObjectsInactive.Include)
                     .FirstOrDefault(camera => string.Equals(camera.name, cameraName, StringComparison.OrdinalIgnoreCase));
                 if (named != null)
                     return named;
@@ -129,7 +129,7 @@ namespace Becool.UnityMcpLens.Editor.Tools
             if (mode == "scene_view")
                 return SceneView.lastActiveSceneView?.camera ?? Camera.main;
 
-            return Camera.main ?? UnityEngine.Object.FindObjectsByType<Camera>(FindObjectsInactive.Exclude, FindObjectsSortMode.None).FirstOrDefault();
+            return Camera.main ?? UnityApiAdapter.FindObjectsByType<Camera>(FindObjectsInactive.Exclude).FirstOrDefault();
         }
 
         static void CaptureCamera(Camera camera, string outputPath, int width, int height)
@@ -160,7 +160,7 @@ namespace Becool.UnityMcpLens.Editor.Tools
 
         static Bounds ComputeSceneBounds()
         {
-            var renderers = UnityEngine.Object.FindObjectsByType<Renderer>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+            var renderers = UnityApiAdapter.FindObjectsByType<Renderer>(FindObjectsInactive.Exclude);
             if (renderers.Length == 0)
                 return new Bounds(Vector3.zero, Vector3.one * 5f);
 

@@ -3,10 +3,13 @@ using System.Collections.Generic;
 using System.Linq;
 using System.IO;
 using System.Threading.Tasks;
+using Newtonsoft.Json;
+using Becool.UnityMcpLens.Editor.Lens;
 using UnityEditor;
 using UnityEditor.SceneManagement; // Required for PrefabStage
 using UnityEditorInternal; // Required for tag management
 using UnityEngine;
+using UnityEngine.SceneManagement;
 using Becool.UnityMcpLens.Runtime;
 using Becool.UnityMcpLens.Editor.Helpers;
 using Becool.UnityMcpLens.Editor.ToolRegistry; // For Response class
@@ -29,6 +32,7 @@ namespace Becool.UnityMcpLens.Editor.Tools
 Args:
     Action: Operation (e.g., 'Play', 'Pause', 'GetState', 'WaitForStableEditor', 'SetActiveTool', 'AddTag').
     WaitForCompletion: Optional. If True, waits for certain actions.
+    StablePollCount/PostStableDelayMs: Optional. Used by WaitForStableEditor to require repeated stable polls and a settle delay.
     Action-specific arguments (e.g., ToolName, TagName, LayerName).
 
 Returns:
@@ -224,6 +228,8 @@ Returns:
             bool waitForCompletion = @params.WaitForCompletion ?? false;
             int timeoutMs = Math.Max(1000, @params.TimeoutMs ?? 30000);
             int pollIntervalMs = Math.Max(100, @params.PollIntervalMs ?? 500);
+            int stablePollCount = Math.Max(1, @params.StablePollCount ?? 1);
+            int postStableDelayMs = Math.Max(0, @params.PostStableDelayMs ?? 0);
 
             // Route action
             switch (@params.Action)
@@ -232,46 +238,45 @@ Returns:
                 case EditorAction.Play:
                     try
                     {
-                        if (!EditorApplication.isPlaying)
+                        if (EditorApplication.isPlaying)
                         {
-                            BridgeStatusTracker.MarkTransition("play_transition", "play_transition");
-                            if (waitForCompletion)
-                            {
-                                EditorApplication.isPlaying = true;
-                                bool enteredPlay = await WaitForPlayTransitionAsync(timeoutMs, pollIntervalMs);
-                                var transitionData = BuildPlayTransitionData(
-                                    enteredPlay ? "entered_play" : "transitioning_to_play",
-                                    !enteredPlay,
-                                    false,
-                                    !enteredPlay);
-                                return Response.Success(
-                                    enteredPlay ? "Entered play mode." : "Play transition requested; reconnect may still be expected.",
-                                    transitionData);
-                            }
-
-                            EditorApplication.CallbackFunction requestPlay = null;
-                            double playRequestAfter = EditorApplication.timeSinceStartup + 0.25d;
-                            requestPlay = () =>
-                            {
-                                if (EditorApplication.timeSinceStartup < playRequestAfter)
-                                {
-                                    return;
-                                }
-
-                                EditorApplication.update -= requestPlay;
-                                if (!EditorApplication.isPlaying)
-                                {
-                                    EditorApplication.isPlaying = true;
-                                }
-                            };
-                            EditorApplication.update += requestPlay;
                             return Response.Success(
-                                "Play transition requested.",
+                                "Already in play mode.",
+                                BuildPlayTransitionData("already_playing", false, true, false));
+                        }
+
+                        if (EditorApplication.isPlayingOrWillChangePlaymode)
+                        {
+                            return Response.Success(
+                                "Play transition already in progress.",
                                 BuildPlayTransitionData("transitioning_to_play", true, false, false));
                         }
+
+                        BridgeStatusTracker.MarkTransition("play_transition", "play_transition");
+                        // A normal play-mode domain reload tears down the in-flight tool request.
+                        // In that configuration, return a reconnect-prone transition response and let callers poll GetState.
+                        if (waitForCompletion && CanWaitForPlayTransitionInCurrentDomain())
+                        {
+                            EditorApplication.isPlaying = true;
+                            var waitResult = await WaitForPlayTransitionAsync(timeoutMs, pollIntervalMs);
+                            var transitionData = BuildPlayTransitionData(
+                                waitResult.TransitionState,
+                                waitResult.ReconnectExpected,
+                                false,
+                                waitResult.TimedOut);
+                            return Response.Success(
+                                waitResult.EnteredPlay
+                                    ? "Entered play mode."
+                                    : "Play transition requested; reconnect may still be expected.",
+                                transitionData);
+                        }
+
+                        RequestPlayModeAfterResponse();
                         return Response.Success(
-                            "Already in play mode.",
-                            BuildPlayTransitionData("already_playing", false, true, false));
+                            waitForCompletion
+                                ? "Play transition requested; completion will be observed after reconnect."
+                                : "Play transition requested.",
+                            BuildPlayTransitionData("transitioning_to_play", true, false, false));
                     }
                     catch (Exception e)
                     {
@@ -312,8 +317,10 @@ Returns:
                 // Editor State/Info
                 case EditorAction.GetState:
                     return GetEditorState();
+                case EditorAction.GetCompactState:
+                    return GetCompactEditorState();
                 case EditorAction.WaitForStableEditor:
-                    return await WaitForStableEditorAsync(timeoutMs, pollIntervalMs);
+                    return await WaitForStableEditorAsync(timeoutMs, pollIntervalMs, stablePollCount, postStableDelayMs);
                 case EditorAction.GetProjectRoot:
                     return GetProjectRoot();
                 case EditorAction.GetWindows:
@@ -366,7 +373,7 @@ Returns:
 
                 default:
                     return Response.Error(
-                        $"Unknown action: '{@params.Action}'. Supported actions include Play, Pause, Stop, GetState, WaitForStableEditor, GetProjectRoot, GetWindows, GetActiveTool, GetSelection, GetPrefabStage, SetActiveTool, AddTag, RemoveTag, GetTags, AddLayer, RemoveLayer, GetLayers."
+                        $"Unknown action: '{@params.Action}'. Supported actions include Play, Pause, Stop, GetState, GetCompactState, WaitForStableEditor, GetProjectRoot, GetWindows, GetActiveTool, GetSelection, GetPrefabStage, SetActiveTool, AddTag, RemoveTag, GetTags, AddLayer, RemoveLayer, GetLayers."
                     );
             }
         }
@@ -381,6 +388,18 @@ Returns:
             catch (Exception e)
             {
                 return Response.Error($"Error getting editor state: {e.Message}");
+            }
+        }
+
+        static object GetCompactEditorState()
+        {
+            try
+            {
+                return Response.Success("Retrieved compact editor state.", BuildCompactEditorStateData());
+            }
+            catch (Exception e)
+            {
+                return Response.Error($"Error getting compact editor state: {e.Message}");
             }
         }
 
@@ -410,6 +429,63 @@ Returns:
             };
         }
 
+        static EditorCompactStateData BuildCompactEditorStateData()
+        {
+            var fullState = BuildEditorStateData();
+            var runtimeProbe = fullState.RuntimeProbe ?? new PlayModeRuntimeProbeData();
+            bool isEditorIdle = !fullState.IsCompiling &&
+                !fullState.IsUpdating &&
+                !fullState.IsBuildingPlayer &&
+                !fullState.IsPlayingOrWillChangePlaymode;
+            object detailRef = CreateFullStateDetailRef(fullState);
+
+            return new EditorCompactStateData
+            {
+                IsPlaying = fullState.IsPlaying,
+                IsPaused = fullState.IsPaused,
+                IsCompiling = fullState.IsCompiling,
+                IsUpdating = fullState.IsUpdating,
+                IsPlayingOrWillChangePlaymode = fullState.IsPlayingOrWillChangePlaymode,
+                IsBuildingPlayer = fullState.IsBuildingPlayer,
+                IsEditorIdle = isEditorIdle,
+                RuntimeAdvanced = runtimeProbe.IsAvailable && runtimeProbe.HasAdvancedFrames,
+                RuntimeProbe = runtimeProbe,
+                ActiveSceneName = ResolveActiveSceneName(runtimeProbe),
+                BridgeStatus = fullState.BridgeStatus,
+                BridgeReason = fullState.BridgeReason,
+                BridgeExpectedRecovery = fullState.BridgeExpectedRecovery,
+                ToolDiscoveryMode = fullState.ToolDiscoveryMode,
+                ToolCount = fullState.ToolCount,
+                ToolsHash = fullState.ToolsHash,
+                TimeSinceStartup = fullState.TimeSinceStartup,
+                FullStateDetailRef = detailRef,
+            };
+        }
+
+        static object CreateFullStateDetailRef(EditorStateData fullState)
+        {
+            string serialized = JsonConvert.SerializeObject(fullState, Formatting.None);
+            int rawBytes = PayloadBudgeting.GetUtf8ByteCount(serialized);
+            return ToolResultCompactor.CreateStoredDetailRef(
+                "Unity.ManageEditor.GetState",
+                fullState,
+                rawBytes,
+                new
+                {
+                    kind = "full_editor_state",
+                    source = "Unity.ManageEditor.GetCompactState"
+                });
+        }
+
+        static string ResolveActiveSceneName(PlayModeRuntimeProbeData runtimeProbe)
+        {
+            if (!string.IsNullOrEmpty(runtimeProbe?.ActiveSceneName))
+                return runtimeProbe.ActiveSceneName;
+
+            Scene activeScene = SceneManager.GetActiveScene();
+            return activeScene.IsValid() ? activeScene.name : string.Empty;
+        }
+
         static EditorTransitionData BuildPlayTransitionData(
             string transitionState,
             bool reconnectExpected,
@@ -426,27 +502,114 @@ Returns:
             };
         }
 
-        static async Task<bool> WaitForPlayTransitionAsync(int timeoutMs, int pollIntervalMs)
+        static bool CanWaitForPlayTransitionInCurrentDomain()
         {
-            double deadline = EditorApplication.timeSinceStartup + (timeoutMs / 1000d);
-            while (EditorApplication.timeSinceStartup < deadline)
-            {
-                if (EditorApplication.isPlaying && !EditorApplication.isPlayingOrWillChangePlaymode)
-                {
-                    BridgeStatusTracker.MarkReady();
-                    return true;
-                }
-
-                await Task.Delay(pollIntervalMs);
-            }
-
-            return EditorApplication.isPlaying;
+#if UNITY_2019_3_OR_NEWER
+            return EditorSettings.enterPlayModeOptionsEnabled &&
+                (EditorSettings.enterPlayModeOptions & EnterPlayModeOptions.DisableDomainReload) != 0;
+#else
+            return false;
+#endif
         }
 
-        static async Task<object> WaitForStableEditorAsync(int timeoutMs, int pollIntervalMs)
+        static void RequestPlayModeAfterResponse()
+        {
+            EditorApplication.CallbackFunction requestPlay = null;
+            double playRequestAfter = EditorApplication.timeSinceStartup + 0.25d;
+            requestPlay = () =>
+            {
+                if (EditorApplication.timeSinceStartup < playRequestAfter)
+                {
+                    return;
+                }
+
+                EditorApplication.update -= requestPlay;
+                if (!EditorApplication.isPlaying && !EditorApplication.isPlayingOrWillChangePlaymode)
+                {
+                    EditorApplication.isPlaying = true;
+                }
+            };
+            EditorApplication.update += requestPlay;
+        }
+
+        sealed class PlayTransitionWaitResult
+        {
+            public bool EnteredPlay { get; set; }
+            public bool TimedOut { get; set; }
+            public bool ReconnectExpected { get; set; }
+            public string TransitionState { get; set; }
+        }
+
+        static async Task<PlayTransitionWaitResult> WaitForPlayTransitionAsync(int timeoutMs, int pollIntervalMs)
+        {
+            double deadline = EditorApplication.timeSinceStartup + (timeoutMs / 1000d);
+            double playingSince = -1d;
+            double fallbackSettleSeconds = Math.Min(2d, Math.Max(0.5d, timeoutMs / 4000d));
+
+            while (EditorApplication.timeSinceStartup < deadline)
+            {
+                if (EditorApplication.isPlaying)
+                {
+                    playingSince = playingSince < 0d
+                        ? EditorApplication.timeSinceStartup
+                        : playingSince;
+
+                    if (PlayModeRuntimeProbe.TryGetSnapshot(out PlayModeRuntimeProbeSnapshot snapshot) &&
+                        snapshot.HasAdvancedFrames)
+                    {
+                        BridgeStatusTracker.MarkReady();
+                        return new PlayTransitionWaitResult
+                        {
+                            EnteredPlay = true,
+                            TimedOut = false,
+                            ReconnectExpected = false,
+                            TransitionState = "entered_play",
+                        };
+                    }
+
+                    if ((EditorApplication.timeSinceStartup - playingSince) >= fallbackSettleSeconds)
+                    {
+                        BridgeStatusTracker.MarkReady();
+                        return new PlayTransitionWaitResult
+                        {
+                            EnteredPlay = true,
+                            TimedOut = false,
+                            ReconnectExpected = false,
+                            TransitionState = "entered_play",
+                        };
+                    }
+                }
+
+                int remainingMs = (int)Math.Ceiling((deadline - EditorApplication.timeSinceStartup) * 1000d);
+                await Task.Delay(Math.Max(1, Math.Min(pollIntervalMs, remainingMs)));
+            }
+
+            if (EditorApplication.isPlaying)
+            {
+                BridgeStatusTracker.MarkReady();
+                return new PlayTransitionWaitResult
+                {
+                    EnteredPlay = true,
+                    TimedOut = true,
+                    ReconnectExpected = false,
+                    TransitionState = "entered_play",
+                };
+            }
+
+            return new PlayTransitionWaitResult
+            {
+                EnteredPlay = false,
+                TimedOut = true,
+                ReconnectExpected = true,
+                TransitionState = "transitioning_to_play",
+            };
+        }
+
+        static async Task<object> WaitForStableEditorAsync(int timeoutMs, int pollIntervalMs, int stablePollCountRequired, int postStableDelayMs)
         {
             var attempts = new List<EditorStabilityAttemptData>();
             var startTime = EditorApplication.timeSinceStartup;
+            int stablePollCountReached = 0;
 
             while (((EditorApplication.timeSinceStartup - startTime) * 1000d) < timeoutMs)
             {
@@ -462,17 +625,46 @@ Returns:
 
                 if (blockingReasons.Count == 0)
                 {
-                    BridgeStatusTracker.MarkReady();
-                    return Response.Success("Editor reached a stable idle state.", new EditorStabilityResultData
+                    stablePollCountReached++;
+                    if (stablePollCountReached >= stablePollCountRequired)
                     {
-                        IsStable = true,
-                        TimedOut = false,
-                        WaitedMilliseconds = (int)((EditorApplication.timeSinceStartup - startTime) * 1000d),
-                        StablePollCountReached = 1,
-                        BlockingReasons = blockingReasons,
-                        Attempts = attempts,
-                        EditorState = editorState,
-                    });
+                        if (postStableDelayMs > 0)
+                        {
+                            await Task.Delay(postStableDelayMs);
+                            blockingReasons = EditorStabilityUtility.GetBlockingReasons();
+                            editorState = BuildEditorStateData();
+                            attempts.Add(new EditorStabilityAttemptData
+                            {
+                                Timestamp = System.DateTime.UtcNow.ToString("o"),
+                                IsStable = blockingReasons.Count == 0,
+                                BlockingReasons = blockingReasons,
+                                EditorState = editorState,
+                            });
+
+                            if (blockingReasons.Count != 0)
+                            {
+                                stablePollCountReached = 0;
+                                await Task.Delay(pollIntervalMs);
+                                continue;
+                            }
+                        }
+
+                        BridgeStatusTracker.MarkReady();
+                        return Response.Success("Editor reached a stable idle state.", new EditorStabilityResultData
+                        {
+                            IsStable = true,
+                            TimedOut = false,
+                            WaitedMilliseconds = (int)((EditorApplication.timeSinceStartup - startTime) * 1000d),
+                            StablePollCountReached = stablePollCountReached,
+                            BlockingReasons = blockingReasons,
+                            Attempts = attempts,
+                            EditorState = editorState,
+                        });
+                    }
+                }
+                else
+                {
+                    stablePollCountReached = 0;
                 }
 
                 await Task.Delay(pollIntervalMs);
@@ -484,7 +676,7 @@ Returns:
                 IsStable = false,
                 TimedOut = true,
                 WaitedMilliseconds = (int)((EditorApplication.timeSinceStartup - startTime) * 1000d),
-                StablePollCountReached = 0,
+                StablePollCountReached = stablePollCountReached,
                 BlockingReasons = finalBlockingReasons,
                 Attempts = attempts,
                 EditorState = BuildEditorStateData(),
@@ -576,7 +768,7 @@ Returns:
                                     Width = window.position.width,
                                     Height = window.position.height,
                                 },
-                                InstanceID = window.GetInstanceID(),
+                                InstanceID = UnityApiAdapter.GetObjectId(window),
                             }
                         );
                     }
@@ -676,14 +868,14 @@ Returns:
                         {
                             Name = obj?.name,
                             Type = obj?.GetType().FullName,
-                            InstanceID = obj?.GetInstanceID(),
+                            InstanceID = UnityApiAdapter.GetObjectId(obj),
                         })
                         .ToList(),
                     GameObjects = Selection
                         .gameObjects.Select(go => new GameObjectSelectionInfo
                         {
                             Name = go?.name,
-                            InstanceID = go?.GetInstanceID(),
+                            InstanceID = UnityApiAdapter.GetObjectId(go),
                         })
                         .ToList(),
                     AssetGUIDs = Selection.assetGUIDs, // GUIDs for selected assets in Project view

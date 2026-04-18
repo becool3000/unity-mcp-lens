@@ -18,7 +18,10 @@ param(
     [object]$PausePlaymodeForCapture = $true,
     [int]$StepFramesBeforeCapture = 0,
     [object]$CapturePauseAndStepOnly = $false,
-    [int]$UnityCaptureTimeoutSeconds = 45
+    [int]$UnityCaptureTimeoutSeconds = 45,
+    [int]$EditorStateTimeoutSeconds = 90,
+    [int]$CameraCaptureWidth = 1280,
+    [int]$CameraCaptureHeight = 720
 )
 
 . "$PSScriptRoot\UnityDevCommon.ps1"
@@ -106,6 +109,25 @@ function Wait-ForCaptureOutputFile {
     }
 }
 
+function Copy-NativeCaptureImage {
+    param(
+        [string]$SourcePath,
+        [string]$DestinationPath
+    )
+
+    if ([string]::IsNullOrWhiteSpace($SourcePath) -or -not (Test-Path -LiteralPath $SourcePath)) {
+        return $false
+    }
+
+    $destinationDirectory = Split-Path -Parent $DestinationPath
+    if (-not [string]::IsNullOrWhiteSpace($destinationDirectory)) {
+        New-Item -ItemType Directory -Force -Path $destinationDirectory | Out-Null
+    }
+
+    Copy-Item -LiteralPath $SourcePath -Destination $DestinationPath -Force
+    return $true
+}
+
 $PausePlaymodeForCapture = ConvertTo-BoolFlag -Value $PausePlaymodeForCapture -Default $true
 $CapturePauseAndStepOnly = ConvertTo-BoolFlag -Value $CapturePauseAndStepOnly -Default $false
 $requestedStepFramesForCapture = [Math]::Max(0, [int]$StepFramesBeforeCapture)
@@ -135,7 +157,7 @@ if ($WarmupSeconds -gt 0) {
 
 $editorState = $null
 try {
-    $editorState = Get-UnityEditorState -ProjectPath $resolvedProjectPath -TimeoutSeconds 20
+    $editorState = Get-UnityEditorState -ProjectPath $resolvedProjectPath -TimeoutSeconds $EditorStateTimeoutSeconds
 }
 catch {
     $editorState = [ordered]@{
@@ -204,7 +226,83 @@ $capturePauseSummary = @{
     pauseStepOnly = $false
 }
 
-if ($CapturePathMode -ne "DesktopOnly") {
+if ($CapturePathMode -ne "DesktopOnly" -and -not $CapturePauseAndStepOnly -and [string]::IsNullOrWhiteSpace($fatalError)) {
+    $editorWasPlaying = $false
+    $editorWasPaused = $false
+    if ($editorState -and $editorState.success -eq $true) {
+        $editorWasPlaying = $editorState.data.IsPlaying -eq $true
+        $editorWasPaused = $editorState.data.IsPaused -eq $true
+    }
+
+    $nativeCaptureDir = "Temp/LensCaptures"
+
+    if ($editorWasPlaying) {
+        try {
+            $gameViewResponse = Invoke-UnityMcpToolJson -ProjectPath $resolvedProjectPath -ToolName "Unity.UI.CaptureGameView" -Arguments @{
+                OutputPath = "$nativeCaptureDir/$safeLabel-game-view.png"
+                WarmupMs = [Math]::Max(0, [int][Math]::Round($WarmupSeconds * 1000))
+                PausePlayMode = $PausePlaymodeForCapture
+                StepFrames = $requestedStepFramesForCapture
+                WaitForFileTimeoutMs = [Math]::Max(4000, $UnityCaptureTimeoutSeconds * 1000)
+            } -TimeoutSeconds ([Math]::Max(30, $UnityCaptureTimeoutSeconds))
+            $gameViewResult = Get-UnityToolObject -Response $gameViewResponse
+            if ($gameViewResult -and $gameViewResult.success -eq $true -and (Copy-NativeCaptureImage -SourcePath $gameViewResult.data.absoluteOutputPath -DestinationPath $unityImagePath)) {
+                $captureSource = "GameView"
+                $imagePath = $unityImagePath
+                $captureError = $null
+                $capturePauseSummary.pauseRequested = ($PausePlaymodeForCapture -or $requestedStepFramesForCapture -gt 0)
+                $capturePauseSummary.pauseWasApplied = $gameViewResult.data.pauseApplied -eq $true
+                $capturePauseSummary.stepsRequested = $requestedStepFramesForCapture
+                $capturePauseSummary.stepsApplied = [int]$gameViewResult.data.stepFrames
+                $capturePauseSummary.wasPlaying = $gameViewResult.data.wasPlaying -eq $true
+                $capturePauseSummary.wasPaused = $gameViewResult.data.wasPaused -eq $true
+                $capturePauseSummary.isPausedAfter = $gameViewResult.data.wasPaused -eq $true
+                $capturePauseSummary.pauseStepOnly = $false
+            }
+            elseif ($gameViewResult) {
+                $captureError = if ($gameViewResult.error) { $gameViewResult.error } elseif ($gameViewResult.message) { $gameViewResult.message } else { "Game-view capture did not produce an image file." }
+            }
+        }
+        catch {
+            $captureError = $_.Exception.Message
+        }
+    }
+
+    if (-not $captureSource) {
+        try {
+            $cameraResponse = Invoke-UnityMcpToolJson -ProjectPath $resolvedProjectPath -ToolName "Unity.Scene.CaptureView" -Arguments @{
+                Mode = "camera"
+                OutputPath = "$nativeCaptureDir/$safeLabel-camera.png"
+                Width = $CameraCaptureWidth
+                Height = $CameraCaptureHeight
+            } -TimeoutSeconds ([Math]::Max(30, $UnityCaptureTimeoutSeconds))
+            $cameraResult = Get-UnityToolObject -Response $cameraResponse
+            $cameraCapture = if ($cameraResult -and $cameraResult.data -and $cameraResult.data.captures -and $cameraResult.data.captures.Count -gt 0) { $cameraResult.data.captures[0] } else { $null }
+            $cameraPath = if ($cameraCapture -and $cameraCapture.path) { Join-Path $resolvedProjectPath $cameraCapture.path } else { $null }
+            if ($cameraResult -and $cameraResult.success -eq $true -and (Copy-NativeCaptureImage -SourcePath $cameraPath -DestinationPath $unityImagePath)) {
+                $captureSource = "CameraRender"
+                $imagePath = $unityImagePath
+                $captureError = $null
+                $capturePauseSummary.pauseRequested = $false
+                $capturePauseSummary.stepsRequested = 0
+                $capturePauseSummary.wasPlaying = $editorWasPlaying
+                $capturePauseSummary.wasPaused = $editorWasPaused
+                $capturePauseSummary.isPausedAfter = $editorWasPaused
+                $capturePauseSummary.pauseStepOnly = $false
+            }
+            elseif ([string]::IsNullOrWhiteSpace($captureError)) {
+                $captureError = if ($cameraResult.error) { $cameraResult.error } elseif ($cameraResult.message) { $cameraResult.message } else { "Camera-render capture did not produce an image file." }
+            }
+        }
+        catch {
+            if ([string]::IsNullOrWhiteSpace($captureError)) {
+                $captureError = $_.Exception.Message
+            }
+        }
+    }
+}
+
+if (-not $captureSource -and $CapturePathMode -ne "DesktopOnly" -and [string]::IsNullOrWhiteSpace($fatalError)) {
     $unityCapture = $null
     $playModeExecution = $null
     $unityCaptureFile = $null
@@ -296,7 +394,7 @@ result.Log("Saved Unity capture to {0}", "$escapedImagePath");
         if ($unityCaptureFile.Exists) {
             try {
                 Move-Item -LiteralPath $unityStageImagePath -Destination $unityImagePath -Force
-                $captureSource = "UnityAware"
+                $captureSource = "RunCommandScreenCapture"
                 $imagePath = $unityImagePath
                 $capturePauseApplied = $capturePauseSummary.pauseWasApplied
                 $captureStepFramesApplied = $capturePauseSummary.stepsApplied
@@ -307,7 +405,7 @@ result.Log("Saved Unity capture to {0}", "$escapedImagePath");
                 try {
                     Copy-Item -LiteralPath $unityStageImagePath -Destination $unityImagePath -Force
                     Remove-Item -LiteralPath $unityStageImagePath -Force -ErrorAction SilentlyContinue
-                    $captureSource = "UnityAware"
+                    $captureSource = "RunCommandScreenCapture"
                     $imagePath = $unityImagePath
                     $capturePauseApplied = $capturePauseSummary.pauseWasApplied
                     $captureStepFramesApplied = $capturePauseSummary.stepsApplied
@@ -328,7 +426,7 @@ result.Log("Saved Unity capture to {0}", "$escapedImagePath");
     }
 }
 
-if (-not $captureSource -and -not $CapturePauseAndStepOnly -and $CapturePathMode -ne "UnityOnly") {
+if (-not $captureSource -and -not $CapturePauseAndStepOnly -and $CapturePathMode -ne "UnityOnly" -and [string]::IsNullOrWhiteSpace($fatalError)) {
     if ($capturePauseSummary.pauseWasApplied -or (($PausePlaymodeForCapture -or $requestedStepFramesForCapture -gt 0) -and $capturePauseSummary.wasPlaying)) {
         try {
             $postCaptureEditorState = Get-UnityEditorState -ProjectPath $resolvedProjectPath -TimeoutSeconds 20

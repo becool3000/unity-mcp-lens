@@ -1270,11 +1270,14 @@ function Invoke-UnityWaitForStableEditor {
     param(
         [Parameter(Mandatory = $true)][string]$ProjectPath,
         [Parameter()][int]$TimeoutSeconds = 60,
-        [Parameter()][double]$PollIntervalSeconds = 0.5
+        [Parameter()][double]$PollIntervalSeconds = 0.5,
+        [Parameter()][int]$StablePollCount = 3,
+        [Parameter()][double]$PostIdleDelaySeconds = 1.0
     )
 
     $timeoutMs = [Math]::Max(1000, $TimeoutSeconds * 1000)
     $pollIntervalMs = [Math]::Max(100, [int][Math]::Round($PollIntervalSeconds * 1000))
+    $postStableDelayMs = [Math]::Max(0, [int][Math]::Round($PostIdleDelaySeconds * 1000))
 
     try {
         $response = Invoke-UnityMcpToolJson -ProjectPath $ProjectPath -ToolName "Unity_ManageEditor" -Arguments @{
@@ -1282,6 +1285,8 @@ function Invoke-UnityWaitForStableEditor {
             WaitForCompletion = $true
             TimeoutMs         = $timeoutMs
             PollIntervalMs    = $pollIntervalMs
+            StablePollCount   = [Math]::Max(1, $StablePollCount)
+            PostStableDelayMs = $postStableDelayMs
         } -TimeoutSeconds ([Math]::Max(15, $TimeoutSeconds + 10))
     }
     catch {
@@ -1358,7 +1363,7 @@ function Wait-UnityEditorIdle {
     $elapsedSeconds = [Math]::Max(0.0, ((Get-Date) - $startedAt).TotalSeconds)
     $remainingTimeoutSeconds = [Math]::Max(1, [int][Math]::Ceiling($TimeoutSeconds - $elapsedSeconds))
 
-    $toolWait = Invoke-UnityWaitForStableEditor -ProjectPath $ProjectPath -TimeoutSeconds $remainingTimeoutSeconds -PollIntervalSeconds $PollIntervalSeconds
+    $toolWait = Invoke-UnityWaitForStableEditor -ProjectPath $ProjectPath -TimeoutSeconds $remainingTimeoutSeconds -PollIntervalSeconds $PollIntervalSeconds -StablePollCount $StablePollCount -PostIdleDelaySeconds $PostIdleDelaySeconds
     if ($toolWait.supported -eq $true -and $null -ne $toolWait.toolResult) {
         if ($toolWait.toolResult.success -and $ClearExpectedReloadOnSuccess) {
             Clear-UnityExpectedReloadState -ProjectPath $ProjectPath

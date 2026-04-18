@@ -44,6 +44,11 @@ namespace Becool.UnityMcpLens.Editor.Helpers
             public string project_path;
 
             /// <summary>
+            /// Full path to the Unity project root.
+            /// </summary>
+            public string project_root;
+
+            /// <summary>
             /// Version of the MCP protocol being used.
             /// </summary>
             public string protocol_version;
@@ -104,6 +109,7 @@ namespace Becool.UnityMcpLens.Editor.Helpers
                     connection_path = connectionPath,
                     created_date = DateTime.UtcNow.ToString("O"),
                     project_path = Application.dataPath,
+                    project_root = GetProjectRoot(),
                     protocol_version = "2.0",
                     editor_pid = s_EditorPid
                 };
@@ -192,6 +198,7 @@ namespace Becool.UnityMcpLens.Editor.Helpers
                     supports_tool_sync_lens = supportsToolSyncLens,
                     last_tools_changed_utc = lastToolsChangedUtc,
                     project_path = Application.dataPath,
+                    project_root = GetProjectRoot(),
                     last_heartbeat = DateTime.UtcNow.ToString("O"),
                     protocol_version = "2.0",
                     editor_pid = s_EditorPid
@@ -228,6 +235,11 @@ namespace Becool.UnityMcpLens.Editor.Helpers
             {
                 // Heartbeat failures should not crash the bridge
             }
+        }
+
+        static string GetProjectRoot()
+        {
+            return Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
         }
 
         /// <summary>

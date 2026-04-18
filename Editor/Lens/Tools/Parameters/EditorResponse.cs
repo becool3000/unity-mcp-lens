@@ -130,6 +130,66 @@ namespace Becool.UnityMcpLens.Editor.Tools.Parameters
         public string ActiveSceneName { get; set; }
     }
 
+    /// <summary>
+    /// Compact editor state summary optimized for frequent readiness checks.
+    /// </summary>
+    public record EditorCompactStateData
+    {
+        [McpDescription("Whether the editor is in play mode")]
+        public bool IsPlaying { get; set; }
+
+        [McpDescription("Whether play mode is paused")]
+        public bool IsPaused { get; set; }
+
+        [McpDescription("Whether the editor is compiling")]
+        public bool IsCompiling { get; set; }
+
+        [McpDescription("Whether the editor is updating or importing assets")]
+        public bool IsUpdating { get; set; }
+
+        [McpDescription("Whether Unity reports an active play-mode transition")]
+        public bool IsPlayingOrWillChangePlaymode { get; set; }
+
+        [McpDescription("Whether Unity is building a player")]
+        public bool IsBuildingPlayer { get; set; }
+
+        [McpDescription("Whether the editor is idle enough for non-play editor operations")]
+        public bool IsEditorIdle { get; set; }
+
+        [McpDescription("Whether the runtime probe has advanced in play mode")]
+        public bool RuntimeAdvanced { get; set; }
+
+        [McpDescription("Runtime probe summary for the active play-mode session")]
+        public PlayModeRuntimeProbeData RuntimeProbe { get; set; }
+
+        [McpDescription("Active scene name")]
+        public string ActiveSceneName { get; set; }
+
+        [McpDescription("Bridge status reported by the Unity MCP bridge")]
+        public string BridgeStatus { get; set; }
+
+        [McpDescription("Bridge status reason when available")]
+        public string BridgeReason { get; set; }
+
+        [McpDescription("Whether bridge recovery is expected without user action")]
+        public bool BridgeExpectedRecovery { get; set; }
+
+        [McpDescription("Tool discovery mode reported by the bridge")]
+        public string ToolDiscoveryMode { get; set; }
+
+        [McpDescription("Current exported/internal tool count reported by the bridge")]
+        public int ToolCount { get; set; }
+
+        [McpDescription("Current known tools hash reported by the bridge")]
+        public string ToolsHash { get; set; }
+
+        [McpDescription("Time since Unity startup")]
+        public double TimeSinceStartup { get; set; }
+
+        [McpDescription("Detail ref for the full EditorStateData payload when available")]
+        public object FullStateDetailRef { get; set; }
+    }
+
     public record EditorTransitionData
     {
         [McpDescription("State of the requested play transition")]
@@ -221,7 +281,7 @@ namespace Becool.UnityMcpLens.Editor.Tools.Parameters
         /// Gets or sets the Unity instance ID of the window.
         /// </summary>
         [McpDescription("Unity instance ID of the window")]
-        public int InstanceID { get; set; }
+        public object InstanceID { get; set; }
     }
 
     /// <summary>
@@ -317,7 +377,7 @@ namespace Becool.UnityMcpLens.Editor.Tools.Parameters
         /// Gets or sets the Unity instance ID.
         /// </summary>
         [McpDescription("Unity instance ID")]
-        public int? InstanceID { get; set; }
+        public object InstanceID { get; set; }
     }
 
     /// <summary>
@@ -335,7 +395,7 @@ namespace Becool.UnityMcpLens.Editor.Tools.Parameters
         /// Gets or sets the Unity instance ID.
         /// </summary>
         [McpDescription("Unity instance ID")]
-        public int? InstanceID { get; set; }
+        public object InstanceID { get; set; }
     }
 
     /// <summary>
@@ -365,7 +425,7 @@ namespace Becool.UnityMcpLens.Editor.Tools.Parameters
         /// Gets or sets the instance ID of active selection.
         /// </summary>
         [McpDescription("Instance ID of active selection")]
-        public int ActiveInstanceID { get; set; }
+        public object ActiveInstanceID { get; set; }
 
         /// <summary>
         /// Gets or sets the total count of selected objects.

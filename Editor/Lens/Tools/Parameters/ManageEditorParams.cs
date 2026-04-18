@@ -29,6 +29,11 @@ namespace Becool.UnityMcpLens.Editor.Tools.Parameters
         GetState,
 
         /// <summary>
+        /// Get a compact editor state summary for frequent readiness checks.
+        /// </summary>
+        GetCompactState,
+
+        /// <summary>
         /// Wait until the Unity editor reaches a stable idle state.
         /// </summary>
         WaitForStableEditor,
@@ -122,6 +127,18 @@ namespace Becool.UnityMcpLens.Editor.Tools.Parameters
         /// </summary>
         [McpDescription("Polling interval in milliseconds for wait-based actions", Required = false)]
         public int? PollIntervalMs { get; set; }
+
+        /// <summary>
+        /// Gets or sets the number of consecutive stable polls required for WaitForStableEditor.
+        /// </summary>
+        [McpDescription("Consecutive stable polls required for WaitForStableEditor", Required = false)]
+        public int? StablePollCount { get; set; }
+
+        /// <summary>
+        /// Gets or sets the post-stability settle delay for WaitForStableEditor.
+        /// </summary>
+        [McpDescription("Additional delay in milliseconds after stable polls are reached", Required = false)]
+        public int? PostStableDelayMs { get; set; }
 
         /// <summary>
         /// Gets or sets the tool name for the set_active_tool action.

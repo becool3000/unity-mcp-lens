@@ -12,10 +12,15 @@ Default assumption going forward:
 - default model-facing tool surface is `foundation`
 - pack expansion is explicit, narrow, and temporary
 
+Helper script selection:
+- macOS/Linux: run the `.js` helper with `node`, for example `node scripts/Check-UnityDevSession.js --ProjectPath "$PWD"`
+- Windows: run the matching `.ps1` helper with PowerShell
+- When both exist, choose the platform-native helper automatically; keep both on the Lens path.
+
 ## Quick Flow
 
 1. Read the repo-local `docs/unity-mcp-backlog.md` if it exists.
-2. Run `scripts/Check-UnityDevSession.ps1` as the mandatory first command for Unity work in a fresh chat or after context loss.
+2. Run `scripts/Check-UnityDevSession.js` on macOS/Linux or `scripts/Check-UnityDevSession.ps1` on Windows as the mandatory first command for Unity work in a fresh chat or after context loss.
    - Treat the editor-status beacon as the first source of truth for compile/import/play/build transitions when it exists.
    - Do not start with broad tool discovery or ad hoc MCP status probes when the beacon is fresh.
    - Only confirm MCP authority after the session check reports `BeaconIdle`, `BeaconStale`, or `BeaconMissing`.
@@ -40,7 +45,7 @@ Default assumption going forward:
    - `IsUpdating = false`
    - `3` consecutive healthy polls
    - `1.0s` post-idle settle
-7. After external edits to compile-affecting files (`*.cs`, `*.asmdef`, `*.asmref`, `*.rsp`, package manifest changes), run `scripts/Sync-UnityScriptChanges.ps1` before the next Unity-side action.
+7. After external edits to compile-affecting files (`*.cs`, `*.asmdef`, `*.asmref`, `*.rsp`, package manifest changes), run `scripts/Sync-UnityScriptChanges.js` on macOS/Linux or `scripts/Sync-UnityScriptChanges.ps1` on Windows before the next Unity-side action.
 8. Prefer direct MCP tools through the Lens path by default.
    - Use helper scripts for orchestration-heavy flows such as long builds, autoplay, or deterministic screenshot capture.
    - Those helper scripts must also stay on the Lens path; do not bounce into legacy relay or manual wrapper behavior.
@@ -51,13 +56,13 @@ Default assumption going forward:
    - `ensure_krita_bridge.py`
    - `export_krita_state_to_unity.py`
    - `Import-UnitySpriteState.ps1`
-11. For long custom builds or exports, validate the exact enabled build-scene list first with `scripts/Test-UnityBuildSceneList.ps1 -ExpectedScenes ...` or `scripts/Check-UnityDevSession.ps1 -ExpectedScenes ...`.
-12. For play mode, use `scripts/Enter-UnityPlayMode.ps1`, require runtime advancement plus a short warmup, and treat transient disconnects during play transition as recoverable until the runtime probe proves success or failure.
-13. For `Unity_RunCommand`, use `scripts/Invoke-UnityRunCommand.ps1` instead of hand-escaping JSON, and prefer small focused probes over one large validation script.
+11. For long custom builds or exports, validate the exact enabled build-scene list first with `scripts/Test-UnityBuildSceneList.js --ExpectedScenes ...` on macOS/Linux, or `scripts/Test-UnityBuildSceneList.ps1 -ExpectedScenes ...` on Windows.
+12. For play mode, use `scripts/Enter-UnityPlayMode.js` on macOS/Linux or `scripts/Enter-UnityPlayMode.ps1` on Windows, require runtime advancement plus a short warmup, and treat transient disconnects during play transition as recoverable until the runtime probe proves success or failure.
+13. For `Unity_RunCommand`, use `scripts/Invoke-UnityRunCommand.js` on macOS/Linux or `scripts/Invoke-UnityRunCommand.ps1` on Windows instead of hand-escaping JSON, and prefer small focused probes over one large validation script.
 14. For console reads, prefer direct `Unity.ReadConsole` through MCP.
    - Default to summary/small reads.
    - Use `Unity.ReadDetailRef` if the result was compacted and the full payload matters.
-   - Reach for `scripts/Get-UnityConsole.ps1` only when the task explicitly needs the helper path or Lens is unavailable.
+   - Reach for `scripts/Get-UnityConsole.js` on macOS/Linux or `scripts/Get-UnityConsole.ps1` on Windows only when the task explicitly needs the helper path or Lens is unavailable.
 15. For menu operations, prefer the direct Unity tool surface when available. Use `scripts/Invoke-UnityMenuItem.ps1` only when there is no direct tool or when a script is operationally safer for the specific task.
 16. For art swaps and prefab binding, split the work into two steps:
    - sprite import or serialized reference binding
@@ -80,9 +85,9 @@ Default assumption going forward:
 22. For scene component refs or other scene-authored serialized fields, use `scripts/Set-UnitySceneSerializedProperties.ps1`.
 23. For persistent scene UI subtree repair or creation, use `scripts/Ensure-UnityUiHierarchy.ps1`.
 24. For deterministic UI layout edits on authored scene objects, use `scripts/Set-UnityUiLayout.ps1`.
-25. If a `Unity_RunCommand` starts a long WebGL build, pass `-MonitorBuildMode WebGL` plus any known output/report/artifact paths so the helper can fall back to passive log/disk monitoring when MCP stdout becomes unreliable.
+25. If a `Unity_RunCommand` starts a long WebGL build on Windows, pass `-MonitorBuildMode WebGL` plus any known output/report/artifact paths so the PowerShell helper can fall back to passive log/disk monitoring when MCP stdout becomes unreliable. On macOS/Linux, launch the build with the JS helper, then use the session check build monitor and `Editor.log` while the build is active.
 26. For autoplay or scripted validation, use `scripts/Run-UnityAutoplayPlaytest.ps1`.
-27. For screenshots, use `scripts/Capture-UnityPlaytestArtifacts.ps1`. It waits for idle, supports pre-capture state locks, prefers relative project paths, and falls back to desktop capture when Unity-aware capture is flaky.
+27. For screenshots, use `scripts/Capture-UnityPlaytestArtifacts.js` on macOS/Linux or `scripts/Capture-UnityPlaytestArtifacts.ps1` on Windows. It waits for idle, supports pre-capture state locks, prefers relative project paths, and falls back to desktop capture when Unity-aware capture is flaky.
 28. When a scene looks correct in edit mode but different in play mode, treat runtime ownership drift as the default suspect before retuning values. Read `references/authoring-drift.md` and use a small runtime probe to compare the same fields in edit mode and play mode.
 29. For score, initials, or other first-run gating backed by `PlayerPrefs`, distinguish a missing key from a saved `0` value. Use `HasKey` when deciding whether a flow is truly first-run.
 30. When reading Unity console output, treat known MCP/package chatter as bridge self-noise unless real compiler or gameplay errors are mixed in.
@@ -111,8 +116,8 @@ Prefer a scene-owned debugger component when a project needs fast UI or state it
 
 ## Defaults
 
-- Windows-first
-- Mandatory first step for Unity work in a fresh chat: `scripts/Check-UnityDevSession.ps1`
+- Platform-native helpers first
+- Mandatory first step for Unity work in a fresh chat: `scripts/Check-UnityDevSession.js` on macOS/Linux or `scripts/Check-UnityDevSession.ps1` on Windows
 - Preferred transport: `unity-mcp-lens`
 - Default exported tool surface: `foundation`
 - Expand packs explicitly, not heuristically
@@ -121,7 +126,7 @@ Prefer a scene-owned debugger component when a project needs fast UI or state it
 - Unity editor compile/import is the authority; do not run `dotnet build` as a Unity compile preflight
 - Editor idle gating before all Unity-facing work
 - Exact build-scene preflight before long custom builds when the intended scene list is known
-- External script edits should be synced through `Sync-UnityScriptChanges.ps1` before follow-up Unity actions
+- External script edits should be synced through `Sync-UnityScriptChanges.js` on macOS/Linux or `Sync-UnityScriptChanges.ps1` on Windows before follow-up Unity actions
 - When `rg.exe` is blocked in the Codex desktop app context, prefer the shared PowerShell search fallback instead of retrying `rg`
 - Hybrid snapshots for playtesting: Unity-aware first, desktop fallback second
 - Prefer relative project paths for Unity-side screenshots and state captures

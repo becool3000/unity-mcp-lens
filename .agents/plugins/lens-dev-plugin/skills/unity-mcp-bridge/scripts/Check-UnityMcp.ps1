@@ -750,6 +750,7 @@ if (Test-Path -LiteralPath $bridgeDirectory) {
                 }
             }
 
+            $statusProjectRoot = if (-not [string]::IsNullOrWhiteSpace($rawStatus.project_root)) { $rawStatus.project_root } else { $rawStatus.project_path }
             $statusCandidates += [pscustomobject]@{
                 FilePath       = $statusFile.FullName
                 LastWriteTime  = $statusFile.LastWriteTime
@@ -768,9 +769,10 @@ if (Test-Path -LiteralPath $bridgeDirectory) {
                 LastCommandFailureUtc = $rawStatus.last_command_failure_utc
                 LastCommandFailureReason = $rawStatus.last_command_failure_reason
                 ProjectPath    = $rawStatus.project_path
+                ProjectRoot    = $rawStatus.project_root
                 ConnectionPath = $rawStatus.connection_path
                 LastHeartbeat  = $rawStatus.last_heartbeat
-                MatchesProject = (Normalize-ProjectPath -PathValue $rawStatus.project_path) -eq $normalizedProjectPath
+                MatchesProject = (Normalize-ProjectPath -PathValue $statusProjectRoot) -eq $normalizedProjectPath
             }
         }
         catch {
@@ -872,6 +874,21 @@ $editorStateEmptyToolSurface = ($editorState -and $editorState.success -ne $true
 $editorStateErrorEmptyToolSurface = (-not [string]::IsNullOrWhiteSpace($editorStateError) -and $editorStateError -match $emptyToolSurfacePattern)
 $bridgeCommandHealthFailed = $selectedStatus -and $selectedStatus.CommandHealth -eq "failed"
 $bridgeTransportRecovering = $selectedStatus -and $selectedStatus.Status -in @("transport_recovering", "transport_degraded")
+$degradedAuthorityProbe = $null
+$degradedAuthorityProbeError = $null
+if ($unityRunning -and
+    -not $beaconIndicatesBuild -and
+    -not $beaconIndicatesTransition -and
+    $webGlBuildState.Status -ne "InProgress" -and
+    ($bridgeCommandHealthFailed -or $bridgeTransportRecovering)) {
+    try {
+        $degradedAuthorityProbe = Get-UnityLensHealth -ProjectPath $ProjectPath -TimeoutSeconds 30
+    }
+    catch {
+        $degradedAuthorityProbeError = $_.Exception.Message
+    }
+}
+$degradedAuthorityProbeOk = $degradedAuthorityProbe -and $degradedAuthorityProbe.success -eq $true
 $wrapperDiagnosticsRelevant = ($manualFallbackProbeAllowed -or ($codexConfig -and $codexConfig.UsesWrapper))
 $wrapperRecentTransportFailure = if ($wrapperDiagnostics) { $wrapperDiagnostics.RecentTransportFailure } else { $null }
 $wrapperRecentTransportFailureReason = if ($wrapperRecentTransportFailure) {
@@ -951,6 +968,13 @@ elseif ($unityRunning -and ($editorStateEmptyToolSurface -or $editorStateErrorEm
     $recommendedAction = "Reconnect or restart the Unity MCP bridge, then retry the MCP call."
     $exitCode = 11
 }
+elseif ($unityRunning -and ($bridgeCommandHealthFailed -or $bridgeTransportRecovering) -and $degradedAuthorityProbeOk) {
+    $classification = "Ready"
+    $userActionRequired = $false
+    $summary = "Bridge status was degraded, but a fresh lightweight Lens authority probe succeeded."
+    $recommendedAction = "Proceed with Lens tools using normal idle gating and longer post-reload probe budgets."
+    $exitCode = 0
+}
 elseif ($unityRunning -and
     $editorState -and $editorState.success -eq $true -and
     (($wrapperDiagnosticsRelevant -and $wrapperDiagnostics -and (($wrapperDiagnostics.toolDiscoveryMode -eq "cached-reload-fallback") -or ($wrapperDiagnostics.lastToolSource -eq "cached-reload-fallback") -or ($wrapperRecentTransportFailure -and $wrapperRecentHealthySuccess))) -or $bridgeCommandHealthFailed -or $bridgeTransportRecovering -or $observedDirectTransportFailure)) {
@@ -1011,7 +1035,12 @@ elseif ($unityRunning -and
 }
 elseif ($unityRunning -and ($bridgeCommandHealthFailed -or $bridgeTransportRecovering)) {
     $classification = "ReconnectRequired"
-    $summary = "Bridge status exists, but the latest direct command health signal is degraded and no healthy wrapper/manual probe was available to take over."
+    $summary = if (-not [string]::IsNullOrWhiteSpace($degradedAuthorityProbeError)) {
+        "Bridge status is degraded, and the fresh lightweight Lens authority probe failed: $degradedAuthorityProbeError"
+    }
+    else {
+        "Bridge status exists, but the latest direct command health signal is degraded and no healthy wrapper/manual probe was available to take over."
+    }
     $recommendedAction = "Reconnect or restart the Unity MCP bridge, then retry the MCP call."
     $exitCode = 11
 }
@@ -1086,6 +1115,7 @@ $result = [pscustomobject]@{
             ExpectedRecoveryExpiresUtc = $selectedStatus.ExpectedRecoveryExpiresUtc
             ExpectedRecoveryExpired = $selectedStatus.ExpectedRecoveryExpired
             ProjectPath    = $selectedStatus.ProjectPath
+            ProjectRoot    = $selectedStatus.ProjectRoot
             ConnectionPath = $selectedStatus.ConnectionPath
             LastHeartbeat  = $selectedStatus.LastHeartbeat
             MatchesProject = $selectedStatus.MatchesProject
@@ -1105,6 +1135,21 @@ $result = [pscustomobject]@{
     }
     AssistantPackage = $assistantPackageState
     UnityMcpSettings = $unityMcpSettings
+    DegradedAuthorityProbe = if ($degradedAuthorityProbe) {
+        [pscustomobject]@{
+            Success = $degradedAuthorityProbe.success -eq $true
+            Error = $degradedAuthorityProbeError
+        }
+    }
+    elseif (-not [string]::IsNullOrWhiteSpace($degradedAuthorityProbeError)) {
+        [pscustomobject]@{
+            Success = $false
+            Error = $degradedAuthorityProbeError
+        }
+    }
+    else {
+        $null
+    }
     ObservedDirectFailure = $observedDirectFailure
     WrapperRecentTransportFailure = if ($wrapperRecentTransportFailure) {
         [pscustomobject]@{
@@ -1171,6 +1216,9 @@ $compactResult = [pscustomobject]@{
             ExpectedRecovery  = $selectedStatus.ExpectedRecovery
             ExpectedRecoveryExpiresUtc = $selectedStatus.ExpectedRecoveryExpiresUtc
             ExpectedRecoveryExpired = $selectedStatus.ExpectedRecoveryExpired
+            ProjectPath       = $selectedStatus.ProjectPath
+            ProjectRoot       = $selectedStatus.ProjectRoot
+            MatchesProject    = $selectedStatus.MatchesProject
             ToolDiscoveryMode = $selectedStatus.ToolDiscoveryMode
             ToolCount         = $selectedStatus.ToolCount
             CommandHealth     = $selectedStatus.CommandHealth
@@ -1180,6 +1228,7 @@ $compactResult = [pscustomobject]@{
         $null
     }
     Wrapper            = Get-UnityCompactWrapperSummary -WrapperDiagnostics $wrapperDiagnostics -RecentTransportFailure $result.WrapperRecentTransportFailure -RecentHealthySuccess $result.WrapperRecentHealthySuccess
+    DegradedAuthorityProbe = $result.DegradedAuthorityProbe
     EditorState        = Get-UnityCompactEditorStateSummary -EditorState $editorState
     EditorStatusBeacon = if ($editorStatusBeacon) {
         [pscustomobject]@{

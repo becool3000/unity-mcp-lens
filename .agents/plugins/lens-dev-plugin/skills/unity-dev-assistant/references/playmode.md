@@ -26,6 +26,6 @@ Rules:
 - If the play request disconnected but the follow-up runtime probe advanced, treat the play request as successful on a degraded path.
 - If play enters but the runtime probe does not advance, treat that as a play/runtime problem, not a healthy playtest.
 - After scene open, asset import, external script edits, or script compile, let Unity finish settling before entering play.
-- After external script edits, run `Sync-UnityScriptChanges.ps1` before requesting play mode.
+- After external script edits, run `Sync-UnityScriptChanges.js` on macOS/Linux or `Sync-UnityScriptChanges.ps1` on Windows before requesting play mode.
 - After stopping play mode, expect one recovery pass before follow-up Unity tool calls.
 - If focus-sensitive stalls appear again, capture runtime probe data and treat it as a playtest environment issue before blaming MCP transport.

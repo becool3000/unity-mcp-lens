@@ -14,7 +14,11 @@ The Lens server is installed under:
 ~/.unity/unity-mcp-lens/
 ```
 
-Codex MCP settings should launch the Lens binary directly with no arguments.
+Codex MCP settings should launch the Lens binary directly with no arguments, or use the repo-local plugin launcher:
+
+```text
+node .agents/plugins/lens-dev-plugin/skills/unity-mcp-bridge/scripts/Launch-UnityMcpLens.js
+```
 
 ## Important Constraints
 
@@ -50,12 +54,19 @@ The repo-local marketplace entry is:
 ```
 
 The plugin bundles the `unity-mcp-bridge`, `unity-dev-assistant`, and
-`unity-mcp-lens-development` skills. The vendored `.mcp.json` intentionally uses
-a disabled source-run template so this repo does not commit a machine-specific
-absolute path. For daily use, install or refresh the Lens server from Unity
-first so `~/.unity/unity-mcp-lens/` contains the platform-specific binary. For
-an Intel Mac, the installed command is:
+`unity-mcp-lens-development` skills. The vendored `.mcp.json` launches a small
+Node shim that resolves the installed platform-specific binary under
+`~/.unity/unity-mcp-lens/`, so the plugin no longer needs a local .NET SDK or a
+source checkout at runtime. For an Intel Mac, the resolved command is:
 
 ```text
 ~/.unity/unity-mcp-lens/unity_mcp_lens_mac_x64
 ```
+
+On Apple Silicon it resolves:
+
+```text
+~/.unity/unity-mcp-lens/unity_mcp_lens_mac_arm64
+```
+
+Set `UNITY_MCP_LENS_PATH` only when testing a nonstandard binary location.

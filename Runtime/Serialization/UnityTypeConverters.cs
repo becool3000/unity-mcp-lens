@@ -1,6 +1,7 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
+using System.Linq;
 using UnityEngine;
 #if UNITY_EDITOR
 using UnityEditor; // Required for AssetDatabase and EditorUtility
@@ -361,7 +362,7 @@ namespace Becool.UnityMcpLens.Runtime.Serialization
                     writer.WritePropertyName("name");
                     writer.WriteValue(value.name);
                     writer.WritePropertyName("instanceID");
-                    writer.WriteValue(value.GetInstanceID());
+                    writer.WriteValue(GetObjectReferenceId(value));
                     writer.WritePropertyName("isAssetWithoutPath");
                     writer.WriteValue(true);
                     writer.WriteEndObject();
@@ -374,7 +375,7 @@ namespace Becool.UnityMcpLens.Runtime.Serialization
                 writer.WritePropertyName("name");
                 writer.WriteValue(value.name);
                 writer.WritePropertyName("instanceID");
-                writer.WriteValue(value.GetInstanceID());
+                writer.WriteValue(GetObjectReferenceId(value));
                 writer.WriteEndObject();
             }
 #else
@@ -383,7 +384,7 @@ namespace Becool.UnityMcpLens.Runtime.Serialization
             writer.WritePropertyName("name");
             writer.WriteValue(value.name);
             writer.WritePropertyName("instanceID");
-            writer.WriteValue(value.GetInstanceID());
+            writer.WriteValue(GetObjectReferenceId(value));
              writer.WritePropertyName("warning");
             writer.WriteValue("UnityEngineObjectConverter running in non-Editor mode, asset path unavailable.");
             writer.WriteEndObject();
@@ -419,11 +420,12 @@ namespace Becool.UnityMcpLens.Runtime.Serialization
                 JObject jo = JObject.Load(reader);
                 if (jo.TryGetValue("instanceID", out JToken idToken) && idToken.Type == JTokenType.Integer)
                 {
-                    int instanceId = idToken.ToObject<int>();
-                    // Unity 6000.4+ renamed InstanceIDToObject to EntityIdToObject
 #if UNITY_6000_3_OR_NEWER
-                    UnityEngine.Object obj = UnityEditor.EditorUtility.EntityIdToObject(instanceId);
+                    ulong entityIdValue = idToken.ToObject<ulong>();
+                    UnityEngine.Object obj = Resources.FindObjectsOfTypeAll(objectType)
+                        .FirstOrDefault(candidate => candidate != null && EntityId.ToULong(candidate.GetEntityId()) == entityIdValue);
 #else
+                    int instanceId = idToken.ToObject<int>();
                     UnityEngine.Object obj = UnityEditor.EditorUtility.InstanceIDToObject(instanceId);
 #endif
                     if (obj != null && objectType.IsAssignableFrom(obj.GetType()))
@@ -446,6 +448,15 @@ namespace Becool.UnityMcpLens.Runtime.Serialization
 #endif
 
             throw new JsonSerializationException($"Unexpected token type '{reader.TokenType}' when deserializing UnityEngine.Object");
+        }
+
+        static object GetObjectReferenceId(UnityEngine.Object value)
+        {
+#if UNITY_6000_3_OR_NEWER
+            return EntityId.ToULong(value.GetEntityId());
+#else
+            return value.GetInstanceID();
+#endif
         }
     }
 }

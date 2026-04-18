@@ -1,2 +1,4 @@
 RelayApp~/gateway/* filter=lfs diff=lfs merge=lfs -text
 RelayApp~/relay_* filter=lfs diff=lfs merge=lfs -text
+UnityMcpLensApp~/prebuilt/**/unity_mcp_lens_* filter=lfs diff=lfs merge=lfs -text
+UnityMcpLensApp~/prebuilt/**/UnityMcpLens* filter=lfs diff=lfs merge=lfs -text

@@ -23,7 +23,7 @@ Common owners:
 
 ## Fast path
 
-1. Compare the same object in edit mode and play mode with paired direct probes through `Invoke-UnityRunCommand.ps1`.
+1. Compare the same object in edit mode and play mode with paired direct probes through `Invoke-UnityRunCommand.js` on macOS/Linux or `Invoke-UnityRunCommand.ps1` on Windows.
 
 ```powershell
 $code = @'

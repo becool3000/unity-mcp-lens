@@ -94,7 +94,7 @@ namespace Becool.UnityMcpLens.Editor.Helpers
             return new
             {
                 name = go.name,
-                instanceID = go.GetInstanceID(),
+                instanceID = UnityApiAdapter.GetObjectId(go),
                 tag = go.tag,
                 layer = go.layer,
                 activeSelf = go.activeSelf,
@@ -117,7 +117,7 @@ namespace Becool.UnityMcpLens.Editor.Helpers
                 center = new {x = bounds.center.x, y = bounds.center.y, z = bounds.center.z,},
                 extents = new {x = bounds.extents.x, y = bounds.extents.y, z = bounds.extents.z,},
                 size = new {x = bounds.size.x, y = bounds.size.y, z = bounds.size.z,},
-                parentInstanceID = go.transform.parent?.gameObject.GetInstanceID() ?? 0, // 0 if no parent
+                parentInstanceID = UnityApiAdapter.GetObjectIdOrZero(go.transform.parent?.gameObject),
                 // Optionally include components, but can be large
                 // components = go.GetComponents<Component>().Select(c => GetComponentData(c)).ToList()
                 // Or just component names:
@@ -184,7 +184,7 @@ namespace Becool.UnityMcpLens.Editor.Helpers
                 return new Dictionary<string, object>
                 {
                     {"typeName", componentType.FullName},
-                    {"instanceID", tr.GetInstanceID()},
+                    {"instanceID", UnityApiAdapter.GetObjectId(tr)},
 
                     // Manually extract known-safe properties. Avoid Quaternion 'rotation' and 'lossyScale'.
                     {"position", CreateTokenFromValue(tr.position, typeof(Vector3))?.ToObject<object>() ?? new JObject()},
@@ -195,14 +195,14 @@ namespace Becool.UnityMcpLens.Editor.Helpers
                     {"right", CreateTokenFromValue(tr.right, typeof(Vector3))?.ToObject<object>() ?? new JObject()},
                     {"up", CreateTokenFromValue(tr.up, typeof(Vector3))?.ToObject<object>() ?? new JObject()},
                     {"forward", CreateTokenFromValue(tr.forward, typeof(Vector3))?.ToObject<object>() ?? new JObject()},
-                    {"parentInstanceID", tr.parent?.gameObject.GetInstanceID() ?? 0},
-                    {"rootInstanceID", tr.root?.gameObject.GetInstanceID() ?? 0},
+                    {"parentInstanceID", UnityApiAdapter.GetObjectIdOrZero(tr.parent?.gameObject)},
+                    {"rootInstanceID", UnityApiAdapter.GetObjectIdOrZero(tr.root?.gameObject)},
                     {"childCount", tr.childCount},
 
                     // Include standard Object/Component properties
                     {"name", tr.name},
                     {"tag", tr.tag},
-                    {"gameObjectInstanceID", tr.gameObject?.GetInstanceID() ?? 0}
+                    {"gameObjectInstanceID", UnityApiAdapter.GetObjectIdOrZero(tr.gameObject)}
                 };
             }
 
@@ -242,7 +242,7 @@ namespace Becool.UnityMcpLens.Editor.Helpers
                     {"enabled", () => cam.enabled},
                     {"name", () => cam.name},
                     {"tag", () => cam.tag},
-                    {"gameObject", () => new {name = cam.gameObject.name, instanceID = cam.gameObject.GetInstanceID()}}
+                    {"gameObject", () => new {name = cam.gameObject.name, instanceID = UnityApiAdapter.GetObjectId(cam.gameObject)}}
                 };
 
                 foreach (var prop in safeProperties)
@@ -262,12 +262,12 @@ namespace Becool.UnityMcpLens.Editor.Helpers
                     }
                 }
 
-                return new Dictionary<string, object> {{"typeName", componentType.FullName}, {"instanceID", cam.GetInstanceID()}, {"properties", cameraProperties}};
+                return new Dictionary<string, object> {{"typeName", componentType.FullName}, {"instanceID", UnityApiAdapter.GetObjectId(cam)}, {"properties", cameraProperties}};
             }
 
             // --- End Special handling for Camera ---
 
-            var data = new Dictionary<string, object> {{"typeName", componentType.FullName}, {"instanceID", c.GetInstanceID()}};
+            var data = new Dictionary<string, object> {{"typeName", componentType.FullName}, {"instanceID", UnityApiAdapter.GetObjectId(c)}};
 
             // --- Get Cached or Generate Metadata (using new cache key) ---
             Tuple<Type, bool> cacheKey = new Tuple<Type, bool>(componentType, includeNonPublicSerializedFields);
@@ -783,7 +783,7 @@ namespace Becool.UnityMcpLens.Editor.Helpers
             var token = new JObject
             {
                 ["name"] = value.name,
-                ["instanceID"] = value.GetInstanceID(),
+                ["instanceID"] = JToken.FromObject(UnityApiAdapter.GetObjectId(value)),
                 ["typeName"] = value.GetType().FullName
             };
 

@@ -36,11 +36,11 @@ namespace Becool.UnityMcpLens.Editor.Helpers
                     data = new
                     {
                         typeName = component.GetType().FullName,
-                        instanceID = component.GetInstanceID(),
+                        instanceID = UnityApiAdapter.GetObjectId(component),
                         summaryMode = "curated",
                         enabled = collider.enabled,
                         isTrigger = collider.isTrigger,
-                        attachedRigidbodyInstanceID = collider.attachedRigidbody != null ? collider.attachedRigidbody.GetInstanceID() : 0,
+                        attachedRigidbodyInstanceID = UnityApiAdapter.GetObjectIdOrZero(collider.attachedRigidbody),
                         bounds = ToBoundsData(collider.bounds)
                     };
                     return true;
@@ -48,7 +48,7 @@ namespace Becool.UnityMcpLens.Editor.Helpers
                     data = new
                     {
                         typeName = component.GetType().FullName,
-                        instanceID = component.GetInstanceID(),
+                        instanceID = UnityApiAdapter.GetObjectId(component),
                         summaryMode = "curated",
                         enabled = collider2D.enabled,
                         isTrigger = collider2D.isTrigger,
@@ -60,7 +60,7 @@ namespace Becool.UnityMcpLens.Editor.Helpers
                     data = new
                     {
                         typeName = component.GetType().FullName,
-                        instanceID = component.GetInstanceID(),
+                        instanceID = UnityApiAdapter.GetObjectId(component),
                         summaryMode = "curated",
                         enabled = renderer.enabled,
                         sortingLayerID = renderer.sortingLayerID,
@@ -73,7 +73,7 @@ namespace Becool.UnityMcpLens.Editor.Helpers
                     data = new
                     {
                         typeName = component.GetType().FullName,
-                        instanceID = component.GetInstanceID(),
+                        instanceID = UnityApiAdapter.GetObjectId(component),
                         summaryMode = "curated",
                         anchorMin = ToVector2Data(rectTransform.anchorMin),
                         anchorMax = ToVector2Data(rectTransform.anchorMax),
@@ -87,7 +87,7 @@ namespace Becool.UnityMcpLens.Editor.Helpers
                     data = new
                     {
                         typeName = component.GetType().FullName,
-                        instanceID = component.GetInstanceID(),
+                        instanceID = UnityApiAdapter.GetObjectId(component),
                         summaryMode = "curated",
                         renderMode = canvas.renderMode.ToString(),
                         sortingOrder = canvas.sortingOrder,
@@ -100,7 +100,7 @@ namespace Becool.UnityMcpLens.Editor.Helpers
                     data = new
                     {
                         typeName = component.GetType().FullName,
-                        instanceID = component.GetInstanceID(),
+                        instanceID = UnityApiAdapter.GetObjectId(component),
                         summaryMode = "curated",
                         enabled = graphic.enabled,
                         raycastTarget = graphic.raycastTarget,
@@ -159,7 +159,7 @@ namespace Becool.UnityMcpLens.Editor.Helpers
             var properties = new Dictionary<string, object>
             {
                 ["name"] = component.name,
-                ["gameObjectInstanceID"] = component.gameObject != null ? component.gameObject.GetInstanceID() : 0
+                ["gameObjectInstanceID"] = UnityApiAdapter.GetObjectIdOrZero(component.gameObject)
             };
 
             if (component is Behaviour behaviour)
@@ -170,7 +170,7 @@ namespace Becool.UnityMcpLens.Editor.Helpers
             return new
             {
                 typeName = component.GetType().FullName,
-                instanceID = component.GetInstanceID(),
+                instanceID = UnityApiAdapter.GetObjectId(component),
                 summaryMode = "fallback",
                 error,
                 properties

@@ -203,7 +203,7 @@ Returns:
                     path = UiDiagnosticsHelper.GetHierarchyPath(created.transform),
                     action,
                     existed = existing != null,
-                    instanceId = created.GetInstanceID(),
+                    instanceId = UnityApiAdapter.GetObjectId(created),
                     componentTypes = created.GetComponents<Component>().Where(component => component != null).Select(component => component.GetType().FullName).ToArray()
                 });
                 return;
@@ -214,7 +214,7 @@ Returns:
                 path = UiDiagnosticsHelper.GetHierarchyPath(existing),
                 action = "preserve",
                 existed = true,
-                instanceId = existing.gameObject.GetInstanceID(),
+                instanceId = UnityApiAdapter.GetObjectId(existing.gameObject),
                 componentTypes = existing.GetComponents<Component>().Where(component => component != null).Select(component => component.GetType().FullName).ToArray()
             });
 

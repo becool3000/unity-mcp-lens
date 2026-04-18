@@ -17,9 +17,11 @@ Use this skill as the operational guide for the local Unity MCP bridge and the o
 
 1. Read the repo-local backlog at `docs/unity-mcp-backlog.md` if it exists.
 2. Start with the shared check script, not an improvised MCP probe:
-   - for repo-local Unity work, `unity-dev-assistant/scripts/Check-UnityDevSession.ps1`
-   - for explicit bridge-maintenance work, `unity-mcp-bridge/scripts/Check-UnityMcp.ps1`
-   - both checks are compact by default; add `-IncludeDiagnostics` only when you need the deep editor payload
+   - macOS/Linux repo-local Unity work: `node unity-dev-assistant/scripts/Check-UnityDevSession.js`
+   - Windows repo-local Unity work: `unity-dev-assistant/scripts/Check-UnityDevSession.ps1`
+   - macOS/Linux bridge maintenance: `node unity-mcp-bridge/scripts/Check-UnityMcp.js`
+   - Windows bridge maintenance: `unity-mcp-bridge/scripts/Check-UnityMcp.ps1`
+   - checks are compact by default; add `--IncludeDiagnostics` or `-IncludeDiagnostics` only when you need the deep editor payload
 3. Check the local editor-status beacon first when it exists.
    - If the beacon reports a fresh compile/import/reload/play/build transition, treat that as the primary status signal and avoid an immediate extra MCP probe.
    - If the beacon is idle, stale, or missing, continue with the normal MCP health-check flow.
@@ -44,8 +46,14 @@ $script = Join-Path $PWD ".agents\plugins\lens-dev-plugin\skills\unity-mcp-bridg
 powershell -ExecutionPolicy Bypass -File $script -ProjectPath "$PWD"
 ```
 
+On macOS/Linux:
+
+```bash
+node .agents/plugins/lens-dev-plugin/skills/unity-mcp-bridge/scripts/Check-UnityMcp.js --ProjectPath "$PWD"
+```
+
 8. Wait briefly, then retry one lightweight authority check.
-   - If the failure came immediately after `Sync-UnityScriptChanges.ps1`, a forced refresh, or package recompilation, still follow the health-check flow before assuming Unity is unavailable.
+   - If the failure came immediately after `Sync-UnityScriptChanges.js`/`Sync-UnityScriptChanges.ps1`, a forced refresh, or package recompilation, still follow the health-check flow before assuming Unity is unavailable.
 9. If the retry still fails and the check classifies the bridge as `EditorReloadingExpected`, wait for Unity to settle and retry instead of notifying the user.
 10. If the retry still fails and the check classifies the bridge as `BuildInProgress`, stop retrying recovery. Switch to passive monitoring of `Editor.log`, the beacon, and any known build artifacts instead of notifying the user.
 11. If the retry still fails and the check classifies the bridge as `ApprovalPending`, `ReconnectRequired`, `UnityNotRunning`, `BridgeNotReady`, or another hard-unavailable state, send a Windows notification:
@@ -60,6 +68,7 @@ powershell -ExecutionPolicy Bypass -File $script -ProjectPath "$PWD"
 ## Lens-Specific Rules
 
 - Prefer `unity-mcp-lens` configured as:
+  - Codex plugin command: `node ./skills/unity-mcp-bridge/scripts/Launch-UnityMcpLens.js`
   - Windows command: `%USERPROFILE%\.unity\unity-mcp-lens\unity_mcp_lens_win.exe`
   - macOS Intel command: `~/.unity/unity-mcp-lens/unity_mcp_lens_mac_x64`
   - macOS Apple Silicon command: `~/.unity/unity-mcp-lens/unity_mcp_lens_mac_arm64`
@@ -96,6 +105,7 @@ powershell -ExecutionPolicy Bypass -File $script -ProjectPath "$PWD"
 - Compact output is the default operator view. Reach for diagnostics mode only when the maintenance task actually requires raw editor detail.
 - Inspect `%USERPROFILE%\.unity\mcp\connections\bridge-status-*.json` for the current bridge status.
 - Inspect `%LOCALAPPDATA%\Unity\Editor\Editor.log` for approval, handshake, disconnect, compile, and auth signals.
+- On macOS inspect `~/Library/Logs/Unity/Editor.log` for the same signals.
 - Check installed MCP binaries:
   - `%USERPROFILE%\.unity\unity-mcp-lens\unity_mcp_lens_win.exe`
   - `~/.unity/unity-mcp-lens/unity_mcp_lens_mac_x64`
@@ -113,7 +123,7 @@ powershell -ExecutionPolicy Bypass -File $script -ProjectPath "$PWD"
 
 - If the custom MCP server `Working directory` is invalid, Codex may fail before the MCP server starts. Prefer a real project path or a stable existing directory such as the user profile.
 - The Lens MCP server is a standard MCP stdio server. It does not need `--mcp`.
-- Until prebuilt Lens binaries are bundled, first-time Lens installation may publish from source and therefore requires a local .NET SDK 8+.
+- The Codex plugin launcher should use the installed native Lens binary and should not require a local .NET SDK. First-time Unity-side Lens installation only requires .NET SDK 8+ when no matching prebuilt server artifact is bundled.
 - When `Assets/Refresh`, `Assets/Reimport All`, package refresh, or script recompilation disrupt discovery, treat that as a temporary editor reload window. Wait for Unity to return to `IsCompiling=false` and `IsUpdating=false`, then retry a lightweight MCP authority check before escalating.
 - When Unity stack traces point into `Packages/com.unity.ai.assistant/...`, patch the in-project package source that Unity is actually loading rather than an external mirror copy.
 - When a repo intentionally uses an external patch source, search the live package folders and exclude `.codex-temp` snapshots before deciding where to patch.

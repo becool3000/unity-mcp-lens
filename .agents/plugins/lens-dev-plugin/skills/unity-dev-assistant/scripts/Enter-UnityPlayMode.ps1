@@ -7,7 +7,8 @@ param(
     [int]$IdleTimeoutSeconds = 60,
     [int]$IdleStablePollCount = 3,
     [double]$IdlePollIntervalSeconds = 0.5,
-    [double]$PostIdleDelaySeconds = 1.0
+    [double]$PostIdleDelaySeconds = 1.0,
+    [int]$PlayRequestTimeoutSeconds = 180
 )
 
 . "$PSScriptRoot\UnityDevCommon.ps1"
@@ -111,7 +112,7 @@ $playResponse = $null
 $playError = $null
 
 try {
-    $playResponse = Invoke-UnityMcpToolJson -ProjectPath $resolvedProjectPath -ToolName "Unity_ManageEditor" -Arguments @{ Action = "Play" } -TimeoutSeconds 20
+    $playResponse = Invoke-UnityMcpToolJson -ProjectPath $resolvedProjectPath -ToolName "Unity_ManageEditor" -Arguments @{ Action = "Play" } -TimeoutSeconds $PlayRequestTimeoutSeconds
 }
 catch {
     $playError = $_.Exception.Message
@@ -151,6 +152,7 @@ if ($playReady.success) {
     message      = $finalMessage
     idleWait     = $idleWait
     degradedPath = $degradedPath
+    playRequestTimeoutSeconds = $PlayRequestTimeoutSeconds
     playRequestWasReconnectProne = $playRequestWasReconnectProne
     playRequestErrorMessage = $playRequestErrorMessage
     playResponse = $playResponseObject

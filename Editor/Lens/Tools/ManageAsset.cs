@@ -798,7 +798,7 @@ Returns:
                     .Select(comp => new
                     {
                         typeName = comp.GetType().FullName,
-                        instanceID = comp.GetInstanceID(),
+                        instanceID = UnityApiAdapter.GetObjectId(comp),
                         // TODO: Add more component-specific details here if needed in the future?
                         //       Requires reflection or specific handling per component type.
                     })
@@ -1339,7 +1339,7 @@ Returns:
                 name = Path.GetFileNameWithoutExtension(path),
                 fileName = Path.GetFileName(path),
                 isFolder = AssetDatabase.IsValidFolder(path),
-                instanceID = asset?.GetInstanceID() ?? 0,
+                instanceID = UnityApiAdapter.GetObjectIdOrZero(asset),
                 lastWriteTimeUtc = File.GetLastWriteTimeUtc(
                         Path.Combine(Directory.GetCurrentDirectory(), path)
                     )
@@ -1353,4 +1353,3 @@ Returns:
         }
     }
 }
-

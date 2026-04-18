@@ -76,12 +76,13 @@ elseif (-not $lensHealthOverridesBeacon -and $editorStatusBeacon.Fresh -and $edi
 }
 else {
     try {
-        $editorState = Get-UnityEditorState -ProjectPath $resolvedProjectPath -TimeoutSeconds 20
-        $wrapperHealthy = $editorState.success -eq $true
+        $stableWait = Wait-UnityEditorIdle -ProjectPath $resolvedProjectPath -TimeoutSeconds 90 -StablePollCount 3 -PollIntervalSeconds 0.5 -PostIdleDelaySeconds 1.0
+        $editorState = $stableWait.lastState
+        $wrapperHealthy = $stableWait.success -eq $true -and $editorState -and $editorState.success -eq $true
         if ($wrapperHealthy) {
             $readiness = Get-UnityReadinessSnapshot -EditorState $editorState
             $editorIdleSnapshot = [ordered]@{
-                Ready                 = $readiness.IdleReady
+                Ready                 = $stableWait.success -eq $true -and $readiness.IdleReady
                 StablePollRequirement = 3
                 PollIntervalSeconds   = 0.5
                 PostIdleDelaySeconds  = 1.0
@@ -93,6 +94,9 @@ else {
                 UpdateCountThreshold = 10
                 Snapshot             = $readiness
             }
+        }
+        else {
+            $wrapperError = if ($stableWait.message) { $stableWait.message } elseif ($stableWait.lastError) { $stableWait.lastError } else { "Unity editor did not reach a stable idle state." }
         }
     }
     catch {

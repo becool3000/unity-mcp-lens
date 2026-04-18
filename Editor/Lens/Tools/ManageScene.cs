@@ -446,7 +446,7 @@ Returns:
                 string query = (searchTerm ?? string.Empty).Trim();
                 int max = Math.Clamp(limit, 1, 500);
                 var inactiveMode = includeInactive ? FindObjectsInactive.Include : FindObjectsInactive.Exclude;
-                var objects = UnityEngine.Object.FindObjectsByType<GameObject>(inactiveMode, FindObjectsSortMode.None)
+                var objects = UnityApiAdapter.FindObjectsByType<GameObject>(inactiveMode)
                     .Where(go => string.IsNullOrEmpty(query) ||
                         go.name.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0 ||
                         GetHierarchyPath(go.transform).IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0 ||
@@ -460,7 +460,7 @@ Returns:
                         go.name,
                         path = GetHierarchyPath(go.transform),
                         scenePath = go.scene.path,
-                        instanceID = go.GetInstanceID(),
+                        instanceID = UnityApiAdapter.GetObjectId(go),
                         go.tag,
                         layer = LayerMask.LayerToName(go.layer),
                         go.activeSelf,
@@ -495,7 +495,7 @@ Returns:
                 int max = Math.Clamp(limit, 1, 500);
                 var planes = GeometryUtility.CalculateFrustumPlanes(camera);
                 var inactiveMode = includeInactive ? FindObjectsInactive.Include : FindObjectsInactive.Exclude;
-                var objects = UnityEngine.Object.FindObjectsByType<Renderer>(inactiveMode, FindObjectsSortMode.None)
+                var objects = UnityApiAdapter.FindObjectsByType<Renderer>(inactiveMode)
                     .Where(renderer => renderer != null && renderer.gameObject.scene.IsValid() && GeometryUtility.TestPlanesAABB(planes, renderer.bounds))
                     .Take(max)
                     .Select(renderer => new
@@ -503,7 +503,7 @@ Returns:
                         renderer.gameObject.name,
                         path = GetHierarchyPath(renderer.transform),
                         scenePath = renderer.gameObject.scene.path,
-                        instanceID = renderer.gameObject.GetInstanceID(),
+                        instanceID = UnityApiAdapter.GetObjectId(renderer.gameObject),
                         rendererType = renderer.GetType().FullName,
                         bounds = new
                         {
@@ -529,7 +529,7 @@ Returns:
 
         static Camera ResolveCamera(string cameraName)
         {
-            var cameras = UnityEngine.Object.FindObjectsByType<Camera>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            var cameras = UnityApiAdapter.FindObjectsByType<Camera>(FindObjectsInactive.Include);
             if (!string.IsNullOrWhiteSpace(cameraName))
             {
                 var named = cameras.FirstOrDefault(camera => string.Equals(camera.name, cameraName, StringComparison.OrdinalIgnoreCase));
@@ -606,7 +606,7 @@ Returns:
                 { "tag", go.tag },
                 { "layer", go.layer },
                 { "isStatic", go.isStatic },
-                { "instanceID", go.GetInstanceID() }, // Useful unique identifier
+                { "instanceID", UnityApiAdapter.GetObjectId(go) },
                 // Remove transform information since large scenes can have a lot of objects and this will
                 // be too much data
                 // {
@@ -640,4 +640,3 @@ Returns:
         }
     }
 }
-

@@ -195,7 +195,7 @@ Returns:
                 return Camera.main;
             }
 
-            Camera[] cameras = UnityEngine.Object.FindObjectsByType<Camera>(includeInactive ? FindObjectsInactive.Include : FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+            Camera[] cameras = UnityApiAdapter.FindObjectsByType<Camera>(includeInactive ? FindObjectsInactive.Include : FindObjectsInactive.Exclude);
             for (int i = 0; i < cameras.Length; i++)
             {
                 if (cameras[i] != null && cameras[i].enabled)

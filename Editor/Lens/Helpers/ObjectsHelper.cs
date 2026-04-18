@@ -92,13 +92,11 @@ namespace Becool.UnityMcpLens.Editor.Helpers
             switch (searchMethod)
             {
                 case "by_id":
-                    if (int.TryParse(searchTerm, out int instanceId))
+                    if (!string.IsNullOrWhiteSpace(searchTerm))
                     {
-                        // EditorUtility.InstanceIDToObject is slow, iterate manually if possible
-                        // GameObject obj = EditorUtility.InstanceIDToObject(instanceId) as GameObject;
                         var allObjects = ManageGameObject.GetAllSceneObjects(searchInactive); // More efficient
                         GameObject obj = allObjects.FirstOrDefault(go =>
-                            go.GetInstanceID() == instanceId
+                            UnityApiAdapter.ObjectIdEquals(go, searchTerm)
                         );
                         if (obj != null)
                             results.Add(obj);
@@ -159,11 +157,7 @@ namespace Becool.UnityMcpLens.Editor.Helpers
                                 .GetComponentsInChildren(componentType, searchInactive)
                                 .Select(c => (c as Component).gameObject)
                             : UnityEngine
-                                .Object.FindObjectsByType(
-                                    componentType,
-                                    findInactive,
-                                    FindObjectsSortMode.None
-                                )
+                                .Object.FindObjectsByType(componentType, findInactive)
                                 .Select(c => (c as Component).gameObject);
                         results.AddRange(searchPoolComp.Where(go => go != null)); // Ensure GO is valid
                     }
@@ -175,11 +169,11 @@ namespace Becool.UnityMcpLens.Editor.Helpers
                     }
                     break;
                 case "by_id_or_name_or_path": // Helper method used internally
-                    if (int.TryParse(searchTerm, out int id))
+                    if (!string.IsNullOrWhiteSpace(searchTerm))
                     {
                         var allObjectsId = ManageGameObject.GetAllSceneObjects(true); // Search inactive for internal lookup
                         GameObject objById = allObjectsId.FirstOrDefault(go =>
-                            go.GetInstanceID() == id
+                            UnityApiAdapter.ObjectIdEquals(go, searchTerm)
                         );
                         if (objById != null)
                         {

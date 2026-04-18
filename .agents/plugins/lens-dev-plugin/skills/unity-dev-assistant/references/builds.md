@@ -5,7 +5,7 @@ Use this reference for long custom exports, especially WebGL builds that spend m
 ## Scene preflight
 
 - Before starting a long build, validate the exact enabled build-scene list if the requested scene order is known.
-- Use `scripts/Test-UnityBuildSceneList.ps1 -ExpectedScenes <paths...>` for a read-only diff against `ProjectSettings/EditorBuildSettings.asset`.
+- Use `scripts/Test-UnityBuildSceneList.js --ExpectedScenes <paths...>` on macOS/Linux or `scripts/Test-UnityBuildSceneList.ps1 -ExpectedScenes <paths...>` on Windows for a read-only diff against `ProjectSettings/EditorBuildSettings.asset`.
 - The preflight returns:
   - `enabledScenes` in current order
   - `missingScenes`
@@ -16,7 +16,7 @@ Use this reference for long custom exports, especially WebGL builds that spend m
 
 ## Long WebGL build monitoring
 
-- If a `Unity_RunCommand` launches a WebGL build, prefer `scripts/Invoke-UnityRunCommand.ps1 -MonitorBuildMode WebGL`.
+- If a `Unity_RunCommand` launches a WebGL build on Windows, prefer `scripts/Invoke-UnityRunCommand.ps1 -MonitorBuildMode WebGL`. On macOS/Linux, launch with `scripts/Invoke-UnityRunCommand.js` and monitor through `Check-UnityDevSession.js` plus `Editor.log`.
 - Provide any known paths:
   - `-BuildOutputPath`
   - `-BuildReportPath`
@@ -41,5 +41,5 @@ Use this reference for long custom exports, especially WebGL builds that spend m
 
 ## Session checks during builds
 
-- `scripts/Check-UnityDevSession.ps1` should report `RecommendedPath = MonitorActiveBuild` when the bridge check classifies the session as `BuildInProgress`.
+- `scripts/Check-UnityDevSession.js`/`scripts/Check-UnityDevSession.ps1` should report `RecommendedPath = MonitorActiveBuild` when the bridge check classifies the session as `BuildInProgress`.
 - During that state, do not spam extra MCP recovery or reconnect prompts. Watch `Editor.log` and the output/report/artifact paths until the build finishes or fails.

@@ -1098,7 +1098,7 @@ Returns:
                 if (targetGo != null)
                 {
                     string goName = targetGo.name;
-                    int goId = targetGo.GetInstanceID();
+                    object goId = UnityApiAdapter.GetObjectId(targetGo);
                     // Use Undo.DestroyObjectImmediate for undo support
                     Undo.DestroyObjectImmediate(targetGo);
                     deletedObjects.Add(new { name = goName, instanceID = goId });
@@ -1207,7 +1207,7 @@ Returns:
             return Response.Success("Retrieved GameObject bounds.", new
             {
                 target = targetGo.name,
-                instanceID = targetGo.GetInstanceID(),
+                instanceID = UnityApiAdapter.GetObjectId(targetGo),
                 hasRendererOrColliderBounds = hasBounds,
                 center = new { x = bounds.center.x, y = bounds.center.y, z = bounds.center.z },
                 size = new { x = bounds.size.x, y = bounds.size.y, z = bounds.size.z },
@@ -1278,11 +1278,11 @@ Returns:
                     }
                     catch (Exception ex)
                     {
-                        Debug.LogError($"[GetComponentsFromTarget REVERSE for] Error processing component {c.GetType().FullName} (ID: {c.GetInstanceID()}) on {targetGo.name}: {ex.Message}\n{ex.StackTrace}");
+                        Debug.LogError($"[GetComponentsFromTarget REVERSE for] Error processing component {c.GetType().FullName} (ID: {UnityApiAdapter.GetObjectId(c)}) on {targetGo.name}: {ex.Message}\n{ex.StackTrace}");
                         // Optionally add placeholder data or just skip
                         componentData.Insert(0, new JObject( // Insert error marker at beginning
                             new JProperty("typeName", c.GetType().FullName + " (Serialization Error)"),
-                            new JProperty("instanceID", c.GetInstanceID()),
+                            new JProperty("instanceID", UnityApiAdapter.GetObjectId(c)),
                             new JProperty("error", ex.Message)
                         ));
                     }

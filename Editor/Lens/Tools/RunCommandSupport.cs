@@ -10,6 +10,7 @@ using System.Text.RegularExpressions;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Becool.UnityMcpLens.Editor.Helpers;
 using Becool.UnityMcpLens.Editor.Utils;
 using UnityEditor;
 using UnityEngine;
@@ -178,7 +179,7 @@ namespace Becool.UnityMcpLens.Editor.Tools.RunCommandSupport
         static string FormatArgumentToken(object argument, string format)
         {
             if (argument is Object unityObject)
-                return unityObject == null ? "[null]" : $"[{unityObject.name}|InstanceID:{unityObject.GetInstanceID()}]";
+                return unityObject == null ? "[null]" : $"[{unityObject.name}|InstanceID:{UnityApiAdapter.GetObjectId(unityObject)}]";
 
             if (argument == null)
                 return "null";

@@ -501,7 +501,8 @@ sealed class UnityMcpLensHost
 
     object BuildToolCallResult(JsonElement structuredContent, bool isError = false)
     {
-        string summaryText = TryGetSummaryText(structuredContent);
+        JsonElement normalizedStructuredContent = RemoveNestedStructuredContentEcho(structuredContent);
+        string summaryText = TryGetSummaryText(normalizedStructuredContent);
         return new
         {
             content = new[]
@@ -512,9 +513,35 @@ sealed class UnityMcpLensHost
                     text = summaryText
                 }
             },
-            structuredContent,
+            structuredContent = normalizedStructuredContent,
             isError
         };
+    }
+
+    static JsonElement RemoveNestedStructuredContentEcho(JsonElement structuredContent)
+    {
+        if (structuredContent.ValueKind != JsonValueKind.Object ||
+            !structuredContent.TryGetProperty("structuredContent", out _))
+        {
+            return structuredContent.Clone();
+        }
+
+        using var stream = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(stream))
+        {
+            writer.WriteStartObject();
+            foreach (var property in structuredContent.EnumerateObject())
+            {
+                if (property.NameEquals("structuredContent"))
+                    continue;
+
+                property.WriteTo(writer);
+            }
+            writer.WriteEndObject();
+        }
+
+        using var document = JsonDocument.Parse(stream.ToArray());
+        return document.RootElement.Clone();
     }
 
     static JsonElement CreateErrorPayload(string message)

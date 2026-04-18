@@ -1,6 +1,6 @@
 # Runtime Probes
 
-Use `Invoke-UnityRunCommand.ps1` for short, reusable runtime probes.
+Use `Invoke-UnityRunCommand.js` on macOS/Linux or `Invoke-UnityRunCommand.ps1` on Windows for short, reusable runtime probes.
 
 If a mutating runtime probe or editor-side `Unity_RunCommand` times out, inspect on-disk or scene state before retrying. The command transport can die after Unity already applied part of the mutation.
 

@@ -1060,10 +1060,12 @@ namespace Becool.UnityMcpLens.Editor
                 }
                 else
                 {
-                    McpLog.LogDelayed(
+                    McpLog.LogOnceDelayed(
+                        "connection-validation-disabled",
                         "Connection validation is DISABLED - connections will not appear in MCP Settings UI. " +
                         "This should only be used for automated tests.",
-                        LogType.Warning);
+                        LogType.Log,
+                        includeStackTrace: false);
                     SetApprovalState(transport, ConnectionApprovalState.Approved);
                     return;
                 }

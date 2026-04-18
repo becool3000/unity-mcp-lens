@@ -24,10 +24,10 @@ static class BridgeDiscovery
             try
             {
                 var status = JsonSerializer.Deserialize<BridgeStatusFile>(File.ReadAllText(statusPath));
-                if (status?.ConnectionPath == null || status.ProjectPath == null)
+                if (status?.ConnectionPath == null || (status.ProjectRoot == null && status.ProjectPath == null))
                     continue;
 
-                string projectRoot = NormalizePath(Path.GetDirectoryName(status.ProjectPath)!);
+                string projectRoot = NormalizeProjectRoot(status.ProjectRoot, status.ProjectPath);
                 candidates.Add(new BridgeDiscoveryResult
                 {
                     StatusFile = status,
@@ -81,6 +81,19 @@ static class BridgeDiscovery
     static DateTime ParseUtc(string? utcText)
     {
         return DateTime.TryParse(utcText, out var parsed) ? parsed.ToUniversalTime() : DateTime.MinValue;
+    }
+
+    static string NormalizeProjectRoot(string? projectRoot, string? projectPath)
+    {
+        string? candidate = !string.IsNullOrWhiteSpace(projectRoot) ? projectRoot : projectPath;
+        if (string.IsNullOrWhiteSpace(candidate))
+            return string.Empty;
+
+        string normalized = NormalizePath(candidate);
+        if (string.Equals(Path.GetFileName(normalized), "Assets", StringComparison.OrdinalIgnoreCase))
+            return NormalizePath(Path.GetDirectoryName(normalized) ?? normalized);
+
+        return normalized;
     }
 
     static string NormalizePath(string path)

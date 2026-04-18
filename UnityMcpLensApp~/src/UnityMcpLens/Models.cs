@@ -23,6 +23,9 @@ sealed class BridgeStatusFile
     [JsonPropertyName("project_path")]
     public string? ProjectPath { get; set; }
 
+    [JsonPropertyName("project_root")]
+    public string? ProjectRoot { get; set; }
+
     [JsonPropertyName("last_heartbeat")]
     public string? LastHeartbeat { get; set; }
 

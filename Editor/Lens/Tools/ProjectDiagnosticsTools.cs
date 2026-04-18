@@ -149,7 +149,7 @@ Returns:
                         continue;
                     }
 
-                    bool missingReference = iterator.objectReferenceValue == null && iterator.objectReferenceInstanceIDValue != 0;
+                    bool missingReference = iterator.objectReferenceValue == null && UnityApiAdapter.HasObjectReferenceId(iterator);
                     bool nullReference = iterator.objectReferenceValue == null;
                     if (!missingReference && !nullReference)
                     {
@@ -164,7 +164,7 @@ Returns:
                         displayName = iterator.displayName,
                         isMissingReference = missingReference,
                         isNullReference = nullReference,
-                        instanceID = iterator.objectReferenceInstanceIDValue
+                        instanceID = UnityApiAdapter.GetObjectReferenceId(iterator)
                     });
 
                     if (findings.Count >= PayloadBudgetPolicy.MaxDiagnosticFindings)

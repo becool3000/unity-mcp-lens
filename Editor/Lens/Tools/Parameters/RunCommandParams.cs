@@ -42,5 +42,11 @@ namespace Becool.UnityMcpLens.Editor.Tools.Parameters
         /// </summary>
         [McpDescription("Restore the prior play-mode pause state after executing the command.", Required = false)]
         public bool RestorePauseState { get; set; } = true;
+
+        /// <summary>
+        /// Gets or sets whether the locally rewritten command code should be included inline on successful execution.
+        /// </summary>
+        [McpDescription("Include the locally rewritten command code inline on successful execution. Defaults to false; use detailRef when available.", Required = false)]
+        public bool IncludeLocalFixedCode { get; set; } = false;
     }
 }

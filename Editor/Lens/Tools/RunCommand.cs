@@ -2,9 +2,11 @@ using System;
 using System.Threading.Tasks;
 using Newtonsoft.Json.Linq;
 using Becool.UnityMcpLens.Editor.Helpers;
+using Becool.UnityMcpLens.Editor.Lens;
 using Becool.UnityMcpLens.Editor.ToolRegistry;
 using Becool.UnityMcpLens.Editor.Tools.Parameters;
 using Becool.UnityMcpLens.Editor.Tools.RunCommandSupport;
+using Becool.UnityMcpLens.Editor.Utils;
 using UnityEditor;
 
 namespace Becool.UnityMcpLens.Editor.Tools
@@ -95,6 +97,9 @@ internal class CommandScript : IRunCommand
                             exceptionMessage = new { type = "string", description = "Captured exception message when available" },
                             validationSummary = new { type = "object", description = "Structured validation summary for the command" },
                             playStateRestored = new { type = "boolean", description = "Whether the tool restored the pre-execution play pause state" },
+                            localFixedCodeChanged = new { type = "boolean", description = "Whether Lens locally rewrote the submitted command before compilation" },
+                            localFixedCodeDetailRef = new { type = "object", description = "Detail ref for the locally rewritten command when omitted from the inline response" },
+                            localFixedCodeIncluded = new { type = "boolean", description = "Whether localFixedCode is included inline" },
                             playModeExecution = new
                             {
                                 type = "object",
@@ -148,6 +153,7 @@ internal class CommandScript : IRunCommand
             int stepsRequested = Math.Max(0, parameters?.StepFrames ?? 0);
             bool shouldPauseForExecution = wasPlaying && ((parameters?.PausePlayMode ?? false) || stepsRequested > 0);
             bool restorePauseState = parameters?.RestorePauseState ?? true;
+            bool includeLocalFixedCode = parameters?.IncludeLocalFixedCode ?? false;
             bool pauseApplied = false;
             int stepsApplied = 0;
             bool responseSuccess = false;
@@ -263,7 +269,12 @@ internal class CommandScript : IRunCommand
                     compilationLogs = validationResult.CompilationLogs,
                     executionLogs = executionResult.ExecutionLogs,
                     consoleLogs = string.Empty,
-                    localFixedCode = validationResult.LocalFixedCode,
+                    localFixedCode = includeLocalFixedCode ? validationResult.LocalFixedCode : null,
+                    localFixedCodeChanged = !string.Equals(validationResult.LocalFixedCode, code, StringComparison.Ordinal),
+                    localFixedCodeIncluded = includeLocalFixedCode,
+                    localFixedCodeDetailRef = includeLocalFixedCode
+                        ? null
+                        : CreateLocalFixedCodeDetailRef(validationResult.LocalFixedCode, code, mode),
                     result = resultMessage,
                     failureStage,
                     exceptionType,
@@ -342,6 +353,24 @@ internal class CommandScript : IRunCommand
             }
 
             return Task.FromResult(BuildResponse(responseSuccess, responseMessage, responseData));
+        }
+
+        static object CreateLocalFixedCodeDetailRef(string localFixedCode, string originalCode, string mode)
+        {
+            if (string.IsNullOrEmpty(localFixedCode))
+                return null;
+
+            int rawBytes = PayloadBudgeting.GetUtf8ByteCount(localFixedCode);
+            return ToolResultCompactor.CreateStoredDetailRef(
+                ToolName,
+                localFixedCode,
+                rawBytes,
+                new
+                {
+                    kind = "local_fixed_code",
+                    mode,
+                    changed = !string.Equals(localFixedCode, originalCode, StringComparison.Ordinal)
+                });
         }
     }
 }

@@ -44,14 +44,19 @@ namespace Becool.UnityMcpLens.Editor.Helpers
         /// Background-thread variant of <see cref="WarningOnce"/>: deduplicates by key,
         /// then defers the log to the main thread via <see cref="EditorApplication.delayCall"/>.
         /// </summary>
-        public static void WarningOnceDelayed(string key, string message, TraceEventOptions opts = null)
+        public static void WarningOnceDelayed(string key, string message, TraceEventOptions opts = null, bool includeStackTrace = true)
+        {
+            LogOnceDelayed(key, message, LogType.Warning, opts, includeStackTrace);
+        }
+
+        public static void LogOnceDelayed(string key, string message, LogType logType = LogType.Log, TraceEventOptions opts = null, bool includeStackTrace = true)
         {
             lock (s_OnceKeys)
             {
                 if (!s_OnceKeys.Add(key))
                     return;
             }
-            LogDelayed(message, LogType.Warning, opts);
+            LogDelayed(message, logType, opts, includeStackTrace);
         }
 
         /// <summary>
@@ -66,12 +71,14 @@ namespace Becool.UnityMcpLens.Editor.Helpers
         /// <summary>
         /// Log from a background thread - delays execution to main thread via EditorApplication.delayCall
         /// </summary>
-        public static void LogDelayed(string message, LogType logType = LogType.Log, TraceEventOptions opts = null)
+        public static void LogDelayed(string message, LogType logType = LogType.Log, TraceEventOptions opts = null, bool includeStackTrace = true)
         {
-            var stackTrace = new StackTrace(1, true);
+            var stackTrace = includeStackTrace ? new StackTrace(1, true) : null;
             EditorApplication.delayCall += () =>
             {
-                var messageWithStack = $"{WithPackageTag(message)}\n{stackTrace}";
+                var messageWithStack = stackTrace == null
+                    ? WithPackageTag(message)
+                    : $"{WithPackageTag(message)}\n{stackTrace}";
                 switch (logType)
                 {
                     case LogType.Warning:
