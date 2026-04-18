@@ -1,11 +1,21 @@
-# License Notice
+MIT License
 
-Original Unity MCP Lens additions and modifications in this repository are authored by James Kanawyer.
+Copyright (c) 2026 James Kanawyer
 
-This package was created from a prior Unity Assistant-derived working tree. The current standalone split removes the Assistant UI, Assistant runtime, cloud generation modules, legacy relay bundle, and Assistant assembly identities from the shipped Lens package surface.
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
 
-Until every remaining file is audited for provenance, this repository should be treated as source-available rather than broadly open licensed. Do not assume Unity-owned upstream material is relicensed by its presence here.
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
 
-Wholly original components may be released under separate license terms after audit.
-
-This repository is provided on an "AS IS" basis, without warranties or conditions of any kind, express or implied.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

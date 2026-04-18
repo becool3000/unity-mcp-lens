@@ -89,3 +89,9 @@ powershell -ExecutionPolicy Bypass -File Tools~/Test-McpLensPresentation.ps1
 Lens is usable but still evolving. The high-priority direction is to keep reducing bridge chatter, keep the default tool surface narrow, and make tool output compact and recoverable by default.
 
 This is not an official Unity release channel.
+
+## License
+
+This project is licensed under the MIT License.
+
+`unity-mcp-lens` is maintained as a standalone MCP package that can be installed alongside Unity's official Assistant package. It is not an official Unity release channel.
