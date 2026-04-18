@@ -26,13 +26,13 @@ Lens does not own Unity's official Assistant chat UI, cloud asset generation, As
 Use this repo as a local package source:
 
 ```json
-"com.becool3000.unity-mcp-lens": "file:C:/UnityAIAssistantPatch"
+"com.becool3000.unity-mcp-lens": "file:C:/dev/unity-mcp-lens"
 ```
 
 or with a relative path:
 
 ```json
-"com.becool3000.unity-mcp-lens": "file:../UnityAIAssistantPatch"
+"com.becool3000.unity-mcp-lens": "file:../unity-mcp-lens"
 ```
 
 If an older project points this checkout at the Assistant package id, replace that dependency with the Lens package id above.
