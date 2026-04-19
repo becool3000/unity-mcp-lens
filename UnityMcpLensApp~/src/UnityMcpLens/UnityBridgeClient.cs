@@ -86,6 +86,7 @@ sealed class UnityBridgeClient : IAsyncDisposable
                     supportsLazySchemas = true
                 }
             },
+            TimeSpan.FromSeconds(10),
             cancellationToken);
     }
 
@@ -99,6 +100,7 @@ sealed class UnityBridgeClient : IAsyncDisposable
                 knownManifestVersion,
                 includeSchemas
             },
+            TimeSpan.FromSeconds(10),
             cancellationToken);
     }
 
@@ -111,6 +113,7 @@ sealed class UnityBridgeClient : IAsyncDisposable
                 packs,
                 includeSchemas
             },
+            TimeSpan.FromSeconds(10),
             cancellationToken);
     }
 
@@ -122,6 +125,7 @@ sealed class UnityBridgeClient : IAsyncDisposable
             {
                 toolNames
             },
+            TimeSpan.FromSeconds(10),
             cancellationToken);
     }
 
@@ -133,12 +137,13 @@ sealed class UnityBridgeClient : IAsyncDisposable
             {
                 refId
             },
+            TimeSpan.FromSeconds(10),
             cancellationToken);
     }
 
     public Task<BridgeEnvelope<JsonElement>> CallToolAsync(string toolName, JsonElement arguments, CancellationToken cancellationToken)
     {
-        return SendCommandAsync<JsonElement>(toolName, arguments, cancellationToken);
+        return SendCommandAsync<JsonElement>(toolName, arguments, null, cancellationToken);
     }
 
     public async ValueTask DisposeAsync()
@@ -230,7 +235,7 @@ sealed class UnityBridgeClient : IAsyncDisposable
         m_PendingResponses.Clear();
     }
 
-    async Task<BridgeEnvelope<T>> SendCommandAsync<T>(string type, object? parameters, CancellationToken cancellationToken)
+    async Task<BridgeEnvelope<T>> SendCommandAsync<T>(string type, object? parameters, TimeSpan? timeout, CancellationToken cancellationToken)
     {
         if (m_Writer == null)
             throw new InvalidOperationException("Unity bridge is not connected.");
@@ -257,10 +262,31 @@ sealed class UnityBridgeClient : IAsyncDisposable
             m_WriteLock.Release();
         }
 
-        using var responseDocument = await tcs.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
-        var envelope = responseDocument.RootElement.Deserialize<BridgeEnvelope<T>>(m_JsonOptions);
-        if (envelope == null)
-            throw new InvalidOperationException($"Unity bridge returned an invalid response for '{type}'.");
-        return envelope;
+        TimeSpan delay = timeout.GetValueOrDefault(Timeout.InfiniteTimeSpan);
+        if (delay != Timeout.InfiniteTimeSpan)
+        {
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeoutCts.CancelAfter(delay);
+            try
+            {
+                using var responseDocument = await tcs.Task.WaitAsync(timeoutCts.Token).ConfigureAwait(false);
+                var envelope = responseDocument.RootElement.Deserialize<BridgeEnvelope<T>>(m_JsonOptions);
+                if (envelope == null)
+                    throw new InvalidOperationException($"Unity bridge returned an invalid response for '{type}'.");
+                return envelope;
+            }
+            catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+            {
+                throw new TimeoutException($"Unity bridge request '{type}' timed out after {delay.TotalSeconds} seconds.");
+            }
+        }
+        else
+        {
+            using var responseDocument = await tcs.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+            var envelope = responseDocument.RootElement.Deserialize<BridgeEnvelope<T>>(m_JsonOptions);
+            if (envelope == null)
+                throw new InvalidOperationException($"Unity bridge returned an invalid response for '{type}'.");
+            return envelope;
+        }
     }
 }
