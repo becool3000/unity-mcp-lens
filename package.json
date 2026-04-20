@@ -6,6 +6,7 @@
   "description": "Standalone Unity MCP bridge and tool-surface package focused on low-noise tool sync, narrow model-facing packs, compact outputs, and owned MCP server integration for external agents.",
   "dependencies": {
     "com.unity.nuget.newtonsoft-json": "3.2.1",
+    "com.unity.ugui": "2.0.0",
     "com.unity.modules.unitywebrequest": "1.0.0",
     "com.unity.modules.uielements": "1.0.0",
     "com.unity.2d.sprite": "1.0.0",
