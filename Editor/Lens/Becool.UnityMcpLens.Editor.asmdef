@@ -16,7 +16,13 @@
         "Microsoft.CodeAnalysis.dll",
         "Microsoft.CodeAnalysis.CSharp.dll",
         "System.Collections.Immutable.dll",
-        "System.Reflection.Metadata.dll"
+        "System.Reflection.Metadata.dll",
+        "System.Memory.dll",
+        "System.Buffers.dll",
+        "System.Numerics.Vectors.dll",
+        "System.Runtime.CompilerServices.Unsafe.dll",
+        "System.Threading.Tasks.Extensions.dll",
+        "System.Text.Encoding.CodePages.dll"
     ],
     "autoReferenced": true,
     "defineConstraints": [],
