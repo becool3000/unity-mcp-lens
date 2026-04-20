@@ -1,0 +1,87 @@
+# Telemetry
+
+Telemetry is a core part of this project.
+
+The goal is not just performance monitoring, but understanding:
+
+**how efficiently an agent can operate the system**
+
+---
+
+## What is Measured
+
+At a minimum:
+
+- tool name
+- execution duration
+- success / failure
+- output size
+- input summary
+- call sequence (what came before/after)
+
+---
+
+## Why Telemetry Matters
+
+In agent-driven systems, cost is not just time.
+
+Cost includes:
+
+- token usage
+- recovery loops
+- repeated calls
+- ambiguous results
+- unnecessary payloads
+
+Telemetry helps identify:
+
+- tools that cause retries
+- tools that return too much data
+- missing intermediate capabilities
+- inefficient call chains
+
+---
+
+## Types of Issues Telemetry Reveals
+
+### 1. Tool Ambiguity
+Agent calls multiple tools to recover from unclear results.
+
+### 2. Payload Bloat
+Large responses increase token usage and slow reasoning.
+
+### 3. Missing Capabilities
+Agent chains many low-level tools to achieve one goal.
+
+### 4. Retry Loops
+Same tool called repeatedly with small variations.
+
+### 5. Redundant Work
+Repeated scene scans or asset queries.
+
+---
+
+## Key Concept
+
+Telemetry measures:
+
+> how expensive it is for an agent to stay oriented
+
+Not just how fast a tool runs.
+
+---
+
+## Future Direction
+
+As the architecture evolves (TSAM):
+
+Telemetry can be extended to:
+
+- Service-level timing
+- Adapter-level cost (Unity calls)
+- Model size and complexity
+- Decision path tracing
+
+This will allow more precise optimization of both:
+- runtime cost
+- token cost
