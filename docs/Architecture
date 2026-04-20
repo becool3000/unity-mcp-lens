@@ -1,0 +1,138 @@
+# Architecture
+
+This project is a Unity MCP package designed for agent-driven workflows.
+
+It exposes Unity capabilities as structured tools that can be called from external agents (e.g. Codex), while maintaining a focus on token efficiency, low-noise communication, and measurable behavior via telemetry.
+
+---
+
+## High-Level Flow
+
+Agent (Codex / external host)
+→ MCP server (UnityMcpLensApp~)
+→ Bridge (named pipe / socket)
+→ Tool Registry
+→ Tools
+→ Unity APIs
+
+Unity acts as the execution and inspection environment.
+
+---
+
+## Current Architecture (Reality)
+
+The current system is **tool-centric**:
+
+- Tools are defined with `[McpTool]`
+- Each tool is responsible for:
+  - querying Unity state
+  - performing logic
+  - applying changes
+  - formatting results
+
+There is no strict separation between:
+- decision logic
+- Unity API access
+- data models
+
+This makes the system simple and flexible, but can lead to:
+- duplicated logic across tools
+- large tool files
+- harder-to-reason-about behavior for agents
+
+---
+
+## Target Direction
+
+The system is evolving toward a structured separation:
+
+**Tool → Service → Adapter → Model (TSAM)**
+
+### Tool
+- MCP entry point
+- validates input
+- calls a service
+- returns structured results
+
+### Service
+- contains decision logic
+- coordinates operations
+- does not directly depend on Unity APIs (ideally)
+
+### Adapter
+- wraps Unity APIs
+- handles scene queries, asset access, mutations
+
+### Model
+- typed data structures
+- passed between layers
+- avoids ad hoc anonymous objects
+
+---
+
+## Design Goals
+
+### 1. Agent-Friendly Tools
+Tools should:
+- be predictable
+- return structured data
+- avoid excessive output
+- reduce ambiguity
+
+### 2. Token Efficiency
+- minimize payload size
+- avoid repeated scans
+- avoid redundant tool calls
+- reduce recovery loops
+
+### 3. Low-Noise Synchronization
+- narrow tool exposure
+- reduce irrelevant context
+- keep tool schemas stable
+
+### 4. Observable Behavior
+- measure tool usage
+- measure payload size
+- detect retry loops
+- detect agent confusion
+
+---
+
+## Unity’s Role
+
+Unity is:
+
+- the source of truth for project state
+- the execution environment for mutations
+- the visualization layer for humans
+
+Unity is **not** the orchestration layer.
+
+Agents operate through MCP tools, not through the editor UI.
+
+---
+
+## Evolution Strategy
+
+This project is intentionally evolving incrementally:
+
+1. Keep tools working
+2. Refactor high-impact tools into TSAM structure
+3. Extract reusable logic into services
+4. Reduce duplication across tools
+5. Improve telemetry visibility
+
+No full rewrite is planned.
+
+---
+
+## Key Insight
+
+This is not trying to replace Unity.
+
+It is turning Unity into a system that can be:
+- inspected
+- queried
+- and acted upon
+
+by external agents in a structured, efficient way.
