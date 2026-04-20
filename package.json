@@ -1,7 +1,7 @@
 {
   "name": "com.becool3000.unity-mcp-lens",
   "displayName": "Unity MCP Lens",
-  "version": "2.3.0-pre.2",
+  "version": "0.1.0-alpha.1",
   "unity": "6000.0",
   "description": "Standalone Unity MCP bridge and tool-surface package focused on low-noise tool sync, narrow model-facing packs, compact outputs, and owned MCP server integration for external agents.",
   "dependencies": {
@@ -14,7 +14,7 @@
   },
   "unityRelease": "60f1",
   "_upm": {
-    "changelog": "### Changed\n\n- Split Unity MCP Lens into a standalone package identity."
+    "changelog": "### Fixed\n\n- Stabilized fresh Unity project imports by bundling a coherent Editor-only Roslyn dependency set.\n\n### Changed\n\n- Reset package versioning to the standalone Unity MCP Lens alpha line."
   },
   "documentationUrl": "https://github.com/becool3000/unity-mcp-lens#readme",
   "repository": {

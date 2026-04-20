@@ -162,7 +162,7 @@ $manifest = [ordered]@{
     }
     study = [ordered]@{
         primaryBaseline = "patched fork"
-        optionalComparison = "official 2.3.0-pre.2 overlap-only"
+        optionalComparison = "legacy Assistant overlap-only"
         scenarioMatrix = @($ScenarioName)
         nextActions = @(
             "Fill in the host project manifest dependency if the package is consumed via file: path.",

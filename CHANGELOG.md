@@ -2,10 +2,18 @@
 
 All notable Unity MCP Lens package changes are documented here.
 
-## [2.3.0-pre.2] - 2026-04-17
+## [0.1.0-alpha.1] - 2026-04-20
+
+### Fixed
+
+- Stabilized fresh Unity project imports by bundling a coherent Roslyn `3.11` dependency family.
+- Added missing managed dependency coverage for the Roslyn support DLLs.
+- Scoped bundled Roslyn/support DLLs to Editor import targets to avoid player/runtime exposure.
+- Declared package dependencies needed by runtime/editor code, including Unity's Newtonsoft.Json package.
 
 ### Changed
 
+- Reset package versioning to the standalone Unity MCP Lens alpha line.
 - Split Unity MCP Lens into the standalone package id `com.becool3000.unity-mcp-lens`.
 - Renamed owned assemblies and namespaces to `Becool.UnityMcpLens.*`.
 - Moved active package code to `Editor/Lens` and `Runtime`.
