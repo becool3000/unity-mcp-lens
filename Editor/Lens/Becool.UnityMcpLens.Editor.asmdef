@@ -4,8 +4,7 @@
     "references": [
         "Becool.UnityMcpLens.Runtime",
         "Unity.ugui",
-        "Unity.2D.Tilemap.Editor",
-        "Newtonsoft.Json"
+        "Unity.2D.Tilemap.Editor"
     ],
     "includePlatforms": [
         "Editor"

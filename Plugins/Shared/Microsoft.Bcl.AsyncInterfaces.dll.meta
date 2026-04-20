@@ -5,22 +5,21 @@ PluginImporter:
   serializedVersion: 3
   iconMap: {}
   executionOrder: {}
-  defineConstraints:
-  - '!EXCLUDE_BCL_ASYNCINTERFACES'
-  - '!UNITY_6_5_OR_NEWER'
+  defineConstraints: []
   isPreloaded: 0
   isOverridable: 1
-  isExplicitlyReferenced: 1
-  validateReferences: 0
+  isExplicitlyReferenced: 0
+  validateReferences: 1
   platformData:
     Any:
-      enabled: 0
+      enabled: 1
       settings:
         Exclude Editor: 0
-        Exclude Linux64: 1
-        Exclude OSXUniversal: 1
-        Exclude Win: 1
-        Exclude Win64: 1
+        Exclude Linux64: 0
+        Exclude OSXUniversal: 0
+        Exclude WebGL: 0
+        Exclude Win: 0
+        Exclude Win64: 0
     Editor:
       enabled: 1
       settings:
@@ -28,19 +27,22 @@ PluginImporter:
         DefaultValueInitialized: true
         OS: AnyOS
     Linux64:
-      enabled: 0
+      enabled: 1
       settings:
         CPU: AnyCPU
     OSXUniversal:
-      enabled: 0
+      enabled: 1
       settings:
         CPU: AnyCPU
+    WebGL:
+      enabled: 1
+      settings: {}
     Win:
-      enabled: 0
+      enabled: 1
       settings:
         CPU: AnyCPU
     Win64:
-      enabled: 0
+      enabled: 1
       settings:
         CPU: AnyCPU
     WindowsStoreApps:

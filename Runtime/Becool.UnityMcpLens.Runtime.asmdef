@@ -1,9 +1,7 @@
 {
     "name": "Becool.UnityMcpLens.Runtime",
     "rootNamespace": "Becool.UnityMcpLens.Runtime",
-    "references": [
-        "Newtonsoft.Json"
-    ],
+    "references": [],
     "includePlatforms": [],
     "excludePlatforms": [],
     "allowUnsafeCode": false,

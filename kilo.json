@@ -1,0 +1,6 @@
+{
+  "$schema": "https://app.kilo.ai/config.json",
+  "skills": {
+    "paths": ["./.agents/plugins/lens-dev-plugin/skills"]
+  }
+}
