@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using System.Text;
 using Newtonsoft.Json; // Added for JsonSerializationException
 using Newtonsoft.Json.Linq;
 using UnityEditor;
@@ -12,6 +13,9 @@ using UnityEditorInternal;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using Becool.UnityMcpLens.Editor.Helpers;
+using Becool.UnityMcpLens.Editor.Adapters.Unity.GameObjects;
+using Becool.UnityMcpLens.Editor.Models.GameObjects;
+using Becool.UnityMcpLens.Editor.Services.GameObjects;
 using Becool.UnityMcpLens.Editor.ToolRegistry; // For Response class
 using Becool.UnityMcpLens.Editor.ToolRegistry.Parameters;
 using Becool.UnityMcpLens.Editor.Lens;
@@ -76,6 +80,11 @@ Returns:
                 new UnityEngineObjectConverter()
             }
         });
+
+        static readonly UnityGameObjectAdapter TsamGameObjectAdapter = new UnityGameObjectAdapter();
+        static readonly GameObjectRequestNormalizer TsamRequestNormalizer = new GameObjectRequestNormalizer();
+        static readonly GameObjectQueryService TsamQueryService = new GameObjectQueryService(TsamGameObjectAdapter);
+        static readonly GameObjectMutationService TsamMutationService = new GameObjectMutationService(TsamGameObjectAdapter);
 
         // --- Main Handler ---
 
@@ -292,15 +301,17 @@ Returns:
                     case "create":
                         return CreateGameObject(@params);
                     case "modify":
+                        if (IsSimpleModifyRequest(@params))
+                            return HandleTsamSimpleModify(@params, targetToken, searchMethod);
                         return ModifyGameObject(@params, targetToken, searchMethod);
                     case "delete":
                         return DeleteGameObject(targetToken, searchMethod);
                     case "find":
-                        return FindGameObjects(@params, targetToken, searchMethod);
+                        return HandleTsamFind(@params, targetToken, searchMethod);
                     case "get_selection":
-                        return GetSelection();
+                        return HandleTsamGetSelection(@params);
                     case "get_bounds":
-                        return GetBounds(targetToken, searchMethod);
+                        return HandleTsamGetBounds(@params, targetToken, searchMethod);
                     case "get_builtin_assets":
                         return GetBuiltinAssets();
                     case "get_components":
@@ -339,6 +350,169 @@ Returns:
                 Debug.LogError($"[ManageGameObject] Action '{action}' failed: {e}");
                 return Response.Error($"Internal error processing action '{action}': {e.Message}");
             }
+        }
+
+        static object HandleTsamFind(JObject @params, JToken targetToken, string searchMethod)
+        {
+            var timing = new GameObjectToolTiming("Unity.ManageGameObject", "find", GetUtf8ByteCount(@params?.ToString(Formatting.None)));
+            GameObjectOperationResult result;
+            string errorKind = null;
+
+            try
+            {
+                GameObjectQueryRequest request;
+                using (timing.Measure("normalization"))
+                {
+                    request = TsamRequestNormalizer.NormalizeQuery(@params, targetToken, searchMethod);
+                }
+
+                using (timing.Measure("service"))
+                {
+                    result = TsamQueryService.Find(request, timing);
+                }
+            }
+            catch (Exception ex)
+            {
+                errorKind = ex.GetType().Name;
+                Debug.LogError($"[ManageGameObject.TSAM] find failed: {ex}");
+                result = GameObjectOperationResult.Error($"Internal error processing action 'find': {ex.Message}", errorKind);
+            }
+
+            return ShapeTsamResponse(result, timing, errorKind);
+        }
+
+        static object HandleTsamGetSelection(JObject @params)
+        {
+            var timing = new GameObjectToolTiming("Unity.ManageGameObject", "get_selection", GetUtf8ByteCount(@params?.ToString(Formatting.None)));
+            GameObjectOperationResult result;
+            string errorKind = null;
+
+            try
+            {
+                using (timing.Measure("normalization"))
+                {
+                    // No action-specific parameters to normalize.
+                }
+
+                using (timing.Measure("service"))
+                {
+                    result = TsamQueryService.GetSelection(timing);
+                }
+            }
+            catch (Exception ex)
+            {
+                errorKind = ex.GetType().Name;
+                Debug.LogError($"[ManageGameObject.TSAM] get_selection failed: {ex}");
+                result = GameObjectOperationResult.Error($"Internal error processing action 'get_selection': {ex.Message}", errorKind);
+            }
+
+            return ShapeTsamResponse(result, timing, errorKind);
+        }
+
+        static object HandleTsamGetBounds(JObject @params, JToken targetToken, string searchMethod)
+        {
+            var timing = new GameObjectToolTiming("Unity.ManageGameObject", "get_bounds", GetUtf8ByteCount(@params?.ToString(Formatting.None)));
+            GameObjectOperationResult result;
+            string errorKind = null;
+
+            try
+            {
+                GameObjectBoundsRequest request;
+                using (timing.Measure("normalization"))
+                {
+                    request = TsamRequestNormalizer.NormalizeBounds(targetToken, searchMethod);
+                }
+
+                using (timing.Measure("service"))
+                {
+                    result = TsamQueryService.GetBounds(request, timing);
+                }
+            }
+            catch (Exception ex)
+            {
+                errorKind = ex.GetType().Name;
+                Debug.LogError($"[ManageGameObject.TSAM] get_bounds failed: {ex}");
+                result = GameObjectOperationResult.Error($"Internal error processing action 'get_bounds': {ex.Message}", errorKind);
+            }
+
+            return ShapeTsamResponse(result, timing, errorKind);
+        }
+
+        static object HandleTsamSimpleModify(JObject @params, JToken targetToken, string searchMethod)
+        {
+            var timing = new GameObjectToolTiming("Unity.ManageGameObject", "modify", GetUtf8ByteCount(@params?.ToString(Formatting.None)));
+            GameObjectOperationResult result;
+            string errorKind = null;
+
+            try
+            {
+                GameObjectSimpleModifyRequest request;
+                using (timing.Measure("normalization"))
+                {
+                    request = TsamRequestNormalizer.NormalizeSimpleModify(@params, targetToken, searchMethod);
+                }
+
+                using (timing.Measure("service"))
+                {
+                    result = TsamMutationService.ModifySimple(request, timing);
+                }
+            }
+            catch (Exception ex)
+            {
+                errorKind = ex.GetType().Name;
+                Debug.LogError($"[ManageGameObject.TSAM] modify failed: {ex}");
+                result = GameObjectOperationResult.Error($"Internal error processing action 'modify': {ex.Message}", errorKind);
+            }
+
+            return ShapeTsamResponse(result, timing, errorKind);
+        }
+
+        static object ShapeTsamResponse(GameObjectOperationResult result, GameObjectToolTiming timing, string fallbackErrorKind)
+        {
+            object response;
+            using (timing.Measure("result_shaping"))
+            {
+                response = result.success
+                    ? Response.Success(result.message, result.data)
+                    : Response.Error(result.message, result.errorData);
+                timing.SetResponseBytes(GetUtf8ByteCount(JsonConvert.SerializeObject(response, Formatting.None)));
+            }
+
+            timing.Record(result.success, result.success ? null : result.errorKind ?? fallbackErrorKind);
+            return response;
+        }
+
+        static bool IsSimpleModifyRequest(JObject parameters)
+        {
+            if (parameters == null)
+                return true;
+
+            string[] legacyModifyKeys =
+            {
+                "components_to_remove",
+                "componentsToRemove",
+                "components_to_add",
+                "componentsToAdd",
+                "component_properties",
+                "componentProperties",
+                "component_name",
+                "componentName",
+                "save_as_prefab",
+                "saveAsPrefab",
+                "prefab_path",
+                "prefabPath",
+                "prefab_folder",
+                "prefabFolder",
+                "primitive_type",
+                "primitiveType"
+            };
+
+            return legacyModifyKeys.All(key => parameters[key] == null);
+        }
+
+        static int GetUtf8ByteCount(string text)
+        {
+            return string.IsNullOrEmpty(text) ? 0 : Encoding.UTF8.GetByteCount(text);
         }
 
         // --- Action Implementations ---
