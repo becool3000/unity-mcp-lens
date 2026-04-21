@@ -387,11 +387,12 @@ namespace Becool.UnityMcpLens.Editor.Lens
             var handler = McpToolRegistry.GetTool(tool.name);
             var groups = handler?.Attribute?.Groups ?? Array.Empty<string>();
             var packs = ToolPackCatalog.GetMatchingPackIds(tool.name, groups);
+            var annotations = ToolMetadataPolicy.BuildAnnotations(tool.name, tool.annotations);
             var schemaHash = PayloadBudgeting.ComputeSha256(JsonConvert.SerializeObject(new
             {
                 tool.inputSchema,
                 tool.outputSchema,
-                tool.annotations
+                annotations
             }, Formatting.None));
 
             return new BridgeToolDescriptor
@@ -402,10 +403,10 @@ namespace Becool.UnityMcpLens.Editor.Lens
                 schemaHash = schemaHash,
                 groups = groups.OrderBy(group => group, StringComparer.OrdinalIgnoreCase).ToArray(),
                 packs = packs,
-                readOnlyHint = ToolPackCatalog.IsReadOnlyHint(tool.name),
+                readOnlyHint = ToolMetadataPolicy.IsReadOnlyHint(tool.name),
                 inputSchema = tool.inputSchema,
                 outputSchema = tool.outputSchema,
-                annotations = tool.annotations
+                annotations = annotations
             };
         }
 

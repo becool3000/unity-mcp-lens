@@ -5,6 +5,37 @@ using System.Text.Json;
 var options = BenchmarkOptions.Parse(args);
 try
 {
+    if (options.MetadataAudit)
+    {
+        var audit = new MetadataAudit(options);
+        var auditReport = await audit.RunAsync();
+
+        if (options.AsJson)
+        {
+            Console.WriteLine(JsonSerializer.Serialize(auditReport, JsonOptions.Output));
+        }
+        else
+        {
+            Console.WriteLine();
+            Console.WriteLine("Lens metadata audit");
+            Console.WriteLine($"Project:    {auditReport.ProjectPath}");
+            Console.WriteLine($"Server:     {auditReport.ServerPath}");
+            Console.WriteLine($"Foundation: {auditReport.FoundationToolCount} tools");
+            Console.WriteLine($"Scene:      {auditReport.SceneToolCount} tools");
+            Console.WriteLine($"Result:     {(auditReport.Success ? "PASS" : "FAIL")}");
+
+            foreach (var failure in auditReport.Failures)
+                Console.WriteLine($"  - {failure}");
+
+            Console.WriteLine();
+        }
+
+        if (!auditReport.Success)
+            Environment.ExitCode = 1;
+
+        return;
+    }
+
     var benchmark = new PackSwitchBenchmark(options);
     var report = await benchmark.RunAsync();
 
@@ -71,6 +102,7 @@ sealed class BenchmarkOptions
     public int StatsSettleMilliseconds { get; init; } = 800;
     public int ScenarioRetryCount { get; init; } = 2;
     public bool AsJson { get; init; }
+    public bool MetadataAudit { get; init; }
 
     public static BenchmarkOptions Parse(string[] args)
     {
@@ -80,6 +112,7 @@ sealed class BenchmarkOptions
         int statsSettleMilliseconds = 800;
         int scenarioRetryCount = 2;
         bool asJson = false;
+        bool metadataAudit = false;
 
         for (var i = 0; i < args.Length; i++)
         {
@@ -103,6 +136,9 @@ sealed class BenchmarkOptions
                 case "--json":
                     asJson = true;
                     break;
+                case "--metadata-audit":
+                    metadataAudit = true;
+                    break;
                 default:
                     throw new InvalidOperationException($"Unknown argument '{args[i]}'.");
             }
@@ -120,8 +156,250 @@ sealed class BenchmarkOptions
             RpcTimeoutSeconds = Math.Max(1, rpcTimeoutSeconds),
             StatsSettleMilliseconds = Math.Max(250, statsSettleMilliseconds),
             ScenarioRetryCount = Math.Max(1, scenarioRetryCount),
-            AsJson = asJson
+            AsJson = asJson,
+            MetadataAudit = metadataAudit
         };
+    }
+}
+
+sealed class MetadataAudit(BenchmarkOptions options)
+{
+    const int ExpectedFoundationToolCount = 12;
+    const int ExpectedSceneToolCount = 22;
+
+    static readonly string[] k_RequiredFoundationTools =
+    [
+        "Unity_GetLensHealth",
+        "Unity_ListToolPacks",
+        "Unity_SetToolPacks",
+        "Unity_ReadDetailRef",
+        "Unity_ReadConsole",
+        "Unity_ListResources",
+        "Unity_ReadResource",
+        "Unity_FindInFile",
+        "Unity_GetSha",
+        "Unity_ValidateScript",
+        "Unity_ManageScript_capabilities",
+        "Unity_Project_GetInfo"
+    ];
+
+    static readonly string[] k_RequiredSceneTools =
+    [
+        "Unity_GameObject_Inspect",
+        "Unity_GameObject_PreviewChanges",
+        "Unity_GameObject_ApplyChanges",
+        "Unity_ManageGameObject",
+        "Unity_ManageScene",
+        "Unity_Scene_SetSerializedProperties",
+        "Unity_Scene_CaptureView",
+        "Unity_Tilemap_Setup",
+        "Unity_Tilemap_Paint",
+        "Unity_Runtime_GetVisualBoundsSnapshot"
+    ];
+
+    public async Task<MetadataAuditReport> RunAsync()
+    {
+        Exception? lastError = null;
+        for (var attempt = 1; attempt <= options.ScenarioRetryCount; attempt++)
+        {
+            try
+            {
+                return await RunAttemptAsync();
+            }
+            catch (Exception ex) when (attempt < options.ScenarioRetryCount && IsTransientFailure(ex))
+            {
+                lastError = ex;
+                await Task.Delay(TimeSpan.FromSeconds(Math.Min(5, attempt))).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                lastError = ex;
+                break;
+            }
+        }
+
+        return new MetadataAuditReport(
+            options.ProjectPath,
+            options.ServerPath,
+            DateTimeOffset.UtcNow,
+            false,
+            0,
+            0,
+            [],
+            [],
+            [$"Metadata audit failed before validation: {lastError?.Message}"]);
+    }
+
+    async Task<MetadataAuditReport> RunAttemptAsync()
+    {
+        await using var session = await LensSession.StartAsync(options.ServerPath, options.ProjectPath, TimeSpan.FromSeconds(options.RpcTimeoutSeconds));
+        await session.InitializeAsync();
+
+        var foundationTools = await session.GetToolsAsync();
+        _ = await session.SetToolPacksAsync(["scene"]);
+        var sceneTools = await session.GetToolsAsync();
+
+        var failures = new List<string>();
+        ValidateToolSet("foundation", foundationTools, ExpectedFoundationToolCount, k_RequiredFoundationTools, failures);
+        ValidateToolSet("foundation+scene", sceneTools, ExpectedSceneToolCount, k_RequiredSceneTools, failures);
+        ValidateReadOnlyHint(sceneTools, "Unity_GameObject_Inspect", expected: true, failures);
+        ValidateReadOnlyHint(sceneTools, "Unity_GameObject_PreviewChanges", expected: true, failures);
+        ValidateReadOnlyHint(sceneTools, "Unity_GameObject_ApplyChanges", expected: false, failures);
+        ValidateReadOnlyHint(sceneTools, "Unity_ManageGameObject", expected: false, failures);
+        ValidateGameObjectSchemas(sceneTools, failures);
+
+        return new MetadataAuditReport(
+            options.ProjectPath,
+            options.ServerPath,
+            DateTimeOffset.UtcNow,
+            failures.Count == 0,
+            foundationTools.Count,
+            sceneTools.Count,
+            foundationTools.Select(tool => tool.Name).OrderBy(name => name, StringComparer.Ordinal).ToArray(),
+            sceneTools.Select(tool => tool.Name).OrderBy(name => name, StringComparer.Ordinal).ToArray(),
+            failures);
+    }
+
+    static void ValidateToolSet(string label, IReadOnlyList<ToolDescriptor> tools, int expectedCount, string[] requiredTools, List<string> failures)
+    {
+        if (tools.Count != expectedCount)
+            failures.Add($"{label} exported {tools.Count} tools; expected {expectedCount}.");
+
+        var toolNames = tools.Select(tool => tool.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var requiredTool in requiredTools)
+        {
+            if (!toolNames.Contains(requiredTool))
+                failures.Add($"{label} missing required tool '{requiredTool}'.");
+        }
+
+        foreach (var tool in tools)
+        {
+            if (string.IsNullOrWhiteSpace(tool.Name))
+                failures.Add($"{label} includes a tool with an empty name.");
+            if (string.IsNullOrWhiteSpace(tool.Title))
+                failures.Add($"{label} tool '{tool.Name}' has an empty title.");
+            if (string.IsNullOrWhiteSpace(tool.Description))
+                failures.Add($"{label} tool '{tool.Name}' has an empty description.");
+            if (!tool.HasObjectInputSchema())
+                failures.Add($"{label} tool '{tool.Name}' does not expose an object input schema.");
+        }
+    }
+
+    static void ValidateReadOnlyHint(IReadOnlyList<ToolDescriptor> tools, string toolName, bool expected, List<string> failures)
+    {
+        var tool = FindTool(tools, toolName);
+        if (tool == null)
+        {
+            failures.Add($"Cannot validate readOnlyHint for missing tool '{toolName}'.");
+            return;
+        }
+
+        if (!tool.TryGetAnnotationBool("readOnlyHint", out var actual))
+        {
+            failures.Add($"Tool '{toolName}' is missing annotations.readOnlyHint.");
+            return;
+        }
+
+        if (actual != expected)
+            failures.Add($"Tool '{toolName}' readOnlyHint was {actual}; expected {expected}.");
+    }
+
+    static void ValidateGameObjectSchemas(IReadOnlyList<ToolDescriptor> tools, List<string> failures)
+    {
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_GameObject_Inspect",
+            ["mode", "target", "searchMethod", "searchTerm", "findAll", "searchInChildren", "searchInactive"],
+            ["mode"],
+            failures);
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_GameObject_PreviewChanges",
+            ["target", "searchMethod", "name", "setActive", "tag", "layer", "position", "positionType", "rotation", "scale", "parent"],
+            ["target"],
+            failures);
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_GameObject_ApplyChanges",
+            ["target", "searchMethod", "name", "setActive", "tag", "layer", "position", "positionType", "rotation", "scale", "parent"],
+            ["target"],
+            failures);
+
+        var legacyTool = FindTool(tools, "Unity_ManageGameObject");
+        if (legacyTool == null)
+        {
+            failures.Add("Cannot validate legacy Unity_ManageGameObject schema because the tool is missing.");
+            return;
+        }
+
+        foreach (var propertyName in new[] { "action", "search_method", "set_active", "find_all", "search_in_children", "search_inactive" })
+        {
+            if (!legacyTool.HasInputProperty(propertyName))
+                failures.Add($"Unity_ManageGameObject schema is missing legacy property '{propertyName}'.");
+        }
+
+        if (!legacyTool.HasRequiredProperty("action"))
+            failures.Add("Unity_ManageGameObject schema no longer requires 'action'.");
+
+        var actionEnum = legacyTool.GetInputPropertyEnum("action").ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var expectedAction in new[] { "find", "get_selection", "get_bounds", "modify" })
+        {
+            if (!actionEnum.Contains(expectedAction))
+                failures.Add($"Unity_ManageGameObject action enum is missing '{expectedAction}'.");
+        }
+    }
+
+    static void ValidateSplitGameObjectSchema(IReadOnlyList<ToolDescriptor> tools, string toolName, string[] expectedProperties, string[] requiredProperties, List<string> failures)
+    {
+        var tool = FindTool(tools, toolName);
+        if (tool == null)
+        {
+            failures.Add($"Cannot validate split GameObject schema because '{toolName}' is missing.");
+            return;
+        }
+
+        var propertyNames = tool.GetInputPropertyNames();
+        foreach (var propertyName in expectedProperties)
+        {
+            if (!propertyNames.Contains(propertyName, StringComparer.Ordinal))
+                failures.Add($"{toolName} schema is missing property '{propertyName}'.");
+        }
+
+        foreach (var propertyName in propertyNames)
+        {
+            if (propertyName.Contains('_'))
+                failures.Add($"{toolName} exposes non-lower-camel input '{propertyName}'.");
+        }
+
+        foreach (var requiredProperty in requiredProperties)
+        {
+            if (!tool.HasRequiredProperty(requiredProperty))
+                failures.Add($"{toolName} schema no longer requires '{requiredProperty}'.");
+        }
+    }
+
+    static ToolDescriptor? FindTool(IReadOnlyList<ToolDescriptor> tools, string toolName)
+    {
+        return tools.FirstOrDefault(tool => string.Equals(tool.Name, toolName, StringComparison.OrdinalIgnoreCase));
+    }
+
+    static bool IsTransientFailure(Exception ex)
+    {
+        for (Exception? current = ex; current != null; current = current.InnerException)
+        {
+            var message = current.Message ?? string.Empty;
+            if (message.Contains("timed out", StringComparison.OrdinalIgnoreCase) ||
+                message.Contains("connection closed", StringComparison.OrdinalIgnoreCase) ||
+                message.Contains("closed stdout", StringComparison.OrdinalIgnoreCase) ||
+                message.Contains("UNITY_MCP_ERROR", StringComparison.OrdinalIgnoreCase) ||
+                message.Contains("No active Unity MCP bridge status file", StringComparison.OrdinalIgnoreCase) ||
+                message.Contains("ReconnectRequired", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 }
 
@@ -314,6 +592,141 @@ sealed record ScenarioResult(
     long SchemaResponseBytes,
     int SchemaCount);
 
+sealed record MetadataAuditReport(
+    string ProjectPath,
+    string ServerPath,
+    DateTimeOffset RanAtUtc,
+    bool Success,
+    int FoundationToolCount,
+    int SceneToolCount,
+    IReadOnlyList<string> FoundationTools,
+    IReadOnlyList<string> SceneTools,
+    IReadOnlyList<string> Failures);
+
+sealed class ToolDescriptor
+{
+    public string Name { get; init; } = string.Empty;
+    public string Title { get; init; } = string.Empty;
+    public string Description { get; init; } = string.Empty;
+    public JsonElement InputSchema { get; init; }
+    public JsonElement Annotations { get; init; }
+
+    public static ToolDescriptor FromJson(JsonElement element)
+    {
+        return new ToolDescriptor
+        {
+            Name = GetString(element, "name"),
+            Title = GetString(element, "title"),
+            Description = GetString(element, "description"),
+            InputSchema = CloneProperty(element, "inputSchema"),
+            Annotations = CloneProperty(element, "annotations")
+        };
+    }
+
+    public bool HasObjectInputSchema()
+    {
+        if (InputSchema.ValueKind != JsonValueKind.Object)
+            return false;
+
+        return InputSchema.TryGetProperty("type", out var typeElement) &&
+            typeElement.ValueKind == JsonValueKind.String &&
+            string.Equals(typeElement.GetString(), "object", StringComparison.OrdinalIgnoreCase);
+    }
+
+    public bool TryGetAnnotationBool(string propertyName, out bool value)
+    {
+        value = false;
+        if (Annotations.ValueKind != JsonValueKind.Object ||
+            !Annotations.TryGetProperty(propertyName, out var property) ||
+            property.ValueKind is not JsonValueKind.True and not JsonValueKind.False)
+        {
+            return false;
+        }
+
+        value = property.GetBoolean();
+        return true;
+    }
+
+    public bool HasInputProperty(string propertyName)
+    {
+        return TryGetInputProperties(out var properties) &&
+            properties.TryGetProperty(propertyName, out _);
+    }
+
+    public bool HasRequiredProperty(string propertyName)
+    {
+        if (InputSchema.ValueKind != JsonValueKind.Object ||
+            !InputSchema.TryGetProperty("required", out var requiredElement) ||
+            requiredElement.ValueKind != JsonValueKind.Array)
+        {
+            return false;
+        }
+
+        return requiredElement.EnumerateArray().Any(item =>
+            item.ValueKind == JsonValueKind.String &&
+            string.Equals(item.GetString(), propertyName, StringComparison.Ordinal));
+    }
+
+    public string[] GetInputPropertyNames()
+    {
+        if (!TryGetInputProperties(out var properties))
+            return [];
+
+        return properties.EnumerateObject()
+            .Select(property => property.Name)
+            .ToArray();
+    }
+
+    public string[] GetInputPropertyEnum(string propertyName)
+    {
+        if (!TryGetInputProperties(out var properties) ||
+            !properties.TryGetProperty(propertyName, out var property) ||
+            property.ValueKind != JsonValueKind.Object ||
+            !property.TryGetProperty("enum", out var enumElement) ||
+            enumElement.ValueKind != JsonValueKind.Array)
+        {
+            return [];
+        }
+
+        return enumElement.EnumerateArray()
+            .Where(item => item.ValueKind == JsonValueKind.String)
+            .Select(item => item.GetString() ?? string.Empty)
+            .Where(item => !string.IsNullOrWhiteSpace(item))
+            .ToArray();
+    }
+
+    bool TryGetInputProperties(out JsonElement properties)
+    {
+        properties = default;
+        return InputSchema.ValueKind == JsonValueKind.Object &&
+            InputSchema.TryGetProperty("properties", out properties) &&
+            properties.ValueKind == JsonValueKind.Object;
+    }
+
+    static JsonElement CloneProperty(JsonElement element, string propertyName)
+    {
+        if (element.ValueKind == JsonValueKind.Object &&
+            element.TryGetProperty(propertyName, out var property))
+        {
+            return property.Clone();
+        }
+
+        return default;
+    }
+
+    static string GetString(JsonElement element, string propertyName)
+    {
+        if (element.ValueKind == JsonValueKind.Object &&
+            element.TryGetProperty(propertyName, out var property) &&
+            property.ValueKind == JsonValueKind.String)
+        {
+            return property.GetString() ?? string.Empty;
+        }
+
+        return string.Empty;
+    }
+}
+
 sealed class StatsSliceSummary
 {
     public int BridgeRequestCount { get; private init; }
@@ -471,9 +884,25 @@ sealed class LensSession : IAsyncDisposable
 
     public async Task<int> GetToolCountAsync()
     {
+        return (await GetToolsAsync()).Count;
+    }
+
+    public async Task<IReadOnlyList<ToolDescriptor>> GetToolsAsync()
+    {
         var response = await SendRequestAsync(NextId(), "tools/list", new { });
-        var tools = response.Response.GetProperty("result").GetProperty("tools");
-        return tools.GetArrayLength();
+        if (response.Response.TryGetProperty("error", out var error))
+            throw new InvalidOperationException($"tools/list failed: {error}");
+
+        if (!response.Response.TryGetProperty("result", out var result) ||
+            !result.TryGetProperty("tools", out var tools) ||
+            tools.ValueKind != JsonValueKind.Array)
+        {
+            throw new InvalidOperationException($"tools/list returned an unexpected payload: {response.Response}");
+        }
+
+        return tools.EnumerateArray()
+            .Select(ToolDescriptor.FromJson)
+            .ToArray();
     }
 
     public async Task<SetToolPacksResult> SetToolPacksAsync(string[] packs)

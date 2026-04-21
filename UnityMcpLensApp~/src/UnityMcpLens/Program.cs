@@ -1,9 +1,76 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace UnityMcpLens;
 
 sealed class UnityMcpLensHost
 {
+    static readonly HashSet<string> s_ReadOnlyTools = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Unity_GameObject_Inspect",
+        "Unity_GameObject_PreviewChanges",
+        "Unity_GetLensHealth",
+        "Unity_ListToolPacks",
+        "Unity_ReadDetailRef",
+        "Unity_ReadConsole",
+        "Unity_ListResources",
+        "Unity_ReadResource",
+        "Unity_FindInFile",
+        "Unity_GetSha",
+        "Unity_ValidateScript",
+        "Unity_UI_Raycast",
+        "Unity_Asset_Search",
+        "Unity_Object_ValidateReferences",
+        "Unity_Project_ScanMissingScripts",
+        "Unity_Project_GetInfo",
+        "Unity_Project_GetPackages",
+        "Unity_Profiler_Query",
+        "Unity_ManageScript_capabilities"
+    };
+
+    static readonly HashSet<string> s_MutatingTools = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Unity_GameObject_ApplyChanges",
+        "Unity_ManageGameObject",
+        "Unity_ManageScene",
+        "Unity_ManageAsset",
+        "Unity_ManageEditor",
+        "Unity_ManageMenuItem",
+        "Unity_ManageScript",
+        "Unity_ManageShader",
+        "Unity_ImportExternalModel",
+        "Unity_ApplyTextEdits",
+        "Unity_ScriptApplyEdits",
+        "Unity_CreateScript",
+        "Unity_DeleteScript",
+        "Unity_RunCommand",
+        "Unity_Resource_Write",
+        "Unity_Resource_Delete",
+        "Unity_Project_ManagePackages",
+        "Unity_Asset_ConfigureSpriteImport",
+        "Unity_Prefab_SetSerializedProperties",
+        "Unity_Scene_SetSerializedProperties",
+        "Unity_Tile_BuildSet",
+        "Unity_Tilemap_Setup",
+        "Unity_Tilemap_Paint",
+        "Unity_UI_EnsureNamedHierarchy",
+        "Unity_UI_SetLayoutProperties",
+        "Unity_UI_Toolkit"
+    };
+
+    static readonly string[] s_ReadOnlyPrefixes =
+    [
+        "Unity_Read",
+        "Unity_Get",
+        "Unity_List",
+        "Unity_Find",
+        "Unity_Validate",
+        "Unity_Query",
+        "Unity_Project_Get",
+        "Unity_Runtime_Get",
+        "Unity_UI_Get"
+    ];
+
     sealed class CachedToolSchema
     {
         public string? SchemaHash { get; init; }
@@ -154,7 +221,7 @@ sealed class UnityMcpLensHost
                 inputSchema = tool.InputSchema.ValueKind == JsonValueKind.Undefined
                     ? JsonSerializer.SerializeToElement(new { type = "object", properties = new { } }, m_JsonOptions)
                     : tool.InputSchema,
-                annotations = tool.Annotations.ValueKind == JsonValueKind.Undefined ? (object?)null : tool.Annotations
+                annotations = ResolveToolAnnotations(tool)
             })
             .ToArray();
 
@@ -435,6 +502,43 @@ sealed class UnityMcpLensHost
     static bool HasSchemaPayload(JsonElement element)
     {
         return element.ValueKind != JsonValueKind.Undefined && element.ValueKind != JsonValueKind.Null;
+    }
+
+    static object ResolveToolAnnotations(BridgeToolDescriptor tool)
+    {
+        bool readOnlyHint = DeriveReadOnlyHint(tool.Name, tool.ReadOnlyHint);
+        if (tool.Annotations.ValueKind != JsonValueKind.Object)
+            return new { readOnlyHint };
+
+        if (tool.Annotations.TryGetProperty("readOnlyHint", out _))
+            return tool.Annotations;
+
+        var merged = new JsonObject();
+        foreach (var property in tool.Annotations.EnumerateObject())
+            merged[property.Name] = JsonNode.Parse(property.Value.GetRawText());
+
+        merged["readOnlyHint"] = readOnlyHint;
+        return merged;
+    }
+
+    static bool DeriveReadOnlyHint(string toolName, bool descriptorHint)
+    {
+        if (string.IsNullOrWhiteSpace(toolName))
+            return descriptorHint;
+
+        string normalizedToolName = toolName.Replace('.', '_');
+        if (s_MutatingTools.Contains(normalizedToolName))
+            return false;
+        if (s_ReadOnlyTools.Contains(normalizedToolName))
+            return true;
+
+        foreach (var prefix in s_ReadOnlyPrefixes)
+        {
+            if (normalizedToolName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+
+        return descriptorHint;
     }
 
     async Task SendToolsListChangedNotificationAsync(CancellationToken cancellationToken)

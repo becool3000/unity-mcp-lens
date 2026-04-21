@@ -72,8 +72,6 @@ namespace Becool.UnityMcpLens.Editor.Lens
 
         static string NormalizeToolName(string toolName) => McpToolRegistry.NormalizeToolName(toolName) ?? string.Empty;
 
-        static string NormalizeToolPrefix(string toolPrefix) => McpToolRegistry.NormalizeToolName(toolPrefix) ?? string.Empty;
-
         static readonly string[] k_FoundationToolNames =
         {
             NormalizeToolName(GetLensHealthToolName),
@@ -302,23 +300,7 @@ namespace Becool.UnityMcpLens.Editor.Lens
 
         public static bool IsReadOnlyHint(string toolName)
         {
-            if (string.IsNullOrWhiteSpace(toolName))
-                return false;
-
-            var normalizedToolName = NormalizeToolName(toolName);
-            return normalizedToolName.StartsWith(NormalizeToolPrefix("Unity.Read"), StringComparison.OrdinalIgnoreCase) ||
-                normalizedToolName.StartsWith(NormalizeToolPrefix("Unity.Get"), StringComparison.OrdinalIgnoreCase) ||
-                normalizedToolName.StartsWith(NormalizeToolPrefix("Unity.List"), StringComparison.OrdinalIgnoreCase) ||
-                normalizedToolName.StartsWith(NormalizeToolPrefix("Unity.Find"), StringComparison.OrdinalIgnoreCase) ||
-                normalizedToolName.StartsWith(NormalizeToolPrefix("Unity.Validate"), StringComparison.OrdinalIgnoreCase) ||
-                normalizedToolName.StartsWith(NormalizeToolPrefix("Unity.Object.Validate"), StringComparison.OrdinalIgnoreCase) ||
-                normalizedToolName.StartsWith(NormalizeToolPrefix("Unity.Project.Scan"), StringComparison.OrdinalIgnoreCase) ||
-                normalizedToolName.StartsWith(NormalizeToolPrefix("Unity.Runtime.Get"), StringComparison.OrdinalIgnoreCase) ||
-                normalizedToolName.StartsWith(NormalizeToolPrefix("Unity.UI.Get"), StringComparison.OrdinalIgnoreCase) ||
-                normalizedToolName.StartsWith(NormalizeToolPrefix("Unity.UI.Raycast"), StringComparison.OrdinalIgnoreCase) ||
-                normalizedToolName.StartsWith(NormalizeToolPrefix("Unity.Asset.Search"), StringComparison.OrdinalIgnoreCase) ||
-                normalizedToolName.StartsWith(NormalizeToolPrefix("Unity.Project.Get"), StringComparison.OrdinalIgnoreCase) ||
-                normalizedToolName.StartsWith(NormalizeToolPrefix("Unity.Profiler.Query"), StringComparison.OrdinalIgnoreCase);
+            return ToolMetadataPolicy.IsReadOnlyHint(toolName);
         }
 
         static bool MatchesDefinition(ToolPackDefinition definition, string toolName, IReadOnlyCollection<string> groups)

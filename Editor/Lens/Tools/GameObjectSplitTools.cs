@@ -3,6 +3,7 @@ using System;
 using System.Text;
 using Becool.UnityMcpLens.Editor.Adapters.Unity.GameObjects;
 using Becool.UnityMcpLens.Editor.Helpers;
+using Becool.UnityMcpLens.Editor.Lens;
 using Becool.UnityMcpLens.Editor.Models.GameObjects;
 using Becool.UnityMcpLens.Editor.Services.GameObjects;
 using Becool.UnityMcpLens.Editor.ToolRegistry;
@@ -55,8 +56,8 @@ Returns compact readback data and reports repeated identical calls as applied=fa
                         description = "Inspection mode.",
                         @enum = new[] { "find", "selection", "bounds" }
                     },
-                    target = TargetSchema("GameObject target, path, name, or id."),
-                    searchMethod = SearchMethodSchema(),
+                    target = ToolSchemaFragments.TargetRef("GameObject target, path, name, or id."),
+                    searchMethod = ToolSchemaFragments.SearchMethod(),
                     searchTerm = new { type = "string", description = "Search term for find mode. Defaults to target when omitted." },
                     findAll = new { type = "boolean", description = "When true, return all matching objects." },
                     searchInChildren = new { type = "boolean", description = "Search under the target object." },
@@ -256,59 +257,24 @@ Returns compact readback data and reports repeated identical calls as applied=fa
                 type = "object",
                 properties = new
                 {
-                    target = TargetSchema("GameObject target, path, name, or id."),
-                    searchMethod = SearchMethodSchema(),
+                    target = ToolSchemaFragments.TargetRef("GameObject target, path, name, or id."),
+                    searchMethod = ToolSchemaFragments.SearchMethod(),
                     name = new { type = "string", description = "New GameObject name." },
                     setActive = new { type = "boolean", description = "Set GameObject active state." },
                     tag = new { type = "string", description = "Tag to assign. Empty means Untagged." },
                     layer = new { type = "string", description = "Layer name to assign." },
-                    position = Vector3ArraySchema("Local position [x, y, z]."),
+                    position = ToolSchemaFragments.Vector3Array("Local position [x, y, z]."),
                     positionType = new
                     {
                         type = "string",
                         description = "How to interpret position.",
                         @enum = new[] { "center", "pivot" }
                     },
-                    rotation = Vector3ArraySchema("Local Euler rotation [x, y, z]."),
-                    scale = Vector3ArraySchema("Local scale [x, y, z]."),
-                    parent = new
-                    {
-                        description = "Parent GameObject target. Null or empty string clears parent.",
-                        anyOf = new object[] { new { type = "string" }, new { type = "integer" }, new { type = "null" } }
-                    }
+                    rotation = ToolSchemaFragments.Vector3Array("Local Euler rotation [x, y, z]."),
+                    scale = ToolSchemaFragments.Vector3Array("Local scale [x, y, z]."),
+                    parent = ToolSchemaFragments.TargetRef("Parent GameObject target. Null or empty string clears parent.", allowNull: true)
                 },
                 required = new[] { "target" }
-            };
-        }
-
-        static object TargetSchema(string description)
-        {
-            return new
-            {
-                description,
-                anyOf = new object[] { new { type = "string" }, new { type = "integer" } }
-            };
-        }
-
-        static object SearchMethodSchema()
-        {
-            return new
-            {
-                type = "string",
-                description = "How to resolve target/searchTerm.",
-                @enum = new[] { "by_name", "by_id", "by_path", "by_tag", "by_layer", "by_component", "by_id_or_name_or_path" }
-            };
-        }
-
-        static object Vector3ArraySchema(string description)
-        {
-            return new
-            {
-                type = "array",
-                description,
-                items = new { type = "number" },
-                min_items = 3,
-                max_items = 3
             };
         }
     }
