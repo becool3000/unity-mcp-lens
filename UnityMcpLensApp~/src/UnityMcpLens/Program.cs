@@ -205,19 +205,22 @@ sealed class UnityMcpLensHost
                 }
                 else
                 {
+                    bool unchanged = string.Equals(manifestEnvelope.Result.Kind, "unchanged", StringComparison.OrdinalIgnoreCase);
                     await ApplyManifestAsync(manifestEnvelope.Result, shouldFetchSchemas: true, cancellationToken).ConfigureAwait(false);
-                    if (m_ClientInitialized)
+                    if (!unchanged && m_ClientInitialized)
                         await SendToolsListChangedNotificationAsync(cancellationToken).ConfigureAwait(false);
 
                     result = BuildToolCallResult(JsonSerializer.SerializeToElement(new
                     {
                         success = true,
-                        message = "Updated active Unity MCP tool packs.",
+                        message = unchanged ? "Active Unity MCP tool packs unchanged." : "Updated active Unity MCP tool packs.",
                         data = new
                         {
                             activeToolPacks = manifestEnvelope.Result.ActiveToolPacks,
                             manifestVersion = manifestEnvelope.Result.ManifestVersion,
                             bridgeSessionId = manifestEnvelope.Result.BridgeSessionId,
+                            unchanged,
+                            manifestKind = manifestEnvelope.Result.Kind,
                             toolCount = m_ToolCache.Count
                         }
                     }, m_JsonOptions));

@@ -905,7 +905,7 @@ namespace Becool.UnityMcpLens.Editor
                             // Fire-and-forget: write response when ready (non-blocking).
                             // The reader loop continues immediately so multiple commands
                             // can be in-flight concurrently (multiplexed by requestId).
-                            _ = WriteResponseWhenReadyAsync(tcs.Task, transport, token);
+                            _ = WriteResponseWhenReadyAsync(tcs.Task, transport, token, command);
                         }
                         catch (Exception ex)
                         {
@@ -1571,18 +1571,69 @@ namespace Becool.UnityMcpLens.Editor
         /// Awaits a response task and writes the result to the transport with write serialization.
         /// Used by the listener loop to fire-and-forget response writes.
         /// </summary>
-        async Task WriteResponseWhenReadyAsync(Task<string> responseTask, IConnectionTransport transport, CancellationToken ct)
+        async Task WriteResponseWhenReadyAsync(Task<string> responseTask, IConnectionTransport transport, CancellationToken ct, Command command)
         {
             try
             {
                 string response = await responseTask.ConfigureAwait(false);
                 await WriteWithLockAsync(transport, response, ct);
             }
-            catch (OperationCanceledException) { /* connection closed */ }
+            catch (OperationCanceledException ex)
+            {
+                RecordBridgeAbortedResponse(command, transport, "transport_closed_before_response", ex.Message);
+            }
             catch (Exception ex)
             {
-                BridgeStatusTracker.MarkCommandFailure(NormalizeTransportFailureReason(ex));
+                string errorKind = NormalizeTransportFailureReason(ex);
+                BridgeStatusTracker.MarkCommandFailure(errorKind);
+                RecordBridgeAbortedResponse(command, transport, errorKind, ex.Message);
                 McpLog.LogDelayed($"Failed to write response: {ex.Message}");
+            }
+        }
+
+        void RecordBridgeAbortedResponse(Command command, IConnectionTransport transport, string errorKind, string errorMessage)
+        {
+            try
+            {
+                var requestJson = command == null
+                    ? string.Empty
+                    : JsonConvert.SerializeObject(new
+                    {
+                        type = command.type,
+                        requestId = command.requestId,
+                        @params = command.@params
+                    }, Formatting.None);
+                var requestBytes = PayloadBudgeting.GetUtf8ByteCount(requestJson);
+                var commandType = command?.type ?? "(null)";
+                PayloadStats.RecordCoverage(
+                    "coverage_bridge_command_response",
+                    commandType,
+                    BuildBridgeCoverageMeta(command, transport, "aborted", 0, errorMessage),
+                    PayloadBudgeting.ComputeSha256($"{transport?.ConnectionId}:{command?.requestId}:{errorKind}:{errorMessage}"),
+                    new PayloadStatOptions
+                    {
+                        EventKind = "bridge_coverage",
+                        ConnectionId = transport?.ConnectionId,
+                        RequestId = command?.requestId,
+                        OperationId = command?.requestId,
+                        WorkflowKind = "mcp_bridge",
+                        Success = false,
+                        ErrorKind = string.IsNullOrWhiteSpace(errorKind) ? "transport_closed_before_response" : errorKind,
+                        ErrorMessageShort = errorMessage,
+                        RepresentationKind = "reference",
+                        PayloadClass = "bridge_command_response",
+                        ExtraFields = new
+                        {
+                            commandType,
+                            requestBytes,
+                            responseBytes = 0,
+                            responseStatus = "aborted"
+                        }
+                    });
+            }
+            catch
+            {
+                // Best-effort telemetry only.
             }
         }
 
@@ -2005,21 +2056,25 @@ namespace Becool.UnityMcpLens.Editor
                         }), "error", error ?? "Failed to update tool packs.");
                     }
 
+                    bool unchanged = string.Equals(manifest.kind, "unchanged", StringComparison.OrdinalIgnoreCase);
                     return ReturnResponse(JsonConvert.SerializeObject(new
                     {
                         status = "success",
                         result = manifest
                     }), "success", null, new PayloadStatOptions
                     {
-                        RepresentationKind = includeSchemas ? "full" : "summary",
+                        RepresentationKind = unchanged ? "reference" : includeSchemas ? "full" : "summary",
                         PayloadClass = "tool_manifest",
+                        Unchanged = unchanged,
                         ExtraFields = new
                         {
                             commandType = command.type,
                             manifestKind = manifest.kind,
+                            manifestReason = manifest.reason,
                             bridgeSessionId = manifest.bridgeSessionId,
                             manifestVersion = manifest.manifestVersion,
-                            activeToolPacks = manifest.activeToolPacks
+                            activeToolPacks = manifest.activeToolPacks,
+                            exportedToolCount = manifest.tools?.Length ?? BridgeManifestBroker.GetExportedToolCount(manifest.activeToolPacks)
                         }
                     });
                 }
