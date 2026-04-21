@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using Newtonsoft.Json.Linq;
+using Becool.UnityMcpLens.Editor.Adapters.Unity;
 using Becool.UnityMcpLens.Editor.Helpers;
 using Becool.UnityMcpLens.Editor.ToolRegistry;
 using Becool.UnityMcpLens.Editor.Tools.Parameters;
@@ -244,7 +245,7 @@ Returns:
 
             foreach (string componentTypeName in spec.ComponentTypes ?? Array.Empty<string>())
             {
-                Type componentType = ManageGameObject.FindType(componentTypeName);
+                Type componentType = UnityComponentResolver.FindType(componentTypeName);
                 if (componentType == null || !typeof(Component).IsAssignableFrom(componentType))
                 {
                     error = $"Component type '{componentTypeName}' could not be resolved.";
@@ -286,7 +287,7 @@ Returns:
 
             foreach (string componentTypeName in spec.ComponentTypes ?? Array.Empty<string>())
             {
-                Type componentType = ManageGameObject.FindType(componentTypeName);
+                Type componentType = UnityComponentResolver.FindType(componentTypeName);
                 if (componentType == null || !typeof(Component).IsAssignableFrom(componentType))
                 {
                     error = $"Component type '{componentTypeName}' could not be resolved.";
@@ -667,7 +668,7 @@ Returns:
 
         static Component FindTextComponent(GameObject target)
         {
-            var textType = ManageGameObject.FindType("Text");
+            var textType = UnityComponentResolver.FindType("Text");
             if (textType != null)
             {
                 Component legacyText = target.GetComponent(textType);
@@ -677,7 +678,7 @@ Returns:
                 }
             }
 
-            var tmpType = ManageGameObject.FindType("TMP_Text") ?? ManageGameObject.FindType("TextMeshProUGUI");
+            var tmpType = UnityComponentResolver.FindType("TMP_Text") ?? UnityComponentResolver.FindType("TextMeshProUGUI");
             if (tmpType != null)
             {
                 return target.GetComponent(tmpType);

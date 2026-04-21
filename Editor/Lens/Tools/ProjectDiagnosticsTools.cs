@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Newtonsoft.Json.Linq;
+using Becool.UnityMcpLens.Editor.Adapters.Unity;
 using Becool.UnityMcpLens.Editor.Utils;
 using Becool.UnityMcpLens.Editor.Helpers;
 using Becool.UnityMcpLens.Editor.ToolRegistry;
@@ -284,7 +285,7 @@ Returns:
                     return results;
                 }
 
-                if (ComponentResolver.TryResolve(componentName, out Type componentType, out _))
+                if (UnityComponentResolver.TryResolve(componentName, out Type componentType, out _))
                 {
                     Component resolved = go.GetComponent(componentType);
                     if (resolved != null)

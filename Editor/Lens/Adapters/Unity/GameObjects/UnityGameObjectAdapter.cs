@@ -3,9 +3,9 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using Becool.UnityMcpLens.Editor.Adapters.Unity;
 using Becool.UnityMcpLens.Editor.Helpers;
 using Becool.UnityMcpLens.Editor.Models.GameObjects;
-using Becool.UnityMcpLens.Editor.Tools;
 using UnityEditor;
 using UnityEditorInternal;
 using UnityEngine;
@@ -100,7 +100,7 @@ namespace Becool.UnityMcpLens.Editor.Adapters.Unity.GameObjects
                     }
                     break;
                 case "by_component":
-                    var componentType = ManageGameObject.FindType(searchTerm);
+                    var componentType = UnityComponentResolver.FindType(searchTerm);
                     if (componentType != null)
                     {
                         var componentPool = rootSearchObject
@@ -268,7 +268,7 @@ namespace Becool.UnityMcpLens.Editor.Adapters.Unity.GameObjects
             var positionToSet = ToUnityVector3(requestedPosition);
             if (normalized == "center")
             {
-                var center = ComponentResolver.GetObjectWorldCenter(target.GameObject);
+                var center = UnityComponentResolver.GetObjectWorldCenter(target.GameObject);
                 var delta = center - target.GameObject.transform.position;
                 positionToSet -= delta;
             }

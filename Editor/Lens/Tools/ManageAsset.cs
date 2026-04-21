@@ -6,6 +6,7 @@ using System.Linq;
 using Newtonsoft.Json.Linq;
 using UnityEditor;
 using UnityEngine;
+using Becool.UnityMcpLens.Editor.Adapters.Unity;
 using Becool.UnityMcpLens.Editor.Helpers;
 using Becool.UnityMcpLens.Editor.ToolRegistry; // For Response class
 using Becool.UnityMcpLens.Editor.ToolRegistry.Parameters;
@@ -209,7 +210,7 @@ Returns:
                             "'scriptClass' property required when creating ScriptableObject asset."
                         );
 
-                    Type scriptType = ComponentResolver.TryResolve(scriptClassName, out var resolvedType, out var error) ? resolvedType : null;
+                    Type scriptType = UnityComponentResolver.TryResolve(scriptClassName, out var resolvedType, out var error) ? resolvedType : null;
                     if (
                         scriptType == null
                         || !typeof(ScriptableObject).IsAssignableFrom(scriptType)
@@ -362,9 +363,9 @@ Returns:
                             && componentProperties.HasValues
                         ) // e.g., {"bobSpeed": 2.0}
                         {
-                            // Resolve component type via ComponentResolver, then fetch by Type
+                            // Resolve component type via the shared Unity resolver, then fetch by Type.
                             Component targetComponent = null;
-                            bool resolved = ComponentResolver.TryResolve(componentName, out var compType, out var compError);
+                            bool resolved = UnityComponentResolver.TryResolve(componentName, out var compType, out var compError);
                             if (resolved)
                             {
                                 targetComponent = gameObject.GetComponent(compType);

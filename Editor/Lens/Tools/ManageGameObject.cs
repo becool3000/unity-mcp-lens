@@ -11,8 +11,8 @@ using UnityEditor;
 // For CompilationPipeline
 using UnityEditorInternal;
 using UnityEngine;
-using UnityEngine.SceneManagement;
 using Becool.UnityMcpLens.Editor.Helpers;
+using Becool.UnityMcpLens.Editor.Adapters.Unity;
 using Becool.UnityMcpLens.Editor.Adapters.Unity.GameObjects;
 using Becool.UnityMcpLens.Editor.Models.GameObjects;
 using Becool.UnityMcpLens.Editor.Services.GameObjects;
@@ -1069,7 +1069,7 @@ Returns:
                 switch (positionType)
                 {
                     case "center":
-                        var center = ComponentResolver.GetObjectWorldCenter(targetGo);
+                        var center = UnityComponentResolver.GetObjectWorldCenter(targetGo);
                         var delta = center - targetGo.transform.position;
                         positionToSet -= delta;
                         break;
@@ -1294,103 +1294,6 @@ Returns:
             }
         }
 
-        static object FindGameObjects(
-            JObject @params,
-            JToken targetToken,
-            string searchMethod
-        )
-        {
-            bool findAll = @params["find_all"]?.ToObject<bool>() ?? @params["findAll"]?.ToObject<bool>() ?? false;
-            List<GameObject> foundObjects = ObjectsHelper.FindObjects(
-                targetToken,
-                searchMethod,
-                findAll,
-                @params
-            );
-
-            if (foundObjects.Count == 0)
-            {
-                return Response.Success("No matching GameObjects found.", new List<object>());
-            }
-
-            // Use the new serializer helper
-            //var results = foundObjects.Select(go => GetGameObjectData(go)).ToList();
-            var results = foundObjects.Select(go => GameObjectSerializer.GetGameObjectData(go)).ToList();
-            return Response.Success($"Found {results.Count} GameObject(s).", results);
-        }
-
-        static object GetSelection()
-        {
-            var objects = Selection.gameObjects
-                .Select(GameObjectSerializer.GetGameObjectData)
-                .ToArray();
-
-            return Response.Success("Retrieved current Unity selection.", new
-            {
-                count = objects.Length,
-                objects
-            });
-        }
-
-        static object GetBounds(JToken targetToken, string searchMethod)
-        {
-            if (targetToken == null)
-                return Response.Error("'target' parameter required for get_bounds.");
-
-            GameObject targetGo = ObjectsHelper.FindObject(targetToken, searchMethod);
-            if (targetGo == null)
-                return Response.Error($"Target GameObject ('{targetToken}') not found using method '{searchMethod ?? "default"}'.");
-
-            var renderers = targetGo.GetComponentsInChildren<Renderer>(includeInactive: true);
-            var colliders = targetGo.GetComponentsInChildren<Collider>(includeInactive: true);
-            bool hasBounds = false;
-            Bounds bounds = new Bounds(targetGo.transform.position, Vector3.zero);
-
-            foreach (var renderer in renderers)
-            {
-                if (renderer == null)
-                    continue;
-
-                if (!hasBounds)
-                {
-                    bounds = renderer.bounds;
-                    hasBounds = true;
-                }
-                else
-                {
-                    bounds.Encapsulate(renderer.bounds);
-                }
-            }
-
-            foreach (var collider in colliders)
-            {
-                if (collider == null)
-                    continue;
-
-                if (!hasBounds)
-                {
-                    bounds = collider.bounds;
-                    hasBounds = true;
-                }
-                else
-                {
-                    bounds.Encapsulate(collider.bounds);
-                }
-            }
-
-            return Response.Success("Retrieved GameObject bounds.", new
-            {
-                target = targetGo.name,
-                instanceID = UnityApiAdapter.GetObjectId(targetGo),
-                hasRendererOrColliderBounds = hasBounds,
-                center = new { x = bounds.center.x, y = bounds.center.y, z = bounds.center.z },
-                size = new { x = bounds.size.x, y = bounds.size.y, z = bounds.size.z },
-                extents = new { x = bounds.extents.x, y = bounds.extents.y, z = bounds.extents.z },
-                rendererCount = renderers.Length,
-                colliderCount = colliders.Length
-            });
-        }
-
         static object GetBuiltinAssets()
         {
             return Response.Success("Retrieved builtin GameObject asset hints.", new
@@ -1504,9 +1407,9 @@ Returns:
 
             try
             {
-                // Try to find the component by name using ComponentResolver first
+                // Try to find the component by name using UnityComponentResolver first
                 Component targetComponent = null;
-                if (ComponentResolver.TryResolve(componentName, out var compType, out var compError))
+                if (UnityComponentResolver.TryResolve(componentName, out var compType, out var compError))
                 {
                     targetComponent = targetGo.GetComponent(compType);
                 }
@@ -1754,22 +1657,6 @@ Returns:
             return null;
         }
 
-        // Helper to get all scene objects efficiently
-        internal static IEnumerable<GameObject> GetAllSceneObjects(bool includeInactive)
-        {
-            // SceneManager.GetActiveScene().GetRootGameObjects() is faster than FindObjectsOfType<GameObject>()
-            var rootObjects = SceneManager.GetActiveScene().GetRootGameObjects();
-            var allObjects = new List<GameObject>();
-            foreach (var root in rootObjects)
-            {
-                allObjects.AddRange(
-                    root.GetComponentsInChildren<Transform>(includeInactive)
-                        .Select(t => t.gameObject)
-                );
-            }
-            return allObjects;
-        }
-
         /// <summary>
         /// Adds a component by type name and optionally sets properties.
         /// Returns null on success, or an error response object on failure.
@@ -1932,7 +1819,7 @@ Returns:
             Component targetComponent = targetComponentInstance;
             if (targetComponent == null)
             {
-                if (ComponentResolver.TryResolve(compName, out var compType, out var compError))
+                if (UnityComponentResolver.TryResolve(compName, out var compType, out var compError))
                 {
                     targetComponent = targetGo.GetComponent(compType);
                 }
@@ -1961,8 +1848,8 @@ Returns:
                     bool setResult = SetProperty(targetComponent, propName, propValue);
                     if (!setResult)
                     {
-                        var availableProperties = ComponentResolver.GetAllComponentProperties(targetComponent.GetType());
-                        var suggestions = ComponentResolver.GetAIPropertySuggestions(propName, availableProperties);
+                        var availableProperties = UnityComponentResolver.GetAllComponentProperties(targetComponent.GetType());
+                        var suggestions = UnityComponentResolver.GetAIPropertySuggestions(propName, availableProperties);
                         var msg = suggestions.Any()
                             ? $"Property '{propName}' not found. Did you mean: {string.Join(", ", suggestions)}? Available: [{string.Join(", ", availableProperties)}]"
                             : $"Property '{propName}' not found. Available: [{string.Join(", ", availableProperties)}]";
@@ -2564,7 +2451,7 @@ Returns:
         /// </summary>
         internal static Type FindType(string typeName)
         {
-            if (ComponentResolver.TryResolve(typeName, out Type resolvedType, out string error))
+            if (UnityComponentResolver.TryResolve(typeName, out Type resolvedType, out string error))
             {
                 return resolvedType;
             }
@@ -2579,283 +2466,4 @@ Returns:
         }
     }
 
-    /// <summary>
-    /// Robust component resolver that avoids Assembly.LoadFrom and supports assembly definitions.
-    /// Prioritizes runtime (Player) assemblies over Editor assemblies.
-    /// </summary>
-    static class ComponentResolver
-    {
-        static readonly Dictionary<string, Type> CacheByFqn = new(StringComparer.Ordinal);
-        static readonly Dictionary<string, Type> CacheByName = new(StringComparer.Ordinal);
-
-        /// <summary>
-        /// Resolve a Component/MonoBehaviour type by short or fully-qualified name.
-        /// Prefers runtime (Player) script assemblies; falls back to Editor assemblies.
-        /// Never uses Assembly.LoadFrom.
-        /// </summary>
-        public static bool TryResolve(string nameOrFullName, out Type type, out string error)
-        {
-            error = string.Empty;
-            type = null!;
-
-            // Handle null/empty input
-            if (string.IsNullOrWhiteSpace(nameOrFullName))
-            {
-                error = "Component name cannot be null or empty";
-                return false;
-            }
-
-            // 1) Exact cache hits
-            if (CacheByFqn.TryGetValue(nameOrFullName, out type)) return true;
-            if (!nameOrFullName.Contains(".") && CacheByName.TryGetValue(nameOrFullName, out type)) return true;
-            type = Type.GetType(nameOrFullName, throwOnError: false);
-            if (IsValidComponent(type)) { Cache(type); return true; }
-
-            // 2) Search loaded assemblies (prefer Player assemblies)
-            var candidates = FindCandidates(nameOrFullName);
-            if (candidates.Count == 1) { type = candidates[0]; Cache(type); return true; }
-            if (candidates.Count > 1) { error = Ambiguity(nameOrFullName, candidates); type = null!; return false; }
-
-#if UNITY_EDITOR
-            // 3) Last resort: Editor-only TypeCache (fast index)
-            var tc = TypeCache.GetTypesDerivedFrom<Component>()
-                              .Where(t => NamesMatch(t, nameOrFullName));
-            candidates = PreferPlayer(tc).ToList();
-            if (candidates.Count == 1) { type = candidates[0]; Cache(type); return true; }
-            if (candidates.Count > 1) { error = Ambiguity(nameOrFullName, candidates); type = null!; return false; }
-#endif
-
-            error = $"Component type '{nameOrFullName}' not found in loaded runtime assemblies. " +
-                    "Use a fully-qualified name (Namespace.TypeName) and ensure the script compiled.";
-            type = null!;
-            return false;
-        }
-
-        static bool NamesMatch(Type t, string q) =>
-            t.Name.Equals(q, StringComparison.Ordinal) ||
-            (t.FullName?.Equals(q, StringComparison.Ordinal) ?? false);
-
-        static bool IsValidComponent(Type t) =>
-            t != null && typeof(Component).IsAssignableFrom(t);
-
-        static void Cache(Type t)
-        {
-            if (t.FullName != null) CacheByFqn[t.FullName] = t;
-            CacheByName[t.Name] = t;
-        }
-
-        static List<Type> FindCandidates(string query)
-        {
-            bool isShort = !query.Contains('.');
-            var loaded = AppDomain.CurrentDomain.GetAssemblies();
-
-#if UNITY_EDITOR
-            // Names of Player (runtime) script assemblies (asmdefs + Assembly-CSharp)
-            var playerAsmNames = new HashSet<string>(
-                UnityEditor.Compilation.CompilationPipeline.GetAssemblies(UnityEditor.Compilation.AssembliesType.Player).Select(a => a.name),
-                StringComparer.Ordinal);
-
-            IEnumerable<Assembly> playerAsms = loaded.Where(a => playerAsmNames.Contains(a.GetName().Name));
-            IEnumerable<Assembly> editorAsms = loaded.Except(playerAsms);
-#else
-            IEnumerable<System.Reflection.Assembly> playerAsms = loaded;
-            IEnumerable<System.Reflection.Assembly> editorAsms = Array.Empty<System.Reflection.Assembly>();
-#endif
-            static IEnumerable<Type> SafeGetTypes(Assembly a)
-            {
-                try { return a.GetTypes(); }
-                catch (ReflectionTypeLoadException rtle) { return rtle.Types.Where(t => t != null)!; }
-            }
-
-            Func<Type, bool> match = isShort
-                ? (t => t.Name.Equals(query, StringComparison.Ordinal))
-                : (t => t.FullName!.Equals(query, StringComparison.Ordinal));
-
-            var fromPlayer = playerAsms.SelectMany(SafeGetTypes)
-                                       .Where(IsValidComponent)
-                                       .Where(match);
-            var fromEditor = editorAsms.SelectMany(SafeGetTypes)
-                                       .Where(IsValidComponent)
-                                       .Where(match);
-
-            var list = new List<Type>(fromPlayer);
-            if (list.Count == 0) list.AddRange(fromEditor);
-            return list;
-        }
-
-#if UNITY_EDITOR
-        static IEnumerable<Type> PreferPlayer(IEnumerable<Type> seq)
-        {
-            var player = new HashSet<string>(
-                UnityEditor.Compilation.CompilationPipeline.GetAssemblies(UnityEditor.Compilation.AssembliesType.Player).Select(a => a.name),
-                StringComparer.Ordinal);
-
-            return seq.OrderBy(t => player.Contains(t.Assembly.GetName().Name) ? 0 : 1);
-        }
-#endif
-
-        static string Ambiguity(string query, IEnumerable<Type> cands)
-        {
-            var lines = cands.Select(t => $"{t.FullName} (assembly {t.Assembly.GetName().Name})");
-            return $"Multiple component types matched '{query}':\n - " + string.Join("\n - ", lines) +
-                   "\nProvide a fully qualified type name to disambiguate.";
-        }
-
-        /// <summary>
-        /// Gets all accessible property and field names from a component type.
-        /// </summary>
-        public static List<string> GetAllComponentProperties(Type componentType)
-        {
-            if (componentType == null) return new List<string>();
-
-            var properties = componentType.GetProperties(BindingFlags.Public | BindingFlags.Instance)
-                                         .Where(p => p.CanRead && p.CanWrite)
-                                         .Select(p => p.Name);
-
-            var fields = componentType.GetFields(BindingFlags.Public | BindingFlags.Instance)
-                                     .Where(f => !f.IsInitOnly && !f.IsLiteral)
-                                     .Select(f => f.Name);
-
-            // Also include SerializeField private fields (common in Unity)
-            var serializeFields = componentType.GetFields(BindingFlags.NonPublic | BindingFlags.Instance)
-                                              .Where(f => f.GetCustomAttribute<SerializeField>() != null)
-                                              .Select(f => f.Name);
-
-            return properties.Concat(fields).Concat(serializeFields).Distinct().OrderBy(x => x).ToList();
-        }
-
-        /// <summary>
-        /// Uses AI to suggest the most likely property matches for a user's input.
-        /// </summary>
-        public static List<string> GetAIPropertySuggestions(string userInput, List<string> availableProperties)
-        {
-            if (string.IsNullOrWhiteSpace(userInput) || !availableProperties.Any())
-                return new List<string>();
-
-            // Simple caching to avoid repeated AI calls for the same input
-            var cacheKey = $"{userInput.ToLowerInvariant()}:{string.Join(",", availableProperties)}";
-            if (PropertySuggestionCache.TryGetValue(cacheKey, out var cached))
-                return cached;
-
-            try
-            {
-                var prompt = $"A Unity developer is trying to set a component property but used an incorrect name.\n\n" +
-                             $"User requested: \"{userInput}\"\n" +
-                             $"Available properties: [{string.Join(", ", availableProperties)}]\n\n" +
-                             $"Find 1-3 most likely matches considering:\n" +
-                             $"- Unity Inspector display names vs actual field names (e.g., \"Max Reach Distance\" → \"maxReachDistance\")\n" +
-                             $"- camelCase vs PascalCase vs spaces\n" +
-                             $"- Similar meaning/semantics\n" +
-                             $"- Common Unity naming patterns\n\n" +
-                             $"Return ONLY the matching property names, comma-separated, no quotes or explanation.\n" +
-                             $"If confidence is low (<70%), return empty string.\n\n" +
-                             $"Examples:\n" +
-                             $"- \"Max Reach Distance\" → \"maxReachDistance\"\n" +
-                             $"- \"Health Points\" → \"healthPoints, hp\"\n" +
-                             $"- \"Move Speed\" → \"moveSpeed, movementSpeed\"";
-
-                // For now, we'll use a simple rule-based approach that mimics AI behavior
-                // This can be replaced with actual AI calls later
-                var suggestions = GetRuleBasedSuggestions(userInput, availableProperties);
-
-                PropertySuggestionCache[cacheKey] = suggestions;
-                return suggestions;
-            }
-            catch (Exception ex)
-            {
-                Debug.LogWarning($"[AI Property Matching] Error getting suggestions for '{userInput}': {ex.Message}");
-                return new List<string>();
-            }
-        }
-
-        static readonly Dictionary<string, List<string>> PropertySuggestionCache = new();
-
-        /// <summary>
-        /// Rule-based suggestions that mimic AI behavior for property matching.
-        /// This provides immediate value while we could add real AI integration later.
-        /// </summary>
-        static List<string> GetRuleBasedSuggestions(string userInput, List<string> availableProperties)
-        {
-            var suggestions = new List<string>();
-            var cleanedInput = userInput.ToLowerInvariant().Replace(" ", "").Replace("-", "").Replace("_", "");
-
-            foreach (var property in availableProperties)
-            {
-                var cleanedProperty = property.ToLowerInvariant().Replace(" ", "").Replace("-", "").Replace("_", "");
-
-                // Exact match after cleaning
-                if (cleanedProperty == cleanedInput)
-                {
-                    suggestions.Add(property);
-                    continue;
-                }
-
-                // Check if property contains all words from input
-                var inputWords = userInput.ToLowerInvariant().Split(new[] { ' ', '-', '_' }, StringSplitOptions.RemoveEmptyEntries);
-                if (inputWords.All(word => cleanedProperty.Contains(word.ToLowerInvariant())))
-                {
-                    suggestions.Add(property);
-                    continue;
-                }
-
-                // Levenshtein distance for close matches
-                if (LevenshteinDistance(cleanedInput, cleanedProperty) <= Math.Max(2, cleanedInput.Length / 4))
-                {
-                    suggestions.Add(property);
-                }
-            }
-
-            // Prioritize exact matches, then by similarity
-            return suggestions.OrderBy(s => LevenshteinDistance(cleanedInput, s.ToLowerInvariant().Replace(" ", "")))
-                             .Take(3)
-                             .ToList();
-        }
-
-        /// <summary>
-        /// Calculates Levenshtein distance between two strings for similarity matching.
-        /// </summary>
-        static int LevenshteinDistance(string s1, string s2)
-        {
-            if (string.IsNullOrEmpty(s1)) return s2?.Length ?? 0;
-            if (string.IsNullOrEmpty(s2)) return s1.Length;
-
-            var matrix = new int[s1.Length + 1, s2.Length + 1];
-
-            for (int i = 0; i <= s1.Length; i++) matrix[i, 0] = i;
-            for (int j = 0; j <= s2.Length; j++) matrix[0, j] = j;
-
-            for (int i = 1; i <= s1.Length; i++)
-            {
-                for (int j = 1; j <= s2.Length; j++)
-                {
-                    int cost = (s2[j - 1] == s1[i - 1]) ? 0 : 1;
-                    matrix[i, j] = Math.Min(Math.Min(
-                        matrix[i - 1, j] + 1,      // deletion
-                        matrix[i, j - 1] + 1),     // insertion
-                        matrix[i - 1, j - 1] + cost); // substitution
-                }
-            }
-
-            return matrix[s1.Length, s2.Length];
-        }
-
-        /// <summary>
-        /// Get the center of the gameobject based on collider or meshrenderer bounds
-        /// </summary>
-        /// <param name="targetGo">The gameobject to target</param>
-        /// <returns>Vector3 world position of the center</returns>
-        public static Vector3 GetObjectWorldCenter(GameObject targetGo)
-        {
-            if (targetGo.TryGetComponent<Collider>(out var collider))
-            {
-                return collider.bounds.center;
-            }
-            if (targetGo.TryGetComponent<MeshRenderer>(out var meshRenderer))
-            {
-                return meshRenderer.bounds.center;
-            }
-
-            return targetGo.transform.position;
-        }
-    }
 }
