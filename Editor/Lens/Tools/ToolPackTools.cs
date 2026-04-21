@@ -176,21 +176,21 @@ namespace Becool.UnityMcpLens.Editor.Tools
             if (string.IsNullOrWhiteSpace(connectionId))
                 return Task.FromResult<object>(Response.Error("Unity.SetToolPacks requires an active Lens MCP bridge connection."));
 
-            if (!BridgeLensSessionRegistry.TrySetActiveToolPacks(connectionId, parameters?.Packs, out var normalizedPacks, out var error))
-                return Task.FromResult<object>(Response.Error(error ?? "Failed to update active tool packs."));
-
-            var manifest = BridgeManifestBroker.SetToolPacks(connectionId, normalizedPacks, includeSchemas: false, out error);
+            var manifest = BridgeManifestBroker.SetToolPacks(connectionId, parameters?.Packs, includeSchemas: false, out var error);
             if (!string.IsNullOrWhiteSpace(error) || manifest == null)
                 return Task.FromResult<object>(Response.Error(error ?? "Failed to rebuild tool manifest after updating tool packs."));
 
+            bool unchanged = string.Equals(manifest.kind, "unchanged", StringComparison.OrdinalIgnoreCase);
             return Task.FromResult<object>(Response.Success(
-                "Updated active Unity MCP tool packs.",
+                unchanged ? "Active Unity MCP tool packs unchanged." : "Updated active Unity MCP tool packs.",
                 new
                 {
                     activeToolPacks = manifest.activeToolPacks,
                     manifestVersion = manifest.manifestVersion,
                     bridgeSessionId = manifest.bridgeSessionId,
-                    toolCount = manifest.tools?.Length ?? 0,
+                    unchanged,
+                    manifestKind = manifest.kind,
+                    toolCount = manifest.tools?.Length ?? BridgeManifestBroker.GetExportedToolCount(manifest.activeToolPacks),
                     recommendedNextPacks = ToolPackCatalog.GetRecommendedNextPacks(manifest.activeToolPacks)
                 }));
         }

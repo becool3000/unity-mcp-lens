@@ -114,7 +114,13 @@ namespace Becool.UnityMcpLens.Editor.Lens
 
         public static bool TrySetActiveToolPacks(string connectionId, IEnumerable<string> requestedPacks, out string[] normalizedPacks, out string error)
         {
+            return TrySetActiveToolPacks(connectionId, requestedPacks, out normalizedPacks, out _, out error);
+        }
+
+        public static bool TrySetActiveToolPacks(string connectionId, IEnumerable<string> requestedPacks, out string[] normalizedPacks, out bool unchanged, out string error)
+        {
             normalizedPacks = Array.Empty<string>();
+            unchanged = false;
             error = null;
 
             if (string.IsNullOrWhiteSpace(connectionId))
@@ -137,7 +143,13 @@ namespace Becool.UnityMcpLens.Editor.Lens
                     s_States[connectionId] = state;
                 }
 
-                state.ActiveToolPacks = normalizedPacks;
+                var currentPacks = state.ActiveToolPacks?.Length > 0
+                    ? state.ActiveToolPacks
+                    : ToolPackCatalog.DefaultActivePacks;
+                unchanged = currentPacks.SequenceEqual(normalizedPacks, StringComparer.OrdinalIgnoreCase);
+                if (!unchanged)
+                    state.ActiveToolPacks = normalizedPacks;
+
                 state.UpdatedUtc = DateTime.UtcNow;
             }
 
