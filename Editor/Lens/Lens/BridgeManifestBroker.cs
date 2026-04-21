@@ -258,15 +258,30 @@ namespace Becool.UnityMcpLens.Editor.Lens
             out string error)
         {
             error = null;
-            if (!BridgeLensSessionRegistry.TrySetActiveToolPacks(connectionId, requestedPacks, out var normalizedPacks, out error))
+            if (!BridgeLensSessionRegistry.TrySetActiveToolPacks(connectionId, requestedPacks, out var normalizedPacks, out var unchanged, out error))
                 return null;
 
             lock (s_Lock)
             {
                 EnsureCurrentSnapshotLocked();
-                var filteredCurrent = FilterToolsForPacks(s_CurrentTools, normalizedPacks, includeSchemas);
+                var filteredCurrent = FilterToolsForPacks(s_CurrentTools, normalizedPacks, includeSchemas && !unchanged);
                 var currentHashes = ComputeHashes(filteredCurrent);
                 BridgeLensSessionRegistry.UpdateAcknowledgedManifest(connectionId, s_BridgeSessionId, s_ManifestVersion);
+                if (unchanged)
+                {
+                    return new BridgeManifestResult
+                    {
+                        bridgeSessionId = s_BridgeSessionId,
+                        manifestVersion = s_ManifestVersion,
+                        profileCatalogVersion = ToolPackCatalog.ProfileCatalogVersion,
+                        activeToolPacks = normalizedPacks,
+                        kind = "unchanged",
+                        reason = "tool_packs_unchanged",
+                        hashMinimal = currentHashes.minimal,
+                        hashFull = currentHashes.full
+                    };
+                }
+
                 return CreateFullResult(filteredCurrent, normalizedPacks, currentHashes, "tool_packs_updated");
             }
         }

@@ -99,6 +99,78 @@ function Get-BoolValue {
     return $null
 }
 
+function Get-PackListString {
+    param($Value)
+
+    if ($null -eq $Value) {
+        return ""
+    }
+
+    $items = if ($Value -is [System.Array]) {
+        @($Value)
+    } elseif ($Value -is [System.Collections.IEnumerable] -and -not ($Value -is [string])) {
+        @($Value)
+    } else {
+        @($Value)
+    }
+
+    return (@($items |
+        Where-Object { $null -ne $_ -and -not [string]::IsNullOrWhiteSpace([string]$_) } |
+        ForEach-Object { ([string]$_).Trim() }) -join ",")
+}
+
+function Get-BridgeRowKey {
+    param($Row)
+
+    if ($null -eq $Row -or [string]::IsNullOrWhiteSpace($Row.RequestId)) {
+        return $null
+    }
+
+    return "{0}|{1}" -f $Row.ConnectionId, $Row.RequestId
+}
+
+function Get-UnmatchedBridgeRequestClass {
+    param(
+        $RequestRow,
+        $AllRows
+    )
+
+    if ($null -eq $RequestRow -or $null -eq $RequestRow.TimestampUtc) {
+        return "unmatched_request"
+    }
+
+    $nearbyRows = @($AllRows | Where-Object {
+        $_.TimestampUtc -ne $null -and
+        $_.TimestampUtc -gt $RequestRow.TimestampUtc -and
+        ($_.TimestampUtc - $RequestRow.TimestampUtc).TotalSeconds -le 45
+    })
+    $hasNewConnection = @($nearbyRows | Where-Object {
+        $_.Stage -eq "coverage_bridge_command_request" -and
+        $_.CommandType -eq "register_client" -and
+        $_.ConnectionId -ne $RequestRow.ConnectionId
+    }).Count -gt 0
+    $hasSnapshotRefresh = @($nearbyRows | Where-Object {
+        $_.EventKind -eq "tool_snapshot" -or $_.Stage -eq "tool_snapshot"
+    }).Count -gt 0
+    $hasReloadHint = @($nearbyRows | Where-Object {
+        $_.SnapshotReason -match "reload|compile|domain|bridge_started"
+    }).Count -gt 0
+
+    if ($hasNewConnection -and ($hasSnapshotRefresh -or $hasReloadHint)) {
+        return "domain_reload_transport_close"
+    }
+
+    if ($hasNewConnection) {
+        return "transport_reconnect_after_request"
+    }
+
+    if ($hasSnapshotRefresh) {
+        return "snapshot_refresh_after_request"
+    }
+
+    return "unmatched_request"
+}
+
 function Get-MeasureSum {
     param(
         $InputObject,
@@ -222,6 +294,12 @@ Get-Content -LiteralPath $resolvedStatsPath | ForEach-Object {
         $commandType = if ($entry.commandType) { Get-StringValue -Value $entry.commandType } else { Get-StringValue -Value $entry.name }
         $discoveryMode = if ($entry.discoveryMode) { Get-StringValue -Value $entry.discoveryMode } else { Get-StringValue -Value $entry.toolDiscoveryMode }
         $snapshotReason = if ($entry.snapshotReason) { Get-StringValue -Value $entry.snapshotReason } else { Get-StringValue -Value $entry.toolDiscoveryReason }
+        $manifestKind = if ($entry.manifestKind) { Get-StringValue -Value $entry.manifestKind } else { Get-StringValue -Value $entry.meta.manifestKind }
+        $manifestReason = if ($entry.manifestReason) { Get-StringValue -Value $entry.manifestReason } else { Get-StringValue -Value $entry.meta.manifestReason }
+        $activeToolPacks = if ($entry.activeToolPacks) { Get-PackListString -Value $entry.activeToolPacks } else { Get-PackListString -Value $entry.meta.activeToolPacks }
+        $bridgeSessionId = if ($entry.bridgeSessionId) { Get-StringValue -Value $entry.bridgeSessionId } else { Get-StringValue -Value $entry.meta.bridgeSessionId }
+        $manifestVersion = if ($entry.manifestVersion) { Get-NumberValue -Value $entry.manifestVersion } else { Get-NumberValue -Value $entry.meta.manifestVersion }
+        $responseStatus = if ($entry.responseStatus) { Get-StringValue -Value $entry.responseStatus } elseif ($entry.status) { Get-StringValue -Value $entry.status } else { Get-StringValue -Value $entry.meta.status }
 
         $rows.Add([pscustomobject]@{
             TimestampUtc        = $timestamp
@@ -265,6 +343,12 @@ Get-Content -LiteralPath $resolvedStatsPath | ForEach-Object {
             SnapshotHashFull    = Get-StringValue -Value $entry.snapshotHashFull
             EnabledToolCount    = Get-NumberValue -Value $entry.enabledToolCount
             RegisteredToolCount = Get-NumberValue -Value $entry.registeredToolCount
+            BridgeSessionId     = $bridgeSessionId
+            ManifestVersion     = $manifestVersion
+            ManifestKind        = $manifestKind
+            ManifestReason      = $manifestReason
+            ActiveToolPacks     = $activeToolPacks
+            ResponseStatus      = $responseStatus
             Meta                = $entry.meta
         })
     }
@@ -412,6 +496,100 @@ $bridgeTopCommands = @($bridgeRequestRows |
 
 $bridgeLatencySummary = New-LatencySummary -Rows $bridgeResponseRows
 
+$bridgeResponseKeys = @{}
+foreach ($responseRow in $bridgeResponseRows) {
+    $key = Get-BridgeRowKey -Row $responseRow
+    if ($key) {
+        $bridgeResponseKeys[$key] = $true
+    }
+}
+
+$unmatchedBridgeRequests = @($bridgeRequestRows |
+    Where-Object {
+        $key = Get-BridgeRowKey -Row $_
+        $key -and -not $bridgeResponseKeys.ContainsKey($key)
+    } |
+    Sort-Object TimestampUtc |
+    ForEach-Object {
+        [pscustomobject]@{
+            TimestampUtc   = $_.TimestampUtc
+            ConnectionId   = $_.ConnectionId
+            RequestId      = $_.RequestId
+            CommandType    = $_.CommandType
+            RequestBytes   = [int64][math]::Round($_.RequestBytes)
+            Classification = Get-UnmatchedBridgeRequestClass -RequestRow $_ -AllRows $sortedRows
+        }
+    })
+
+$connectionSummaries = @($rows |
+    Where-Object { -not [string]::IsNullOrWhiteSpace($_.ConnectionId) } |
+    Group-Object ConnectionId |
+    ForEach-Object {
+        $connectionId = $_.Name
+        $connectionRows = @($_.Group | Sort-Object TimestampUtc)
+        $requests = @($connectionRows | Where-Object { $_.Stage -eq "coverage_bridge_command_request" })
+        $responses = @($connectionRows | Where-Object { $_.Stage -eq "coverage_bridge_command_response" })
+        [pscustomobject]@{
+            ConnectionId = $connectionId
+            FirstUtc = $connectionRows[0].TimestampUtc
+            LastUtc = $connectionRows[-1].TimestampUtc
+            RequestCount = $requests.Count
+            ResponseCount = $responses.Count
+            UnmatchedRequestCount = @($unmatchedBridgeRequests | Where-Object { $_.ConnectionId -eq $connectionId }).Count
+            TopCommand = (@($requests | Group-Object CommandType | Sort-Object Count -Descending | Select-Object -First 1).Name)
+        }
+    } |
+    Sort-Object FirstUtc)
+
+$setupCycles = @()
+foreach ($connectionGroup in ($bridgeRequestRows | Sort-Object TimestampUtc | Group-Object ConnectionId)) {
+    $connectionRequests = @($connectionGroup.Group | Sort-Object TimestampUtc)
+    for ($i = 0; $i -lt $connectionRequests.Count; $i++) {
+        $registerRow = $connectionRequests[$i]
+        if ($registerRow.CommandType -ne "register_client") {
+            continue
+        }
+
+        $manifestRow = @($connectionRequests | Where-Object {
+            $_.TimestampUtc -gt $registerRow.TimestampUtc -and $_.CommandType -eq "get_manifest"
+        } | Select-Object -First 1)
+        if ($manifestRow.Count -eq 0) {
+            continue
+        }
+
+        $schemaRow = @($connectionRequests | Where-Object {
+            $_.TimestampUtc -gt $manifestRow[0].TimestampUtc -and $_.CommandType -eq "get_tool_schema"
+        } | Select-Object -First 1)
+        if ($schemaRow.Count -eq 0) {
+            continue
+        }
+
+        $setupCycles += [pscustomobject]@{
+            TimestampUtc = $registerRow.TimestampUtc
+            ConnectionId = $connectionGroup.Name
+            RegisterRequestId = $registerRow.RequestId
+            ManifestRequestId = $manifestRow[0].RequestId
+            SchemaRequestId = $schemaRow[0].RequestId
+        }
+    }
+}
+
+$packSetTransitions = @($bridgeResponseRows |
+    Where-Object { $_.CommandType -eq "set_tool_packs" } |
+    Sort-Object TimestampUtc |
+    ForEach-Object {
+        [pscustomobject]@{
+            TimestampUtc = $_.TimestampUtc
+            ConnectionId = $_.ConnectionId
+            RequestId = $_.RequestId
+            ActiveToolPacks = $_.ActiveToolPacks
+            ManifestKind = $_.ManifestKind
+            ManifestReason = $_.ManifestReason
+            Unchanged = $_.Unchanged
+            ResponseBytes = [int64][math]::Round($_.ResponseBytes)
+        }
+    })
+
 $toolSnapshotRows = @($rows | Where-Object { $_.EventKind -eq "tool_snapshot" -or $_.Stage -eq "tool_snapshot" })
 $orderedSnapshotRows = @($toolSnapshotRows | Sort-Object TimestampUtc)
 $minimalTransitions = 0
@@ -474,6 +652,19 @@ $report = [pscustomobject]@{
         ShapedTokens = [int64]$totalShapedTokens
         SavedTokens = [int64][math]::Max(0, $totalRawTokens - $totalShapedTokens)
         SavingsPct = Get-Percent -Part ([math]::Max(0, $totalRawBytes - $totalShapedBytes)) -Whole $totalRawBytes
+        ShapingApplicability = [pscustomobject]@{
+            PayloadRowsEligible = $payloadRows.Count
+            CoverageRowsNotApplicable = $coverageRows.Count
+            PayloadRowsWithSavings = @($payloadRows | Where-Object { $_.RawBytes -gt $_.ShapedBytes }).Count
+            NoShapingRecorded = ($totalRawBytes -gt 0 -and [int64][math]::Round($totalRawBytes) -eq [int64][math]::Round($totalShapedBytes))
+            Summary = if ($payloadRows.Count -eq 0) {
+                "No payload rows recorded; coverage rows are shaping n/a."
+            } elseif ($totalRawBytes -gt 0 -and [int64][math]::Round($totalRawBytes) -eq [int64][math]::Round($totalShapedBytes)) {
+                "No shaping recorded for eligible payload rows; coverage rows are shaping n/a."
+            } else {
+                "Payload rows are shaping eligible; coverage rows are shaping n/a."
+            }
+        }
     }
     RepeatedContextEstimate = [pscustomobject]@{
         ExactDuplicateGroups = @($exactDuplicateGroups).Count
@@ -494,12 +685,17 @@ $report = [pscustomobject]@{
     BridgeCoverage = [pscustomobject]@{
         RequestCount = $bridgeRequestRows.Count
         ResponseCount = $bridgeResponseRows.Count
+        ConnectionCount = @($connectionSummaries).Count
         DirectRequests = @($bridgeRequestRows | Where-Object { $_.Origin -eq "direct" }).Count
         GatewayRequests = @($bridgeRequestRows | Where-Object { $_.Origin -eq "gateway" }).Count
         RequestBytes = [int64][math]::Round($bridgeRequestBytes)
         ResponseBytes = [int64][math]::Round($bridgeResponseBytes)
         Latency = $bridgeLatencySummary
         TopCommands = @($bridgeTopCommands)
+        ConnectionSummaries = @($connectionSummaries)
+        SetupCycles = @($setupCycles)
+        PackSetTransitions = @($packSetTransitions)
+        UnmatchedRequests = @($unmatchedBridgeRequests)
     }
     ToolSnapshotChurn = [pscustomobject]@{
         Count = $toolSnapshotRows.Count
@@ -534,6 +730,8 @@ Write-Host ("  Raw tokens:     {0}" -f $report.Totals.RawTokens)
 Write-Host ("  Shaped tokens:  {0}" -f $report.Totals.ShapedTokens)
 Write-Host ("  Saved tokens:   {0}" -f $report.Totals.SavedTokens)
 Write-Host ("  Savings:        {0}%" -f $report.Totals.SavingsPct)
+Write-Host ("  Shaping scope:  {0}" -f $report.Totals.ShapingApplicability.Summary)
+Write-Host ("  Eligible payload rows: {0}; coverage rows shaping n/a: {1}" -f $report.Totals.ShapingApplicability.PayloadRowsEligible, $report.Totals.ShapingApplicability.CoverageRowsNotApplicable)
 Write-Host ""
 Write-Host "Repeated context estimate"
 Write-Host ("  Exact duplicate groups:      {0}" -f $report.RepeatedContextEstimate.ExactDuplicateGroups)
@@ -566,6 +764,8 @@ if ($report.RunSummaries.Count -gt 0) {
 Write-Host "Bridge coverage"
 Write-Host ("  Requests:        {0}" -f $report.BridgeCoverage.RequestCount)
 Write-Host ("  Responses:       {0}" -f $report.BridgeCoverage.ResponseCount)
+Write-Host ("  Connections:     {0}" -f $report.BridgeCoverage.ConnectionCount)
+Write-Host ("  Unmatched reqs:  {0}" -f $report.BridgeCoverage.UnmatchedRequests.Count)
 Write-Host ("  Direct requests: {0}" -f $report.BridgeCoverage.DirectRequests)
 Write-Host ("  Gateway requests:{0}" -f $report.BridgeCoverage.GatewayRequests)
 Write-Host ("  Request bytes:   {0} ({1})" -f $report.BridgeCoverage.RequestBytes, (Get-ByteString $report.BridgeCoverage.RequestBytes))
@@ -574,6 +774,34 @@ Write-Host ("  Response latency Mean / P95 ms: {0} / {1}" -f $report.BridgeCover
 if ($report.BridgeCoverage.TopCommands.Count -gt 0) {
     $report.BridgeCoverage.TopCommands |
         Format-Table Label, Count, RequestBytes -AutoSize |
+        Out-String |
+        Write-Host
+}
+
+Write-Host "Session churn"
+Write-Host ("  Setup cycles:          {0}" -f $report.BridgeCoverage.SetupCycles.Count)
+Write-Host ("  Pack-set transitions:  {0}" -f $report.BridgeCoverage.PackSetTransitions.Count)
+Write-Host ("  Unmatched requests:    {0}" -f $report.BridgeCoverage.UnmatchedRequests.Count)
+if ($report.BridgeCoverage.ConnectionSummaries.Count -gt 0) {
+    $report.BridgeCoverage.ConnectionSummaries |
+        Select-Object ConnectionId, RequestCount, ResponseCount, UnmatchedRequestCount, TopCommand |
+        Format-Table -AutoSize |
+        Out-String |
+        Write-Host
+}
+if ($report.BridgeCoverage.PackSetTransitions.Count -gt 0) {
+    Write-Host "Pack-set transitions"
+    $report.BridgeCoverage.PackSetTransitions |
+        Select-Object TimestampUtc, ConnectionId, ActiveToolPacks, ManifestKind, Unchanged, ResponseBytes |
+        Format-Table -AutoSize |
+        Out-String |
+        Write-Host
+}
+if ($report.BridgeCoverage.UnmatchedRequests.Count -gt 0) {
+    Write-Host "Unmatched bridge requests"
+    $report.BridgeCoverage.UnmatchedRequests |
+        Select-Object TimestampUtc, ConnectionId, CommandType, RequestId, Classification |
+        Format-Table -AutoSize |
         Out-String |
         Write-Host
 }

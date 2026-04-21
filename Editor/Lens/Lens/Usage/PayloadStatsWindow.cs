@@ -76,6 +76,8 @@ namespace Becool.UnityMcpLens.Editor.Lens.Usage
             EditorGUILayout.Space(8f);
             DrawBridgeCommandsSection();
             EditorGUILayout.Space(8f);
+            DrawSessionChurnSection();
+            EditorGUILayout.Space(8f);
             DrawChurnSection();
             EditorGUILayout.Space(8f);
             DrawTopRows("Top Payload Stages", m_Report.TopStages);
@@ -194,6 +196,9 @@ namespace Becool.UnityMcpLens.Editor.Lens.Usage
                 EditorGUILayout.LabelField("Estimated Saved Tokens", $"{FormatNumber(m_Report.SavedTokens)} ({m_Report.SavingsPct:F2}%)");
                 EditorGUILayout.LabelField("Raw Bytes", FormatBytes(m_Report.RawBytes));
                 EditorGUILayout.LabelField("Shaped Bytes", FormatBytes(m_Report.ShapedBytes));
+                EditorGUILayout.LabelField("Shaping Scope", m_Report.ShapingApplicability?.Summary ?? "Payload rows are shaping eligible; coverage rows are shaping n/a.");
+                EditorGUILayout.LabelField("Eligible Payload Rows", FormatNumber(m_Report.ShapingApplicability?.PayloadRowsEligible ?? m_Report.PayloadEntryCount));
+                EditorGUILayout.LabelField("Coverage Rows Shaping", $"n/a ({FormatNumber(m_Report.ShapingApplicability?.CoverageRowsNotApplicable ?? m_Report.CoverageEntryCount)} rows)");
                 EditorGUILayout.LabelField("Exact Duplicate Raw Estimate", $"{FormatBytes(m_Report.ExactRepeatedRawBytes)} ({m_Report.ExactRepeatedRawPct:F2}%)");
                 EditorGUILayout.LabelField("Normalized Duplicate Raw Estimate", $"{FormatBytes(m_Report.NormalizedRepeatedRawBytes)} ({m_Report.NormalizedRepeatedRawPct:F2}%)");
             }
@@ -206,6 +211,8 @@ namespace Becool.UnityMcpLens.Editor.Lens.Usage
             {
                 EditorGUILayout.LabelField("Bridge Requests", FormatNumber(m_Report.BridgeRequestCount));
                 EditorGUILayout.LabelField("Bridge Responses", FormatNumber(m_Report.BridgeResponseCount));
+                EditorGUILayout.LabelField("Bridge Connections", FormatNumber(m_Report.BridgeConnectionCount));
+                EditorGUILayout.LabelField("Unmatched Requests", FormatNumber(m_Report.UnmatchedRequests?.Count ?? 0));
                 EditorGUILayout.LabelField("Bridge Request Bytes", FormatBytes(m_Report.BridgeRequestBytes));
                 EditorGUILayout.LabelField("Bridge Response Bytes", FormatBytes(m_Report.BridgeResponseBytes));
             }
@@ -227,6 +234,54 @@ namespace Becool.UnityMcpLens.Editor.Lens.Usage
                     EditorGUILayout.LabelField(
                         command.Label,
                         $"count {command.Count}, request bytes {FormatBytes(command.RequestBytes)}");
+                }
+            }
+        }
+
+        void DrawSessionChurnSection()
+        {
+            DrawSectionHeader("Session Churn");
+            using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
+            {
+                EditorGUILayout.LabelField("Connections", FormatNumber(m_Report.BridgeConnectionCount));
+                EditorGUILayout.LabelField("Setup Cycles", FormatNumber(m_Report.SetupCycleCount));
+                EditorGUILayout.LabelField("Pack-Set Transitions", FormatNumber(m_Report.PackSetTransitions?.Count ?? 0));
+                EditorGUILayout.LabelField("Unmatched Requests", FormatNumber(m_Report.UnmatchedRequests?.Count ?? 0));
+
+                if (m_Report.ConnectionSummaries != null && m_Report.ConnectionSummaries.Count > 0)
+                {
+                    EditorGUILayout.Space(4f);
+                    EditorGUILayout.LabelField("Connections", EditorStyles.boldLabel);
+                    foreach (var connection in m_Report.ConnectionSummaries.Take(k_TopCount))
+                    {
+                        EditorGUILayout.LabelField(
+                            connection.ConnectionId,
+                            $"requests {connection.RequestCount}, responses {connection.ResponseCount}, unmatched {connection.UnmatchedRequestCount}, top {connection.TopCommand}");
+                    }
+                }
+
+                if (m_Report.PackSetTransitions != null && m_Report.PackSetTransitions.Count > 0)
+                {
+                    EditorGUILayout.Space(4f);
+                    EditorGUILayout.LabelField("Pack Sets", EditorStyles.boldLabel);
+                    foreach (var transition in m_Report.PackSetTransitions.Take(k_TopCount))
+                    {
+                        EditorGUILayout.LabelField(
+                            transition.ConnectionId,
+                            $"{transition.ActiveToolPacks} -> {transition.ManifestKind}, unchanged {transition.Unchanged}, response {FormatBytes(transition.ResponseBytes)}");
+                    }
+                }
+
+                if (m_Report.UnmatchedRequests != null && m_Report.UnmatchedRequests.Count > 0)
+                {
+                    EditorGUILayout.Space(4f);
+                    EditorGUILayout.LabelField("Unmatched", EditorStyles.boldLabel);
+                    foreach (var request in m_Report.UnmatchedRequests.Take(k_TopCount))
+                    {
+                        EditorGUILayout.LabelField(
+                            request.CommandType,
+                            $"{request.ConnectionId}, {ShortId(request.RequestId)}, {request.Classification}");
+                    }
                 }
             }
         }
@@ -355,14 +410,24 @@ namespace Becool.UnityMcpLens.Editor.Lens.Usage
                         Hash = ReadString(entry["hash"]),
                         NormalizedHash = ReadString(entry["normalizedHash"]),
                         RunId = ReadString(entry["runId"]),
+                        ConnectionId = ReadString(entry["connectionId"], ReadString(entry.SelectToken("meta.connectionId"))),
+                        RequestId = ReadString(entry["requestId"], ReadString(entry.SelectToken("meta.requestId"))),
                         Success = ReadBool(entry["success"]),
+                        Unchanged = ReadBool(entry["unchanged"]),
                         ErrorKind = ReadString(entry["errorKind"]),
                         CommandType = ReadString(entry["commandType"], ReadString(entry["name"])),
                         RequestBytes = ReadLong(entry["requestBytes"], ReadLong(entry.SelectToken("meta.payloadBytes"))),
                         ResponseBytes = ReadLong(entry["responseBytes"]),
                         DiscoveryMode = ReadString(entry["discoveryMode"], ReadString(entry["toolDiscoveryMode"])),
+                        SnapshotReason = ReadString(entry["snapshotReason"], ReadString(entry["toolDiscoveryReason"])),
                         SnapshotHashMinimal = ReadString(entry["snapshotHashMinimal"]),
-                        SnapshotHashFull = ReadString(entry["snapshotHashFull"])
+                        SnapshotHashFull = ReadString(entry["snapshotHashFull"]),
+                        BridgeSessionId = ReadString(entry["bridgeSessionId"], ReadString(entry.SelectToken("meta.bridgeSessionId"))),
+                        ManifestVersion = ReadLong(entry["manifestVersion"], ReadLong(entry.SelectToken("meta.manifestVersion"))),
+                        ManifestKind = ReadString(entry["manifestKind"], ReadString(entry.SelectToken("meta.manifestKind"))),
+                        ManifestReason = ReadString(entry["manifestReason"], ReadString(entry.SelectToken("meta.manifestReason"))),
+                        ActiveToolPacks = ReadPackList(entry["activeToolPacks"] ?? entry.SelectToken("meta.activeToolPacks")),
+                        ResponseStatus = ReadString(entry["responseStatus"], ReadString(entry.SelectToken("meta.status")))
                     });
                 }
                 catch
@@ -407,6 +472,67 @@ namespace Becool.UnityMcpLens.Editor.Lens.Usage
                 .ThenByDescending(row => row.RequestBytes)
                 .Take(k_TopCount)
                 .ToList();
+
+            var responseKeys = new HashSet<string>(
+                bridgeResponseRows
+                    .Select(BuildBridgeRowKey)
+                    .Where(key => !string.IsNullOrWhiteSpace(key)),
+                StringComparer.Ordinal);
+            var unmatchedRequests = bridgeRequestRows
+                .Where(row => !string.IsNullOrWhiteSpace(BuildBridgeRowKey(row)) && !responseKeys.Contains(BuildBridgeRowKey(row)))
+                .OrderBy(row => row.TimestampUtc ?? DateTimeOffset.MinValue)
+                .Select(row => new UnmatchedRequestRow
+                {
+                    TimestampUtc = row.TimestampUtc,
+                    ConnectionId = row.ConnectionId,
+                    RequestId = row.RequestId,
+                    CommandType = row.CommandType,
+                    RequestBytes = row.RequestBytes,
+                    Classification = ClassifyUnmatchedBridgeRequest(row, orderedRows)
+                })
+                .ToList();
+            var connectionSummaries = rows
+                .Where(row => !string.IsNullOrWhiteSpace(row.ConnectionId))
+                .GroupBy(row => row.ConnectionId)
+                .Select(group =>
+                {
+                    var connectionRows = group.OrderBy(row => row.TimestampUtc ?? DateTimeOffset.MinValue).ToList();
+                    var requests = connectionRows.Where(row => string.Equals(row.Stage, "coverage_bridge_command_request", StringComparison.Ordinal)).ToList();
+                    var responses = connectionRows.Where(row => string.Equals(row.Stage, "coverage_bridge_command_response", StringComparison.Ordinal)).ToList();
+                    var topCommand = requests
+                        .GroupBy(row => string.IsNullOrWhiteSpace(row.CommandType) ? "(unknown)" : row.CommandType)
+                        .OrderByDescending(commandGroup => commandGroup.Count())
+                        .Select(commandGroup => commandGroup.Key)
+                        .FirstOrDefault() ?? "(none)";
+                    return new ConnectionSummaryRow
+                    {
+                        ConnectionId = group.Key,
+                        FirstUtc = connectionRows.FirstOrDefault()?.TimestampUtc,
+                        LastUtc = connectionRows.LastOrDefault()?.TimestampUtc,
+                        RequestCount = requests.Count,
+                        ResponseCount = responses.Count,
+                        UnmatchedRequestCount = unmatchedRequests.Count(request => string.Equals(request.ConnectionId, group.Key, StringComparison.Ordinal)),
+                        TopCommand = topCommand
+                    };
+                })
+                .OrderBy(row => row.FirstUtc ?? DateTimeOffset.MinValue)
+                .ToList();
+            var setupCycleCount = CountSetupCycles(bridgeRequestRows);
+            var packSetTransitions = bridgeResponseRows
+                .Where(row => string.Equals(row.CommandType, "set_tool_packs", StringComparison.Ordinal))
+                .OrderBy(row => row.TimestampUtc ?? DateTimeOffset.MinValue)
+                .Select(row => new PackSetTransitionRow
+                {
+                    TimestampUtc = row.TimestampUtc,
+                    ConnectionId = row.ConnectionId,
+                    RequestId = row.RequestId,
+                    ActiveToolPacks = row.ActiveToolPacks,
+                    ManifestKind = row.ManifestKind,
+                    ManifestReason = row.ManifestReason,
+                    Unchanged = row.Unchanged == true,
+                    ResponseBytes = row.ResponseBytes
+                })
+                .ToList();
             var toolSnapshotRows = rows.Where(row =>
                 string.Equals(row.EventKind, "tool_snapshot", StringComparison.Ordinal) ||
                 string.Equals(row.Stage, "tool_snapshot", StringComparison.Ordinal)).OrderBy(row => row.TimestampUtc ?? DateTimeOffset.MinValue).ToList();
@@ -442,6 +568,7 @@ namespace Becool.UnityMcpLens.Editor.Lens.Usage
                 ShapedBytes = payloadRows.Sum(row => row.ShapedBytes),
                 RawTokens = payloadRows.Sum(row => EstimateTokensFromBytes(row.RawBytes)),
                 ShapedTokens = payloadRows.Sum(row => EstimateTokensFromBytes(row.ShapedBytes)),
+                ShapingApplicability = CreateShapingApplicability(payloadRows.Count, coverageRows.Count, payloadRows.Sum(row => row.RawBytes), payloadRows.Sum(row => row.ShapedBytes), payloadRows.Count(row => row.RawBytes > row.ShapedBytes)),
                 ExactRepeatedRawBytes = exactRepeatedRawBytes,
                 ExactRepeatedRawPct = Percent(exactRepeatedRawBytes, payloadRows.Sum(row => row.RawBytes)),
                 NormalizedRepeatedRawBytes = normalizedRepeatedRawBytes,
@@ -451,6 +578,11 @@ namespace Becool.UnityMcpLens.Editor.Lens.Usage
                 BridgeRequestBytes = bridgeRequestRows.Sum(row => row.RequestBytes),
                 BridgeResponseBytes = bridgeResponseRows.Sum(row => row.ResponseBytes),
                 BridgeTopCommands = bridgeTopCommands,
+                BridgeConnectionCount = connectionSummaries.Count,
+                ConnectionSummaries = connectionSummaries,
+                SetupCycleCount = setupCycleCount,
+                PackSetTransitions = packSetTransitions,
+                UnmatchedRequests = unmatchedRequests,
                 ToolSnapshotCount = toolSnapshotRows.Count,
                 MinimalHashTransitions = minimalTransitions,
                 FullHashTransitions = fullTransitions,
@@ -508,6 +640,103 @@ namespace Becool.UnityMcpLens.Editor.Lens.Usage
 
             return string.Equals(row.EventKind, "coverage", StringComparison.Ordinal) ||
                 string.Equals(row.EventKind, "bridge_coverage", StringComparison.Ordinal);
+        }
+
+        static ShapingApplicabilityRow CreateShapingApplicability(int payloadRowsEligible, int coverageRowsNotApplicable, long rawBytes, long shapedBytes, int payloadRowsWithSavings)
+        {
+            string summary;
+            if (payloadRowsEligible == 0)
+                summary = "No payload rows recorded; coverage rows are shaping n/a.";
+            else if (rawBytes > 0 && rawBytes == shapedBytes)
+                summary = "No shaping recorded for eligible payload rows; coverage rows are shaping n/a.";
+            else
+                summary = "Payload rows are shaping eligible; coverage rows are shaping n/a.";
+
+            return new ShapingApplicabilityRow
+            {
+                PayloadRowsEligible = payloadRowsEligible,
+                CoverageRowsNotApplicable = coverageRowsNotApplicable,
+                PayloadRowsWithSavings = payloadRowsWithSavings,
+                NoShapingRecorded = rawBytes > 0 && rawBytes == shapedBytes,
+                Summary = summary
+            };
+        }
+
+        static string BuildBridgeRowKey(PayloadRow row)
+        {
+            if (row == null || string.IsNullOrWhiteSpace(row.RequestId))
+                return string.Empty;
+
+            return $"{row.ConnectionId}|{row.RequestId}";
+        }
+
+        static string ClassifyUnmatchedBridgeRequest(PayloadRow request, IReadOnlyList<PayloadRow> orderedRows)
+        {
+            if (request?.TimestampUtc == null || orderedRows == null)
+                return "unmatched_request";
+
+            var requestTime = request.TimestampUtc.Value;
+            var nearbyRows = orderedRows
+                .Where(row => row.TimestampUtc.HasValue &&
+                    row.TimestampUtc.Value > requestTime &&
+                    (row.TimestampUtc.Value - requestTime).TotalSeconds <= 45d)
+                .ToList();
+            bool hasNewConnection = nearbyRows.Any(row =>
+                string.Equals(row.Stage, "coverage_bridge_command_request", StringComparison.Ordinal) &&
+                string.Equals(row.CommandType, "register_client", StringComparison.Ordinal) &&
+                !string.Equals(row.ConnectionId, request.ConnectionId, StringComparison.Ordinal));
+            bool hasSnapshotRefresh = nearbyRows.Any(row =>
+                string.Equals(row.EventKind, "tool_snapshot", StringComparison.Ordinal) ||
+                string.Equals(row.Stage, "tool_snapshot", StringComparison.Ordinal));
+            bool hasReloadHint = nearbyRows.Any(row =>
+                !string.IsNullOrWhiteSpace(row.SnapshotReason) &&
+                (row.SnapshotReason.IndexOf("reload", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    row.SnapshotReason.IndexOf("compile", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    row.SnapshotReason.IndexOf("domain", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    row.SnapshotReason.IndexOf("bridge_started", StringComparison.OrdinalIgnoreCase) >= 0));
+
+            if (hasNewConnection && (hasSnapshotRefresh || hasReloadHint))
+                return "domain_reload_transport_close";
+
+            if (hasNewConnection)
+                return "transport_reconnect_after_request";
+
+            if (hasSnapshotRefresh)
+                return "snapshot_refresh_after_request";
+
+            return "unmatched_request";
+        }
+
+        static int CountSetupCycles(IReadOnlyList<PayloadRow> bridgeRequestRows)
+        {
+            var count = 0;
+            foreach (var connectionGroup in bridgeRequestRows
+                .OrderBy(row => row.TimestampUtc ?? DateTimeOffset.MinValue)
+                .GroupBy(row => row.ConnectionId))
+            {
+                var requests = connectionGroup.OrderBy(row => row.TimestampUtc ?? DateTimeOffset.MinValue).ToList();
+                foreach (var registerRow in requests.Where(row => string.Equals(row.CommandType, "register_client", StringComparison.Ordinal)))
+                {
+                    if (!registerRow.TimestampUtc.HasValue)
+                        continue;
+
+                    var manifestRow = requests.FirstOrDefault(row =>
+                        row.TimestampUtc.HasValue &&
+                        row.TimestampUtc.Value > registerRow.TimestampUtc.Value &&
+                        string.Equals(row.CommandType, "get_manifest", StringComparison.Ordinal));
+                    if (manifestRow?.TimestampUtc == null)
+                        continue;
+
+                    var schemaRow = requests.FirstOrDefault(row =>
+                        row.TimestampUtc.HasValue &&
+                        row.TimestampUtc.Value > manifestRow.TimestampUtc.Value &&
+                        string.Equals(row.CommandType, "get_tool_schema", StringComparison.Ordinal));
+                    if (schemaRow != null)
+                        count++;
+                }
+            }
+
+            return count;
         }
 
         static string GetStatsPath()
@@ -571,6 +800,22 @@ namespace Becool.UnityMcpLens.Editor.Lens.Usage
                 : null;
         }
 
+        static string ReadPackList(JToken token)
+        {
+            if (token == null || token.Type == JTokenType.Null)
+                return string.Empty;
+
+            if (token.Type == JTokenType.Array)
+            {
+                return string.Join(",",
+                    token.Values<string>()
+                        .Where(value => !string.IsNullOrWhiteSpace(value))
+                        .Select(value => value.Trim()));
+            }
+
+            return ReadString(token);
+        }
+
         static long EstimateTokensFromBytes(long bytes)
         {
             if (bytes <= 0)
@@ -606,6 +851,14 @@ namespace Becool.UnityMcpLens.Editor.Lens.Usage
             return value.ToString("N0", CultureInfo.InvariantCulture);
         }
 
+        static string ShortId(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value) || value.Length <= 10)
+                return value ?? string.Empty;
+
+            return value.Substring(0, 10);
+        }
+
         static string BuildClipboardReport(PayloadStatsReport report)
         {
             var builder = new StringBuilder();
@@ -622,11 +875,16 @@ namespace Becool.UnityMcpLens.Editor.Lens.Usage
 
             builder.AppendLine();
             builder.AppendLine($"Payload stats: {FormatNumber(report.RawTokens)} raw tokens -> {FormatNumber(report.ShapedTokens)} shaped tokens, saved {FormatNumber(report.SavedTokens)} tokens ({report.SavingsPct:F2}% savings).");
+            builder.AppendLine($"Shaping applicability: {report.ShapingApplicability?.Summary ?? "Payload rows are shaping eligible; coverage rows are shaping n/a."}");
             builder.AppendLine($"Repeated context estimate: exact {report.ExactRepeatedRawPct:F2}% raw, normalized {report.NormalizedRepeatedRawPct:F2}% raw.");
             builder.AppendLine($"Bridge requests seen: {FormatNumber(report.BridgeRequestCount)}. Bridge responses seen: {FormatNumber(report.BridgeResponseCount)}.");
+            builder.AppendLine($"Session churn: {FormatNumber(report.BridgeConnectionCount)} connections, {FormatNumber(report.SetupCycleCount)} setup cycles, {FormatNumber(report.PackSetTransitions?.Count ?? 0)} pack-set transitions, {FormatNumber(report.UnmatchedRequests?.Count ?? 0)} unmatched requests.");
             builder.AppendLine($"Tool snapshot churn: {FormatNumber(report.ToolSnapshotCount)} rows, {FormatNumber(report.MinimalHashTransitions)} minimal transitions, {FormatNumber(report.FullHashTransitions)} full transitions, {FormatNumber(report.FalseStableMinimalTransitions)} false-stable minimal transitions.");
 
             AppendBridgeCommands(builder, report.BridgeTopCommands);
+            AppendConnectionSummaries(builder, report.ConnectionSummaries);
+            AppendPackSetTransitions(builder, report.PackSetTransitions);
+            AppendUnmatchedRequests(builder, report.UnmatchedRequests);
             AppendSummaryRows(builder, "Top payload stages", report.TopStages);
             AppendSummaryRows(builder, "Top payload names", report.TopNames);
             AppendRunSummaries(builder, report.RunSummaries);
@@ -657,6 +915,45 @@ namespace Becool.UnityMcpLens.Editor.Lens.Usage
             foreach (var row in rows)
             {
                 builder.AppendLine($"- {row.Label}: rows {row.Count}, raw {FormatBytes(row.RawBytes)}, failures {row.FailureCount}");
+            }
+        }
+
+        static void AppendConnectionSummaries(StringBuilder builder, IReadOnlyList<ConnectionSummaryRow> rows)
+        {
+            if (rows == null || rows.Count == 0)
+                return;
+
+            builder.AppendLine();
+            builder.AppendLine("Bridge connections:");
+            foreach (var row in rows.Take(k_TopCount))
+            {
+                builder.AppendLine($"- {row.ConnectionId}: requests {row.RequestCount}, responses {row.ResponseCount}, unmatched {row.UnmatchedRequestCount}, top {row.TopCommand}");
+            }
+        }
+
+        static void AppendPackSetTransitions(StringBuilder builder, IReadOnlyList<PackSetTransitionRow> rows)
+        {
+            if (rows == null || rows.Count == 0)
+                return;
+
+            builder.AppendLine();
+            builder.AppendLine("Pack-set transitions:");
+            foreach (var row in rows.Take(k_TopCount))
+            {
+                builder.AppendLine($"- {row.ConnectionId}: {row.ActiveToolPacks} -> {row.ManifestKind}, unchanged {row.Unchanged}, response {FormatBytes(row.ResponseBytes)}");
+            }
+        }
+
+        static void AppendUnmatchedRequests(StringBuilder builder, IReadOnlyList<UnmatchedRequestRow> rows)
+        {
+            if (rows == null || rows.Count == 0)
+                return;
+
+            builder.AppendLine();
+            builder.AppendLine("Unmatched bridge requests:");
+            foreach (var row in rows.Take(k_TopCount))
+            {
+                builder.AppendLine($"- {row.CommandType}: {row.ConnectionId}, {ShortId(row.RequestId)}, {row.Classification}");
             }
         }
 
@@ -694,6 +991,7 @@ namespace Becool.UnityMcpLens.Editor.Lens.Usage
             public long ShapedTokens { get; set; }
             public long SavedTokens => Math.Max(0L, RawTokens - ShapedTokens);
             public double SavingsPct => Percent(Math.Max(0L, RawBytes - ShapedBytes), RawBytes);
+            public ShapingApplicabilityRow ShapingApplicability { get; set; }
             public long ExactRepeatedRawBytes { get; set; }
             public double ExactRepeatedRawPct { get; set; }
             public long NormalizedRepeatedRawBytes { get; set; }
@@ -703,6 +1001,11 @@ namespace Becool.UnityMcpLens.Editor.Lens.Usage
             public long BridgeRequestBytes { get; set; }
             public long BridgeResponseBytes { get; set; }
             public List<BridgeCommandRow> BridgeTopCommands { get; set; }
+            public int BridgeConnectionCount { get; set; }
+            public List<ConnectionSummaryRow> ConnectionSummaries { get; set; }
+            public int SetupCycleCount { get; set; }
+            public List<PackSetTransitionRow> PackSetTransitions { get; set; }
+            public List<UnmatchedRequestRow> UnmatchedRequests { get; set; }
             public int ToolSnapshotCount { get; set; }
             public int MinimalHashTransitions { get; set; }
             public int FullHashTransitions { get; set; }
@@ -710,6 +1013,15 @@ namespace Becool.UnityMcpLens.Editor.Lens.Usage
             public List<PayloadSummaryRow> TopStages { get; set; }
             public List<PayloadSummaryRow> TopNames { get; set; }
             public List<RunSummaryRow> RunSummaries { get; set; }
+        }
+
+        sealed class ShapingApplicabilityRow
+        {
+            public int PayloadRowsEligible { get; set; }
+            public int CoverageRowsNotApplicable { get; set; }
+            public int PayloadRowsWithSavings { get; set; }
+            public bool NoShapingRecorded { get; set; }
+            public string Summary { get; set; }
         }
 
         sealed class PayloadSummaryRow
@@ -737,6 +1049,39 @@ namespace Becool.UnityMcpLens.Editor.Lens.Usage
             public long RequestBytes { get; set; }
         }
 
+        sealed class ConnectionSummaryRow
+        {
+            public string ConnectionId { get; set; }
+            public DateTimeOffset? FirstUtc { get; set; }
+            public DateTimeOffset? LastUtc { get; set; }
+            public int RequestCount { get; set; }
+            public int ResponseCount { get; set; }
+            public int UnmatchedRequestCount { get; set; }
+            public string TopCommand { get; set; }
+        }
+
+        sealed class PackSetTransitionRow
+        {
+            public DateTimeOffset? TimestampUtc { get; set; }
+            public string ConnectionId { get; set; }
+            public string RequestId { get; set; }
+            public string ActiveToolPacks { get; set; }
+            public string ManifestKind { get; set; }
+            public string ManifestReason { get; set; }
+            public bool Unchanged { get; set; }
+            public long ResponseBytes { get; set; }
+        }
+
+        sealed class UnmatchedRequestRow
+        {
+            public DateTimeOffset? TimestampUtc { get; set; }
+            public string ConnectionId { get; set; }
+            public string RequestId { get; set; }
+            public string CommandType { get; set; }
+            public long RequestBytes { get; set; }
+            public string Classification { get; set; }
+        }
+
         sealed class PayloadRow
         {
             public DateTimeOffset? TimestampUtc { get; set; }
@@ -748,14 +1093,24 @@ namespace Becool.UnityMcpLens.Editor.Lens.Usage
             public string Hash { get; set; }
             public string NormalizedHash { get; set; }
             public string RunId { get; set; }
+            public string ConnectionId { get; set; }
+            public string RequestId { get; set; }
             public bool? Success { get; set; }
+            public bool? Unchanged { get; set; }
             public string ErrorKind { get; set; }
             public string CommandType { get; set; }
             public long RequestBytes { get; set; }
             public long ResponseBytes { get; set; }
             public string DiscoveryMode { get; set; }
+            public string SnapshotReason { get; set; }
             public string SnapshotHashMinimal { get; set; }
             public string SnapshotHashFull { get; set; }
+            public string BridgeSessionId { get; set; }
+            public long ManifestVersion { get; set; }
+            public string ManifestKind { get; set; }
+            public string ManifestReason { get; set; }
+            public string ActiveToolPacks { get; set; }
+            public string ResponseStatus { get; set; }
         }
     }
 }
