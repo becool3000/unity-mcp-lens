@@ -73,6 +73,37 @@ namespace Becool.UnityMcpLens.Editor.Services.GameObjects
             };
         }
 
+        public GameObjectComponentMutationRequest NormalizeComponentMutation(JObject parameters, JToken targetToken, string searchMethod, string operation = null)
+        {
+            string normalizedOperation = NormalizeOperation(operation ?? parameters?["operation"]?.ToString());
+            string componentName = parameters?["component_name"]?.ToString() ?? parameters?["componentName"]?.ToString();
+            JObject componentProperties = parameters?["component_properties"] as JObject ?? parameters?["componentProperties"] as JObject;
+
+            if (normalizedOperation == "add" && string.IsNullOrEmpty(componentName))
+                ExtractFirstAddComponent(parameters, ref componentName, ref componentProperties);
+
+            if (normalizedOperation == "remove" && string.IsNullOrEmpty(componentName))
+                ExtractFirstRemoveComponent(parameters, ref componentName);
+
+            if (normalizedOperation == "setProperties" && componentProperties != null && !string.IsNullOrEmpty(componentName))
+                componentProperties = componentProperties[componentName] as JObject ?? componentProperties;
+
+            if (normalizedOperation == "add" && componentProperties != null && !string.IsNullOrEmpty(componentName))
+                componentProperties = componentProperties[componentName] as JObject ?? componentProperties;
+
+            return new GameObjectComponentMutationRequest
+            {
+                target = NormalizeTarget(targetToken),
+                searchMethod = NormalizeSearchMethod(searchMethod),
+                searchInactive = parameters?["search_inactive"]?.ToObject<bool>() ?? parameters?["searchInactive"]?.ToObject<bool>() ?? false,
+                operation = normalizedOperation,
+                componentName = componentName,
+                componentIndex = ParseNullableInt(parameters?["component_index"] ?? parameters?["componentIndex"]),
+                componentProperties = componentProperties,
+                legacyAction = operation
+            };
+        }
+
         static string NormalizeSearchMethod(string searchMethod)
         {
             return string.IsNullOrWhiteSpace(searchMethod) ? null : searchMethod.ToLowerInvariant();
@@ -122,6 +153,51 @@ namespace Becool.UnityMcpLens.Editor.Services.GameObjects
                 return token.ToObject<int>();
 
             return int.TryParse(token.ToString(), out int value) ? value : null;
+        }
+
+        static string NormalizeOperation(string operation)
+        {
+            if (string.IsNullOrWhiteSpace(operation))
+                return null;
+
+            string normalized = operation.Trim();
+            if (string.Equals(normalized, "set_properties", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(normalized, "set_component_property", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(normalized, "setProperty", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(normalized, "setProperties", StringComparison.OrdinalIgnoreCase))
+                return "setProperties";
+
+            return normalized.ToLowerInvariant();
+        }
+
+        static void ExtractFirstAddComponent(JObject parameters, ref string componentName, ref JObject componentProperties)
+        {
+            if (!(parameters?["components_to_add"] is JArray componentsToAddArray) || componentsToAddArray.Count == 0)
+                return;
+
+            var componentToken = componentsToAddArray.First;
+            if (componentToken == null)
+                return;
+
+            if (componentToken.Type == JTokenType.String)
+            {
+                componentName = componentToken.ToString();
+                return;
+            }
+
+            if (componentToken is JObject componentObject)
+            {
+                componentName = componentObject["typeName"]?.ToString() ?? componentObject["componentName"]?.ToString() ?? componentObject["component_name"]?.ToString();
+                componentProperties = componentObject["properties"] as JObject ?? componentProperties;
+            }
+        }
+
+        static void ExtractFirstRemoveComponent(JObject parameters, ref string componentName)
+        {
+            if (!(parameters?["components_to_remove"] is JArray componentsToRemoveArray) || componentsToRemoveArray.Count == 0)
+                return;
+
+            componentName = componentsToRemoveArray.First?.ToString();
         }
     }
 }

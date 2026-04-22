@@ -18,6 +18,7 @@ namespace Becool.UnityMcpLens.Editor.Lens
             NormalizeToolName("Unity.GameObject.ListComponents"),
             NormalizeToolName("Unity.GameObject.GetComponent"),
             NormalizeToolName("Unity.GameObject.PreviewChanges"),
+            NormalizeToolName("Unity.GameObject.PreviewComponentChanges"),
             NormalizeToolName("Unity.GetLensUsageReport"),
             NormalizeToolName("Unity.GetLensHealth"),
             NormalizeToolName("Unity.ListToolPacks"),
@@ -41,6 +42,7 @@ namespace Becool.UnityMcpLens.Editor.Lens
         static readonly HashSet<string> k_MutatingTools = new(StringComparer.OrdinalIgnoreCase)
         {
             NormalizeToolName("Unity.GameObject.ApplyChanges"),
+            NormalizeToolName("Unity.GameObject.ApplyComponentChanges"),
             NormalizeToolName("Unity.ManageGameObject"),
             NormalizeToolName("Unity.ManageScene"),
             NormalizeToolName("Unity.ManageAsset"),

@@ -19,6 +19,8 @@ namespace Becool.UnityMcpLens.Editor.Tools
         const string ApplyChangesToolName = "Unity.GameObject.ApplyChanges";
         const string ListComponentsToolName = "Unity.GameObject.ListComponents";
         const string GetComponentToolName = "Unity.GameObject.GetComponent";
+        const string PreviewComponentChangesToolName = "Unity.GameObject.PreviewComponentChanges";
+        const string ApplyComponentChangesToolName = "Unity.GameObject.ApplyComponentChanges";
 
         public const string InspectDescription = @"Inspects scene GameObjects without mutation.
 
@@ -47,11 +49,21 @@ Returns compact component inventory only. Use Unity.GameObject.GetComponent for 
 
 Use componentName and optional componentIndex to select among duplicate component types.";
 
+        public const string PreviewComponentChangesDescription = @"Previews component changes on a scene GameObject without mutation.
+
+Supports add, remove, and setProperties operations. Preview does not call Undo, add/remove components, set properties, or mark objects dirty.";
+
+        public const string ApplyComponentChangesDescription = @"Applies component changes on a scene GameObject after the same validation used by PreviewComponentChanges.
+
+Supports add, remove, and setProperties operations. Returns compact readback data and reports no-op property updates as applied=false.";
+
         static readonly UnityGameObjectAdapter GameObjectAdapter = new UnityGameObjectAdapter();
+        static readonly UnityComponentMutationAdapter ComponentMutationAdapter = new UnityComponentMutationAdapter(GameObjectAdapter);
         static readonly GameObjectRequestNormalizer RequestNormalizer = new GameObjectRequestNormalizer();
         static readonly GameObjectQueryService QueryService = new GameObjectQueryService(GameObjectAdapter);
         static readonly GameObjectMutationService MutationService = new GameObjectMutationService(GameObjectAdapter);
         static readonly GameObjectComponentReadService ComponentReadService = new GameObjectComponentReadService(GameObjectAdapter);
+        static readonly GameObjectComponentMutationService ComponentMutationService = new GameObjectComponentMutationService(GameObjectAdapter, ComponentMutationAdapter);
 
         [McpSchema(InspectToolName)]
         public static object GetInspectSchema()
@@ -123,6 +135,18 @@ Use componentName and optional componentIndex to select among duplicate componen
                 },
                 required = new[] { "target", "componentName" }
             };
+        }
+
+        [McpSchema(PreviewComponentChangesToolName)]
+        public static object GetPreviewComponentChangesSchema()
+        {
+            return BuildComponentChangeSchema();
+        }
+
+        [McpSchema(ApplyComponentChangesToolName)]
+        public static object GetApplyComponentChangesSchema()
+        {
+            return BuildComponentChangeSchema();
         }
 
         [McpTool(InspectToolName, InspectDescription, "Inspect GameObject", Groups = new[] { "scene" }, EnabledByDefault = true)]
@@ -273,6 +297,18 @@ Use componentName and optional componentIndex to select among duplicate componen
             return ShapeComponentReadResponse(GetComponentToolName, result, timing, errorKind);
         }
 
+        [McpTool(PreviewComponentChangesToolName, PreviewComponentChangesDescription, "Preview GameObject Component Changes", Groups = new[] { "scene" }, EnabledByDefault = true)]
+        public static object PreviewComponentChanges(JObject @params)
+        {
+            return HandleComponentChangeTool(PreviewComponentChangesToolName, "preview_component_changes", @params, apply: false);
+        }
+
+        [McpTool(ApplyComponentChangesToolName, ApplyComponentChangesDescription, "Apply GameObject Component Changes", Groups = new[] { "scene" }, EnabledByDefault = true)]
+        public static object ApplyComponentChanges(JObject @params)
+        {
+            return HandleComponentChangeTool(ApplyComponentChangesToolName, "apply_component_changes", @params, apply: true);
+        }
+
         static object HandleChangeTool(string toolName, string requestType, JObject @params, bool apply)
         {
             @params ??= new JObject();
@@ -299,6 +335,37 @@ Use componentName and optional componentIndex to select among duplicate componen
             {
                 errorKind = ex.GetType().Name;
                 result = GameObjectOperationResult.Error($"Internal error processing GameObject {requestType}: {ex.Message}", errorKind);
+            }
+
+            return ShapeResponse(result, timing, errorKind);
+        }
+
+        static object HandleComponentChangeTool(string toolName, string requestType, JObject @params, bool apply)
+        {
+            @params ??= new JObject();
+            var timing = new GameObjectToolTiming(toolName, requestType, GetUtf8ByteCount(@params.ToString(Formatting.None)));
+            GameObjectOperationResult result;
+            string errorKind = null;
+
+            try
+            {
+                GameObjectComponentMutationRequest request;
+                using (timing.Measure("normalization"))
+                {
+                    request = RequestNormalizer.NormalizeComponentMutation(@params, GetToken(@params, "target", "Target"), GetSearchMethod(@params));
+                }
+
+                using (timing.Measure("service"))
+                {
+                    result = apply
+                        ? ComponentMutationService.Apply(request, timing)
+                        : ComponentMutationService.Preview(request, timing);
+                }
+            }
+            catch (Exception ex)
+            {
+                errorKind = ex.GetType().Name;
+                result = GameObjectOperationResult.Error($"Internal error processing GameObject component changes: {ex.Message}", errorKind);
             }
 
             return ShapeResponse(result, timing, errorKind);
@@ -396,6 +463,35 @@ Use componentName and optional componentIndex to select among duplicate componen
                     parent = ToolSchemaFragments.TargetRef("Parent GameObject target. Null or empty string clears parent.", allowNull: true)
                 },
                 required = new[] { "target" }
+            };
+        }
+
+        static object BuildComponentChangeSchema()
+        {
+            return new
+            {
+                type = "object",
+                properties = new
+                {
+                    operation = new
+                    {
+                        type = "string",
+                        description = "Component mutation operation.",
+                        @enum = new[] { "add", "remove", "setProperties" }
+                    },
+                    target = ToolSchemaFragments.TargetRef("GameObject target, path, name, or id."),
+                    searchMethod = ToolSchemaFragments.SearchMethod(),
+                    searchInactive = new { type = "boolean", description = "Include inactive scene objects while resolving the target." },
+                    componentName = new { type = "string", description = "Component type name, full type name, or resolvable Unity component name." },
+                    componentIndex = new { type = "integer", description = "0-based index among components matching componentName. Defaults to 0." },
+                    componentProperties = new
+                    {
+                        type = "object",
+                        description = "Flat property dictionary for setProperties or optional initial properties for add.",
+                        additionalProperties = true
+                    }
+                },
+                required = new[] { "operation", "target", "componentName" }
             };
         }
     }

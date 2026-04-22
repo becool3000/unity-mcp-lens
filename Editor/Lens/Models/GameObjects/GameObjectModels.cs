@@ -1,6 +1,7 @@
 #nullable disable
 using System;
 using System.Collections.Generic;
+using Newtonsoft.Json.Linq;
 
 namespace Becool.UnityMcpLens.Editor.Models.GameObjects
 {
@@ -78,6 +79,18 @@ namespace Becool.UnityMcpLens.Editor.Models.GameObjects
         public string componentName { get; set; }
         public int? componentIndex { get; set; }
         public bool includeNonPublicSerialized { get; set; }
+    }
+
+    sealed class GameObjectComponentMutationRequest
+    {
+        public GameObjectTargetRef target { get; set; }
+        public string searchMethod { get; set; }
+        public bool searchInactive { get; set; }
+        public string operation { get; set; }
+        public string componentName { get; set; }
+        public int? componentIndex { get; set; }
+        public JObject componentProperties { get; set; }
+        public string legacyAction { get; set; }
     }
 
     sealed class GameObjectTransformInfo
@@ -181,6 +194,28 @@ namespace Becool.UnityMcpLens.Editor.Models.GameObjects
         public GameObjectTargetSummary target { get; set; }
         public GameObjectComponentInfo component { get; set; }
         public object data { get; set; }
+    }
+
+    sealed class GameObjectComponentMutationPreviewResult
+    {
+        public GameObjectTargetSummary target { get; set; }
+        public string operation { get; set; }
+        public bool willModify { get; set; }
+        public List<GameObjectChangeEntry> changes { get; set; }
+        public List<ValidationMessage> validationMessages { get; set; }
+        public GameObjectComponentInfo component { get; set; }
+        public GameObjectInfo @object { get; set; }
+    }
+
+    sealed class GameObjectComponentMutationApplyResult
+    {
+        public GameObjectTargetSummary target { get; set; }
+        public string operation { get; set; }
+        public bool applied { get; set; }
+        public List<GameObjectChangeEntry> changes { get; set; }
+        public List<ValidationMessage> validationMessages { get; set; }
+        public GameObjectComponentInfo component { get; set; }
+        public GameObjectInfo @object { get; set; }
     }
 
     sealed class GameObjectChangeEntry

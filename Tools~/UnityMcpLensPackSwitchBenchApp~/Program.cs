@@ -166,7 +166,7 @@ sealed class BenchmarkOptions
 sealed class MetadataAudit(BenchmarkOptions options)
 {
     const int ExpectedFoundationToolCount = 12;
-    const int ExpectedSceneToolCount = 24;
+    const int ExpectedSceneToolCount = 26;
 
     static readonly string[] k_RequiredFoundationTools =
     [
@@ -189,6 +189,8 @@ sealed class MetadataAudit(BenchmarkOptions options)
         "Unity_GameObject_Inspect",
         "Unity_GameObject_ListComponents",
         "Unity_GameObject_GetComponent",
+        "Unity_GameObject_PreviewComponentChanges",
+        "Unity_GameObject_ApplyComponentChanges",
         "Unity_GameObject_PreviewChanges",
         "Unity_GameObject_ApplyChanges",
         "Unity_ManageGameObject",
@@ -260,6 +262,8 @@ sealed class MetadataAudit(BenchmarkOptions options)
         ValidateReadOnlyHint(sceneTools, "Unity_GameObject_GetComponent", expected: true, failures);
         ValidateReadOnlyHint(sceneTools, "Unity_GameObject_PreviewChanges", expected: true, failures);
         ValidateReadOnlyHint(sceneTools, "Unity_GameObject_ApplyChanges", expected: false, failures);
+        ValidateReadOnlyHint(sceneTools, "Unity_GameObject_PreviewComponentChanges", expected: true, failures);
+        ValidateReadOnlyHint(sceneTools, "Unity_GameObject_ApplyComponentChanges", expected: false, failures);
         ValidateReadOnlyHint(sceneTools, "Unity_ManageGameObject", expected: false, failures);
         ValidateReadOnlyHint(debugTools, "Unity_GetLensUsageReport", expected: true, failures);
         ValidateGameObjectSchemas(sceneTools, failures);
@@ -370,6 +374,18 @@ sealed class MetadataAudit(BenchmarkOptions options)
             "Unity_GameObject_ApplyChanges",
             ["target", "searchMethod", "name", "setActive", "tag", "layer", "position", "positionType", "rotation", "scale", "parent"],
             ["target"],
+            failures);
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_GameObject_PreviewComponentChanges",
+            ["operation", "target", "searchMethod", "searchInactive", "componentName", "componentIndex", "componentProperties"],
+            ["operation", "target", "componentName"],
+            failures);
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_GameObject_ApplyComponentChanges",
+            ["operation", "target", "searchMethod", "searchInactive", "componentName", "componentIndex", "componentProperties"],
+            ["operation", "target", "componentName"],
             failures);
 
         var legacyTool = FindTool(tools, "Unity_ManageGameObject");

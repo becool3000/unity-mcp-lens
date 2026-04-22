@@ -244,9 +244,7 @@ namespace Becool.UnityMcpLens.Editor.Adapters.Unity.GameObjects
             if (string.IsNullOrWhiteSpace(componentName))
                 return null;
 
-            var matches = GetComponentHandles(handle)
-                .Where(component => component.Component != null && ComponentMatches(component.Component, componentName))
-                .ToList();
+            var matches = FindComponents(handle, componentName);
 
             if (matches.Count == 0)
                 return null;
@@ -255,11 +253,36 @@ namespace Becool.UnityMcpLens.Editor.Adapters.Unity.GameObjects
             return index >= 0 && index < matches.Count ? matches[index] : null;
         }
 
+        public List<UnityComponentHandle> FindComponents(UnityGameObjectHandle handle, string componentName)
+        {
+            if (string.IsNullOrWhiteSpace(componentName))
+                return new List<UnityComponentHandle>();
+
+            return GetComponentHandles(handle)
+                .Where(component => component.Component != null && ComponentMatches(component.Component, componentName))
+                .ToList();
+        }
+
+        public UnityComponentHandle ToComponentHandle(Component component)
+        {
+            if (component == null)
+                return null;
+
+            var components = component.gameObject.GetComponents<Component>() ?? Array.Empty<Component>();
+            int index = Array.IndexOf(components, component);
+            return new UnityComponentHandle(component, ToComponentInfo(component, index < 0 ? 0 : index));
+        }
+
         public object ReadComponentData(UnityComponentHandle component, bool includeNonPublicSerialized)
         {
             return component?.Component == null
                 ? null
                 : ComponentSummarySerializer.GetSafeComponentData(component.Component, includeNonPublicSerialized);
+        }
+
+        public object GetLegacyGameObjectData(UnityGameObjectHandle handle)
+        {
+            return handle?.GameObject == null ? null : GameObjectSerializer.GetGameObjectData(handle.GameObject);
         }
 
         public GameObjectTargetSummary ToTargetSummary(UnityGameObjectHandle handle)

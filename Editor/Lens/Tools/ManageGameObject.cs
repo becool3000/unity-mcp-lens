@@ -2,13 +2,10 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Reflection;
 using System.Text;
-using Newtonsoft.Json; // Added for JsonSerializationException
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using UnityEditor;
-
-// For CompilationPipeline
 using UnityEditorInternal;
 using UnityEngine;
 using Becool.UnityMcpLens.Editor.Helpers;
@@ -19,7 +16,6 @@ using Becool.UnityMcpLens.Editor.Services.GameObjects;
 using Becool.UnityMcpLens.Editor.ToolRegistry; // For Response class
 using Becool.UnityMcpLens.Editor.ToolRegistry.Parameters;
 using Becool.UnityMcpLens.Editor.Lens;
-using Becool.UnityMcpLens.Runtime.Serialization;
 
 namespace Becool.UnityMcpLens.Editor.Tools
 {
@@ -66,26 +62,13 @@ Args:
 
 Returns:
     Dictionary with operation results ('success', 'message', 'data').";
-        // Shared JsonSerializer to avoid per-call allocation overhead
-        static readonly JsonSerializer InputSerializer = JsonSerializer.Create(new JsonSerializerSettings
-        {
-            Converters = new List<JsonConverter>
-            {
-                new Vector3Converter(),
-                new Vector2Converter(),
-                new QuaternionConverter(),
-                new ColorConverter(),
-                new RectConverter(),
-                new BoundsConverter(),
-                new UnityEngineObjectConverter()
-            }
-        });
-
         static readonly UnityGameObjectAdapter TsamGameObjectAdapter = new UnityGameObjectAdapter();
+        static readonly UnityComponentMutationAdapter TsamComponentMutationAdapter = new UnityComponentMutationAdapter(TsamGameObjectAdapter);
         static readonly GameObjectRequestNormalizer TsamRequestNormalizer = new GameObjectRequestNormalizer();
         static readonly GameObjectQueryService TsamQueryService = new GameObjectQueryService(TsamGameObjectAdapter);
         static readonly GameObjectMutationService TsamMutationService = new GameObjectMutationService(TsamGameObjectAdapter);
         static readonly GameObjectComponentReadService TsamComponentReadService = new GameObjectComponentReadService(TsamGameObjectAdapter);
+        static readonly GameObjectComponentMutationService TsamComponentMutationService = new GameObjectComponentMutationService(TsamGameObjectAdapter, TsamComponentMutationAdapter);
 
         // --- Main Handler ---
 
@@ -320,11 +303,11 @@ Returns:
                     case "get_component":
                         return HandleTsamGetComponent(@params, targetToken, searchMethod);
                     case "add_component":
-                        return AddComponentToTarget(@params, targetToken, searchMethod);
+                        return HandleTsamAddComponent(@params, targetToken, searchMethod);
                     case "remove_component":
-                        return RemoveComponentFromTarget(@params, targetToken, searchMethod);
+                        return HandleTsamRemoveComponent(@params, targetToken, searchMethod);
                     case "set_component_property":
-                        return SetComponentPropertyOnTarget(@params, targetToken, searchMethod);
+                        return HandleTsamSetComponentProperty(@params, targetToken, searchMethod);
 
                     default:
                         return Response.Error($"Unknown action: '{action}'.");
@@ -532,7 +515,66 @@ Returns:
             return ShapeLegacyComponentReadResponse(result, timing, errorKind, @params, "get_component");
         }
 
+        static object HandleTsamAddComponent(JObject @params, JToken targetToken, string searchMethod)
+        {
+            return HandleTsamComponentMutation(@params, targetToken, searchMethod, "add");
+        }
+
+        static object HandleTsamRemoveComponent(JObject @params, JToken targetToken, string searchMethod)
+        {
+            return HandleTsamComponentMutation(@params, targetToken, searchMethod, "remove");
+        }
+
+        static object HandleTsamSetComponentProperty(JObject @params, JToken targetToken, string searchMethod)
+        {
+            return HandleTsamComponentMutation(@params, targetToken, searchMethod, "setProperties");
+        }
+
+        static object HandleTsamComponentMutation(JObject @params, JToken targetToken, string searchMethod, string operation)
+        {
+            var timing = new GameObjectToolTiming("Unity.ManageGameObject", operation == "setProperties" ? "set_component_property" : $"{operation}_component", GetUtf8ByteCount(@params?.ToString(Formatting.None)));
+            GameObjectOperationResult result;
+            string errorKind = null;
+
+            try
+            {
+                GameObjectComponentMutationRequest request;
+                using (timing.Measure("normalization"))
+                {
+                    request = TsamRequestNormalizer.NormalizeComponentMutation(@params, targetToken, searchMethod, operation);
+                }
+
+                using (timing.Measure("service"))
+                {
+                    result = TsamComponentMutationService.ApplyLegacy(request, timing);
+                }
+            }
+            catch (Exception ex)
+            {
+                errorKind = ex.GetType().Name;
+                Debug.LogError($"[ManageGameObject.TSAM] component mutation '{operation}' failed: {ex}");
+                result = GameObjectOperationResult.Error($"Internal error processing component mutation '{operation}': {ex.Message}", errorKind);
+            }
+
+            return ShapeLegacyComponentMutationResponse(result, timing, errorKind);
+        }
+
         static object ShapeTsamResponse(GameObjectOperationResult result, GameObjectToolTiming timing, string fallbackErrorKind)
+        {
+            object response;
+            using (timing.Measure("result_shaping"))
+            {
+                response = result.success
+                    ? Response.Success(result.message, result.data)
+                    : Response.Error(result.message, result.errorData);
+                timing.SetResponseBytes(GetUtf8ByteCount(JsonConvert.SerializeObject(response, Formatting.None)));
+            }
+
+            timing.Record(result.success, result.success ? null : result.errorKind ?? fallbackErrorKind);
+            return response;
+        }
+
+        static object ShapeLegacyComponentMutationResponse(GameObjectOperationResult result, GameObjectToolTiming timing, string fallbackErrorKind)
         {
             object response;
             using (timing.Measure("result_shaping"))
@@ -1407,159 +1449,6 @@ Returns:
             return ToolResultCompactor.ShapeJsonPayload("Unity.ManageGameObject", summary, data, detailRef);
         }
 
-        static object AddComponentToTarget(
-            JObject @params,
-            JToken targetToken,
-            string searchMethod
-        )
-        {
-            GameObject targetGo = ObjectsHelper.FindObject(targetToken, searchMethod);
-            if (targetGo == null)
-            {
-                return Response.Error(
-                    $"Target GameObject ('{targetToken}') not found using method '{searchMethod ?? "default"}'."
-                );
-            }
-
-            string typeName = null;
-            JObject properties = null;
-
-            // Allow adding component specified directly or via componentsToAdd array (take first)
-            if (@params["component_name"] != null)
-            {
-                typeName = @params["component_name"]?.ToString();
-                properties = @params["component_properties"]?[typeName] as JObject; // Check if props are nested under name
-            }
-            else if (
-                @params["components_to_add"] is JArray componentsToAddArray
-                && componentsToAddArray.Count > 0
-            )
-            {
-                var compToken = componentsToAddArray.First;
-                if (compToken.Type == JTokenType.String)
-                    typeName = compToken.ToString();
-                else if (compToken is JObject compObj)
-                {
-                    typeName = compObj["typeName"]?.ToString();
-                    properties = compObj["properties"] as JObject;
-                }
-            }
-
-            if (string.IsNullOrEmpty(typeName))
-            {
-                return Response.Error(
-                    "Component type name ('componentName' or first element in 'components_to_add') is required."
-                );
-            }
-
-            var addResult = AddComponentInternal(targetGo, typeName, properties);
-            if (addResult != null)
-                return addResult; // Return error
-
-            EditorUtility.SetDirty(targetGo);
-            // Use the new serializer helper
-            return Response.Success(
-                $"Component '{typeName}' added to '{targetGo.name}'.",
-                GameObjectSerializer.GetGameObjectData(targetGo)
-            ); // Return updated GO data
-        }
-
-        static object RemoveComponentFromTarget(
-            JObject @params,
-            JToken targetToken,
-            string searchMethod
-        )
-        {
-            GameObject targetGo = ObjectsHelper.FindObject(targetToken, searchMethod);
-            if (targetGo == null)
-            {
-                return Response.Error(
-                    $"Target GameObject ('{targetToken}') not found using method '{searchMethod ?? "default"}'."
-                );
-            }
-
-            string typeName = null;
-            // Allow removing component specified directly or via componentsToRemove array (take first)
-            if (@params["component_name"] != null)
-            {
-                typeName = @params["component_name"]?.ToString();
-            }
-            else if (
-                @params["components_to_remove"] is JArray componentsToRemoveArray
-                && componentsToRemoveArray.Count > 0
-            )
-            {
-                typeName = componentsToRemoveArray.First?.ToString();
-            }
-
-            if (string.IsNullOrEmpty(typeName))
-            {
-                return Response.Error(
-                    "Component type name ('componentName' or first element in 'componentsToRemove') is required."
-                );
-            }
-
-            var removeResult = RemoveComponentInternal(targetGo, typeName);
-            if (removeResult != null)
-                return removeResult; // Return error
-
-            EditorUtility.SetDirty(targetGo);
-             // Use the new serializer helper
-            return Response.Success(
-                $"Component '{typeName}' removed from '{targetGo.name}'.",
-                GameObjectSerializer.GetGameObjectData(targetGo)
-            );
-        }
-
-        static object SetComponentPropertyOnTarget(
-            JObject @params,
-            JToken targetToken,
-            string searchMethod
-        )
-        {
-            GameObject targetGo = ObjectsHelper.FindObject(targetToken, searchMethod);
-            if (targetGo == null)
-            {
-                return Response.Error(
-                    $"Target GameObject ('{targetToken}') not found using method '{searchMethod ?? "default"}'."
-                );
-            }
-
-            string compName = @params["component_name"]?.ToString();
-            JObject propertiesToSet = null;
-
-            if (!string.IsNullOrEmpty(compName))
-            {
-                // Properties might be directly under componentProperties or nested under the component name
-                if (@params["component_properties"] is JObject compProps)
-                {
-                    propertiesToSet = compProps[compName] as JObject ?? compProps; // Allow flat or nested structure
-                }
-            }
-            else
-            {
-                return Response.Error("'componentName' parameter is required.");
-            }
-
-            if (propertiesToSet == null || !propertiesToSet.HasValues)
-            {
-                return Response.Error(
-                    "'componentProperties' dictionary for the specified component is required and cannot be empty."
-                );
-            }
-
-            var setResult = SetComponentPropertiesInternal(targetGo, compName, propertiesToSet);
-            if (setResult != null)
-                return setResult; // Return error
-
-            EditorUtility.SetDirty(targetGo);
-             // Use the new serializer helper
-            return Response.Success(
-                $"Properties set for component '{compName}' on '{targetGo.name}'.",
-                GameObjectSerializer.GetGameObjectData(targetGo)
-            );
-        }
-
         // --- Internal Helpers ---
 
         /// <summary>
@@ -1595,102 +1484,8 @@ Returns:
             JObject properties
         )
         {
-            Type componentType = FindType(typeName);
-            if (componentType == null)
-            {
-                return Response.Error(
-                    $"Component type '{typeName}' not found or is not a valid Component."
-                );
-            }
-            if (!typeof(Component).IsAssignableFrom(componentType))
-            {
-                return Response.Error($"Type '{typeName}' is not a Component.");
-            }
-
-            // Prevent adding Transform again
-            if (componentType == typeof(Transform))
-            {
-                return Response.Error("Cannot add another Transform component.");
-            }
-
-            // Check for 2D/3D physics component conflicts
-            bool isAdding2DPhysics =
-                typeof(Rigidbody2D).IsAssignableFrom(componentType)
-                || typeof(Collider2D).IsAssignableFrom(componentType);
-            bool isAdding3DPhysics =
-                typeof(Rigidbody).IsAssignableFrom(componentType)
-                || typeof(Collider).IsAssignableFrom(componentType);
-
-            if (isAdding2DPhysics)
-            {
-                // Check if the GameObject already has any 3D Rigidbody or Collider
-                if (
-                    targetGo.GetComponent<Rigidbody>() != null
-                    || targetGo.GetComponent<Collider>() != null
-                )
-                {
-                    return Response.Error(
-                        $"Cannot add 2D physics component '{typeName}' because the GameObject '{targetGo.name}' already has a 3D Rigidbody or Collider."
-                    );
-                }
-            }
-            else if (isAdding3DPhysics)
-            {
-                // Check if the GameObject already has any 2D Rigidbody or Collider
-                if (
-                    targetGo.GetComponent<Rigidbody2D>() != null
-                    || targetGo.GetComponent<Collider2D>() != null
-                )
-                {
-                    return Response.Error(
-                        $"Cannot add 3D physics component '{typeName}' because the GameObject '{targetGo.name}' already has a 2D Rigidbody or Collider."
-                    );
-                }
-            }
-
-            try
-            {
-                // Use Undo.AddComponent for undo support
-                Component newComponent = Undo.AddComponent(targetGo, componentType);
-                if (newComponent == null)
-                {
-                    return Response.Error(
-                        $"Failed to add component '{typeName}' to '{targetGo.name}'. It might be disallowed (e.g., adding script twice)."
-                    );
-                }
-
-                // Set default values for specific component types
-                if (newComponent is Light light)
-                {
-                    // Default newly added lights to directional
-                    light.type = LightType.Directional;
-                }
-
-                // Set properties if provided
-                if (properties != null)
-                {
-                    var setResult = SetComponentPropertiesInternal(
-                        targetGo,
-                        typeName,
-                        properties,
-                        newComponent
-                    ); // Pass the new component instance
-                    if (setResult != null)
-                    {
-                        // If setting properties failed, maybe remove the added component?
-                        Undo.DestroyObjectImmediate(newComponent);
-                        return setResult; // Return the error from setting properties
-                    }
-                }
-
-                return null; // Success
-            }
-            catch (Exception e)
-            {
-                return Response.Error(
-                    $"Error adding component '{typeName}' to '{targetGo.name}': {e.Message}"
-                );
-            }
+            var result = TsamComponentMutationAdapter.ApplyAddComponent(new UnityGameObjectHandle(targetGo), typeName, properties);
+            return result.success ? null : Response.Error(result.message, new { errorKind = result.errorKind, errors = result.errors });
         }
 
         /// <summary>
@@ -1699,38 +1494,8 @@ Returns:
         /// </summary>
         static object RemoveComponentInternal(GameObject targetGo, string typeName)
         {
-            Type componentType = FindType(typeName);
-            if (componentType == null)
-            {
-                return Response.Error($"Component type '{typeName}' not found for removal.");
-            }
-
-            // Prevent removing essential components
-            if (componentType == typeof(Transform))
-            {
-                return Response.Error("Cannot remove the Transform component.");
-            }
-
-            Component componentToRemove = targetGo.GetComponent(componentType);
-            if (componentToRemove == null)
-            {
-                return Response.Error(
-                    $"Component '{typeName}' not found on '{targetGo.name}' to remove."
-                );
-            }
-
-            try
-            {
-                // Use Undo.DestroyObjectImmediate for undo support
-                Undo.DestroyObjectImmediate(componentToRemove);
-                return null; // Success
-            }
-            catch (Exception e)
-            {
-                return Response.Error(
-                    $"Error removing component '{typeName}' from '{targetGo.name}': {e.Message}"
-                );
-            }
+            var result = TsamComponentMutationAdapter.ApplyRemoveComponent(new UnityGameObjectHandle(targetGo), typeName, null);
+            return result.success ? null : Response.Error(result.message, new { errorKind = result.errorKind, errors = result.errors });
         }
 
         /// <summary>
@@ -1744,526 +1509,18 @@ Returns:
             Component targetComponentInstance = null
         )
         {
-            Component targetComponent = targetComponentInstance;
-            if (targetComponent == null)
+            UnityComponentMutationStatus result;
+            if (targetComponentInstance != null)
             {
-                if (UnityComponentResolver.TryResolve(compName, out var compType, out var compError))
-                {
-                    targetComponent = targetGo.GetComponent(compType);
-                }
-                else
-                {
-                    targetComponent = targetGo.GetComponent(compName); // fallback to string-based lookup
-                }
+                result = TsamComponentMutationAdapter.ApplySetPropertiesToComponent(targetComponentInstance, propertiesToSet);
             }
-            if (targetComponent == null)
+            else
             {
-                return Response.Error(
-                    $"Component '{compName}' not found on '{targetGo.name}' to set properties."
-                );
+                result = TsamComponentMutationAdapter.ApplySetProperties(new UnityGameObjectHandle(targetGo), compName, null, propertiesToSet);
             }
 
-            Undo.RecordObject(targetComponent, "Set Component Properties");
-
-            var failures = new List<string>();
-            foreach (var prop in propertiesToSet.Properties())
-            {
-                string propName = prop.Name;
-                JToken propValue = prop.Value;
-
-                try
-                {
-                    bool setResult = SetProperty(targetComponent, propName, propValue);
-                    if (!setResult)
-                    {
-                        var availableProperties = UnityComponentResolver.GetAllComponentProperties(targetComponent.GetType());
-                        var suggestions = UnityComponentResolver.GetAIPropertySuggestions(propName, availableProperties);
-                        var msg = suggestions.Any()
-                            ? $"Property '{propName}' not found. Did you mean: {string.Join(", ", suggestions)}? Available: [{string.Join(", ", availableProperties)}]"
-                            : $"Property '{propName}' not found. Available: [{string.Join(", ", availableProperties)}]";
-                        Debug.LogWarning($"[ManageGameObject] {msg}");
-                        failures.Add(msg);
-                    }
-                }
-                catch (Exception e)
-                {
-                    Debug.LogError(
-                        $"[ManageGameObject] Error setting property '{propName}' on '{compName}': {e.Message}"
-                    );
-                    failures.Add($"Error setting '{propName}': {e.Message}");
-                }
-            }
-            EditorUtility.SetDirty(targetComponent);
-            return failures.Count == 0
-                ? null
-                : Response.Error($"One or more properties failed on '{compName}'.", new { errors = failures });
+            return result.success ? null : Response.Error(result.message, new { errorKind = result.errorKind, errors = result.errors });
         }
-
-        /// <summary>
-        /// Helper to set a property or field via reflection, handling basic types.
-        /// </summary>
-        static bool SetProperty(object target, string memberName, JToken value)
-        {
-            Type type = target.GetType();
-            BindingFlags flags =
-                BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase;
-
-            // Use shared serializer to avoid per-call allocation
-            var inputSerializer = InputSerializer;
-
-            try
-            {
-                // Handle special case for materials with dot notation (material.property)
-                // Examples: material.color, sharedMaterial.color, materials[0].color
-                if (memberName.Contains('.') || memberName.Contains('['))
-                {
-                    // Pass the inputSerializer down for nested conversions
-                    return SetNestedProperty(target, memberName, value, inputSerializer);
-                }
-
-                PropertyInfo propInfo = type.GetProperty(memberName, flags);
-                if (propInfo != null && propInfo.CanWrite)
-                {
-                    // Use the inputSerializer for conversion
-                    object convertedValue = ConvertJTokenToType(value, propInfo.PropertyType, inputSerializer);
-                    if (convertedValue != null || value.Type == JTokenType.Null) // Allow setting null
-                    {
-                        propInfo.SetValue(target, convertedValue);
-                        return true;
-                    }
-                    else
-                    {
-                        Debug.LogWarning($"[SetProperty] Conversion failed for property '{memberName}' (Type: {propInfo.PropertyType.Name}) from token: {value.ToString(Formatting.None)}");
-                    }
-                }
-                else
-                {
-                    FieldInfo fieldInfo = type.GetField(memberName, flags);
-                    if (fieldInfo != null) // Check if !IsLiteral?
-                    {
-                        // Use the inputSerializer for conversion
-                        object convertedValue = ConvertJTokenToType(value, fieldInfo.FieldType, inputSerializer);
-                        if (convertedValue != null || value.Type == JTokenType.Null) // Allow setting null
-                        {
-                            fieldInfo.SetValue(target, convertedValue);
-                            return true;
-                        }
-                        else
-                        {
-                            Debug.LogWarning($"[SetProperty] Conversion failed for field '{memberName}' (Type: {fieldInfo.FieldType.Name}) from token: {value.ToString(Formatting.None)}");
-                        }
-                    }
-                    else
-                    {
-                        // Try NonPublic [SerializeField] fields
-                        var npField = type.GetField(memberName, BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.IgnoreCase);
-                        if (npField != null && npField.GetCustomAttribute<SerializeField>() != null)
-                        {
-                            object convertedValue = ConvertJTokenToType(value, npField.FieldType, inputSerializer);
-                            if (convertedValue != null || value.Type == JTokenType.Null)
-                            {
-                                npField.SetValue(target, convertedValue);
-                                return true;
-                            }
-                        }
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.LogError(
-                    $"[SetProperty] Failed to set '{memberName}' on {type.Name}: {ex.Message}\nToken: {value.ToString(Formatting.None)}"
-                );
-            }
-            return false;
-        }
-
-        /// <summary>
-        /// Sets a nested property using dot notation (e.g., "material.color") or array access (e.g., "materials[0]")
-        /// </summary>
-        // Pass the input serializer for conversions
-        //Using the serializer helper
-        static bool SetNestedProperty(object target, string path, JToken value, JsonSerializer inputSerializer)
-        {
-            try
-            {
-                // Split the path into parts (handling both dot notation and array indexing)
-                string[] pathParts = SplitPropertyPath(path);
-                if (pathParts.Length == 0)
-                    return false;
-
-                object currentObject = target;
-                Type currentType = currentObject.GetType();
-                BindingFlags flags =
-                    BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase;
-
-                // Traverse the path until we reach the final property
-                for (int i = 0; i < pathParts.Length - 1; i++)
-                {
-                    string part = pathParts[i];
-                    bool isArray = false;
-                    int arrayIndex = -1;
-
-                    // Check if this part contains array indexing
-                    if (part.Contains("["))
-                    {
-                        int startBracket = part.IndexOf('[');
-                        int endBracket = part.IndexOf(']');
-                        if (startBracket > 0 && endBracket > startBracket)
-                        {
-                            string indexStr = part.Substring(
-                                startBracket + 1,
-                                endBracket - startBracket - 1
-                            );
-                            if (int.TryParse(indexStr, out arrayIndex))
-                            {
-                                isArray = true;
-                                part = part.Substring(0, startBracket);
-                            }
-                        }
-                    }
-                    // Get the property/field
-                    PropertyInfo propInfo = currentType.GetProperty(part, flags);
-                    FieldInfo fieldInfo = null;
-                    if (propInfo == null)
-                    {
-                        fieldInfo = currentType.GetField(part, flags);
-                        if (fieldInfo == null)
-                        {
-                            Debug.LogWarning(
-                                $"[SetNestedProperty] Could not find property or field '{part}' on type '{currentType.Name}'"
-                            );
-                            return false;
-                        }
-                    }
-
-                    // Get the value
-                    currentObject =
-                        propInfo != null
-                            ? propInfo.GetValue(currentObject)
-                            : fieldInfo.GetValue(currentObject);
-                    //Need to stop if current property is null
-                    if (currentObject == null)
-                    {
-                        Debug.LogWarning(
-                            $"[SetNestedProperty] Property '{part}' is null, cannot access nested properties."
-                        );
-                        return false;
-                    }
-                    // If this part was an array or list, access the specific index
-                    if (isArray)
-                    {
-                        if (currentObject is Material[])
-                        {
-                            var materials = currentObject as Material[];
-                            if (arrayIndex < 0 || arrayIndex >= materials.Length)
-                            {
-                                Debug.LogWarning(
-                                    $"[SetNestedProperty] Material index {arrayIndex} out of range (0-{materials.Length - 1})"
-                                );
-                                return false;
-                            }
-                            currentObject = materials[arrayIndex];
-                        }
-                        else if (currentObject is System.Collections.IList)
-                        {
-                            var list = currentObject as System.Collections.IList;
-                            if (arrayIndex < 0 || arrayIndex >= list.Count)
-                            {
-                                Debug.LogWarning(
-                                    $"[SetNestedProperty] Index {arrayIndex} out of range (0-{list.Count - 1})"
-                                );
-                                return false;
-                            }
-                            currentObject = list[arrayIndex];
-                        }
-                        else
-                        {
-                            Debug.LogWarning(
-                                $"[SetNestedProperty] Property '{part}' is not an array or list, cannot access by index."
-                            );
-                            return false;
-                        }
-                    }
-                    currentType = currentObject.GetType();
-                }
-
-                // Set the final property
-                string finalPart = pathParts[pathParts.Length - 1];
-
-                // Special handling for Material properties (shader properties)
-                if (currentObject is Material material && finalPart.StartsWith("_"))
-                {
-                    // Use the serializer to convert the JToken value first
-                    if (value is JArray jArray)
-                    {
-                        // Try converting to known types that SetColor/SetVector accept
-                        if (jArray.Count == 4) {
-                            try { Color color = value.ToObject<Color>(inputSerializer); material.SetColor(finalPart, color); return true; } catch { }
-                            try { Vector4 vec = value.ToObject<Vector4>(inputSerializer); material.SetVector(finalPart, vec); return true; } catch { }
-                        } else if (jArray.Count == 3) {
-                            try { Color color = value.ToObject<Color>(inputSerializer); material.SetColor(finalPart, color); return true; } catch { } // ToObject handles conversion to Color
-                        } else if (jArray.Count == 2) {
-                            try { Vector2 vec = value.ToObject<Vector2>(inputSerializer); material.SetVector(finalPart, vec); return true; } catch { }
-                        }
-                    }
-                    else if (value.Type == JTokenType.Float || value.Type == JTokenType.Integer)
-                    {
-                        try { material.SetFloat(finalPart, value.ToObject<float>(inputSerializer)); return true; } catch { }
-                    }
-                    else if (value.Type == JTokenType.Boolean)
-                    {
-                        try { material.SetFloat(finalPart, value.ToObject<bool>(inputSerializer) ? 1f : 0f); return true; } catch { }
-                    }
-                    else if (value.Type == JTokenType.String)
-                    {
-                        // Try converting to Texture using the serializer/converter
-                        try {
-                            Texture texture = value.ToObject<Texture>(inputSerializer);
-                            if (texture != null) {
-                                material.SetTexture(finalPart, texture);
-                                return true;
-                            }
-                        } catch { }
-                    }
-
-                    Debug.LogWarning(
-                        $"[SetNestedProperty] Unsupported or failed conversion for material property '{finalPart}' from value: {value.ToString(Formatting.None)}"
-                    );
-                    return false;
-                }
-
-                // For standard properties (not shader specific)
-                PropertyInfo finalPropInfo = currentType.GetProperty(finalPart, flags);
-                if (finalPropInfo != null && finalPropInfo.CanWrite)
-                {
-                    // Use the inputSerializer for conversion
-                    object convertedValue = ConvertJTokenToType(value, finalPropInfo.PropertyType, inputSerializer);
-                    if (convertedValue != null || value.Type == JTokenType.Null)
-                    {
-                        finalPropInfo.SetValue(currentObject, convertedValue);
-                        return true;
-                    }
-                    else
-                    {
-                        Debug.LogWarning($"[SetNestedProperty] Final conversion failed for property '{finalPart}' (Type: {finalPropInfo.PropertyType.Name}) from token: {value.ToString(Formatting.None)}");
-                    }
-                }
-                else
-                {
-                    FieldInfo finalFieldInfo = currentType.GetField(finalPart, flags);
-                    if (finalFieldInfo != null)
-                    {
-                        // Use the inputSerializer for conversion
-                        object convertedValue = ConvertJTokenToType(value, finalFieldInfo.FieldType, inputSerializer);
-                        if (convertedValue != null || value.Type == JTokenType.Null)
-                        {
-                            finalFieldInfo.SetValue(currentObject, convertedValue);
-                            return true;
-                        }
-                        else
-                        {
-                            Debug.LogWarning($"[SetNestedProperty] Final conversion failed for field '{finalPart}' (Type: {finalFieldInfo.FieldType.Name}) from token: {value.ToString(Formatting.None)}");
-                        }
-                    }
-                    else
-                    {
-                        Debug.LogWarning(
-                            $"[SetNestedProperty] Could not find final writable property or field '{finalPart}' on type '{currentType.Name}'"
-                        );
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.LogError(
-                    $"[SetNestedProperty] Error setting nested property '{path}': {ex.Message}\nToken: {value.ToString(Formatting.None)}"
-                );
-            }
-
-            return false;
-        }
-
-
-        /// <summary>
-        /// Split a property path into parts, handling both dot notation and array indexers
-        /// </summary>
-        static string[] SplitPropertyPath(string path)
-        {
-            // Handle complex paths with both dots and array indexers
-            List<string> parts = new List<string>();
-            int startIndex = 0;
-            bool inBrackets = false;
-
-            for (int i = 0; i < path.Length; i++)
-            {
-                char c = path[i];
-
-                if (c == '[')
-                {
-                    inBrackets = true;
-                }
-                else if (c == ']')
-                {
-                    inBrackets = false;
-                }
-                else if (c == '.' && !inBrackets)
-                {
-                    // Found a dot separator outside of brackets
-                    parts.Add(path.Substring(startIndex, i - startIndex));
-                    startIndex = i + 1;
-                }
-            }
-            if (startIndex < path.Length)
-            {
-                parts.Add(path.Substring(startIndex));
-            }
-            return parts.ToArray();
-        }
-
-        /// <summary>
-        /// Simple JToken to Type conversion for common Unity types, using JsonSerializer.
-        /// </summary>
-        // Pass the input serializer
-        static object ConvertJTokenToType(JToken token, Type targetType, JsonSerializer inputSerializer)
-        {
-            if (token == null || token.Type == JTokenType.Null)
-            {
-                if (targetType.IsValueType && Nullable.GetUnderlyingType(targetType) == null)
-                {
-                    Debug.LogWarning($"Cannot assign null to non-nullable value type {targetType.Name}. Returning default value.");
-                    return Activator.CreateInstance(targetType);
-                }
-                return null;
-            }
-
-            try
-            {
-                // Use the provided serializer instance which includes our custom converters
-                return token.ToObject(targetType, inputSerializer);
-            }
-            catch (JsonSerializationException jsonEx)
-            {
-                 Debug.LogError($"JSON Deserialization Error converting token to {targetType.FullName}: {jsonEx.Message}\nToken: {token.ToString(Formatting.None)}");
-                 // Optionally re-throw or return null/default
-                 // return targetType.IsValueType ? Activator.CreateInstance(targetType) : null;
-                 throw; // Re-throw to indicate failure higher up
-            }
-            catch (ArgumentException argEx)
-            {
-                Debug.LogError($"Argument Error converting token to {targetType.FullName}: {argEx.Message}\nToken: {token.ToString(Formatting.None)}");
-                 throw;
-            }
-            catch (Exception ex)
-            {
-                 Debug.LogError($"Unexpected error converting token to {targetType.FullName}: {ex}\nToken: {token.ToString(Formatting.None)}");
-                 throw;
-            }
-            // If ToObject succeeded, it would have returned. If it threw, we wouldn't reach here.
-             // This fallback logic is likely unreachable if ToObject covers all cases or throws on failure.
-             // Debug.LogWarning($"Conversion failed for token to {targetType.FullName}. Token: {token.ToString(Formatting.None)}");
-             // return targetType.IsValueType ? Activator.CreateInstance(targetType) : null;
-        }
-
-        // --- ParseJTokenTo... helpers are likely redundant now with the serializer approach ---
-        // Keep them temporarily for reference or if specific fallback logic is ever needed.
-
-        static Vector3 ParseJTokenToVector3(JToken token)
-        {
-            // ... (implementation - likely replaced by Vector3Converter) ...
-            // Consider removing these if the serializer handles them reliably.
-            if (token is JObject obj && obj.ContainsKey("x") && obj.ContainsKey("y") && obj.ContainsKey("z"))
-            {
-                return new Vector3(obj["x"].ToObject<float>(), obj["y"].ToObject<float>(), obj["z"].ToObject<float>());
-            }
-            if (token is JArray arr && arr.Count >= 3)
-            {
-                 return new Vector3(arr[0].ToObject<float>(), arr[1].ToObject<float>(), arr[2].ToObject<float>());
-            }
-            Debug.LogWarning($"Could not parse JToken '{token}' as Vector3 using fallback. Returning Vector3.zero.");
-            return Vector3.zero;
-
-        }
-
-        static Vector2 ParseJTokenToVector2(JToken token)
-        {
-            // ... (implementation - likely replaced by Vector2Converter) ...
-             if (token is JObject obj && obj.ContainsKey("x") && obj.ContainsKey("y"))
-            {
-                return new Vector2(obj["x"].ToObject<float>(), obj["y"].ToObject<float>());
-            }
-            if (token is JArray arr && arr.Count >= 2)
-            {
-                 return new Vector2(arr[0].ToObject<float>(), arr[1].ToObject<float>());
-            }
-            Debug.LogWarning($"Could not parse JToken '{token}' as Vector2 using fallback. Returning Vector2.zero.");
-            return Vector2.zero;
-        }
-
-        static Quaternion ParseJTokenToQuaternion(JToken token)
-        {
-            // ... (implementation - likely replaced by QuaternionConverter) ...
-            if (token is JObject obj && obj.ContainsKey("x") && obj.ContainsKey("y") && obj.ContainsKey("z") && obj.ContainsKey("w"))
-            {
-                return new Quaternion(obj["x"].ToObject<float>(), obj["y"].ToObject<float>(), obj["z"].ToObject<float>(), obj["w"].ToObject<float>());
-            }
-            if (token is JArray arr && arr.Count >= 4)
-            {
-                 return new Quaternion(arr[0].ToObject<float>(), arr[1].ToObject<float>(), arr[2].ToObject<float>(), arr[3].ToObject<float>());
-            }
-            Debug.LogWarning($"Could not parse JToken '{token}' as Quaternion using fallback. Returning Quaternion.identity.");
-            return Quaternion.identity;
-        }
-
-        static Color ParseJTokenToColor(JToken token)
-        {
-             // ... (implementation - likely replaced by ColorConverter) ...
-            if (token is JObject obj && obj.ContainsKey("r") && obj.ContainsKey("g") && obj.ContainsKey("b") && obj.ContainsKey("a"))
-            {
-                return new Color(obj["r"].ToObject<float>(), obj["g"].ToObject<float>(), obj["b"].ToObject<float>(), obj["a"].ToObject<float>());
-            }
-            if (token is JArray arr && arr.Count >= 4)
-            {
-                 return new Color(arr[0].ToObject<float>(), arr[1].ToObject<float>(), arr[2].ToObject<float>(), arr[3].ToObject<float>());
-            }
-            Debug.LogWarning($"Could not parse JToken '{token}' as Color using fallback. Returning Color.white.");
-            return Color.white;
-        }
-
-        static Rect ParseJTokenToRect(JToken token)
-        {
-             // ... (implementation - likely replaced by RectConverter) ...
-            if (token is JObject obj && obj.ContainsKey("x") && obj.ContainsKey("y") && obj.ContainsKey("width") && obj.ContainsKey("height"))
-            {
-                return new Rect(obj["x"].ToObject<float>(), obj["y"].ToObject<float>(), obj["width"].ToObject<float>(), obj["height"].ToObject<float>());
-            }
-            if (token is JArray arr && arr.Count >= 4)
-            {
-                 return new Rect(arr[0].ToObject<float>(), arr[1].ToObject<float>(), arr[2].ToObject<float>(), arr[3].ToObject<float>());
-            }
-            Debug.LogWarning($"Could not parse JToken '{token}' as Rect using fallback. Returning Rect.zero.");
-            return Rect.zero;
-        }
-
-        static Bounds ParseJTokenToBounds(JToken token)
-        {
-             // ... (implementation - likely replaced by BoundsConverter) ...
-            if (token is JObject obj && obj.ContainsKey("center") && obj.ContainsKey("size"))
-            {
-                // Requires Vector3 conversion, which should ideally use the serializer too
-                Vector3 center = ParseJTokenToVector3(obj["center"]); // Or use obj["center"].ToObject<Vector3>(inputSerializer)
-                Vector3 size = ParseJTokenToVector3(obj["size"]);     // Or use obj["size"].ToObject<Vector3>(inputSerializer)
-                return new Bounds(center, size);
-            }
-            // Array fallback for Bounds is less intuitive, maybe remove?
-            // if (token is JArray arr && arr.Count >= 6)
-            // {
-            //      return new Bounds(new Vector3(arr[0].ToObject<float>(), arr[1].ToObject<float>(), arr[2].ToObject<float>()), new Vector3(arr[3].ToObject<float>(), arr[4].ToObject<float>(), arr[5].ToObject<float>()));
-            // }
-            Debug.LogWarning($"Could not parse JToken '{token}' as Bounds using fallback. Returning new Bounds(Vector3.zero, Vector3.zero).");
-            return new Bounds(Vector3.zero, Vector3.zero);
-        }
-        // --- End Redundant Parse Helpers ---
 
         /// <summary>
         /// Finds a specific UnityEngine.Object based on a find instruction JObject.
@@ -2275,103 +1532,8 @@ Returns:
         // Made public static so UnityEngineObjectConverter can call it. Moved from ConvertJTokenToType.
         public static UnityEngine.Object FindObjectByInstruction(JObject instruction, Type targetType)
         {
-            string findTerm = instruction["find"]?.ToString();
-            string method = instruction["method"]?.ToString()?.ToLower();
-            string componentName = instruction["component"]?.ToString(); // Specific component to get
-
-            if (string.IsNullOrEmpty(findTerm))
-            {
-                Debug.LogWarning("Find instruction missing 'find' term.");
-                return null;
-            }
-
-            // Use a flexible default search method if none provided
-            string searchMethodToUse = string.IsNullOrEmpty(method) ? "by_id_or_name_or_path" : method;
-
-            // If the target is an asset (Material, Texture, ScriptableObject etc.) try AssetDatabase first
-            if (typeof(Material).IsAssignableFrom(targetType) ||
-                typeof(Texture).IsAssignableFrom(targetType) ||
-                typeof(ScriptableObject).IsAssignableFrom(targetType) ||
-                targetType.FullName.StartsWith("UnityEngine.U2D") || // Sprites etc.
-                typeof(AudioClip).IsAssignableFrom(targetType) ||
-                typeof(AnimationClip).IsAssignableFrom(targetType) ||
-                typeof(Font).IsAssignableFrom(targetType) ||
-                typeof(Shader).IsAssignableFrom(targetType) ||
-                typeof(ComputeShader).IsAssignableFrom(targetType) ||
-                typeof(GameObject).IsAssignableFrom(targetType) && findTerm.StartsWith("Assets/")) // Prefab check
-            {
-                // Try loading directly by path/GUID first
-                UnityEngine.Object asset = AssetDatabase.LoadAssetAtPath(findTerm, targetType);
-                if (asset != null) return asset;
-                asset = AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(findTerm); // Try generic if type specific failed
-                if (asset != null && targetType.IsAssignableFrom(asset.GetType())) return asset;
-
-
-                // If direct path failed, try finding by name/type using FindAssets
-                string searchFilter = $"t:{targetType.Name} {System.IO.Path.GetFileNameWithoutExtension(findTerm)}"; // Search by type and name
-                string[] guids = AssetDatabase.FindAssets(searchFilter);
-
-                if (guids.Length == 1)
-                {
-                    asset = AssetDatabase.LoadAssetAtPath(AssetDatabase.GUIDToAssetPath(guids[0]), targetType);
-                    if (asset != null) return asset;
-                }
-                else if (guids.Length > 1)
-                {
-                    Debug.LogWarning($"[FindObjectByInstruction] Ambiguous asset find: Found {guids.Length} assets matching filter '{searchFilter}'. Provide a full path or unique name.");
-                    // Optionally return the first one? Or null? Returning null is safer.
-                    return null;
-                }
-                // If still not found, fall through to scene search (though unlikely for assets)
-            }
-
-
-            // --- Scene Object Search ---
-            // Find the GameObject using the internal finder
-            GameObject foundGo = ObjectsHelper.FindObject(new JValue(findTerm), searchMethodToUse);
-
-            if (foundGo == null)
-            {
-                // Don't warn yet, could still be an asset not found above
-                // Debug.LogWarning($"Could not find GameObject using instruction: {instruction}");
-                return null;
-            }
-
-            // Now, get the target object/component from the found GameObject
-            if (targetType == typeof(GameObject))
-            {
-                return foundGo; // We were looking for a GameObject
-            }
-            else if (typeof(Component).IsAssignableFrom(targetType))
-            {
-                Type componentToGetType = targetType;
-                if (!string.IsNullOrEmpty(componentName))
-                {
-                    Type specificCompType = FindType(componentName);
-                    if (specificCompType != null && typeof(Component).IsAssignableFrom(specificCompType))
-                    {
-                        componentToGetType = specificCompType;
-                    }
-                    else
-                    {
-                        Debug.LogWarning($"Could not find component type '{componentName}' specified in find instruction. Falling back to target type '{targetType.Name}'.");
-                    }
-                }
-
-                Component foundComp = foundGo.GetComponent(componentToGetType);
-                if (foundComp == null)
-                {
-                    Debug.LogWarning($"Found GameObject '{foundGo.name}' but could not find component of type '{componentToGetType.Name}'.");
-                }
-                return foundComp;
-            }
-            else
-            {
-                Debug.LogWarning($"Find instruction handling not implemented for target type: {targetType.Name}");
-                return null;
-            }
+            return TsamComponentMutationAdapter.FindObjectByInstruction(instruction, targetType);
         }
-
 
         /// <summary>
         /// Robust component resolver that avoids Assembly.LoadFrom and works with asmdefs.
@@ -2379,18 +1541,7 @@ Returns:
         /// </summary>
         internal static Type FindType(string typeName)
         {
-            if (UnityComponentResolver.TryResolve(typeName, out Type resolvedType, out string error))
-            {
-                return resolvedType;
-            }
-
-            // Log the resolver error if type wasn't found
-            if (!string.IsNullOrEmpty(error))
-            {
-                Debug.LogWarning($"[FindType] {error}");
-            }
-
-            return null;
+            return TsamComponentMutationAdapter.FindType(typeName);
         }
     }
 
