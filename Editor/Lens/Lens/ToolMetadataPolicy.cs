@@ -16,6 +16,7 @@ namespace Becool.UnityMcpLens.Editor.Lens
         {
             NormalizeToolName("Unity.GameObject.Inspect"),
             NormalizeToolName("Unity.GameObject.PreviewChanges"),
+            NormalizeToolName("Unity.GetLensUsageReport"),
             NormalizeToolName("Unity.GetLensHealth"),
             NormalizeToolName("Unity.ListToolPacks"),
             NormalizeToolName("Unity.ReadDetailRef"),

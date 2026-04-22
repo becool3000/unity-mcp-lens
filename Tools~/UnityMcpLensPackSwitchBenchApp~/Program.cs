@@ -22,6 +22,7 @@ try
             Console.WriteLine($"Server:     {auditReport.ServerPath}");
             Console.WriteLine($"Foundation: {auditReport.FoundationToolCount} tools");
             Console.WriteLine($"Scene:      {auditReport.SceneToolCount} tools");
+            Console.WriteLine($"Debug:      {auditReport.DebugToolCount} tools");
             Console.WriteLine($"Result:     {(auditReport.Success ? "PASS" : "FAIL")}");
 
             foreach (var failure in auditReport.Failures)
@@ -197,6 +198,11 @@ sealed class MetadataAudit(BenchmarkOptions options)
         "Unity_Runtime_GetVisualBoundsSnapshot"
     ];
 
+    static readonly string[] k_RequiredDebugTools =
+    [
+        "Unity_GetLensUsageReport"
+    ];
+
     public async Task<MetadataAuditReport> RunAsync()
     {
         Exception? lastError = null;
@@ -225,6 +231,8 @@ sealed class MetadataAudit(BenchmarkOptions options)
             false,
             0,
             0,
+            0,
+            [],
             [],
             [],
             [$"Metadata audit failed before validation: {lastError?.Message}"]);
@@ -238,15 +246,20 @@ sealed class MetadataAudit(BenchmarkOptions options)
         var foundationTools = await session.GetToolsAsync();
         _ = await session.SetToolPacksAsync(["scene"]);
         var sceneTools = await session.GetToolsAsync();
+        _ = await session.SetToolPacksAsync(["debug"]);
+        var debugTools = await session.GetToolsAsync();
 
         var failures = new List<string>();
         ValidateToolSet("foundation", foundationTools, ExpectedFoundationToolCount, k_RequiredFoundationTools, failures);
         ValidateToolSet("foundation+scene", sceneTools, ExpectedSceneToolCount, k_RequiredSceneTools, failures);
+        ValidateToolSet("foundation+debug", debugTools, null, k_RequiredDebugTools, failures);
         ValidateReadOnlyHint(sceneTools, "Unity_GameObject_Inspect", expected: true, failures);
         ValidateReadOnlyHint(sceneTools, "Unity_GameObject_PreviewChanges", expected: true, failures);
         ValidateReadOnlyHint(sceneTools, "Unity_GameObject_ApplyChanges", expected: false, failures);
         ValidateReadOnlyHint(sceneTools, "Unity_ManageGameObject", expected: false, failures);
+        ValidateReadOnlyHint(debugTools, "Unity_GetLensUsageReport", expected: true, failures);
         ValidateGameObjectSchemas(sceneTools, failures);
+        ValidateLensUsageSchema(debugTools, failures);
 
         return new MetadataAuditReport(
             options.ProjectPath,
@@ -255,15 +268,17 @@ sealed class MetadataAudit(BenchmarkOptions options)
             failures.Count == 0,
             foundationTools.Count,
             sceneTools.Count,
+            debugTools.Count,
             foundationTools.Select(tool => tool.Name).OrderBy(name => name, StringComparer.Ordinal).ToArray(),
             sceneTools.Select(tool => tool.Name).OrderBy(name => name, StringComparer.Ordinal).ToArray(),
+            debugTools.Select(tool => tool.Name).OrderBy(name => name, StringComparer.Ordinal).ToArray(),
             failures);
     }
 
-    static void ValidateToolSet(string label, IReadOnlyList<ToolDescriptor> tools, int expectedCount, string[] requiredTools, List<string> failures)
+    static void ValidateToolSet(string label, IReadOnlyList<ToolDescriptor> tools, int? expectedCount, string[] requiredTools, List<string> failures)
     {
-        if (tools.Count != expectedCount)
-            failures.Add($"{label} exported {tools.Count} tools; expected {expectedCount}.");
+        if (expectedCount.HasValue && tools.Count != expectedCount.Value)
+            failures.Add($"{label} exported {tools.Count} tools; expected {expectedCount.Value}.");
 
         var toolNames = tools.Select(tool => tool.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
         foreach (var requiredTool in requiredTools)
@@ -282,6 +297,22 @@ sealed class MetadataAudit(BenchmarkOptions options)
                 failures.Add($"{label} tool '{tool.Name}' has an empty description.");
             if (!tool.HasObjectInputSchema())
                 failures.Add($"{label} tool '{tool.Name}' does not expose an object input schema.");
+        }
+    }
+
+    static void ValidateLensUsageSchema(IReadOnlyList<ToolDescriptor> tools, List<string> failures)
+    {
+        var tool = FindTool(tools, "Unity_GetLensUsageReport");
+        if (tool == null)
+        {
+            failures.Add("Cannot validate Unity_GetLensUsageReport schema because the tool is missing.");
+            return;
+        }
+
+        foreach (var propertyName in new[] { "sinceLine", "sinceUtc", "lastRows", "maxItems", "includeDetails" })
+        {
+            if (!tool.HasInputProperty(propertyName))
+                failures.Add($"Unity_GetLensUsageReport schema is missing property '{propertyName}'.");
         }
     }
 
@@ -599,8 +630,10 @@ sealed record MetadataAuditReport(
     bool Success,
     int FoundationToolCount,
     int SceneToolCount,
+    int DebugToolCount,
     IReadOnlyList<string> FoundationTools,
     IReadOnlyList<string> SceneTools,
+    IReadOnlyList<string> DebugTools,
     IReadOnlyList<string> Failures);
 
 sealed class ToolDescriptor
