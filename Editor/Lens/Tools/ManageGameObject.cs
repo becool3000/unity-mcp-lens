@@ -510,7 +510,7 @@ Returns:
 
                 using (timing.Measure("service"))
                 {
-                    result = TsamLifecycleService.GetBuiltinAssets();
+                    result = TsamLifecycleService.GetBuiltinAssets(timing);
                 }
             }
             catch (Exception ex)

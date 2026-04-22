@@ -69,9 +69,15 @@ namespace Becool.UnityMcpLens.Editor.Services.GameObjects
             m_ComponentMutationAdapter = componentMutationAdapter;
         }
 
-        public GameObjectOperationResult GetBuiltinAssets()
+        public GameObjectOperationResult GetBuiltinAssets(GameObjectToolTiming timing)
         {
-            return GameObjectOperationResult.Ok("Retrieved builtin GameObject asset hints.", m_LifecycleAdapter.GetBuiltinAssetsData());
+            object data;
+            using (timing.Measure("adapter"))
+            {
+                data = m_LifecycleAdapter.GetBuiltinAssetsData();
+            }
+
+            return GameObjectOperationResult.Ok("Retrieved builtin GameObject asset hints.", data);
         }
 
         public GameObjectOperationResult PreviewCreate(GameObjectCreateRequest request, GameObjectToolTiming timing)
