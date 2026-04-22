@@ -1,5 +1,6 @@
 #nullable disable
 using System;
+using System.Collections.Generic;
 using Becool.UnityMcpLens.Editor.Models.GameObjects;
 using Newtonsoft.Json.Linq;
 
@@ -104,6 +105,40 @@ namespace Becool.UnityMcpLens.Editor.Services.GameObjects
             };
         }
 
+        public GameObjectCreateRequest NormalizeCreate(JObject parameters, bool legacyCompatibility)
+        {
+            return new GameObjectCreateRequest
+            {
+                name = parameters?["name"]?.ToString(),
+                primitiveType = parameters?["primitive_type"]?.ToString() ?? parameters?["primitiveType"]?.ToString(),
+                saveAsPrefab = parameters?["save_as_prefab"]?.ToObject<bool>() ?? parameters?["saveAsPrefab"]?.ToObject<bool>() ?? false,
+                prefabPath = parameters?["prefab_path"]?.ToString() ?? parameters?["prefabPath"]?.ToString(),
+                prefabFolder = parameters?["prefab_folder"]?.ToString() ?? parameters?["prefabFolder"]?.ToString() ?? "Assets/Prefabs",
+                tag = parameters?["tag"]?.ToString(),
+                layer = parameters?["layer"]?.ToString(),
+                position = ParseVector3(parameters?["position"] as JArray),
+                rotation = ParseVector3(parameters?["rotation"] as JArray),
+                scale = ParseVector3(parameters?["scale"] as JArray),
+                hasParent = parameters?["parent"] != null,
+                parent = NormalizeTarget(parameters?["parent"]),
+                componentsToAdd = ParseComponentsToAdd(parameters),
+                legacyCompatibility = legacyCompatibility
+            };
+        }
+
+        public GameObjectDeleteRequest NormalizeDelete(JObject parameters, JToken targetToken, string searchMethod, bool legacyCompatibility)
+        {
+            bool defaultFindAll = legacyCompatibility;
+            return new GameObjectDeleteRequest
+            {
+                target = NormalizeTarget(targetToken),
+                searchMethod = NormalizeSearchMethod(searchMethod),
+                findAll = parameters?["find_all"]?.ToObject<bool>() ?? parameters?["findAll"]?.ToObject<bool>() ?? defaultFindAll,
+                searchInactive = parameters?["search_inactive"]?.ToObject<bool>() ?? parameters?["searchInactive"]?.ToObject<bool>() ?? true,
+                legacyCompatibility = legacyCompatibility
+            };
+        }
+
         static string NormalizeSearchMethod(string searchMethod)
         {
             return string.IsNullOrWhiteSpace(searchMethod) ? null : searchMethod.ToLowerInvariant();
@@ -198,6 +233,50 @@ namespace Becool.UnityMcpLens.Editor.Services.GameObjects
                 return;
 
             componentName = componentsToRemoveArray.First?.ToString();
+        }
+
+        static List<GameObjectComponentAddSpec> ParseComponentsToAdd(JObject parameters)
+        {
+            var specs = new List<GameObjectComponentAddSpec>();
+            JArray componentsToAdd = parameters?["components_to_add"] as JArray ?? parameters?["componentsToAdd"] as JArray;
+            if (componentsToAdd == null)
+                return specs;
+
+            foreach (var token in componentsToAdd)
+            {
+                if (token == null || token.Type == JTokenType.Null)
+                {
+                    specs.Add(new GameObjectComponentAddSpec());
+                    continue;
+                }
+
+                if (token.Type == JTokenType.String)
+                {
+                    specs.Add(new GameObjectComponentAddSpec
+                    {
+                        componentName = token.ToString()
+                    });
+                    continue;
+                }
+
+                if (token is JObject componentObject)
+                {
+                    specs.Add(new GameObjectComponentAddSpec
+                    {
+                        componentName = componentObject["typeName"]?.ToString()
+                            ?? componentObject["componentName"]?.ToString()
+                            ?? componentObject["component_name"]?.ToString(),
+                        properties = componentObject["properties"] as JObject
+                            ?? componentObject["componentProperties"] as JObject
+                            ?? componentObject["component_properties"] as JObject
+                    });
+                    continue;
+                }
+
+                specs.Add(new GameObjectComponentAddSpec());
+            }
+
+            return specs;
         }
     }
 }

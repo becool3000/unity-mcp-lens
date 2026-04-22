@@ -21,6 +21,10 @@ namespace Becool.UnityMcpLens.Editor.Tools
         const string GetComponentToolName = "Unity.GameObject.GetComponent";
         const string PreviewComponentChangesToolName = "Unity.GameObject.PreviewComponentChanges";
         const string ApplyComponentChangesToolName = "Unity.GameObject.ApplyComponentChanges";
+        const string PreviewCreateToolName = "Unity.GameObject.PreviewCreate";
+        const string CreateToolName = "Unity.GameObject.Create";
+        const string PreviewDeleteToolName = "Unity.GameObject.PreviewDelete";
+        const string DeleteToolName = "Unity.GameObject.Delete";
 
         public const string InspectDescription = @"Inspects scene GameObjects without mutation.
 
@@ -57,13 +61,31 @@ Supports add, remove, and setProperties operations. Preview does not call Undo, 
 
 Supports add, remove, and setProperties operations. Returns compact readback data and reports no-op property updates as applied=false.";
 
+        public const string PreviewCreateDescription = @"Previews GameObject creation without mutation.
+
+Supports empty objects, primitives, prefab instantiation, save-as-prefab planning, parent, transform, tag, layer, and initial component validation.";
+
+        public const string CreateDescription = @"Creates or instantiates a scene GameObject after the same validation used by PreviewCreate.
+
+Supports empty objects, primitives, prefab instantiation, save-as-prefab, parent, transform, tag, layer, and initial components.";
+
+        public const string PreviewDeleteDescription = @"Previews scene GameObject deletion without mutation.
+
+Defaults to single-target safety and reports ambiguous matches unless findAll=true.";
+
+        public const string DeleteDescription = @"Deletes scene GameObjects after the same validation used by PreviewDelete.
+
+Defaults to single-target safety and requires findAll=true to delete multiple matches.";
+
         static readonly UnityGameObjectAdapter GameObjectAdapter = new UnityGameObjectAdapter();
         static readonly UnityComponentMutationAdapter ComponentMutationAdapter = new UnityComponentMutationAdapter(GameObjectAdapter);
+        static readonly UnityGameObjectLifecycleAdapter LifecycleAdapter = new UnityGameObjectLifecycleAdapter(GameObjectAdapter);
         static readonly GameObjectRequestNormalizer RequestNormalizer = new GameObjectRequestNormalizer();
         static readonly GameObjectQueryService QueryService = new GameObjectQueryService(GameObjectAdapter);
         static readonly GameObjectMutationService MutationService = new GameObjectMutationService(GameObjectAdapter);
         static readonly GameObjectComponentReadService ComponentReadService = new GameObjectComponentReadService(GameObjectAdapter);
         static readonly GameObjectComponentMutationService ComponentMutationService = new GameObjectComponentMutationService(GameObjectAdapter, ComponentMutationAdapter);
+        static readonly GameObjectLifecycleService LifecycleService = new GameObjectLifecycleService(LifecycleAdapter, ComponentMutationAdapter);
 
         [McpSchema(InspectToolName)]
         public static object GetInspectSchema()
@@ -147,6 +169,30 @@ Supports add, remove, and setProperties operations. Returns compact readback dat
         public static object GetApplyComponentChangesSchema()
         {
             return BuildComponentChangeSchema();
+        }
+
+        [McpSchema(PreviewCreateToolName)]
+        public static object GetPreviewCreateSchema()
+        {
+            return BuildCreateSchema();
+        }
+
+        [McpSchema(CreateToolName)]
+        public static object GetCreateSchema()
+        {
+            return BuildCreateSchema();
+        }
+
+        [McpSchema(PreviewDeleteToolName)]
+        public static object GetPreviewDeleteSchema()
+        {
+            return BuildDeleteSchema();
+        }
+
+        [McpSchema(DeleteToolName)]
+        public static object GetDeleteSchema()
+        {
+            return BuildDeleteSchema();
         }
 
         [McpTool(InspectToolName, InspectDescription, "Inspect GameObject", Groups = new[] { "scene" }, EnabledByDefault = true)]
@@ -309,6 +355,30 @@ Supports add, remove, and setProperties operations. Returns compact readback dat
             return HandleComponentChangeTool(ApplyComponentChangesToolName, "apply_component_changes", @params, apply: true);
         }
 
+        [McpTool(PreviewCreateToolName, PreviewCreateDescription, "Preview GameObject Create", Groups = new[] { "scene" }, EnabledByDefault = true)]
+        public static object PreviewCreate(JObject @params)
+        {
+            return HandleCreateTool(PreviewCreateToolName, "preview_create", @params, apply: false);
+        }
+
+        [McpTool(CreateToolName, CreateDescription, "Create GameObject", Groups = new[] { "scene" }, EnabledByDefault = true)]
+        public static object Create(JObject @params)
+        {
+            return HandleCreateTool(CreateToolName, "create", @params, apply: true);
+        }
+
+        [McpTool(PreviewDeleteToolName, PreviewDeleteDescription, "Preview GameObject Delete", Groups = new[] { "scene" }, EnabledByDefault = true)]
+        public static object PreviewDelete(JObject @params)
+        {
+            return HandleDeleteTool(PreviewDeleteToolName, "preview_delete", @params, apply: false);
+        }
+
+        [McpTool(DeleteToolName, DeleteDescription, "Delete GameObject", Groups = new[] { "scene" }, EnabledByDefault = true)]
+        public static object Delete(JObject @params)
+        {
+            return HandleDeleteTool(DeleteToolName, "delete", @params, apply: true);
+        }
+
         static object HandleChangeTool(string toolName, string requestType, JObject @params, bool apply)
         {
             @params ??= new JObject();
@@ -366,6 +436,68 @@ Supports add, remove, and setProperties operations. Returns compact readback dat
             {
                 errorKind = ex.GetType().Name;
                 result = GameObjectOperationResult.Error($"Internal error processing GameObject component changes: {ex.Message}", errorKind);
+            }
+
+            return ShapeResponse(result, timing, errorKind);
+        }
+
+        static object HandleCreateTool(string toolName, string requestType, JObject @params, bool apply)
+        {
+            @params ??= new JObject();
+            var timing = new GameObjectToolTiming(toolName, requestType, GetUtf8ByteCount(@params.ToString(Formatting.None)));
+            GameObjectOperationResult result;
+            string errorKind = null;
+
+            try
+            {
+                GameObjectCreateRequest request;
+                using (timing.Measure("normalization"))
+                {
+                    request = RequestNormalizer.NormalizeCreate(@params, legacyCompatibility: false);
+                }
+
+                using (timing.Measure("service"))
+                {
+                    result = apply
+                        ? LifecycleService.ApplyCreate(request, timing)
+                        : LifecycleService.PreviewCreate(request, timing);
+                }
+            }
+            catch (Exception ex)
+            {
+                errorKind = ex.GetType().Name;
+                result = GameObjectOperationResult.Error($"Internal error processing GameObject create: {ex.Message}", errorKind);
+            }
+
+            return ShapeResponse(result, timing, errorKind);
+        }
+
+        static object HandleDeleteTool(string toolName, string requestType, JObject @params, bool apply)
+        {
+            @params ??= new JObject();
+            var timing = new GameObjectToolTiming(toolName, requestType, GetUtf8ByteCount(@params.ToString(Formatting.None)));
+            GameObjectOperationResult result;
+            string errorKind = null;
+
+            try
+            {
+                GameObjectDeleteRequest request;
+                using (timing.Measure("normalization"))
+                {
+                    request = RequestNormalizer.NormalizeDelete(@params, GetToken(@params, "target", "Target"), GetSearchMethod(@params), legacyCompatibility: false);
+                }
+
+                using (timing.Measure("service"))
+                {
+                    result = apply
+                        ? LifecycleService.ApplyDelete(request, timing)
+                        : LifecycleService.PreviewDelete(request, timing);
+                }
+            }
+            catch (Exception ex)
+            {
+                errorKind = ex.GetType().Name;
+                result = GameObjectOperationResult.Error($"Internal error processing GameObject delete: {ex.Message}", errorKind);
             }
 
             return ShapeResponse(result, timing, errorKind);
@@ -492,6 +624,73 @@ Supports add, remove, and setProperties operations. Returns compact readback dat
                     }
                 },
                 required = new[] { "operation", "target", "componentName" }
+            };
+        }
+
+        static object BuildCreateSchema()
+        {
+            return new
+            {
+                type = "object",
+                properties = new
+                {
+                    name = new { type = "string", description = "Name for the created or instantiated GameObject." },
+                    primitiveType = new
+                    {
+                        type = "string",
+                        description = "Unity primitive type to create when prefabPath is not resolved.",
+                        @enum = new[] { "Sphere", "Capsule", "Cylinder", "Cube", "Plane", "Quad" }
+                    },
+                    prefabPath = new { type = "string", description = "Prefab asset path or unique prefab name to instantiate. Also used as save path when saveAsPrefab=true." },
+                    saveAsPrefab = new { type = "boolean", description = "Save a newly created object as a prefab and connect the scene instance." },
+                    prefabFolder = new { type = "string", description = "Folder used to construct a prefab path when saveAsPrefab=true and prefabPath is omitted." },
+                    parent = ToolSchemaFragments.TargetRef("Parent GameObject target. Null or empty string creates at scene root.", allowNull: true),
+                    tag = new { type = "string", description = "Tag to assign. Missing tags are created during apply." },
+                    layer = new { type = "string", description = "Layer name to assign." },
+                    position = ToolSchemaFragments.Vector3Array("Local position [x, y, z]."),
+                    rotation = ToolSchemaFragments.Vector3Array("Local Euler rotation [x, y, z]."),
+                    scale = ToolSchemaFragments.Vector3Array("Local scale [x, y, z]."),
+                    componentsToAdd = new
+                    {
+                        type = "array",
+                        description = "Initial components to add after creation.",
+                        items = new
+                        {
+                            anyOf = new object[]
+                            {
+                                new { type = "string" },
+                                new
+                                {
+                                    type = "object",
+                                    properties = new
+                                    {
+                                        typeName = new { type = "string" },
+                                        componentName = new { type = "string" },
+                                        properties = new { type = "object", additionalProperties = true },
+                                        componentProperties = new { type = "object", additionalProperties = true }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                required = new[] { "name" }
+            };
+        }
+
+        static object BuildDeleteSchema()
+        {
+            return new
+            {
+                type = "object",
+                properties = new
+                {
+                    target = ToolSchemaFragments.TargetRef("GameObject target, path, name, or id."),
+                    searchMethod = ToolSchemaFragments.SearchMethod(),
+                    findAll = new { type = "boolean", description = "When true, delete all matching scene GameObjects." },
+                    searchInactive = new { type = "boolean", description = "Include inactive scene objects while resolving the target." }
+                },
+                required = new[] { "target" }
             };
         }
     }

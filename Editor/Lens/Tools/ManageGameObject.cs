@@ -64,11 +64,13 @@ Returns:
     Dictionary with operation results ('success', 'message', 'data').";
         static readonly UnityGameObjectAdapter TsamGameObjectAdapter = new UnityGameObjectAdapter();
         static readonly UnityComponentMutationAdapter TsamComponentMutationAdapter = new UnityComponentMutationAdapter(TsamGameObjectAdapter);
+        static readonly UnityGameObjectLifecycleAdapter TsamLifecycleAdapter = new UnityGameObjectLifecycleAdapter(TsamGameObjectAdapter);
         static readonly GameObjectRequestNormalizer TsamRequestNormalizer = new GameObjectRequestNormalizer();
         static readonly GameObjectQueryService TsamQueryService = new GameObjectQueryService(TsamGameObjectAdapter);
         static readonly GameObjectMutationService TsamMutationService = new GameObjectMutationService(TsamGameObjectAdapter);
         static readonly GameObjectComponentReadService TsamComponentReadService = new GameObjectComponentReadService(TsamGameObjectAdapter);
         static readonly GameObjectComponentMutationService TsamComponentMutationService = new GameObjectComponentMutationService(TsamGameObjectAdapter, TsamComponentMutationAdapter);
+        static readonly GameObjectLifecycleService TsamLifecycleService = new GameObjectLifecycleService(TsamLifecycleAdapter, TsamComponentMutationAdapter);
 
         // --- Main Handler ---
 
@@ -283,13 +285,13 @@ Returns:
                 switch (action)
                 {
                     case "create":
-                        return CreateGameObject(@params);
+                        return HandleTsamCreate(@params);
                     case "modify":
                         if (IsSimpleModifyRequest(@params))
                             return HandleTsamSimpleModify(@params, targetToken, searchMethod);
                         return ModifyGameObject(@params, targetToken, searchMethod);
                     case "delete":
-                        return DeleteGameObject(targetToken, searchMethod);
+                        return HandleTsamDelete(@params, targetToken, searchMethod);
                     case "find":
                         return HandleTsamFind(@params, targetToken, searchMethod);
                     case "get_selection":
@@ -297,7 +299,7 @@ Returns:
                     case "get_bounds":
                         return HandleTsamGetBounds(@params, targetToken, searchMethod);
                     case "get_builtin_assets":
-                        return GetBuiltinAssets();
+                        return HandleTsamGetBuiltinAssets(@params);
                     case "get_components":
                         return HandleTsamGetComponents(@params, targetToken, searchMethod);
                     case "get_component":
@@ -430,6 +432,92 @@ Returns:
                 errorKind = ex.GetType().Name;
                 Debug.LogError($"[ManageGameObject.TSAM] modify failed: {ex}");
                 result = GameObjectOperationResult.Error($"Internal error processing action 'modify': {ex.Message}", errorKind);
+            }
+
+            return ShapeTsamResponse(result, timing, errorKind);
+        }
+
+        static object HandleTsamCreate(JObject @params)
+        {
+            var timing = new GameObjectToolTiming("Unity.ManageGameObject", "create", GetUtf8ByteCount(@params?.ToString(Formatting.None)));
+            GameObjectOperationResult result;
+            string errorKind = null;
+
+            try
+            {
+                GameObjectCreateRequest request;
+                using (timing.Measure("normalization"))
+                {
+                    request = TsamRequestNormalizer.NormalizeCreate(@params, legacyCompatibility: true);
+                }
+
+                using (timing.Measure("service"))
+                {
+                    result = TsamLifecycleService.CreateLegacy(request, timing);
+                }
+            }
+            catch (Exception ex)
+            {
+                errorKind = ex.GetType().Name;
+                Debug.LogError($"[ManageGameObject.TSAM] create failed: {ex}");
+                result = GameObjectOperationResult.Error($"Internal error processing action 'create': {ex.Message}", errorKind);
+            }
+
+            return ShapeTsamResponse(result, timing, errorKind);
+        }
+
+        static object HandleTsamDelete(JObject @params, JToken targetToken, string searchMethod)
+        {
+            var timing = new GameObjectToolTiming("Unity.ManageGameObject", "delete", GetUtf8ByteCount(@params?.ToString(Formatting.None)));
+            GameObjectOperationResult result;
+            string errorKind = null;
+
+            try
+            {
+                GameObjectDeleteRequest request;
+                using (timing.Measure("normalization"))
+                {
+                    request = TsamRequestNormalizer.NormalizeDelete(@params, targetToken, searchMethod, legacyCompatibility: true);
+                }
+
+                using (timing.Measure("service"))
+                {
+                    result = TsamLifecycleService.DeleteLegacy(request, timing);
+                }
+            }
+            catch (Exception ex)
+            {
+                errorKind = ex.GetType().Name;
+                Debug.LogError($"[ManageGameObject.TSAM] delete failed: {ex}");
+                result = GameObjectOperationResult.Error($"Internal error processing action 'delete': {ex.Message}", errorKind);
+            }
+
+            return ShapeTsamResponse(result, timing, errorKind);
+        }
+
+        static object HandleTsamGetBuiltinAssets(JObject @params)
+        {
+            var timing = new GameObjectToolTiming("Unity.ManageGameObject", "get_builtin_assets", GetUtf8ByteCount(@params?.ToString(Formatting.None)));
+            GameObjectOperationResult result;
+            string errorKind = null;
+
+            try
+            {
+                using (timing.Measure("normalization"))
+                {
+                    // No action-specific parameters to normalize.
+                }
+
+                using (timing.Measure("service"))
+                {
+                    result = TsamLifecycleService.GetBuiltinAssets();
+                }
+            }
+            catch (Exception ex)
+            {
+                errorKind = ex.GetType().Name;
+                Debug.LogError($"[ManageGameObject.TSAM] get_builtin_assets failed: {ex}");
+                result = GameObjectOperationResult.Error($"Internal error processing action 'get_builtin_assets': {ex.Message}", errorKind);
             }
 
             return ShapeTsamResponse(result, timing, errorKind);
@@ -653,430 +741,9 @@ Returns:
 
         static object CreateGameObject(JObject @params)
         {
-            string name = @params["name"]?.ToString();
-            if (string.IsNullOrEmpty(name))
-            {
-                return Response.Error("'name' parameter is required for 'create' action.");
-            }
-
-            // Get prefab creation parameters
-            bool saveAsPrefab = @params["save_as_prefab"]?.ToObject<bool>() ?? false;
-            string prefabPath = @params["prefab_path"]?.ToString();
-            string prefabFolder = @params["prefab_folder"]?.ToString() ?? "Assets/Prefabs";
-            string tag = @params["tag"]?.ToString(); // Get tag for creation
-            string primitiveType = @params["primitive_type"]?.ToString(); // Keep primitiveType check
-
-            // --- Handle Prefab Path Logic (Python server parity) ---
-            if (saveAsPrefab)
-            {
-                if (string.IsNullOrEmpty(prefabPath))
-                {
-                    if (string.IsNullOrEmpty(name))
-                    {
-                        return Response.Error("Cannot create default prefab path: 'name' parameter is missing.");
-                    }
-                    // Construct path using prefab_folder and name
-                    string constructedPath = $"{prefabFolder}/{name}.prefab";
-                    // Ensure clean path separators (Unity prefers '/')
-                    prefabPath = constructedPath.Replace("\\", "/");
-                    Debug.Log($"[ManageGameObject.Create] Constructed prefab path: '{prefabPath}'");
-                }
-                else if (!prefabPath.ToLower().EndsWith(".prefab"))
-                {
-                    return Response.Error($"Invalid prefab_path: '{prefabPath}' must end with .prefab");
-                }
-            }
-            // --- End Prefab Path Logic ---
-
-            GameObject newGo = null; // Initialize as null
-
-            // --- Try Instantiating Prefab First ---
-            string originalPrefabPath = prefabPath; // Keep original for messages
-            if (!string.IsNullOrEmpty(prefabPath))
-            {
-                // If no extension, search for the prefab by name
-                if (
-                    !prefabPath.Contains("/")
-                    && !prefabPath.EndsWith(".prefab", StringComparison.OrdinalIgnoreCase)
-                )
-                {
-                    string prefabNameOnly = prefabPath;
-                    Debug.Log(
-                        $"[ManageGameObject.Create] Searching for prefab named: '{prefabNameOnly}'"
-                    );
-                    string[] guids = AssetDatabase.FindAssets($"t:Prefab {prefabNameOnly}");
-                    if (guids.Length == 0)
-                    {
-                        return Response.Error(
-                            $"Prefab named '{prefabNameOnly}' not found anywhere in the project."
-                        );
-                    }
-                    else if (guids.Length > 1)
-                    {
-                        string foundPaths = string.Join(
-                            ", ",
-                            guids.Select(g => AssetDatabase.GUIDToAssetPath(g))
-                        );
-                        return Response.Error(
-                            $"Multiple prefabs found matching name '{prefabNameOnly}': {foundPaths}. Please provide a more specific path."
-                        );
-                    }
-                    else // Exactly one found
-                    {
-                        prefabPath = AssetDatabase.GUIDToAssetPath(guids[0]); // Update prefabPath with the full path
-                        Debug.Log(
-                            $"[ManageGameObject.Create] Found unique prefab at path: '{prefabPath}'"
-                        );
-                    }
-                }
-                else if (!prefabPath.EndsWith(".prefab", StringComparison.OrdinalIgnoreCase))
-                {
-                    // If it looks like a path but doesn't end with .prefab, assume user forgot it and append it.
-                    Debug.LogWarning(
-                        $"[ManageGameObject.Create] Provided prefabPath '{prefabPath}' does not end with .prefab. Assuming it's missing and appending."
-                    );
-                    prefabPath += ".prefab";
-                    // Note: This path might still not exist, AssetDatabase.LoadAssetAtPath will handle that.
-                }
-                // The logic above now handles finding or assuming the .prefab extension.
-
-                GameObject prefabAsset = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
-                if (prefabAsset != null)
-                {
-                    try
-                    {
-                        // Instantiate the prefab, initially place it at the root
-                        // Parent will be set later if specified
-                        newGo = PrefabUtility.InstantiatePrefab(prefabAsset) as GameObject;
-
-                        if (newGo == null)
-                        {
-                            // This might happen if the asset exists but isn't a valid GameObject prefab somehow
-                            Debug.LogError(
-                                $"[ManageGameObject.Create] Failed to instantiate prefab at '{prefabPath}', asset might be corrupted or not a GameObject."
-                            );
-                            return Response.Error(
-                                $"Failed to instantiate prefab at '{prefabPath}'."
-                            );
-                        }
-                        // Name the instance based on the 'name' parameter, not the prefab's default name
-                        if (!string.IsNullOrEmpty(name))
-                        {
-                            newGo.name = name;
-                        }
-                        // Register Undo for prefab instantiation
-                        Undo.RegisterCreatedObjectUndo(
-                            newGo,
-                            $"Instantiate Prefab '{prefabAsset.name}' as '{newGo.name}'"
-                        );
-                        Debug.Log(
-                            $"[ManageGameObject.Create] Instantiated prefab '{prefabAsset.name}' from path '{prefabPath}' as '{newGo.name}'."
-                        );
-                    }
-                    catch (Exception e)
-                    {
-                        return Response.Error(
-                            $"Error instantiating prefab '{prefabPath}': {e.Message}"
-                        );
-                    }
-                }
-                else
-                {
-                    // Only return error if prefabPath was specified but not found.
-                    // If prefabPath was empty/null, we proceed to create primitive/empty.
-                    Debug.LogWarning(
-                        $"[ManageGameObject.Create] Prefab asset not found at path: '{prefabPath}'. Will proceed to create new object if specified."
-                    );
-                    // Do not return error here, allow fallback to primitive/empty creation
-                }
-            }
-
-            // --- Fallback: Create Primitive or Empty GameObject ---
-            bool createdNewObject = false; // Flag to track if we created (not instantiated)
-            if (newGo == null) // Only proceed if prefab instantiation didn't happen
-            {
-                if (!string.IsNullOrEmpty(primitiveType))
-                {
-                    try
-                    {
-                        PrimitiveType type = (PrimitiveType)
-                            Enum.Parse(typeof(PrimitiveType), primitiveType, true);
-                        newGo = GameObject.CreatePrimitive(type);
-                        // Set name *after* creation for primitives
-                        if (!string.IsNullOrEmpty(name))
-                        {
-                            newGo.name = name;
-                        }
-                        else
-                        {
-                            UnityEngine.Object.DestroyImmediate(newGo); // cleanup leak
-                            return Response.Error(
-                                "'name' parameter is required when creating a primitive."
-                            ); // Name is essential
-                        }
-                        createdNewObject = true;
-                    }
-                    catch (ArgumentException)
-                    {
-                        return Response.Error(
-                            $"Invalid primitive type: '{primitiveType}'. Valid types: {string.Join(", ", Enum.GetNames(typeof(PrimitiveType)))}"
-                        );
-                    }
-                    catch (Exception e)
-                    {
-                        return Response.Error(
-                            $"Failed to create primitive '{primitiveType}': {e.Message}"
-                        );
-                    }
-                }
-                else // Create empty GameObject
-                {
-                    if (string.IsNullOrEmpty(name))
-                    {
-                        return Response.Error(
-                            "'name' parameter is required for 'create' action when not instantiating a prefab or creating a primitive."
-                        );
-                    }
-                    newGo = new GameObject(name);
-                    createdNewObject = true;
-                }
-                // Record creation for Undo *only* if we created a new object
-                if (createdNewObject)
-                {
-                    Undo.RegisterCreatedObjectUndo(newGo, $"Create GameObject '{newGo.name}'");
-                }
-            }
-            // --- Common Setup (Parent, Transform, Tag, Components) - Applied AFTER object exists ---
-            if (newGo == null)
-            {
-                // Should theoretically not happen if logic above is correct, but safety check.
-                return Response.Error("Failed to create or instantiate the GameObject.");
-            }
-
-            // Record potential changes to the existing prefab instance or the new GO
-            // Record transform separately in case parent changes affect it
-            Undo.RecordObject(newGo.transform, "Set GameObject Transform");
-            Undo.RecordObject(newGo, "Set GameObject Properties");
-
-            // Set Transform
-            Vector3? position = ParseVector3(@params["position"] as JArray);
-            Vector3? rotation = ParseVector3(@params["rotation"] as JArray);
-            Vector3? scale = ParseVector3(@params["scale"] as JArray);
-
-            if (position.HasValue)
-                newGo.transform.localPosition = position.Value;
-            if (rotation.HasValue)
-                newGo.transform.localEulerAngles = rotation.Value;
-            if (scale.HasValue)
-                newGo.transform.localScale = scale.Value;
-
-            // Set Parent
-            JToken parentToken = @params["parent"];
-            if (parentToken != null)
-            {
-                GameObject parentGo = ObjectsHelper.FindObject(parentToken, "by_id_or_name_or_path"); // Flexible parent finding
-                if (parentGo == null)
-                {
-                    UnityEngine.Object.DestroyImmediate(newGo); // Clean up created object
-                    return Response.Error($"Parent specified ('{parentToken}') but not found.");
-                }
-                newGo.transform.SetParent(parentGo.transform, true); // worldPositionStays = true
-            }
-
-            // Set Tag (added for create action)
-            if (!string.IsNullOrEmpty(tag))
-            {
-                // Similar logic as in ModifyGameObject for setting/creating tags
-                string tagToSet = string.IsNullOrEmpty(tag) ? "Untagged" : tag;
-                try
-                {
-                    newGo.tag = tagToSet;
-                }
-                catch (UnityException ex)
-                {
-                    if (ex.Message.Contains("is not defined"))
-                    {
-                        Debug.LogWarning(
-                            $"[ManageGameObject.Create] Tag '{tagToSet}' not found. Attempting to create it."
-                        );
-                        try
-                        {
-                            InternalEditorUtility.AddTag(tagToSet);
-                            newGo.tag = tagToSet; // Retry
-                            Debug.Log(
-                                $"[ManageGameObject.Create] Tag '{tagToSet}' created and assigned successfully."
-                            );
-                        }
-                        catch (Exception innerEx)
-                        {
-                            UnityEngine.Object.DestroyImmediate(newGo); // Clean up
-                            return Response.Error(
-                                $"Failed to create or assign tag '{tagToSet}' during creation: {innerEx.Message}."
-                            );
-                        }
-                    }
-                    else
-                    {
-                        UnityEngine.Object.DestroyImmediate(newGo); // Clean up
-                        return Response.Error(
-                            $"Failed to set tag to '{tagToSet}' during creation: {ex.Message}."
-                        );
-                    }
-                }
-            }
-
-            // Set Layer (new for create action)
-            string layerName = @params["layer"]?.ToString();
-            if (!string.IsNullOrEmpty(layerName))
-            {
-                int layerId = LayerMask.NameToLayer(layerName);
-                if (layerId != -1)
-                {
-                    newGo.layer = layerId;
-                }
-                else
-                {
-                    Debug.LogWarning(
-                        $"[ManageGameObject.Create] Layer '{layerName}' not found. Using default layer."
-                    );
-                }
-            }
-
-            // Add Components
-            if (@params["components_to_add"] is JArray componentsToAddArray)
-            {
-                foreach (var compToken in componentsToAddArray)
-                {
-                    string typeName = null;
-                    JObject properties = null;
-
-                    if (compToken.Type == JTokenType.String)
-                    {
-                        typeName = compToken.ToString();
-                    }
-                    else if (compToken is JObject compObj)
-                    {
-                        typeName = compObj["typeName"]?.ToString();
-                        properties = compObj["properties"] as JObject;
-                    }
-
-                    if (!string.IsNullOrEmpty(typeName))
-                    {
-                        var addResult = AddComponentInternal(newGo, typeName, properties);
-                        if (addResult != null) // Check if AddComponentInternal returned an error object
-                        {
-                            UnityEngine.Object.DestroyImmediate(newGo); // Clean up
-                            return addResult; // Return the error response
-                        }
-                    }
-                    else
-                    {
-                        Debug.LogWarning(
-                            $"[ManageGameObject] Invalid component format in components_to_add: {compToken}"
-                        );
-                    }
-                }
-            }
-
-            // Save as Prefab ONLY if we *created* a new object AND saveAsPrefab is true
-            GameObject finalInstance = newGo; // Use this for selection and return data
-            if (createdNewObject && saveAsPrefab)
-            {
-                string finalPrefabPath = prefabPath; // Use a separate variable for saving path
-                // This check should now happen *before* attempting to save
-                if (string.IsNullOrEmpty(finalPrefabPath))
-                {
-                    // Clean up the created object before returning error
-                    UnityEngine.Object.DestroyImmediate(newGo);
-                    return Response.Error(
-                        "'prefabPath' is required when 'saveAsPrefab' is true and creating a new object."
-                    );
-                }
-                // Ensure the *saving* path ends with .prefab
-                if (!finalPrefabPath.EndsWith(".prefab", StringComparison.OrdinalIgnoreCase))
-                {
-                    Debug.Log(
-                        $"[ManageGameObject.Create] Appending .prefab extension to save path: '{finalPrefabPath}' -> '{finalPrefabPath}.prefab'"
-                    );
-                    finalPrefabPath += ".prefab";
-                }
-
-                try
-                {
-                    // Ensure directory exists using the final saving path
-                    string directoryPath = System.IO.Path.GetDirectoryName(finalPrefabPath);
-                    if (
-                        !string.IsNullOrEmpty(directoryPath)
-                        && !System.IO.Directory.Exists(directoryPath)
-                    )
-                    {
-                        System.IO.Directory.CreateDirectory(directoryPath);
-                        AssetDatabase.Refresh(); // Refresh asset database to recognize the new folder
-                        Debug.Log(
-                            $"[ManageGameObject.Create] Created directory for prefab: {directoryPath}"
-                        );
-                    }
-                    // Use SaveAsPrefabAssetAndConnect with the final saving path
-                    finalInstance = PrefabUtility.SaveAsPrefabAssetAndConnect(
-                        newGo,
-                        finalPrefabPath,
-                        InteractionMode.UserAction
-                    );
-
-                    if (finalInstance == null)
-                    {
-                        // Destroy the original if saving failed somehow (shouldn't usually happen if path is valid)
-                        UnityEngine.Object.DestroyImmediate(newGo);
-                        return Response.Error(
-                            $"Failed to save GameObject '{name}' as prefab at '{finalPrefabPath}'. Check path and permissions."
-                        );
-                    }
-                    Debug.Log(
-                        $"[ManageGameObject.Create] GameObject '{name}' saved as prefab to '{finalPrefabPath}' and instance connected."
-                    );
-                    // Mark the new prefab asset as dirty? Not usually necessary, SaveAsPrefabAsset handles it.
-                    // EditorUtility.SetDirty(finalInstance); // Instance is handled by SaveAsPrefabAssetAndConnect
-                }
-                catch (Exception e)
-                {
-                    // Clean up the instance if prefab saving fails
-                    UnityEngine.Object.DestroyImmediate(newGo); // Destroy the original attempt
-                    return Response.Error($"Error saving prefab '{finalPrefabPath}': {e.Message}");
-                }
-            }
-
-            // Select the instance in the scene (either prefab instance or newly created/saved one)
-            Selection.activeGameObject = finalInstance;
-
-            // Determine appropriate success message using the potentially updated or original path
-            string messagePrefabPath =
-                finalInstance == null
-                    ? originalPrefabPath
-                    : AssetDatabase.GetAssetPath(
-                        PrefabUtility.GetCorrespondingObjectFromSource(finalInstance)
-                            ?? (UnityEngine.Object)finalInstance
-                    );
-            string successMessage;
-            if (!createdNewObject && !string.IsNullOrEmpty(messagePrefabPath)) // Instantiated existing prefab
-            {
-                successMessage =
-                    $"Prefab '{messagePrefabPath}' instantiated successfully as '{finalInstance.name}'.";
-            }
-            else if (createdNewObject && saveAsPrefab && !string.IsNullOrEmpty(messagePrefabPath)) // Created new and saved as prefab
-            {
-                successMessage =
-                    $"GameObject '{finalInstance.name}' created and saved as prefab to '{messagePrefabPath}'.";
-            }
-            else // Created new primitive or empty GO, didn't save as prefab
-            {
-                successMessage =
-                    $"GameObject '{finalInstance.name}' created successfully in scene.";
-            }
-
-            // Use the new serializer helper
-            //return Response.Success(successMessage, GetGameObjectData(finalInstance));
-            return Response.Success(successMessage, GameObjectSerializer.GetGameObjectData(finalInstance));
+            return HandleTsamCreate(@params);
         }
+
 
         static object ModifyGameObject(
             JObject @params,
@@ -1390,59 +1057,15 @@ Returns:
 
         static object DeleteGameObject(JToken targetToken, string searchMethod)
         {
-            // Find potentially multiple objects if name/tag search is used without find_all=false implicitly
-            List<GameObject> targets = ObjectsHelper.FindObjects(targetToken, searchMethod, true); // find_all=true for delete safety
-
-            if (targets.Count == 0)
-            {
-                return Response.Error(
-                    $"Target GameObject(s) ('{targetToken}') not found using method '{searchMethod ?? "default"}'."
-                );
-            }
-
-            List<object> deletedObjects = new List<object>();
-            foreach (var targetGo in targets)
-            {
-                if (targetGo != null)
-                {
-                    string goName = targetGo.name;
-                    object goId = UnityApiAdapter.GetObjectId(targetGo);
-                    // Use Undo.DestroyObjectImmediate for undo support
-                    Undo.DestroyObjectImmediate(targetGo);
-                    deletedObjects.Add(new { name = goName, instanceID = goId });
-                }
-            }
-
-            if (deletedObjects.Count > 0)
-            {
-                string message =
-                    targets.Count == 1
-                        ? $"GameObject '{deletedObjects[0].GetType().GetProperty("name").GetValue(deletedObjects[0])}' deleted successfully."
-                        : $"{deletedObjects.Count} GameObjects deleted successfully.";
-                return Response.Success(message, deletedObjects);
-            }
-            else
-            {
-                // Should not happen if targets.Count > 0 initially, but defensive check
-                return Response.Error("Failed to delete target GameObject(s).");
-            }
+            return HandleTsamDelete(new JObject { ["target"] = targetToken }, targetToken, searchMethod);
         }
+
 
         static object GetBuiltinAssets()
         {
-            return Response.Success("Retrieved builtin GameObject asset hints.", new
-            {
-                primitiveTypes = Enum.GetNames(typeof(PrimitiveType)),
-                builtinResources = new[]
-                {
-                    "Default-Material",
-                    "Sprites-Default",
-                    "UI/Skin/Background.psd",
-                    "UI/Skin/Knob.psd"
-                },
-                note = "Use create with primitive_type for primitives, or Unity.Asset.Search for project assets."
-            });
+            return HandleTsamGetBuiltinAssets(new JObject { ["action"] = "get_builtin_assets" });
         }
+
 
         static object ShapeComponentPayload(object data, string summary, object detailRef)
         {

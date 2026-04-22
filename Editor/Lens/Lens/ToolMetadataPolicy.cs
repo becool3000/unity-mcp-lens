@@ -19,6 +19,8 @@ namespace Becool.UnityMcpLens.Editor.Lens
             NormalizeToolName("Unity.GameObject.GetComponent"),
             NormalizeToolName("Unity.GameObject.PreviewChanges"),
             NormalizeToolName("Unity.GameObject.PreviewComponentChanges"),
+            NormalizeToolName("Unity.GameObject.PreviewCreate"),
+            NormalizeToolName("Unity.GameObject.PreviewDelete"),
             NormalizeToolName("Unity.GetLensUsageReport"),
             NormalizeToolName("Unity.GetLensHealth"),
             NormalizeToolName("Unity.ListToolPacks"),
@@ -43,6 +45,8 @@ namespace Becool.UnityMcpLens.Editor.Lens
         {
             NormalizeToolName("Unity.GameObject.ApplyChanges"),
             NormalizeToolName("Unity.GameObject.ApplyComponentChanges"),
+            NormalizeToolName("Unity.GameObject.Create"),
+            NormalizeToolName("Unity.GameObject.Delete"),
             NormalizeToolName("Unity.ManageGameObject"),
             NormalizeToolName("Unity.ManageScene"),
             NormalizeToolName("Unity.ManageAsset"),

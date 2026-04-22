@@ -166,7 +166,7 @@ sealed class BenchmarkOptions
 sealed class MetadataAudit(BenchmarkOptions options)
 {
     const int ExpectedFoundationToolCount = 12;
-    const int ExpectedSceneToolCount = 26;
+    const int ExpectedSceneToolCount = 30;
 
     static readonly string[] k_RequiredFoundationTools =
     [
@@ -191,6 +191,10 @@ sealed class MetadataAudit(BenchmarkOptions options)
         "Unity_GameObject_GetComponent",
         "Unity_GameObject_PreviewComponentChanges",
         "Unity_GameObject_ApplyComponentChanges",
+        "Unity_GameObject_PreviewCreate",
+        "Unity_GameObject_Create",
+        "Unity_GameObject_PreviewDelete",
+        "Unity_GameObject_Delete",
         "Unity_GameObject_PreviewChanges",
         "Unity_GameObject_ApplyChanges",
         "Unity_ManageGameObject",
@@ -264,6 +268,10 @@ sealed class MetadataAudit(BenchmarkOptions options)
         ValidateReadOnlyHint(sceneTools, "Unity_GameObject_ApplyChanges", expected: false, failures);
         ValidateReadOnlyHint(sceneTools, "Unity_GameObject_PreviewComponentChanges", expected: true, failures);
         ValidateReadOnlyHint(sceneTools, "Unity_GameObject_ApplyComponentChanges", expected: false, failures);
+        ValidateReadOnlyHint(sceneTools, "Unity_GameObject_PreviewCreate", expected: true, failures);
+        ValidateReadOnlyHint(sceneTools, "Unity_GameObject_Create", expected: false, failures);
+        ValidateReadOnlyHint(sceneTools, "Unity_GameObject_PreviewDelete", expected: true, failures);
+        ValidateReadOnlyHint(sceneTools, "Unity_GameObject_Delete", expected: false, failures);
         ValidateReadOnlyHint(sceneTools, "Unity_ManageGameObject", expected: false, failures);
         ValidateReadOnlyHint(debugTools, "Unity_GetLensUsageReport", expected: true, failures);
         ValidateGameObjectSchemas(sceneTools, failures);
@@ -386,6 +394,30 @@ sealed class MetadataAudit(BenchmarkOptions options)
             "Unity_GameObject_ApplyComponentChanges",
             ["operation", "target", "searchMethod", "searchInactive", "componentName", "componentIndex", "componentProperties"],
             ["operation", "target", "componentName"],
+            failures);
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_GameObject_PreviewCreate",
+            ["name", "primitiveType", "prefabPath", "saveAsPrefab", "prefabFolder", "parent", "tag", "layer", "position", "rotation", "scale", "componentsToAdd"],
+            ["name"],
+            failures);
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_GameObject_Create",
+            ["name", "primitiveType", "prefabPath", "saveAsPrefab", "prefabFolder", "parent", "tag", "layer", "position", "rotation", "scale", "componentsToAdd"],
+            ["name"],
+            failures);
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_GameObject_PreviewDelete",
+            ["target", "searchMethod", "findAll", "searchInactive"],
+            ["target"],
+            failures);
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_GameObject_Delete",
+            ["target", "searchMethod", "findAll", "searchInactive"],
+            ["target"],
             failures);
 
         var legacyTool = FindTool(tools, "Unity_ManageGameObject");

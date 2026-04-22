@@ -93,6 +93,39 @@ namespace Becool.UnityMcpLens.Editor.Models.GameObjects
         public string legacyAction { get; set; }
     }
 
+    sealed class GameObjectComponentAddSpec
+    {
+        public string componentName { get; set; }
+        public JObject properties { get; set; }
+    }
+
+    sealed class GameObjectCreateRequest
+    {
+        public string name { get; set; }
+        public string primitiveType { get; set; }
+        public bool saveAsPrefab { get; set; }
+        public string prefabPath { get; set; }
+        public string prefabFolder { get; set; }
+        public string tag { get; set; }
+        public string layer { get; set; }
+        public Vector3Value position { get; set; }
+        public Vector3Value rotation { get; set; }
+        public Vector3Value scale { get; set; }
+        public bool hasParent { get; set; }
+        public GameObjectTargetRef parent { get; set; }
+        public List<GameObjectComponentAddSpec> componentsToAdd { get; set; } = new List<GameObjectComponentAddSpec>();
+        public bool legacyCompatibility { get; set; }
+    }
+
+    sealed class GameObjectDeleteRequest
+    {
+        public GameObjectTargetRef target { get; set; }
+        public string searchMethod { get; set; }
+        public bool findAll { get; set; }
+        public bool searchInactive { get; set; }
+        public bool legacyCompatibility { get; set; }
+    }
+
     sealed class GameObjectTransformInfo
     {
         public Vector3Value position { get; set; }
@@ -216,6 +249,43 @@ namespace Becool.UnityMcpLens.Editor.Models.GameObjects
         public List<ValidationMessage> validationMessages { get; set; }
         public GameObjectComponentInfo component { get; set; }
         public GameObjectInfo @object { get; set; }
+    }
+
+    sealed class GameObjectCreatePreviewResult
+    {
+        public bool willCreate { get; set; }
+        public string source { get; set; }
+        public string prefabPath { get; set; }
+        public GameObjectTargetSummary parent { get; set; }
+        public GameObjectInfo plannedObject { get; set; }
+        public List<GameObjectComponentInfo> components { get; set; }
+        public List<ValidationMessage> validationMessages { get; set; }
+    }
+
+    sealed class GameObjectCreateApplyResult
+    {
+        public bool created { get; set; }
+        public string source { get; set; }
+        public bool savedAsPrefab { get; set; }
+        public string prefabPath { get; set; }
+        public GameObjectInfo @object { get; set; }
+        public List<GameObjectComponentInfo> components { get; set; }
+        public List<ValidationMessage> validationMessages { get; set; }
+    }
+
+    sealed class GameObjectDeletePreviewResult
+    {
+        public bool willDelete { get; set; }
+        public int count { get; set; }
+        public List<GameObjectTargetSummary> objects { get; set; }
+        public List<ValidationMessage> validationMessages { get; set; }
+    }
+
+    sealed class GameObjectDeleteApplyResult
+    {
+        public bool deleted { get; set; }
+        public int count { get; set; }
+        public List<GameObjectTargetSummary> objects { get; set; }
     }
 
     sealed class GameObjectChangeEntry
