@@ -63,6 +63,23 @@ namespace Becool.UnityMcpLens.Editor.Models.GameObjects
         public GameObjectTargetRef parent { get; set; }
     }
 
+    sealed class GameObjectComponentListRequest
+    {
+        public GameObjectTargetRef target { get; set; }
+        public string searchMethod { get; set; }
+        public bool searchInactive { get; set; }
+    }
+
+    sealed class GameObjectComponentGetRequest
+    {
+        public GameObjectTargetRef target { get; set; }
+        public string searchMethod { get; set; }
+        public bool searchInactive { get; set; }
+        public string componentName { get; set; }
+        public int? componentIndex { get; set; }
+        public bool includeNonPublicSerialized { get; set; }
+    }
+
     sealed class GameObjectTransformInfo
     {
         public Vector3Value position { get; set; }
@@ -138,6 +155,32 @@ namespace Becool.UnityMcpLens.Editor.Models.GameObjects
     {
         public int count { get; set; }
         public List<GameObjectInfo> objects { get; set; }
+    }
+
+    sealed class GameObjectComponentInfo
+    {
+        public string id { get; set; }
+        public object instanceID { get; set; }
+        public int index { get; set; }
+        public string typeName { get; set; }
+        public string shortTypeName { get; set; }
+        public string name { get; set; }
+        public bool? enabled { get; set; }
+        public bool missing { get; set; }
+    }
+
+    sealed class GameObjectComponentListResult
+    {
+        public GameObjectTargetSummary target { get; set; }
+        public int count { get; set; }
+        public List<GameObjectComponentInfo> components { get; set; }
+    }
+
+    sealed class GameObjectComponentGetResult
+    {
+        public GameObjectTargetSummary target { get; set; }
+        public GameObjectComponentInfo component { get; set; }
+        public object data { get; set; }
     }
 
     sealed class GameObjectChangeEntry

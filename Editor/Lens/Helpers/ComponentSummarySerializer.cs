@@ -32,6 +32,16 @@ namespace Becool.UnityMcpLens.Editor.Helpers
         {
             switch (component)
             {
+                case MeshFilter meshFilter:
+                    data = new
+                    {
+                        typeName = component.GetType().FullName,
+                        instanceID = UnityApiAdapter.GetObjectId(component),
+                        summaryMode = "curated",
+                        sharedMeshName = meshFilter.sharedMesh != null ? meshFilter.sharedMesh.name : null,
+                        sharedMeshInstanceID = UnityApiAdapter.GetObjectIdOrZero(meshFilter.sharedMesh)
+                    };
+                    return true;
                 case Collider collider:
                     data = new
                     {

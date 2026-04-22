@@ -15,6 +15,8 @@ namespace Becool.UnityMcpLens.Editor.Lens
         static readonly HashSet<string> k_ReadOnlyTools = new(StringComparer.OrdinalIgnoreCase)
         {
             NormalizeToolName("Unity.GameObject.Inspect"),
+            NormalizeToolName("Unity.GameObject.ListComponents"),
+            NormalizeToolName("Unity.GameObject.GetComponent"),
             NormalizeToolName("Unity.GameObject.PreviewChanges"),
             NormalizeToolName("Unity.GetLensUsageReport"),
             NormalizeToolName("Unity.GetLensHealth"),

@@ -26,6 +26,18 @@ namespace Becool.UnityMcpLens.Editor.Adapters.Unity.GameObjects
         }
     }
 
+    sealed class UnityComponentHandle
+    {
+        internal Component Component { get; }
+        public GameObjectComponentInfo Info { get; }
+
+        public UnityComponentHandle(Component component, GameObjectComponentInfo info)
+        {
+            Component = component;
+            Info = info;
+        }
+    }
+
     sealed class UnityGameObjectSimpleChangeSet
     {
         public string name { get; set; }
@@ -206,6 +218,48 @@ namespace Becool.UnityMcpLens.Editor.Adapters.Unity.GameObjects
                 rendererCount = renderers.Length,
                 colliderCount = colliders.Length
             };
+        }
+
+        public List<GameObjectComponentInfo> ListComponents(UnityGameObjectHandle handle)
+        {
+            return GetComponentHandles(handle).Select(component => component.Info).ToList();
+        }
+
+        public List<object> GetSerializedComponentDataList(UnityGameObjectHandle handle, bool includeNonPublicSerialized)
+        {
+            var data = new List<object>();
+            foreach (var component in GetComponentHandles(handle))
+            {
+                if (component.Component == null)
+                    continue;
+
+                data.Add(ReadComponentData(component, includeNonPublicSerialized));
+            }
+
+            return data;
+        }
+
+        public UnityComponentHandle FindComponent(UnityGameObjectHandle handle, string componentName, int? componentIndex)
+        {
+            if (string.IsNullOrWhiteSpace(componentName))
+                return null;
+
+            var matches = GetComponentHandles(handle)
+                .Where(component => component.Component != null && ComponentMatches(component.Component, componentName))
+                .ToList();
+
+            if (matches.Count == 0)
+                return null;
+
+            int index = componentIndex ?? 0;
+            return index >= 0 && index < matches.Count ? matches[index] : null;
+        }
+
+        public object ReadComponentData(UnityComponentHandle component, bool includeNonPublicSerialized)
+        {
+            return component?.Component == null
+                ? null
+                : ComponentSummarySerializer.GetSafeComponentData(component.Component, includeNonPublicSerialized);
         }
 
         public GameObjectTargetSummary ToTargetSummary(UnityGameObjectHandle handle)
@@ -423,6 +477,67 @@ namespace Becool.UnityMcpLens.Editor.Adapters.Unity.GameObjects
                     return false;
                 }
             }
+        }
+
+        List<UnityComponentHandle> GetComponentHandles(UnityGameObjectHandle handle)
+        {
+            var targetGo = handle?.GameObject;
+            if (targetGo == null)
+                return new List<UnityComponentHandle>();
+
+            var components = targetGo.GetComponents<Component>() ?? Array.Empty<Component>();
+            var handles = new List<UnityComponentHandle>(components.Length);
+            for (int i = 0; i < components.Length; i++)
+            {
+                var component = components[i];
+                handles.Add(new UnityComponentHandle(component, ToComponentInfo(component, i)));
+            }
+
+            return handles;
+        }
+
+        static bool ComponentMatches(Component component, string componentName)
+        {
+            if (component == null || string.IsNullOrWhiteSpace(componentName))
+                return false;
+
+            if (UnityComponentResolver.TryResolve(componentName, out var resolvedType, out _)
+                && resolvedType != null
+                && resolvedType.IsAssignableFrom(component.GetType()))
+            {
+                return true;
+            }
+
+            var type = component.GetType();
+            return string.Equals(type.Name, componentName, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(type.FullName, componentName, StringComparison.OrdinalIgnoreCase);
+        }
+
+        static GameObjectComponentInfo ToComponentInfo(Component component, int index)
+        {
+            if (component == null)
+            {
+                return new GameObjectComponentInfo
+                {
+                    index = index,
+                    typeName = "(Missing Script)",
+                    shortTypeName = "(Missing Script)",
+                    missing = true
+                };
+            }
+
+            var type = component.GetType();
+            return new GameObjectComponentInfo
+            {
+                id = GetObjectIdString(component),
+                instanceID = UnityApiAdapter.GetObjectId(component),
+                index = index,
+                typeName = type.FullName,
+                shortTypeName = type.Name,
+                name = component.name,
+                enabled = component is Behaviour behaviour ? behaviour.enabled : null,
+                missing = false
+            };
         }
 
         static GameObjectInfo ToGameObjectInfo(GameObject go)

@@ -17,6 +17,8 @@ namespace Becool.UnityMcpLens.Editor.Tools
         const string InspectToolName = "Unity.GameObject.Inspect";
         const string PreviewChangesToolName = "Unity.GameObject.PreviewChanges";
         const string ApplyChangesToolName = "Unity.GameObject.ApplyChanges";
+        const string ListComponentsToolName = "Unity.GameObject.ListComponents";
+        const string GetComponentToolName = "Unity.GameObject.GetComponent";
 
         public const string InspectDescription = @"Inspects scene GameObjects without mutation.
 
@@ -37,10 +39,19 @@ Does not call Undo, mark scenes dirty, save scenes, or create tags.";
 Supports name, setActive, tag, layer, position, positionType, rotation, scale, and parent.
 Returns compact readback data and reports repeated identical calls as applied=false.";
 
+        public const string ListComponentsDescription = @"Lists components on a scene GameObject without mutation.
+
+Returns compact component inventory only. Use Unity.GameObject.GetComponent for serialized component data.";
+
+        public const string GetComponentDescription = @"Reads one serialized component from a scene GameObject without mutation.
+
+Use componentName and optional componentIndex to select among duplicate component types.";
+
         static readonly UnityGameObjectAdapter GameObjectAdapter = new UnityGameObjectAdapter();
         static readonly GameObjectRequestNormalizer RequestNormalizer = new GameObjectRequestNormalizer();
         static readonly GameObjectQueryService QueryService = new GameObjectQueryService(GameObjectAdapter);
         static readonly GameObjectMutationService MutationService = new GameObjectMutationService(GameObjectAdapter);
+        static readonly GameObjectComponentReadService ComponentReadService = new GameObjectComponentReadService(GameObjectAdapter);
 
         [McpSchema(InspectToolName)]
         public static object GetInspectSchema()
@@ -77,6 +88,41 @@ Returns compact readback data and reports repeated identical calls as applied=fa
         public static object GetApplyChangesSchema()
         {
             return BuildChangeSchema();
+        }
+
+        [McpSchema(ListComponentsToolName)]
+        public static object GetListComponentsSchema()
+        {
+            return new
+            {
+                type = "object",
+                properties = new
+                {
+                    target = ToolSchemaFragments.TargetRef("GameObject target, path, name, or id."),
+                    searchMethod = ToolSchemaFragments.SearchMethod(),
+                    searchInactive = new { type = "boolean", description = "Include inactive scene objects while resolving the target." }
+                },
+                required = new[] { "target" }
+            };
+        }
+
+        [McpSchema(GetComponentToolName)]
+        public static object GetGetComponentSchema()
+        {
+            return new
+            {
+                type = "object",
+                properties = new
+                {
+                    target = ToolSchemaFragments.TargetRef("GameObject target, path, name, or id."),
+                    componentName = new { type = "string", description = "Component type name, full type name, or resolvable Unity component name." },
+                    componentIndex = new { type = "integer", description = "0-based index among components matching componentName. Defaults to 0." },
+                    searchMethod = ToolSchemaFragments.SearchMethod(),
+                    searchInactive = new { type = "boolean", description = "Include inactive scene objects while resolving the target." },
+                    includeNonPublicSerialized = new { type = "boolean", description = "Include private fields marked [SerializeField] in component data." }
+                },
+                required = new[] { "target", "componentName" }
+            };
         }
 
         [McpTool(InspectToolName, InspectDescription, "Inspect GameObject", Groups = new[] { "scene" }, EnabledByDefault = true)]
@@ -167,6 +213,66 @@ Returns compact readback data and reports repeated identical calls as applied=fa
             return HandleChangeTool(ApplyChangesToolName, "apply", @params, apply: true);
         }
 
+        [McpTool(ListComponentsToolName, ListComponentsDescription, "List GameObject Components", Groups = new[] { "scene" }, EnabledByDefault = true)]
+        public static object ListComponents(JObject @params)
+        {
+            @params ??= new JObject();
+            var timing = new GameObjectToolTiming(ListComponentsToolName, "list_components", GetUtf8ByteCount(@params.ToString(Formatting.None)));
+            GameObjectOperationResult result;
+            string errorKind = null;
+
+            try
+            {
+                GameObjectComponentListRequest request;
+                using (timing.Measure("normalization"))
+                {
+                    request = RequestNormalizer.NormalizeComponentList(@params, GetToken(@params, "target", "Target"), GetSearchMethod(@params));
+                }
+
+                using (timing.Measure("service"))
+                {
+                    result = ComponentReadService.ListComponents(request, timing);
+                }
+            }
+            catch (Exception ex)
+            {
+                errorKind = ex.GetType().Name;
+                result = GameObjectOperationResult.Error($"Internal error listing GameObject components: {ex.Message}", errorKind);
+            }
+
+            return ShapeComponentReadResponse(ListComponentsToolName, result, timing, errorKind);
+        }
+
+        [McpTool(GetComponentToolName, GetComponentDescription, "Get GameObject Component", Groups = new[] { "scene" }, EnabledByDefault = true)]
+        public static object GetComponent(JObject @params)
+        {
+            @params ??= new JObject();
+            var timing = new GameObjectToolTiming(GetComponentToolName, "get_component", GetUtf8ByteCount(@params.ToString(Formatting.None)));
+            GameObjectOperationResult result;
+            string errorKind = null;
+
+            try
+            {
+                GameObjectComponentGetRequest request;
+                using (timing.Measure("normalization"))
+                {
+                    request = RequestNormalizer.NormalizeComponentGet(@params, GetToken(@params, "target", "Target"), GetSearchMethod(@params));
+                }
+
+                using (timing.Measure("service"))
+                {
+                    result = ComponentReadService.GetComponent(request, timing);
+                }
+            }
+            catch (Exception ex)
+            {
+                errorKind = ex.GetType().Name;
+                result = GameObjectOperationResult.Error($"Internal error getting GameObject component: {ex.Message}", errorKind);
+            }
+
+            return ShapeComponentReadResponse(GetComponentToolName, result, timing, errorKind);
+        }
+
         static object HandleChangeTool(string toolName, string requestType, JObject @params, bool apply)
         {
             @params ??= new JObject();
@@ -205,6 +311,21 @@ Returns compact readback data and reports repeated identical calls as applied=fa
             {
                 response = result.success
                     ? Response.Success(result.message, result.data)
+                    : Response.Error(result.message, EnsureErrorKind(result.errorData, result.errorKind ?? fallbackErrorKind));
+                timing.SetResponseBytes(GetUtf8ByteCount(JsonConvert.SerializeObject(response, Formatting.None)));
+            }
+
+            timing.Record(result.success, result.success ? null : result.errorKind ?? fallbackErrorKind);
+            return response;
+        }
+
+        static object ShapeComponentReadResponse(string toolName, GameObjectOperationResult result, GameObjectToolTiming timing, string fallbackErrorKind)
+        {
+            object response;
+            using (timing.Measure("result_shaping"))
+            {
+                response = result.success
+                    ? Response.Success(result.message, ToolResultCompactor.ShapeJsonPayload(toolName, result.message, result.data))
                     : Response.Error(result.message, EnsureErrorKind(result.errorData, result.errorKind ?? fallbackErrorKind));
                 timing.SetResponseBytes(GetUtf8ByteCount(JsonConvert.SerializeObject(response, Formatting.None)));
             }

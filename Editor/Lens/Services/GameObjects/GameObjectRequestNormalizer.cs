@@ -50,6 +50,29 @@ namespace Becool.UnityMcpLens.Editor.Services.GameObjects
             };
         }
 
+        public GameObjectComponentListRequest NormalizeComponentList(JObject parameters, JToken targetToken, string searchMethod)
+        {
+            return new GameObjectComponentListRequest
+            {
+                target = NormalizeTarget(targetToken),
+                searchMethod = NormalizeSearchMethod(searchMethod),
+                searchInactive = parameters?["search_inactive"]?.ToObject<bool>() ?? parameters?["searchInactive"]?.ToObject<bool>() ?? false
+            };
+        }
+
+        public GameObjectComponentGetRequest NormalizeComponentGet(JObject parameters, JToken targetToken, string searchMethod)
+        {
+            return new GameObjectComponentGetRequest
+            {
+                target = NormalizeTarget(targetToken),
+                searchMethod = NormalizeSearchMethod(searchMethod),
+                searchInactive = parameters?["search_inactive"]?.ToObject<bool>() ?? parameters?["searchInactive"]?.ToObject<bool>() ?? false,
+                componentName = parameters?["component_name"]?.ToString() ?? parameters?["componentName"]?.ToString(),
+                componentIndex = ParseNullableInt(parameters?["component_index"] ?? parameters?["componentIndex"]),
+                includeNonPublicSerialized = parameters?["include_non_public_serialized"]?.ToObject<bool>() ?? parameters?["includeNonPublicSerialized"]?.ToObject<bool>() ?? false
+            };
+        }
+
         static string NormalizeSearchMethod(string searchMethod)
         {
             return string.IsNullOrWhiteSpace(searchMethod) ? null : searchMethod.ToLowerInvariant();
@@ -88,6 +111,17 @@ namespace Becool.UnityMcpLens.Editor.Services.GameObjects
                 y = array[1].ToObject<float>(),
                 z = array[2].ToObject<float>()
             };
+        }
+
+        static int? ParseNullableInt(JToken token)
+        {
+            if (token == null || token.Type == JTokenType.Null)
+                return null;
+
+            if (token.Type == JTokenType.Integer)
+                return token.ToObject<int>();
+
+            return int.TryParse(token.ToString(), out int value) ? value : null;
         }
     }
 }

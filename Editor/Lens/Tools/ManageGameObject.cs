@@ -85,6 +85,7 @@ Returns:
         static readonly GameObjectRequestNormalizer TsamRequestNormalizer = new GameObjectRequestNormalizer();
         static readonly GameObjectQueryService TsamQueryService = new GameObjectQueryService(TsamGameObjectAdapter);
         static readonly GameObjectMutationService TsamMutationService = new GameObjectMutationService(TsamGameObjectAdapter);
+        static readonly GameObjectComponentReadService TsamComponentReadService = new GameObjectComponentReadService(TsamGameObjectAdapter);
 
         // --- Main Handler ---
 
@@ -315,25 +316,9 @@ Returns:
                     case "get_builtin_assets":
                         return GetBuiltinAssets();
                     case "get_components":
-                        string getCompTarget = targetToken?.ToString(); // Expect name, path, or ID string
-                        if (getCompTarget == null)
-                            return Response.Error(
-                                "'target' parameter required for get_components."
-                            );
-                        // Pass the includeNonPublicSerialized flag here
-                        return GetComponentsFromTarget(getCompTarget, searchMethod, includeNonPublicSerialized);
+                        return HandleTsamGetComponents(@params, targetToken, searchMethod);
                     case "get_component":
-                        string getSingleCompTarget = targetToken?.ToString();
-                        if (getSingleCompTarget == null)
-                            return Response.Error(
-                                "'target' parameter required for get_component."
-                            );
-                        string componentName = @params["component_name"]?.ToString() ?? @params["componentName"]?.ToString();
-                        if (string.IsNullOrEmpty(componentName))
-                            return Response.Error(
-                                "'component_name' parameter required for get_component."
-                            );
-                        return GetSingleComponentFromTarget(getSingleCompTarget, searchMethod, componentName, includeNonPublicSerialized);
+                        return HandleTsamGetComponent(@params, targetToken, searchMethod);
                     case "add_component":
                         return AddComponentToTarget(@params, targetToken, searchMethod);
                     case "remove_component":
@@ -467,6 +452,86 @@ Returns:
             return ShapeTsamResponse(result, timing, errorKind);
         }
 
+        static object HandleTsamGetComponents(JObject @params, JToken targetToken, string searchMethod)
+        {
+            var timing = new GameObjectToolTiming("Unity.ManageGameObject", "get_components", GetUtf8ByteCount(@params?.ToString(Formatting.None)));
+            GameObjectOperationResult result;
+            string errorKind = null;
+
+            try
+            {
+                GameObjectComponentGetRequest request;
+                using (timing.Measure("normalization"))
+                {
+                    request = TsamRequestNormalizer.NormalizeComponentGet(@params, targetToken, searchMethod);
+                }
+
+                using (timing.Measure("service"))
+                {
+                    result = request?.target == null || request.target.isNull || request.target.isEmptyString
+                        ? GameObjectOperationResult.Error(
+                            "'target' parameter required for get_components.",
+                            "missing_target",
+                            new { errorKind = "missing_target", code = "missing_target" })
+                        : TsamComponentReadService.GetComponentsLegacy(request, timing);
+                }
+            }
+            catch (Exception ex)
+            {
+                errorKind = ex.GetType().Name;
+                Debug.LogError($"[ManageGameObject.TSAM] get_components failed: {ex}");
+                result = GameObjectOperationResult.Error($"Internal error processing action 'get_components': {ex.Message}", errorKind);
+            }
+
+            return ShapeLegacyComponentReadResponse(result, timing, errorKind, @params, "get_components");
+        }
+
+        static object HandleTsamGetComponent(JObject @params, JToken targetToken, string searchMethod)
+        {
+            var timing = new GameObjectToolTiming("Unity.ManageGameObject", "get_component", GetUtf8ByteCount(@params?.ToString(Formatting.None)));
+            GameObjectOperationResult result;
+            string errorKind = null;
+
+            try
+            {
+                GameObjectComponentGetRequest request;
+                using (timing.Measure("normalization"))
+                {
+                    request = TsamRequestNormalizer.NormalizeComponentGet(@params, targetToken, searchMethod);
+                }
+
+                using (timing.Measure("service"))
+                {
+                    if (request?.target == null || request.target.isNull || request.target.isEmptyString)
+                    {
+                        result = GameObjectOperationResult.Error(
+                            "'target' parameter required for get_component.",
+                            "missing_target",
+                            new { errorKind = "missing_target", code = "missing_target" });
+                    }
+                    else if (string.IsNullOrWhiteSpace(request.componentName))
+                    {
+                        result = GameObjectOperationResult.Error(
+                            "'component_name' parameter required for get_component.",
+                            "missing_component_name",
+                            new { errorKind = "missing_component_name", code = "missing_component_name" });
+                    }
+                    else
+                    {
+                        result = TsamComponentReadService.GetComponentLegacy(request, timing);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                errorKind = ex.GetType().Name;
+                Debug.LogError($"[ManageGameObject.TSAM] get_component failed: {ex}");
+                result = GameObjectOperationResult.Error($"Internal error processing action 'get_component': {ex.Message}", errorKind);
+            }
+
+            return ShapeLegacyComponentReadResponse(result, timing, errorKind, @params, "get_component");
+        }
+
         static object ShapeTsamResponse(GameObjectOperationResult result, GameObjectToolTiming timing, string fallbackErrorKind)
         {
             object response;
@@ -474,6 +539,33 @@ Returns:
             {
                 response = result.success
                     ? Response.Success(result.message, result.data)
+                    : Response.Error(result.message, result.errorData);
+                timing.SetResponseBytes(GetUtf8ByteCount(JsonConvert.SerializeObject(response, Formatting.None)));
+            }
+
+            timing.Record(result.success, result.success ? null : result.errorKind ?? fallbackErrorKind);
+            return response;
+        }
+
+        static object ShapeLegacyComponentReadResponse(GameObjectOperationResult result, GameObjectToolTiming timing, string fallbackErrorKind, JObject @params, string action)
+        {
+            object response;
+            using (timing.Measure("result_shaping"))
+            {
+                response = result.success
+                    ? Response.Success(
+                        result.message,
+                        ShapeComponentPayload(
+                            result.data,
+                            result.message,
+                            new
+                            {
+                                action,
+                                target = @params?["target"]?.ToString(),
+                                search_method = @params?["search_method"]?.ToString(),
+                                component_name = @params?["component_name"]?.ToString() ?? @params?["componentName"]?.ToString(),
+                                include_non_public_serialized = @params?["include_non_public_serialized"]?.ToObject<bool>() ?? @params?["includeNonPublicSerialized"]?.ToObject<bool>() ?? false
+                            }))
                     : Response.Error(result.message, result.errorData);
                 timing.SetResponseBytes(GetUtf8ByteCount(JsonConvert.SerializeObject(response, Formatting.None)));
             }
@@ -1308,170 +1400,6 @@ Returns:
                 },
                 note = "Use create with primitive_type for primitives, or Unity.Asset.Search for project assets."
             });
-        }
-
-        static object GetComponentsFromTarget(string target, string searchMethod, bool includeNonPublicSerialized = true)
-        {
-            GameObject targetGo = ObjectsHelper.FindObject(target, searchMethod);
-            if (targetGo == null)
-            {
-                return Response.Error(
-                    $"Target GameObject ('{target}') not found using method '{searchMethod ?? "default"}'."
-                );
-            }
-
-            try
-            {
-                // --- Get components, immediately copy to list, and null original array ---
-                Component[] originalComponents = targetGo.GetComponents<Component>();
-                List<Component> componentsToIterate = new List<Component>(originalComponents ?? Array.Empty<Component>()); // Copy immediately, handle null case
-                int componentCount = componentsToIterate.Count;
-                originalComponents = null; // Null the original reference
-                // Debug.Log($"[GetComponentsFromTarget] Found {componentCount} components on {targetGo.name}. Copied to list, nulled original. Starting REVERSE for loop...");
-                // --- End Copy and Null ---
-
-                var componentData = new List<object>();
-
-                for (int i = componentCount - 1; i >= 0; i--) // Iterate backwards over the COPY
-                {
-                    Component c = componentsToIterate[i]; // Use the copy
-                    if (c == null)
-                    {
-                        // Debug.LogWarning($"[GetComponentsFromTarget REVERSE for] Encountered a null component at index {i} on {targetGo.name}. Skipping.");
-                        continue; // Safety check
-                    }
-                    // Debug.Log($"[GetComponentsFromTarget REVERSE for] Processing component: {c.GetType()?.FullName ?? "null"} (ID: {c.GetInstanceID()}) at index {i} on {targetGo.name}");
-                    try
-                    {
-                        var data = ComponentSummarySerializer.GetSafeComponentData(c, includeNonPublicSerialized);
-                        if (data != null) // Ensure GetComponentData didn't return null
-                        {
-                            componentData.Insert(0, data); // Insert at beginning to maintain original order in final list
-                        }
-                        // else
-                        // {
-                        //     Debug.LogWarning($"[GetComponentsFromTarget REVERSE for] GetComponentData returned null for component {c.GetType().FullName} (ID: {c.GetInstanceID()}) on {targetGo.name}. Skipping addition.");
-                        // }
-                    }
-                    catch (Exception ex)
-                    {
-                        Debug.LogError($"[GetComponentsFromTarget REVERSE for] Error processing component {c.GetType().FullName} (ID: {UnityApiAdapter.GetObjectId(c)}) on {targetGo.name}: {ex.Message}\n{ex.StackTrace}");
-                        // Optionally add placeholder data or just skip
-                        componentData.Insert(0, new JObject( // Insert error marker at beginning
-                            new JProperty("typeName", c.GetType().FullName + " (Serialization Error)"),
-                            new JProperty("instanceID", UnityApiAdapter.GetObjectId(c)),
-                            new JProperty("error", ex.Message)
-                        ));
-                    }
-                }
-                // Debug.Log($"[GetComponentsFromTarget] Finished REVERSE for loop.");
-
-                // Cleanup the list we created
-                componentsToIterate.Clear();
-                componentsToIterate = null;
-
-                return Response.Success(
-                    $"Retrieved {componentData.Count} components from '{targetGo.name}'.",
-                    ShapeComponentPayload(
-                        componentData,
-                        $"Retrieved {componentData.Count} components from '{targetGo.name}'.",
-                        new
-                        {
-                            action = "get_components",
-                            target,
-                            search_method = searchMethod,
-                            include_non_public_serialized = includeNonPublicSerialized
-                        })
-                );
-            }
-            catch (Exception e)
-            {
-                return Response.Error(
-                    $"Error getting components from '{targetGo.name}': {e.Message}"
-                );
-            }
-        }
-
-        /// <summary>
-        /// Gets a single component from the target GameObject and returns its serialized data.
-        /// </summary>
-        static object GetSingleComponentFromTarget(string target, string searchMethod, string componentName, bool includeNonPublicSerialized = true)
-        {
-            GameObject targetGo = ObjectsHelper.FindObject(target, searchMethod);
-            if (targetGo == null)
-            {
-                return Response.Error(
-                    $"Target GameObject ('{target}') not found using method '{searchMethod ?? "default"}'."
-                );
-            }
-
-            try
-            {
-                // Try to find the component by name using UnityComponentResolver first
-                Component targetComponent = null;
-                if (UnityComponentResolver.TryResolve(componentName, out var compType, out var compError))
-                {
-                    targetComponent = targetGo.GetComponent(compType);
-                }
-
-                // Fallback: search all components for name/type match
-                if (targetComponent == null)
-                {
-                    Component[] allComponents = targetGo.GetComponents<Component>();
-                    foreach (Component comp in allComponents)
-                    {
-                        if (comp != null)
-                        {
-                            string typeName = comp.GetType().Name;
-                            string fullTypeName = comp.GetType().FullName;
-
-                            if (typeName.Equals(componentName, StringComparison.OrdinalIgnoreCase) ||
-                                fullTypeName.Equals(componentName, StringComparison.OrdinalIgnoreCase))
-                            {
-                                targetComponent = comp;
-                                break;
-                            }
-                        }
-                    }
-                }
-
-                if (targetComponent == null)
-                {
-                    return Response.Error(
-                        $"Component '{componentName}' not found on GameObject '{targetGo.name}'."
-                    );
-                }
-
-                var componentData = ComponentSummarySerializer.GetSafeComponentData(targetComponent, includeNonPublicSerialized);
-
-                if (componentData == null)
-                {
-                    return Response.Error(
-                        $"Failed to serialize component '{componentName}' on GameObject '{targetGo.name}'."
-                    );
-                }
-
-                return Response.Success(
-                    $"Retrieved component '{componentName}' from '{targetGo.name}'.",
-                    ShapeComponentPayload(
-                        componentData,
-                        $"Retrieved component '{componentName}' from '{targetGo.name}'.",
-                        new
-                        {
-                            action = "get_component",
-                            target,
-                            search_method = searchMethod,
-                            component_name = componentName,
-                            include_non_public_serialized = includeNonPublicSerialized
-                        })
-                );
-            }
-            catch (Exception e)
-            {
-                return Response.Error(
-                    $"Error getting component '{componentName}' from '{targetGo.name}': {e.Message}"
-                );
-            }
         }
 
         static object ShapeComponentPayload(object data, string summary, object detailRef)

@@ -166,7 +166,7 @@ sealed class BenchmarkOptions
 sealed class MetadataAudit(BenchmarkOptions options)
 {
     const int ExpectedFoundationToolCount = 12;
-    const int ExpectedSceneToolCount = 22;
+    const int ExpectedSceneToolCount = 24;
 
     static readonly string[] k_RequiredFoundationTools =
     [
@@ -187,6 +187,8 @@ sealed class MetadataAudit(BenchmarkOptions options)
     static readonly string[] k_RequiredSceneTools =
     [
         "Unity_GameObject_Inspect",
+        "Unity_GameObject_ListComponents",
+        "Unity_GameObject_GetComponent",
         "Unity_GameObject_PreviewChanges",
         "Unity_GameObject_ApplyChanges",
         "Unity_ManageGameObject",
@@ -254,6 +256,8 @@ sealed class MetadataAudit(BenchmarkOptions options)
         ValidateToolSet("foundation+scene", sceneTools, ExpectedSceneToolCount, k_RequiredSceneTools, failures);
         ValidateToolSet("foundation+debug", debugTools, null, k_RequiredDebugTools, failures);
         ValidateReadOnlyHint(sceneTools, "Unity_GameObject_Inspect", expected: true, failures);
+        ValidateReadOnlyHint(sceneTools, "Unity_GameObject_ListComponents", expected: true, failures);
+        ValidateReadOnlyHint(sceneTools, "Unity_GameObject_GetComponent", expected: true, failures);
         ValidateReadOnlyHint(sceneTools, "Unity_GameObject_PreviewChanges", expected: true, failures);
         ValidateReadOnlyHint(sceneTools, "Unity_GameObject_ApplyChanges", expected: false, failures);
         ValidateReadOnlyHint(sceneTools, "Unity_ManageGameObject", expected: false, failures);
@@ -342,6 +346,18 @@ sealed class MetadataAudit(BenchmarkOptions options)
             "Unity_GameObject_Inspect",
             ["mode", "target", "searchMethod", "searchTerm", "findAll", "searchInChildren", "searchInactive"],
             ["mode"],
+            failures);
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_GameObject_ListComponents",
+            ["target", "searchMethod", "searchInactive"],
+            ["target"],
+            failures);
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_GameObject_GetComponent",
+            ["target", "componentName", "componentIndex", "searchMethod", "searchInactive", "includeNonPublicSerialized"],
+            ["target", "componentName"],
             failures);
         ValidateSplitGameObjectSchema(
             tools,
