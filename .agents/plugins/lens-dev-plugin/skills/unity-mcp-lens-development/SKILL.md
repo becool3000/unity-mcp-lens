@@ -5,6 +5,16 @@ description: Develop, test, and improve Unity MCP Lens tools, packs, bridge beha
 
 # Unity MCP Lens Development
 
+## Source Of Truth
+
+The repo-local Codex plugin is the only editable source of truth for Lens workflow skills:
+
+- `.agents/plugins/lens-dev-plugin/skills/unity-dev-assistant`
+- `.agents/plugins/lens-dev-plugin/skills/unity-mcp-bridge`
+- `.agents/plugins/lens-dev-plugin/skills/unity-mcp-lens-development`
+
+Do not edit installed Codex cache copies or standalone `$CODEX_HOME/skills` copies. If the app shows duplicate Lens skills, remove the duplicates and regenerate the plugin cache from this repo.
+
 ## Prime Directive
 
 Dogfood Lens. Use the Lens MCP bridge for Unity editor state inspection and editor mutations whenever Unity work is involved.
@@ -30,6 +40,22 @@ Build like a human Unity developer would:
 - Verify serialized or persistent state afterward.
 
 Do not rely on runtime-only bootstrap creation for durable project structure unless the user explicitly asks for runtime generation architecture.
+
+## Phase 8 Tool Truth
+
+The current Phase 8 scene surface is the split GameObject TSAM surface. With `foundation` plus `scene` active, the smoke baseline is `30` exported tools.
+
+- Prefer `Unity.GameObject.Inspect`, `ListComponents`, and `GetComponent` for reads.
+- Prefer preview/apply pairs for mutation: `PreviewChanges`/`ApplyChanges`, `PreviewComponentChanges`/`ApplyComponentChanges`, `PreviewCreate`/`Create`, and `PreviewDelete`/`Delete`.
+- Keep `Unity.ManageGameObject` compatible as the legacy facade and fallback for uncovered behavior.
+- Use `debug` plus `Unity.GetLensUsageReport` for telemetry baselines and appended-row smoke reporting.
+
+## Maintenance Rules
+
+- Any pack membership change must update the metadata audit expected counts and required-tool assertions.
+- Any TSAM-covered tool path must emit `normalization`, `service`, `adapter`, and `result_shaping` telemetry rows.
+- Smoke prompts must cover split tools, the legacy facade, metadata annotations, usage telemetry, and the `MeshFilter.mesh` edit-mode warning regression.
+- Commit package behavior fixes separately from skill/plugin hygiene changes.
 
 ## Missing Tool Rule
 

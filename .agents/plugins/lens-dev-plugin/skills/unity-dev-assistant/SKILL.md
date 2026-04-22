@@ -11,11 +11,24 @@ Default assumption going forward:
 - preferred transport is `unity-mcp-lens`
 - default model-facing tool surface is `foundation`
 - pack expansion is explicit, narrow, and temporary
+- the repo plugin source at `.agents/plugins/lens-dev-plugin` is the skill source of truth
 
 Helper script selection:
 - macOS/Linux: run the `.js` helper with `node`, for example `node scripts/Check-UnityDevSession.js --ProjectPath "$PWD"`
 - Windows: run the matching `.ps1` helper with PowerShell
 - When both exist, choose the platform-native helper automatically; keep both on the Lens path.
+
+## Phase 8 GameObject Tool Preference
+
+For covered GameObject workflows, prefer the split Phase 8 tools over `Unity.ManageGameObject`.
+
+- Read/inspect: `Unity.GameObject.Inspect`, `Unity.GameObject.ListComponents`, `Unity.GameObject.GetComponent`
+- Simple GameObject mutation: `Unity.GameObject.PreviewChanges`, then `Unity.GameObject.ApplyChanges`
+- Component mutation: `Unity.GameObject.PreviewComponentChanges`, then `Unity.GameObject.ApplyComponentChanges`
+- Lifecycle: `Unity.GameObject.PreviewCreate`, `Unity.GameObject.Create`, `Unity.GameObject.PreviewDelete`, `Unity.GameObject.Delete`
+- Legacy fallback: use `Unity.ManageGameObject` only for compatibility paths or uncovered behavior.
+
+With `foundation` plus `scene` active, the current Phase 8 scene surface exports `30` tools. Keep `foundation` as the default and activate `scene` only when scene/GameObject work is needed.
 
 ## Quick Flow
 
@@ -52,45 +65,49 @@ Helper script selection:
 9. For large tool outputs, prefer summary/preview first.
    - If a result exposes `detailRef`, call `Unity.ReadDetailRef` only when the preview is insufficient.
    - Do not immediately expand every large payload.
-10. For art from Krita, use the handoff path:
+10. For telemetry and agent-cost checks, activate `debug` only when needed and use `Unity.GetLensUsageReport`.
+   - Capture a marker before smoke work.
+   - Re-run with `sinceLine` after the smoke sequence.
+   - Confirm TSAM actions emit `normalization`, `service`, `adapter`, and `result_shaping` rows.
+11. For art from Krita, use the handoff path:
    - `ensure_krita_bridge.py`
    - `export_krita_state_to_unity.py`
    - `Import-UnitySpriteState.ps1`
-11. For long custom builds or exports, validate the exact enabled build-scene list first with `scripts/Test-UnityBuildSceneList.js --ExpectedScenes ...` on macOS/Linux, or `scripts/Test-UnityBuildSceneList.ps1 -ExpectedScenes ...` on Windows.
-12. For play mode, use `scripts/Enter-UnityPlayMode.js` on macOS/Linux or `scripts/Enter-UnityPlayMode.ps1` on Windows, require runtime advancement plus a short warmup, and treat transient disconnects during play transition as recoverable until the runtime probe proves success or failure.
-13. For `Unity_RunCommand`, use `scripts/Invoke-UnityRunCommand.js` on macOS/Linux or `scripts/Invoke-UnityRunCommand.ps1` on Windows instead of hand-escaping JSON, and prefer small focused probes over one large validation script.
-14. For console reads, prefer direct `Unity.ReadConsole` through MCP.
+12. For long custom builds or exports, validate the exact enabled build-scene list first with `scripts/Test-UnityBuildSceneList.js --ExpectedScenes ...` on macOS/Linux, or `scripts/Test-UnityBuildSceneList.ps1 -ExpectedScenes ...` on Windows.
+13. For play mode, use `scripts/Enter-UnityPlayMode.js` on macOS/Linux or `scripts/Enter-UnityPlayMode.ps1` on Windows, require runtime advancement plus a short warmup, and treat transient disconnects during play transition as recoverable until the runtime probe proves success or failure.
+14. For `Unity_RunCommand`, use `scripts/Invoke-UnityRunCommand.js` on macOS/Linux or `scripts/Invoke-UnityRunCommand.ps1` on Windows instead of hand-escaping JSON, and prefer small focused probes over one large validation script.
+15. For console reads, prefer direct `Unity.ReadConsole` through MCP.
    - Default to summary/small reads.
    - Use `Unity.ReadDetailRef` if the result was compacted and the full payload matters.
    - Reach for `scripts/Get-UnityConsole.js` on macOS/Linux or `scripts/Get-UnityConsole.ps1` on Windows only when the task explicitly needs the helper path or Lens is unavailable.
-15. For menu operations, prefer the direct Unity tool surface when available. Use `scripts/Invoke-UnityMenuItem.ps1` only when there is no direct tool or when a script is operationally safer for the specific task.
-16. For art swaps and prefab binding, split the work into two steps:
+16. For menu operations, prefer the direct Unity tool surface when available. Use `scripts/Invoke-UnityMenuItem.ps1` only when there is no direct tool or when a script is operationally safer for the specific task.
+17. For art swaps and prefab binding, split the work into two steps:
    - sprite import or serialized reference binding
    - motion or presentation retuning
    Do not mix both concerns in one broad probe unless you already know the ownership chain.
-17. When authored scale, tint, sprite assignment, or motion does not stick, use the visual-ownership triage path before changing values again:
+18. When authored scale, tint, sprite assignment, or motion does not stick, use the visual-ownership triage path before changing values again:
    - prefab local scale
    - child renderer local scale
    - serialized authored baseline fields such as `authoredScaleBaseline`
    - runtime-computed multiplier or override path
    - final renderer bounds / screen footprint
-18. When the user wants to resize, reposition, or restyle HUD/layout objects directly, prefer persistent scene-owned UI groups over runtime `Ensure*Hierarchy` fallbacks:
+19. When the user wants to resize, reposition, or restyle HUD/layout objects directly, prefer persistent scene-owned UI groups over runtime `Ensure*Hierarchy` fallbacks:
    - ensure the authored subtree exists in the scene
    - bind serialized scene refs deterministically
    - save the scene
    - verify the subtree exists on disk before removing or disabling fallback creation
-19. For deterministic sprite importer changes, use `scripts/Import-UnitySpriteAsset.ps1`.
-20. For narrow prefab field verification after a sprite or property mutation, use `scripts/Verify-UnityPrefabSerializedFields.ps1`.
-21. For runtime visual ownership inspection, use `scripts/Get-UnityVisualOwnership.ps1`, which wraps `Unity.Runtime.GetVisualBoundsSnapshot` with ownership output enabled.
-22. For scene component refs or other scene-authored serialized fields, use `scripts/Set-UnitySceneSerializedProperties.ps1`.
-23. For persistent scene UI subtree repair or creation, use `scripts/Ensure-UnityUiHierarchy.ps1`.
-24. For deterministic UI layout edits on authored scene objects, use `scripts/Set-UnityUiLayout.ps1`.
-25. If a `Unity_RunCommand` starts a long WebGL build on Windows, pass `-MonitorBuildMode WebGL` plus any known output/report/artifact paths so the PowerShell helper can fall back to passive log/disk monitoring when MCP stdout becomes unreliable. On macOS/Linux, launch the build with the JS helper, then use the session check build monitor and `Editor.log` while the build is active.
-26. For autoplay or scripted validation, use `scripts/Run-UnityAutoplayPlaytest.ps1`.
-27. For screenshots, use `scripts/Capture-UnityPlaytestArtifacts.js` on macOS/Linux or `scripts/Capture-UnityPlaytestArtifacts.ps1` on Windows. It waits for idle, supports pre-capture state locks, prefers relative project paths, and falls back to desktop capture when Unity-aware capture is flaky.
-28. When a scene looks correct in edit mode but different in play mode, treat runtime ownership drift as the default suspect before retuning values. Read `references/authoring-drift.md` and use a small runtime probe to compare the same fields in edit mode and play mode.
-29. For score, initials, or other first-run gating backed by `PlayerPrefs`, distinguish a missing key from a saved `0` value. Use `HasKey` when deciding whether a flow is truly first-run.
-30. When reading Unity console output, treat known MCP/package chatter as bridge self-noise unless real compiler or gameplay errors are mixed in.
+20. For deterministic sprite importer changes, use `scripts/Import-UnitySpriteAsset.ps1`.
+21. For narrow prefab field verification after a sprite or property mutation, use `scripts/Verify-UnityPrefabSerializedFields.ps1`.
+22. For runtime visual ownership inspection, use `scripts/Get-UnityVisualOwnership.ps1`, which wraps `Unity.Runtime.GetVisualBoundsSnapshot` with ownership output enabled.
+23. For scene component refs or other scene-authored serialized fields, use `scripts/Set-UnitySceneSerializedProperties.ps1`.
+24. For persistent scene UI subtree repair or creation, use `scripts/Ensure-UnityUiHierarchy.ps1`.
+25. For deterministic UI layout edits on authored scene objects, use `scripts/Set-UnityUiLayout.ps1`.
+26. If a `Unity_RunCommand` starts a long WebGL build on Windows, pass `-MonitorBuildMode WebGL` plus any known output/report/artifact paths so the PowerShell helper can fall back to passive log/disk monitoring when MCP stdout becomes unreliable. On macOS/Linux, launch the build with the JS helper, then use the session check build monitor and `Editor.log` while the build is active.
+27. For autoplay or scripted validation, use `scripts/Run-UnityAutoplayPlaytest.ps1`.
+28. For screenshots, use `scripts/Capture-UnityPlaytestArtifacts.js` on macOS/Linux or `scripts/Capture-UnityPlaytestArtifacts.ps1` on Windows. It waits for idle, supports pre-capture state locks, prefers relative project paths, and falls back to desktop capture when Unity-aware capture is flaky.
+29. When a scene looks correct in edit mode but different in play mode, treat runtime ownership drift as the default suspect before retuning values. Read `references/authoring-drift.md` and use a small runtime probe to compare the same fields in edit mode and play mode.
+30. For score, initials, or other first-run gating backed by `PlayerPrefs`, distinguish a missing key from a saved `0` value. Use `HasKey` when deciding whether a flow is truly first-run.
+31. When reading Unity console output, treat known MCP/package chatter as bridge self-noise unless real compiler or gameplay errors are mixed in.
 
 ## Scene Debugger Pattern
 
@@ -120,7 +137,10 @@ Prefer a scene-owned debugger component when a project needs fast UI or state it
 - Mandatory first step for Unity work in a fresh chat: `scripts/Check-UnityDevSession.js` on macOS/Linux or `scripts/Check-UnityDevSession.ps1` on Windows
 - Preferred transport: `unity-mcp-lens`
 - Default exported tool surface: `foundation`
+- Current Phase 8 `foundation` + `scene` surface: `30` tools
+- Prefer split GameObject TSAM tools before legacy `Unity.ManageGameObject`
 - Expand packs explicitly, not heuristically
+- Use `Unity.GetLensUsageReport` in `debug` for telemetry baselines, appended smoke rows, and TSAM stage coverage
 - Session and bridge checks are compact by default; use `-IncludeDiagnostics` only for explicit maintenance
 - Status from the local editor-status beacon first when available; MCP remains the authority for mutations
 - Unity editor compile/import is the authority; do not run `dotnet build` as a Unity compile preflight

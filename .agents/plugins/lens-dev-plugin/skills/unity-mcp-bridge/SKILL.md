@@ -9,8 +9,9 @@ Use this skill as the operational guide for the local Unity MCP bridge and the o
 
 ## Preferred Topology
 
-- Required for Codex-side helper scripts: `Codex/other MCP client -> unity_mcp_lens -> Unity bridge`
-- Legacy relay remains a package-side compatibility lane, but helper scripts should not use it.
+- Required for Codex-side helper scripts: `Codex/other MCP client -> unity-mcp-lens -> Unity bridge`
+- The repo plugin source at `.agents/plugins/lens-dev-plugin` is the skill and launcher source of truth.
+- Legacy relay may exist as a package-side compatibility lane, but helper scripts must not use it.
 - Default assumption going forward: `unity-mcp-lens` is the only supported helper-script transport.
 
 ## Workflow
@@ -99,6 +100,7 @@ powershell -ExecutionPolicy Bypass -File $script -ProjectPath "$PWD"
 - Do not use the legacy relay or any manual wrapper path for Codex helper-script work.
 - If `unity-mcp-lens` is unavailable, stop Unity mutations and repair Lens instead of falling back silently.
 - Legacy relay may still exist inside the Unity package for Assistant/Gateway compatibility, but it is not a valid Codex helper transport.
+- Do not maintain standalone copies of Lens skills under `$CODEX_HOME/skills`; the repo plugin is the canonical distribution path.
 
 ## Diagnostics
 
