@@ -16,10 +16,11 @@ async function main() {
   });
 
   console.log(JSON.stringify(includeDiagnostics ? check.result : check.compactResult, null, 2));
+  await common.shutdownUnityMcpSessions();
   process.exit(check.exitCode);
 }
 
 main().catch((error) => {
   console.error(error.message);
-  process.exit(1);
+  common.shutdownUnityMcpSessions().finally(() => process.exit(1));
 });

@@ -30,6 +30,7 @@ async function main() {
     wrapperError = `Skipped Lens editor-state probe because the editor status beacon reports phase '${bridgeCheck.result.EditorStatusBeacon.Phase}'.`;
   } else if (bridgeCheck.result.Classification === "Ready") {
     try {
+      await common.ensureUnityToolPacks(projectPath, ["console"], { timeoutSeconds: 15 });
       const stableWait = await common.waitUnityEditorIdle(projectPath, {
         timeoutSeconds: common.getArgNumber(args, ["EditorStateTimeoutSeconds"], 90),
         stablePollCount: 3,
@@ -149,16 +150,17 @@ async function main() {
     PlayReadySnapshot: playReadySnapshot,
     AssistantPackageState: assistantPackageState,
     ReadyForLongBuild:
-      ["Ready", "WrapperUnhealthyDirectMcpOk"].includes(bridgeCheck.result.Classification) &&
+      bridgeCheck.result.Classification === "Ready" &&
       (!buildScenePreflight || buildScenePreflight.exactMatch),
     RecommendedPath: recommendedPath,
   };
 
   console.log(JSON.stringify(includeDiagnostics ? diagnosticResult : compactResult, null, 2));
+  await common.shutdownUnityMcpSessions();
   process.exit(bridgeCheck.exitCode === 0 || bridgeCheck.exitCode === 14 || bridgeCheck.exitCode === 15 ? 0 : bridgeCheck.exitCode);
 }
 
 main().catch((error) => {
   console.error(error.message);
-  process.exit(1);
+  common.shutdownUnityMcpSessions().finally(() => process.exit(1));
 });

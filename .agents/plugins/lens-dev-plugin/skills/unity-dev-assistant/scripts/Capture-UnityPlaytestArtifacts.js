@@ -321,10 +321,11 @@ async function main() {
   };
   common.writeJsonFile(manifestPath, manifest);
   console.log(JSON.stringify(manifest, null, 2));
+  await common.shutdownUnityMcpSessions();
   process.exit(fatalError ? 1 : 0);
 }
 
 main().catch((error) => {
   console.error(error.message);
-  process.exit(1);
+  common.shutdownUnityMcpSessions().finally(() => process.exit(1));
 });

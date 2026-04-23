@@ -16,9 +16,10 @@ async function main() {
     timeoutSeconds: common.getArgNumber(args, ["TimeoutSeconds"], 30),
   });
   console.log(JSON.stringify(result, null, 2));
+  await common.shutdownUnityMcpSessions();
 }
 
 main().catch((error) => {
   console.error(error.message);
-  process.exit(1);
+  common.shutdownUnityMcpSessions().finally(() => process.exit(1));
 });

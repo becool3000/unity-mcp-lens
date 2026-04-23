@@ -12,12 +12,13 @@ function main() {
 
   const result = common.testUnityBuildSceneList(projectPath, expectedScenes);
   console.log(JSON.stringify(result, null, 2));
-  process.exit(result.exactMatch ? 0 : 1);
+  return result.exactMatch ? 0 : 1;
 }
 
 try {
-  main();
+  const exitCode = main();
+  common.shutdownUnityMcpSessions().finally(() => process.exit(exitCode));
 } catch (error) {
   console.error(error.message);
-  process.exit(1);
+  common.shutdownUnityMcpSessions().finally(() => process.exit(1));
 }

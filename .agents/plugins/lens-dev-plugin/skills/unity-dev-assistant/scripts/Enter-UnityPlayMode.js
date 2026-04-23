@@ -34,6 +34,7 @@ async function main() {
 
   if (!idleWait.success) {
     console.log(JSON.stringify({ success: false, message: "Unity editor did not become idle before play.", idleWait }, null, 2));
+    await common.shutdownUnityMcpSessions();
     process.exit(1);
     return;
   }
@@ -99,10 +100,11 @@ async function main() {
   };
 
   console.log(JSON.stringify(result, null, 2));
+  await common.shutdownUnityMcpSessions();
   process.exit(playReady.success ? 0 : 1);
 }
 
 main().catch((error) => {
   console.error(error.message);
-  process.exit(1);
+  common.shutdownUnityMcpSessions().finally(() => process.exit(1));
 });

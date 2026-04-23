@@ -61,7 +61,7 @@ With `foundation` plus `scene` active, the current Phase 8 scene surface exports
 7. After external edits to compile-affecting files (`*.cs`, `*.asmdef`, `*.asmref`, `*.rsp`, package manifest changes), run `scripts/Sync-UnityScriptChanges.js` on macOS/Linux or `scripts/Sync-UnityScriptChanges.ps1` on Windows before the next Unity-side action.
 8. Prefer direct MCP tools through the Lens path by default.
    - Use helper scripts for orchestration-heavy flows such as long builds, autoplay, or deterministic screenshot capture.
-   - Those helper scripts must also stay on the Lens path; do not bounce into legacy relay or manual wrapper behavior.
+   - Those helper scripts must also stay on the Lens path; do not bounce into legacy relay or stale fallback behavior.
 9. For large tool outputs, prefer summary/preview first.
    - If a result exposes `detailRef`, call `Unity.ReadDetailRef` only when the preview is insufficient.
    - Do not immediately expand every large payload.
