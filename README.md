@@ -18,6 +18,8 @@ Editor UI is Lens-owned and lives under **Tools > Unity MCP Lens** and **Project
 - Compact tool outputs with `detailRef` expansion for large payloads.
 - Local Unity editor/dev tools for console, project, scene, UI, scripting, assets, diagnostics, and package workflows.
 - Payload and bridge telemetry for measuring context and control-plane noise.
+- Split Phase 8 GameObject TSAM tools behind the `scene` pack.
+- Phase 10 project/Input System diagnostics and active input handler tools behind the `project` pack.
 
 Lens does not own Unity's official Assistant chat UI, cloud asset generation, Assistant Gateway workflows, or Assistant-specific UI. Install the official Assistant package separately if you want those features.
 
@@ -84,9 +86,23 @@ powershell -ExecutionPolicy Bypass -File Tools~/Test-McpToolOwnership.ps1
 powershell -ExecutionPolicy Bypass -File Tools~/Test-McpLensPresentation.ps1
 ```
 
+Useful live metadata audit, run against a Unity host project with the Lens
+server installed and the editor idle:
+
+```powershell
+dotnet run --project Tools~/UnityMcpLensPackSwitchBenchApp~/UnityMcpLensPackSwitchBench.csproj -c Release -p:UseAppHost=false -- --project-path C:\Path\To\UnityProject --server-path C:\Users\<you>\.unity\unity-mcp-lens\unity_mcp_lens_win.exe --metadata-audit
+```
+
 ## Status
 
-Lens is usable but still evolving. The high-priority direction is to keep reducing bridge chatter, keep the default tool surface narrow, and make tool output compact and recoverable by default.
+Lens is usable but still evolving. The current stable direction is to keep the
+default `foundation` surface narrow, preserve the `12` tool foundation baseline,
+preserve the `30` tool `foundation + scene` smoke baseline, and continue moving
+high-friction workflows into compact TSAM tools.
+
+Current near-term work is focused on bridge/session churn, payload shaping,
+Input System diagnostics, active input handler reliability, structured console
+errors, restart/reload orchestration, and prefab/serialized-reference authoring.
 
 This is not an official Unity release channel.
 
