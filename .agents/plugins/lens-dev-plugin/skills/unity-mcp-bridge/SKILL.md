@@ -85,6 +85,7 @@ powershell -ExecutionPolicy Bypass -File $script -ProjectPath "$PWD"
 - `foundation` is the default pack and is always on.
 - At most two additional non-foundation packs should be active at once.
 - When a tool result includes `detailRef`, use `Unity.ReadDetailRef` only when the preview/summary is insufficient. Do not immediately expand every large result.
+- `Unity.RunCommand` and `Unity.ManageEditor WaitForStableEditor` are expected to return compact, stage-aware results. Treat detail refs as the source for full logs or full editor-state attempts when needed.
 
 ## Classification Rules
 
@@ -105,6 +106,7 @@ powershell -ExecutionPolicy Bypass -File $script -ProjectPath "$PWD"
 ## Diagnostics
 
 - Compact output is the default operator view. Reach for diagnostics mode only when the maintenance task actually requires raw editor detail.
+- For Input System backend or device failures, prefer `project` pack tools (`Unity.InputSystem.Diagnostics` and the active input handler preview/apply tools) before resorting to ad hoc editor probes.
 - Inspect `%USERPROFILE%\.unity\mcp\connections\bridge-status-*.json` for the current bridge status.
 - Inspect `%LOCALAPPDATA%\Unity\Editor\Editor.log` for approval, handshake, disconnect, compile, and auth signals.
 - On macOS inspect `~/Library/Logs/Unity/Editor.log` for the same signals.

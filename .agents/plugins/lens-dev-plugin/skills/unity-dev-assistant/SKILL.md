@@ -30,6 +30,16 @@ For covered GameObject workflows, prefer the split Phase 8 tools over `Unity.Man
 
 With `foundation` plus `scene` active, the current Phase 8 scene surface exports `30` tools. Keep `foundation` as the default and activate `scene` only when scene/GameObject work is needed.
 
+## Phase 10 Project/Input Tool Preference
+
+For Input System and active input handler work, prefer the Phase 10 project tools before custom `Unity_RunCommand` probes or YAML edits.
+
+- Diagnostics: `Unity.InputSystem.Diagnostics`
+- Preview backend changes: `Unity.ProjectSettings.PreviewActiveInputHandler`
+- Apply backend changes: `Unity.ProjectSettings.SetActiveInputHandler`
+- Use `Unity.RunCommand` only for project-specific probes not covered by Lens tools.
+- Treat active input handler changes as editor-authored ProjectSettings mutations that may need script reload or editor restart before defines and devices settle.
+
 ## Quick Flow
 
 1. Read the repo-local `docs/unity-mcp-backlog.md` if it exists.
@@ -108,6 +118,8 @@ With `foundation` plus `scene` active, the current Phase 8 scene surface exports
 29. When a scene looks correct in edit mode but different in play mode, treat runtime ownership drift as the default suspect before retuning values. Read `references/authoring-drift.md` and use a small runtime probe to compare the same fields in edit mode and play mode.
 30. For score, initials, or other first-run gating backed by `PlayerPrefs`, distinguish a missing key from a saved `0` value. Use `HasKey` when deciding whether a flow is truly first-run.
 31. When reading Unity console output, treat known MCP/package chatter as bridge self-noise unless real compiler or gameplay errors are mixed in.
+32. For Input System failures, activate `project` and run `Unity.InputSystem.Diagnostics` before editing `ProjectSettings.asset`, grepping `Editor.log`, or writing a custom input probe.
+33. For active input backend changes, use the preview/apply ProjectSettings tools and verify readback before restarting Unity.
 
 ## Scene Debugger Pattern
 
@@ -139,6 +151,7 @@ Prefer a scene-owned debugger component when a project needs fast UI or state it
 - Default exported tool surface: `foundation`
 - Current Phase 8 `foundation` + `scene` surface: `30` tools
 - Prefer split GameObject TSAM tools before legacy `Unity.ManageGameObject`
+- Prefer Phase 10 project tools for Input System diagnostics and active input handler changes
 - Expand packs explicitly, not heuristically
 - Use `Unity.GetLensUsageReport` in `debug` for telemetry baselines, appended smoke rows, and TSAM stage coverage
 - Session and bridge checks are compact by default; use `-IncludeDiagnostics` only for explicit maintenance

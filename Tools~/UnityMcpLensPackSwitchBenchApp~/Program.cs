@@ -22,6 +22,7 @@ try
             Console.WriteLine($"Server:     {auditReport.ServerPath}");
             Console.WriteLine($"Foundation: {auditReport.FoundationToolCount} tools");
             Console.WriteLine($"Scene:      {auditReport.SceneToolCount} tools");
+            Console.WriteLine($"Project:    {auditReport.ProjectToolCount} tools");
             Console.WriteLine($"Debug:      {auditReport.DebugToolCount} tools");
             Console.WriteLine($"Result:     {(auditReport.Success ? "PASS" : "FAIL")}");
 
@@ -211,6 +212,15 @@ sealed class MetadataAudit(BenchmarkOptions options)
         "Unity_GetLensUsageReport"
     ];
 
+    static readonly string[] k_RequiredProjectTools =
+    [
+        "Unity_Project_GetInfo",
+        "Unity_Project_GetPackages",
+        "Unity_InputSystem_Diagnostics",
+        "Unity_ProjectSettings_PreviewActiveInputHandler",
+        "Unity_ProjectSettings_SetActiveInputHandler"
+    ];
+
     public async Task<MetadataAuditReport> RunAsync()
     {
         Exception? lastError = null;
@@ -240,6 +250,8 @@ sealed class MetadataAudit(BenchmarkOptions options)
             0,
             0,
             0,
+            0,
+            [],
             [],
             [],
             [],
@@ -254,12 +266,15 @@ sealed class MetadataAudit(BenchmarkOptions options)
         var foundationTools = await session.GetToolsAsync();
         _ = await session.SetToolPacksAsync(["scene"]);
         var sceneTools = await session.GetToolsAsync();
+        _ = await session.SetToolPacksAsync(["project"]);
+        var projectTools = await session.GetToolsAsync();
         _ = await session.SetToolPacksAsync(["debug"]);
         var debugTools = await session.GetToolsAsync();
 
         var failures = new List<string>();
         ValidateToolSet("foundation", foundationTools, ExpectedFoundationToolCount, k_RequiredFoundationTools, failures);
         ValidateToolSet("foundation+scene", sceneTools, ExpectedSceneToolCount, k_RequiredSceneTools, failures);
+        ValidateToolSet("foundation+project", projectTools, null, k_RequiredProjectTools, failures);
         ValidateToolSet("foundation+debug", debugTools, null, k_RequiredDebugTools, failures);
         ValidateReadOnlyHint(sceneTools, "Unity_GameObject_Inspect", expected: true, failures);
         ValidateReadOnlyHint(sceneTools, "Unity_GameObject_ListComponents", expected: true, failures);
@@ -273,8 +288,12 @@ sealed class MetadataAudit(BenchmarkOptions options)
         ValidateReadOnlyHint(sceneTools, "Unity_GameObject_PreviewDelete", expected: true, failures);
         ValidateReadOnlyHint(sceneTools, "Unity_GameObject_Delete", expected: false, failures);
         ValidateReadOnlyHint(sceneTools, "Unity_ManageGameObject", expected: false, failures);
+        ValidateReadOnlyHint(projectTools, "Unity_InputSystem_Diagnostics", expected: true, failures);
+        ValidateReadOnlyHint(projectTools, "Unity_ProjectSettings_PreviewActiveInputHandler", expected: true, failures);
+        ValidateReadOnlyHint(projectTools, "Unity_ProjectSettings_SetActiveInputHandler", expected: false, failures);
         ValidateReadOnlyHint(debugTools, "Unity_GetLensUsageReport", expected: true, failures);
         ValidateGameObjectSchemas(sceneTools, failures);
+        ValidateProjectToolSchemas(projectTools, failures);
         ValidateLensUsageSchema(debugTools, failures);
 
         return new MetadataAuditReport(
@@ -284,9 +303,11 @@ sealed class MetadataAudit(BenchmarkOptions options)
             failures.Count == 0,
             foundationTools.Count,
             sceneTools.Count,
+            projectTools.Count,
             debugTools.Count,
             foundationTools.Select(tool => tool.Name).OrderBy(name => name, StringComparer.Ordinal).ToArray(),
             sceneTools.Select(tool => tool.Name).OrderBy(name => name, StringComparer.Ordinal).ToArray(),
+            projectTools.Select(tool => tool.Name).OrderBy(name => name, StringComparer.Ordinal).ToArray(),
             debugTools.Select(tool => tool.Name).OrderBy(name => name, StringComparer.Ordinal).ToArray(),
             failures);
     }
@@ -442,6 +463,28 @@ sealed class MetadataAudit(BenchmarkOptions options)
             if (!actionEnum.Contains(expectedAction))
                 failures.Add($"Unity_ManageGameObject action enum is missing '{expectedAction}'.");
         }
+    }
+
+    static void ValidateProjectToolSchemas(IReadOnlyList<ToolDescriptor> tools, List<string> failures)
+    {
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_InputSystem_Diagnostics",
+            ["assetPath", "includeDevices", "includeBindings", "includeEditorLogSignals", "maxItems", "includeDetails"],
+            [],
+            failures);
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_ProjectSettings_PreviewActiveInputHandler",
+            ["mode", "save", "requestScriptReload"],
+            ["mode"],
+            failures);
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_ProjectSettings_SetActiveInputHandler",
+            ["mode", "save", "requestScriptReload"],
+            ["mode"],
+            failures);
     }
 
     static void ValidateSplitGameObjectSchema(IReadOnlyList<ToolDescriptor> tools, string toolName, string[] expectedProperties, string[] requiredProperties, List<string> failures)
@@ -694,9 +737,11 @@ sealed record MetadataAuditReport(
     bool Success,
     int FoundationToolCount,
     int SceneToolCount,
+    int ProjectToolCount,
     int DebugToolCount,
     IReadOnlyList<string> FoundationTools,
     IReadOnlyList<string> SceneTools,
+    IReadOnlyList<string> ProjectTools,
     IReadOnlyList<string> DebugTools,
     IReadOnlyList<string> Failures);
 

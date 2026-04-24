@@ -50,10 +50,21 @@ The current Phase 8 scene surface is the split GameObject TSAM surface. With `fo
 - Keep `Unity.ManageGameObject` compatible as the legacy facade and fallback for uncovered behavior.
 - Use `debug` plus `Unity.GetLensUsageReport` for telemetry baselines and appended-row smoke reporting.
 
+## Phase 10 Project Tool Truth
+
+The current Phase 10 project surface includes Input System and active input handler diagnostics.
+
+- Prefer `Unity.InputSystem.Diagnostics` for Input System package, assembly, device, `.inputactions`, define, and editor-log signals.
+- Prefer `Unity.ProjectSettings.PreviewActiveInputHandler` before changing the active input backend.
+- Use `Unity.ProjectSettings.SetActiveInputHandler` for editor-authored active input backend changes; do not hand-edit `ProjectSettings.asset` as the first path.
+- `foundation` remains `12` tools and `foundation + scene` remains `30` tools; project-pack additions must not change those baselines.
+
 ## Maintenance Rules
 
 - Any pack membership change must update the metadata audit expected counts and required-tool assertions.
 - Any TSAM-covered tool path must emit `normalization`, `service`, `adapter`, and `result_shaping` telemetry rows.
+- `Unity.RunCommand` result metadata must distinguish validation, compilation, execution, result serialization, and transport/unknown failures.
+- `Unity.ManageEditor WaitForStableEditor` should keep inline output compact and store full attempt/state detail behind detail refs.
 - Smoke prompts must cover split tools, the legacy facade, metadata annotations, usage telemetry, and the `MeshFilter.mesh` edit-mode warning regression.
 - Commit package behavior fixes separately from skill/plugin hygiene changes.
 
