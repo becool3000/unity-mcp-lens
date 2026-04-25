@@ -1,5 +1,7 @@
 # unity-mcp-lens
 
+Active TSAM refactor. Stable for experimentation and real workflows, but still evolving.
+
 `unity-mcp-lens` is a token-conscious MCP bridge for Unity. It gives coding agents like Codex, Claude Code, Cursor, and other MCP clients a smaller, safer way to inspect and change Unity projects without constantly falling back to noisy custom editor probes.
 
 The core idea is **TSAM**: **Tool, Service, Adapter, Model**.
