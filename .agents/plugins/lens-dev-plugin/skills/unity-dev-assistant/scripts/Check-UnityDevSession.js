@@ -3,6 +3,16 @@
 const path = require("path");
 const common = require("../../unity-mcp-bridge/scripts/UnityMcpCommon");
 
+function isLowLevelPackActivationFailure(message) {
+  const text = String(message || "").toLowerCase();
+  return (
+    text.includes("failed to restore required lens packs") ||
+    text.includes("failed to restore desired lens packs") ||
+    text.includes("failed to restore required unity tool packs") ||
+    (text.includes("set_tool_packs") && text.includes("timed out"))
+  );
+}
+
 async function main() {
   const args = common.parseCliArgs(process.argv.slice(2));
   const projectPath = common.resolveProjectPath(common.getArgString(args, ["ProjectPath"], process.cwd()));
@@ -19,8 +29,11 @@ async function main() {
   let editorState = null;
   let wrapperError = null;
   let wrapperHealthy = false;
+  let helperDegraded = false;
   let editorIdleSnapshot = null;
   let playReadySnapshot = null;
+  const directMcpHealthy = bridgeCheck.result.Classification === "Ready";
+  let lowLevelPackActivationFailed = false;
 
   if (bridgeCheck.result.Classification === "BuildInProgress") {
     wrapperError = "Skipped Lens editor-state probe because Check-UnityMcp classified the session as BuildInProgress.";
@@ -30,6 +43,7 @@ async function main() {
     wrapperError = `Skipped Lens editor-state probe because the editor status beacon reports phase '${bridgeCheck.result.EditorStatusBeacon.Phase}'.`;
   } else if (bridgeCheck.result.Classification === "Ready") {
     try {
+      await common.ensureUnityToolPacks(projectPath, ["console"], { timeoutSeconds: 15 });
       const stableWait = await common.waitUnityEditorIdle(projectPath, {
         timeoutSeconds: common.getArgNumber(args, ["EditorStateTimeoutSeconds"], 90),
         stablePollCount: 3,
@@ -63,6 +77,9 @@ async function main() {
     } catch (error) {
       wrapperError = error.message;
     }
+
+    lowLevelPackActivationFailed = isLowLevelPackActivationFailure(wrapperError);
+    helperDegraded = directMcpHealthy && !wrapperHealthy && !lowLevelPackActivationFailed;
   }
 
   const assistantPackageState = common.getUnityAssistantPackageState(projectPath);
@@ -85,6 +102,10 @@ async function main() {
     recommendedPath = "RepairBridge";
   } else if (wrapperHealthy) {
     recommendedPath = "ProceedWithLensHelpers";
+  } else if (lowLevelPackActivationFailed) {
+    recommendedPath = "InvestigateLensHelperPath";
+  } else if (directMcpHealthy) {
+    recommendedPath = "ProceedWithDirectLensTools";
   } else {
     recommendedPath = "InvestigateLensHelperPath";
   }
@@ -99,8 +120,11 @@ async function main() {
       UserActionRequired: bridgeCheck.result.UserActionRequired,
     },
     Editor: {
+      DirectMcpHealthy: directMcpHealthy,
       ManualWrapperHealthy: wrapperHealthy,
       LensHelperHealthy: wrapperHealthy,
+      HelperDegraded: helperDegraded,
+      LowLevelPackActivationFailed: lowLevelPackActivationFailed,
       Error: wrapperError,
       IdleReady: editorIdleSnapshot ? editorIdleSnapshot.Ready : null,
       PlayReady: playReadySnapshot ? playReadySnapshot.Ready : null,
@@ -137,8 +161,11 @@ async function main() {
     BridgeCheck: bridgeCheck.result,
     EditorStatusBeacon: bridgeCheck.result.EditorStatusBeacon,
     BeaconWait: bridgeCheck.result.BeaconWait,
+    DirectMcpHealthy: directMcpHealthy,
     ManualWrapperHealthy: wrapperHealthy,
     LensHelperHealthy: wrapperHealthy,
+    HelperDegraded: helperDegraded,
+    LowLevelPackActivationFailed: lowLevelPackActivationFailed,
     ManualWrapperError: wrapperError,
     LensHelperError: wrapperError,
     EditorState: editorState,
@@ -149,16 +176,17 @@ async function main() {
     PlayReadySnapshot: playReadySnapshot,
     AssistantPackageState: assistantPackageState,
     ReadyForLongBuild:
-      ["Ready", "WrapperUnhealthyDirectMcpOk"].includes(bridgeCheck.result.Classification) &&
+      bridgeCheck.result.Classification === "Ready" &&
       (!buildScenePreflight || buildScenePreflight.exactMatch),
     RecommendedPath: recommendedPath,
   };
 
   console.log(JSON.stringify(includeDiagnostics ? diagnosticResult : compactResult, null, 2));
+  await common.shutdownUnityMcpSessions();
   process.exit(bridgeCheck.exitCode === 0 || bridgeCheck.exitCode === 14 || bridgeCheck.exitCode === 15 ? 0 : bridgeCheck.exitCode);
 }
 
 main().catch((error) => {
   console.error(error.message);
-  process.exit(1);
+  common.shutdownUnityMcpSessions().finally(() => process.exit(1));
 });

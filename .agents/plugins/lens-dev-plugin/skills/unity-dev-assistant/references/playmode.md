@@ -18,7 +18,7 @@ Rules:
 
 - `Unity_ManageEditor Play` may return `Connection disconnected`. That is not enough to declare failure.
 - `Unity_ManageEditor Play` may also return a structured `transitioning_to_play` result with `ReconnectExpected = true`. Treat that as a recoverable transition, not a failure.
-- Poll `Unity_ManageEditor GetState` until:
+- Poll `Unity_ManageEditor GetCompactState` until:
   - `IsPlaying = true`
   - `RuntimeProbe.IsAvailable = true`
   - `RuntimeProbe.HasAdvancedFrames = true`

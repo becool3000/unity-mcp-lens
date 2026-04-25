@@ -1,5 +1,6 @@
 using System;
 using System.Threading.Tasks;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Becool.UnityMcpLens.Editor.Helpers;
 using Becool.UnityMcpLens.Editor.Lens;
@@ -92,14 +93,23 @@ internal class CommandScript : IRunCommand
                             consoleLogs = new { type = "string", description = "Warnings, errors, and exceptions captured from the Unity console during execution" },
                             localFixedCode = new { type = "string", description = "Code with local fixes applied (if any)" },
                             result = new { type = "string", description = "Human-readable result message" },
-                            failureStage = new { type = "string", description = "The phase where execution failed: validation, execution, result_serialization, or unknown" },
+                            failureStage = new { type = "string", description = "The phase where execution failed: validation, compilation, execution, result_serialization, transport_unknown, or unknown" },
+                            errorKind = new { type = "string", description = "Stable machine-readable failure classification when available" },
                             exceptionType = new { type = "string", description = "Captured exception type when available" },
                             exceptionMessage = new { type = "string", description = "Captured exception message when available" },
+                            compilationLogsDetailRef = new { type = "object", description = "Detail ref for full compilation logs when omitted or truncated" },
+                            executionLogsDetailRef = new { type = "object", description = "Detail ref for full execution logs when omitted or truncated" },
+                            consoleLogsDetailRef = new { type = "object", description = "Detail ref for full captured console logs when omitted or truncated" },
+                            logCounts = new { type = "object", description = "Counts of execution log, warning, and error entries" },
                             validationSummary = new { type = "object", description = "Structured validation summary for the command" },
                             playStateRestored = new { type = "boolean", description = "Whether the tool restored the pre-execution play pause state" },
                             localFixedCodeChanged = new { type = "boolean", description = "Whether Lens locally rewrote the submitted command before compilation" },
                             localFixedCodeDetailRef = new { type = "object", description = "Detail ref for the locally rewritten command when omitted from the inline response" },
                             localFixedCodeIncluded = new { type = "boolean", description = "Whether localFixedCode is included inline" },
+                            returnedData = new { description = "Structured result returned from ExecutionResult.ReturnResult when included inline." },
+                            returnedDataIncluded = new { type = "boolean", description = "Whether returnedData is included inline." },
+                            returnedDataBytes = new { type = "integer", description = "UTF-8 byte count of the serialized returnedData payload." },
+                            returnedDataDetailRef = new { type = "object", description = "Detail ref for structured returnedData when omitted from the inline response." },
                             playModeExecution = new
                             {
                                 type = "object",
@@ -163,6 +173,7 @@ internal class CommandScript : IRunCommand
             bool validationCompleted = false;
             LensExecutionOutput executionResult = default;
             string failureStage = "unknown";
+            string errorKind = null;
             string exceptionType = null;
             string exceptionMessage = null;
 
@@ -174,25 +185,44 @@ internal class CommandScript : IRunCommand
 
                 if (!validationResult.IsCompilationSuccessful)
                 {
-                    failureStage = "validation";
+                    failureStage = "compilation";
+                    errorKind = validationResult.HasUnauthorizedNamespaceUsage ? "unauthorized_namespace" : "compilation_failed";
                     responseMessage = "COMPILATION_FAILED: Code failed to compile.";
+                    var compilationLog = ShapeLogText("compilation_logs", validationResult.CompilationLogs, mode, out var compilationLogDetailRef, out var compilationLogTruncated, out var compilationLogBytes);
+                    var localFixedCodeDetailRef = includeLocalFixedCode
+                        ? null
+                        : CreateLocalFixedCodeDetailRef(validationResult.LocalFixedCode, code, mode);
                     responseData = new
                     {
                         isCompilationSuccessful = false,
                         isExecutionSuccessful = false,
-                        compilationLogs = validationResult.CompilationLogs,
+                        compilationLogs = compilationLog,
+                        compilationLogsDetailRef = compilationLogDetailRef,
+                        compilationLogsTruncated = compilationLogTruncated,
+                        compilationLogsBytes = compilationLogBytes,
                         executionLogs = string.Empty,
                         consoleLogs = string.Empty,
-                        localFixedCode = validationResult.LocalFixedCode,
+                        localFixedCode = includeLocalFixedCode ? validationResult.LocalFixedCode : null,
+                        localFixedCodeChanged = !string.Equals(validationResult.LocalFixedCode, code, StringComparison.Ordinal),
+                        localFixedCodeIncluded = includeLocalFixedCode,
+                        localFixedCodeDetailRef = localFixedCodeDetailRef,
+                        returnedData = (object)null,
+                        returnedDataIncluded = false,
+                        returnedDataBytes = 0,
+                        returnedDataDetailRef = (object)null,
                         result = responseMessage,
                         failureStage,
+                        errorKind,
                         exceptionType = (string)null,
                         exceptionMessage = (string)null,
+                        logCounts = new { execution = 0, warnings = 0, errors = 0 },
                         validationSummary = new
                         {
                             isCompilationSuccessful = false,
                             localFixedCodeChanged = !string.Equals(validationResult.LocalFixedCode, code, StringComparison.Ordinal),
-                            compilationLogLength = validationResult.CompilationLogs?.Length ?? 0
+                            compilationLogLength = validationResult.CompilationLogs?.Length ?? 0,
+                            compilationLogBytes,
+                            hasUnauthorizedNamespaceUsage = validationResult.HasUnauthorizedNamespaceUsage
                         }
                     };
                     goto ReturnResponse;
@@ -203,25 +233,37 @@ internal class CommandScript : IRunCommand
                     failureStage = null;
                     responseSuccess = true;
                     responseMessage = "Command validation succeeded.";
+                    var compilationLog = ShapeLogText("compilation_logs", validationResult.CompilationLogs, mode, out var compilationLogDetailRef, out var compilationLogTruncated, out var compilationLogBytes);
                     responseData = new
                     {
                         mode,
                         isCompilationSuccessful = true,
                         isExecutionSuccessful = false,
                         executionSkipped = true,
-                        compilationLogs = validationResult.CompilationLogs,
+                        compilationLogs = compilationLog,
+                        compilationLogsDetailRef = compilationLogDetailRef,
+                        compilationLogsTruncated = compilationLogTruncated,
+                        compilationLogsBytes = compilationLogBytes,
                         executionLogs = string.Empty,
                         consoleLogs = string.Empty,
                         localFixedCode = validationResult.LocalFixedCode,
+                        returnedData = (object)null,
+                        returnedDataIncluded = false,
+                        returnedDataBytes = 0,
+                        returnedDataDetailRef = (object)null,
                         result = responseMessage,
                         failureStage = (string)null,
+                        errorKind = (string)null,
                         exceptionType = (string)null,
                         exceptionMessage = (string)null,
+                        logCounts = new { execution = 0, warnings = 0, errors = 0 },
                         validationSummary = new
                         {
                             isCompilationSuccessful = true,
                             localFixedCodeChanged = !string.Equals(validationResult.LocalFixedCode, code, StringComparison.Ordinal),
-                            compilationLogLength = validationResult.CompilationLogs?.Length ?? 0
+                            compilationLogLength = validationResult.CompilationLogs?.Length ?? 0,
+                            compilationLogBytes,
+                            hasUnauthorizedNamespaceUsage = false
                         }
                     };
                     goto ReturnResponse;
@@ -247,10 +289,11 @@ internal class CommandScript : IRunCommand
                     }
                 }
 
-                executionResult = LensRunCommandExecutor.Execute(code, parameters?.Title);
+                executionResult = LensRunCommandExecutor.Execute(validationResult.Command, parameters?.Title);
 
                 // Return combined result
                 failureStage = executionResult.IsExecutionSuccessful ? null : "execution";
+                errorKind = executionResult.ErrorKind;
                 exceptionType = null;
                 exceptionMessage = null;
                 var resultMessage = executionResult.IsExecutionSuccessful
@@ -259,6 +302,76 @@ internal class CommandScript : IRunCommand
 
                 responseSuccess = executionResult.IsExecutionSuccessful;
                 responseMessage = resultMessage;
+                var shapedCompilationLogs = ShapeLogText("compilation_logs", validationResult.CompilationLogs, mode, out var compilationLogsDetailRef, out var compilationLogsTruncated, out var compilationLogsBytes);
+                var shapedExecutionLogs = ShapeLogText("execution_logs", executionResult.ExecutionLogs, mode, out var executionLogsDetailRef, out var executionLogsTruncated, out var executionLogsBytes);
+                var shapedConsoleLogs = ShapeLogText("console_logs", executionResult.ConsoleLogs, mode, out var consoleLogsDetailRef, out var consoleLogsTruncated, out var consoleLogsBytes);
+                if (!TryShapeReturnedData(
+                        executionResult.ReturnedData,
+                        mode,
+                        out object returnedData,
+                        out bool returnedDataIncluded,
+                        out int returnedDataBytes,
+                        out object returnedDataDetailRef,
+                        out string returnedDataError))
+                {
+                    failureStage = "result_serialization";
+                    errorKind = "result_serialization_failed";
+                    exceptionType = typeof(JsonException).FullName;
+                    exceptionMessage = returnedDataError;
+                    responseSuccess = false;
+                    responseMessage = $"RESULT_SERIALIZATION_FAILED: {returnedDataError}";
+                    responseData = new
+                    {
+                        isCompilationSuccessful = true,
+                        isExecutionSuccessful = false,
+                        mode,
+                        executionSkipped = false,
+                        executionId = executionResult.ExecutionId,
+                        compilationLogs = shapedCompilationLogs,
+                        compilationLogsDetailRef,
+                        compilationLogsTruncated,
+                        compilationLogsBytes,
+                        executionLogs = shapedExecutionLogs,
+                        executionLogsDetailRef,
+                        executionLogsTruncated,
+                        executionLogsBytes,
+                        consoleLogs = shapedConsoleLogs,
+                        consoleLogsDetailRef,
+                        consoleLogsTruncated,
+                        consoleLogsBytes,
+                        localFixedCode = includeLocalFixedCode ? validationResult.LocalFixedCode : null,
+                        localFixedCodeChanged = !string.Equals(validationResult.LocalFixedCode, code, StringComparison.Ordinal),
+                        localFixedCodeIncluded = includeLocalFixedCode,
+                        localFixedCodeDetailRef = includeLocalFixedCode
+                            ? null
+                            : CreateLocalFixedCodeDetailRef(validationResult.LocalFixedCode, code, mode),
+                        returnedData = (object)null,
+                        returnedDataIncluded = false,
+                        returnedDataBytes = 0,
+                        returnedDataDetailRef = (object)null,
+                        result = responseMessage,
+                        failureStage,
+                        errorKind,
+                        exceptionType,
+                        exceptionMessage,
+                        logCounts = new
+                        {
+                            execution = executionResult.LogCount,
+                            warnings = executionResult.WarningCount,
+                            errors = executionResult.ErrorCount
+                        },
+                        validationSummary = new
+                        {
+                            isCompilationSuccessful = true,
+                            localFixedCodeChanged = !string.Equals(validationResult.LocalFixedCode, code, StringComparison.Ordinal),
+                            compilationLogLength = validationResult.CompilationLogs?.Length ?? 0,
+                            compilationLogBytes = compilationLogsBytes,
+                            hasUnauthorizedNamespaceUsage = false
+                        }
+                    };
+                    goto ReturnResponse;
+                }
+
                 responseData = new
                 {
                     isCompilationSuccessful = true,
@@ -266,51 +379,99 @@ internal class CommandScript : IRunCommand
                     mode,
                     executionSkipped = false,
                     executionId = executionResult.ExecutionId,
-                    compilationLogs = validationResult.CompilationLogs,
-                    executionLogs = executionResult.ExecutionLogs,
-                    consoleLogs = string.Empty,
+                    compilationLogs = shapedCompilationLogs,
+                    compilationLogsDetailRef,
+                    compilationLogsTruncated,
+                    compilationLogsBytes,
+                    executionLogs = shapedExecutionLogs,
+                    executionLogsDetailRef,
+                    executionLogsTruncated,
+                    executionLogsBytes,
+                    consoleLogs = shapedConsoleLogs,
+                    consoleLogsDetailRef,
+                    consoleLogsTruncated,
+                    consoleLogsBytes,
                     localFixedCode = includeLocalFixedCode ? validationResult.LocalFixedCode : null,
                     localFixedCodeChanged = !string.Equals(validationResult.LocalFixedCode, code, StringComparison.Ordinal),
                     localFixedCodeIncluded = includeLocalFixedCode,
                     localFixedCodeDetailRef = includeLocalFixedCode
                         ? null
                         : CreateLocalFixedCodeDetailRef(validationResult.LocalFixedCode, code, mode),
-                    result = resultMessage,
+                    returnedData,
+                    returnedDataIncluded,
+                    returnedDataBytes,
+                    returnedDataDetailRef,
+                    result = executionResult.IsExecutionSuccessful ? resultMessage : executionResult.FailureReason ?? resultMessage,
                     failureStage,
+                    errorKind,
                     exceptionType,
                     exceptionMessage,
+                    logCounts = new
+                    {
+                        execution = executionResult.LogCount,
+                        warnings = executionResult.WarningCount,
+                        errors = executionResult.ErrorCount
+                    },
                     validationSummary = new
                     {
                         isCompilationSuccessful = true,
                         localFixedCodeChanged = !string.Equals(validationResult.LocalFixedCode, code, StringComparison.Ordinal),
-                        compilationLogLength = validationResult.CompilationLogs?.Length ?? 0
+                        compilationLogLength = validationResult.CompilationLogs?.Length ?? 0,
+                        compilationLogBytes = compilationLogsBytes,
+                        hasUnauthorizedNamespaceUsage = false
                     }
                 };
             }
             catch (Exception e)
             {
                 failureStage = validationCompleted ? "execution" : "validation";
+                errorKind = validationCompleted ? "execution_exception" : "validation_exception";
                 exceptionType = e.GetType().FullName;
                 exceptionMessage = e.Message;
                 responseMessage = $"UNEXPECTED_ERROR: {e.GetType().Name}: {e.Message}";
+                var shapedCompilationLogs = ShapeLogText("compilation_logs", validationCompleted ? validationResult.CompilationLogs : string.Empty, mode, out var compilationLogsDetailRef, out var compilationLogsTruncated, out var compilationLogsBytes);
+                var shapedExecutionLogs = ShapeLogText("execution_logs", executionResult.ExecutionLogs ?? string.Empty, mode, out var executionLogsDetailRef, out var executionLogsTruncated, out var executionLogsBytes);
+                var shapedConsoleLogs = ShapeLogText("console_logs", executionResult.ConsoleLogs ?? string.Empty, mode, out var consoleLogsDetailRef, out var consoleLogsTruncated, out var consoleLogsBytes);
                 responseData = new
                 {
                     isCompilationSuccessful = validationCompleted && validationResult.IsCompilationSuccessful,
                     isExecutionSuccessful = false,
                     executionId = executionResult.ExecutionId,
-                    compilationLogs = validationCompleted ? validationResult.CompilationLogs : string.Empty,
-                    executionLogs = executionResult.ExecutionLogs ?? string.Empty,
-                    consoleLogs = string.Empty,
+                    compilationLogs = shapedCompilationLogs,
+                    compilationLogsDetailRef,
+                    compilationLogsTruncated,
+                    compilationLogsBytes,
+                    executionLogs = shapedExecutionLogs,
+                    executionLogsDetailRef,
+                    executionLogsTruncated,
+                    executionLogsBytes,
+                    consoleLogs = shapedConsoleLogs,
+                    consoleLogsDetailRef,
+                    consoleLogsTruncated,
+                    consoleLogsBytes,
                     localFixedCode = validationCompleted ? validationResult.LocalFixedCode : string.Empty,
+                    returnedData = (object)null,
+                    returnedDataIncluded = false,
+                    returnedDataBytes = 0,
+                    returnedDataDetailRef = (object)null,
                     result = responseMessage,
                     failureStage,
+                    errorKind,
                     exceptionType,
                     exceptionMessage,
+                    logCounts = new
+                    {
+                        execution = executionResult.LogCount,
+                        warnings = executionResult.WarningCount,
+                        errors = executionResult.ErrorCount
+                    },
                     validationSummary = new
                     {
                         isCompilationSuccessful = validationCompleted && validationResult.IsCompilationSuccessful,
                         localFixedCodeChanged = validationCompleted && !string.Equals(validationResult.LocalFixedCode, code, StringComparison.Ordinal),
-                        compilationLogLength = validationCompleted ? (validationResult.CompilationLogs?.Length ?? 0) : 0
+                        compilationLogLength = validationCompleted ? (validationResult.CompilationLogs?.Length ?? 0) : 0,
+                        compilationLogBytes = compilationLogsBytes,
+                        hasUnauthorizedNamespaceUsage = validationCompleted && validationResult.HasUnauthorizedNamespaceUsage
                     }
                 };
             }
@@ -371,6 +532,87 @@ internal class CommandScript : IRunCommand
                     mode,
                     changed = !string.Equals(localFixedCode, originalCode, StringComparison.Ordinal)
                 });
+        }
+
+        static string ShapeLogText(
+            string kind,
+            string text,
+            string mode,
+            out object detailRef,
+            out bool truncated,
+            out int bytes)
+        {
+            text ??= string.Empty;
+            bytes = PayloadBudgeting.GetUtf8ByteCount(text);
+            string preview = PayloadBudgeting.CreateTextPreview(text, 80, Math.Min(4096, PayloadBudgetPolicy.MaxToolResultBytes), out truncated);
+            detailRef = truncated
+                ? ToolResultCompactor.CreateStoredDetailRef(
+                    ToolName,
+                    text,
+                    bytes,
+                    new
+                    {
+                        kind,
+                        mode,
+                        sha256 = PayloadBudgeting.ComputeSha256(text)
+                    })
+                : null;
+            return preview;
+        }
+
+        static bool TryShapeReturnedData(
+            object returnedData,
+            string mode,
+            out object inlineValue,
+            out bool included,
+            out int bytes,
+            out object detailRef,
+            out string error)
+        {
+            inlineValue = null;
+            included = false;
+            bytes = 0;
+            detailRef = null;
+            error = null;
+
+            if (returnedData == null)
+                return true;
+
+            try
+            {
+                string serialized = JsonConvert.SerializeObject(returnedData, Formatting.None);
+                bytes = PayloadBudgeting.GetUtf8ByteCount(serialized);
+                if (bytes <= PayloadBudgetPolicy.MaxToolResultBytes)
+                {
+                    inlineValue = JsonConvert.DeserializeObject(serialized);
+                    included = true;
+                    return true;
+                }
+
+                detailRef = ToolResultCompactor.CreateStoredDetailRef(
+                    ToolName,
+                    returnedData,
+                    bytes,
+                    new
+                    {
+                        kind = "returned_data",
+                        mode,
+                        sha256 = PayloadBudgeting.ComputeSha256(serialized)
+                    });
+
+                if (detailRef == null)
+                {
+                    inlineValue = JsonConvert.DeserializeObject(serialized);
+                    included = true;
+                }
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                error = ex.Message;
+                return false;
+            }
         }
     }
 }

@@ -255,55 +255,508 @@ function runProcess(command, args, options = {}) {
   });
 }
 
-async function invokeUnityMcpToolJson(projectPath, toolName, toolArguments = {}, options = {}) {
-  const projectRoot = resolveProjectPath(projectPath);
-  const invokeScript = path.join(bridgeScriptsDir, "Invoke-UnityMcpTool.js");
-  const timeoutSeconds = Math.max(1, Number(options.timeoutSeconds || 45));
-  const env = {
-    ...process.env,
-    UNITY_MCP_TOOL_ARGS_JSON: typeof toolArguments === "string" ? toolArguments : JSON.stringify(toolArguments),
-    UNITY_MCP_TOOL_TIMEOUT_MS: String(Math.max(1000, timeoutSeconds * 1000)),
-  };
+function normalizeToolName(value) {
+  return typeof value === "string" ? value.replace(/\./g, "_") : "";
+}
 
-  const expectedReloadState = getUnityExpectedReloadState(projectRoot);
-  if (expectedReloadState.IsActive) {
-    env.UNITY_MCP_EXPECT_RELOAD = "1";
-    if (expectedReloadState.ExpiresAtUtc) {
-      env.UNITY_MCP_EXPECT_RELOAD_UNTIL_UTC = expectedReloadState.ExpiresAtUtc;
+const foundationToolNames = new Set(
+  [
+    "Unity.ListToolPacks",
+    "Unity.SetToolPacks",
+    "Unity.ReadDetailRef",
+    "Unity.GetLensHealth",
+    "Unity.ReadConsole",
+    "Unity.ListResources",
+    "Unity.ReadResource",
+    "Unity.FindInFile",
+    "Unity.GetSha",
+    "Unity.ValidateScript",
+    "Unity.ManageScript_capabilities",
+    "Unity.Project.GetInfo",
+  ].map(normalizeToolName)
+);
+
+const exactPackMap = new Map(
+  Object.entries({
+    Unity_ManageEditor: ["console"],
+    Unity_GetConsoleLogs: ["console"],
+    Unity_ManageMenuItem: ["console"],
+    Unity_RunCommand: ["scripting"],
+    Unity_ManageScript: ["scripting"],
+    Unity_ManageShader: ["scripting"],
+    Unity_Resource_Write: ["scripting", "assets"],
+    Unity_Resource_Delete: ["full"],
+    Unity_ManageAsset: ["assets"],
+    Unity_ImportExternalModel: ["assets"],
+    Unity_Project_ManagePackages: ["full"],
+    Unity_InputSystem_Diagnostics: ["project"],
+    Unity_Project_PackageCompatibility: ["project"],
+    Unity_InputActions_InspectAsset: ["project"],
+    Unity_ProjectSettings_PreviewActiveInputHandler: ["project"],
+    Unity_ProjectSettings_SetActiveInputHandler: ["project"],
+    Unity_Object_ValidateReferences: ["project"],
+    Unity_Project_ScanMissingScripts: ["project"],
+    Unity_Runtime_GetVisualBoundsSnapshot: ["scene"],
+    Unity_GetLensUsageReport: ["debug"],
+  })
+);
+
+const prefixPackMap = [
+  { prefix: "Unity_UI_", packs: ["ui"] },
+  { prefix: "Unity_Scene_", packs: ["scene"] },
+  { prefix: "Unity_ManageGameObject", packs: ["scene"] },
+  { prefix: "Unity_ManageScene", packs: ["scene"] },
+  { prefix: "Unity_Tilemap_", packs: ["scene"] },
+  { prefix: "Unity_Prefab_", packs: ["assets"] },
+  { prefix: "Unity_Asset_", packs: ["assets"] },
+  { prefix: "Unity_Tile_", packs: ["assets"] },
+  { prefix: "Unity_Project_", packs: ["project"] },
+  { prefix: "Unity_Profiler_", packs: ["debug"] },
+];
+
+function normalizeAdditionalPacks(packs = []) {
+  const normalized = [];
+  let fullRequested = false;
+  for (const pack of packs) {
+    const value = String(pack || "").trim();
+    if (!value || value === "foundation") {
+      continue;
     }
-    if (expectedReloadState.Reason) {
-      env.UNITY_MCP_EXPECT_RELOAD_REASON = expectedReloadState.Reason;
+    if (value === "full") {
+      fullRequested = true;
+      continue;
+    }
+    if (!normalized.includes(value)) {
+      normalized.push(value);
     }
   }
 
-  const result = await runProcess(process.execPath, [invokeScript, toolName], {
-    cwd: projectRoot,
-    env,
-    timeoutMs: (timeoutSeconds + 2) * 1000,
-  });
-
-  if (result.timedOut) {
-    if (toolName === "Unity_RunCommand") {
-      throw new Error(
-        `Unity MCP tool '${toolName}' timed out after ${timeoutSeconds} seconds. Verify on-disk or scene state before retrying because Unity may have applied part of the command before the transport died.`
-      );
-    }
-    throw new Error(`Unity MCP tool '${toolName}' timed out after ${timeoutSeconds} seconds.`);
+  if (fullRequested) {
+    return ["full"];
   }
 
-  if (!result.stdout.trim()) {
-    throw new Error(
-      result.stderr.trim()
-        ? `Unity MCP tool '${toolName}' produced no stdout output. stderr: ${result.stderr.trim()}`
-        : `Unity MCP tool '${toolName}' produced no stdout output.`
+  return normalized.slice(0, 2);
+}
+
+function inferRequiredPacks(toolName) {
+  const normalizedToolName = normalizeToolName(toolName);
+  if (!normalizedToolName || foundationToolNames.has(normalizedToolName)) {
+    return [];
+  }
+
+  const requiredPacks = new Set();
+  const exactPacks = exactPackMap.get(normalizedToolName);
+  if (Array.isArray(exactPacks)) {
+    for (const pack of exactPacks) {
+      requiredPacks.add(pack);
+    }
+  }
+
+  for (const entry of prefixPackMap) {
+    if (normalizedToolName.startsWith(entry.prefix)) {
+      for (const pack of entry.packs) {
+        requiredPacks.add(pack);
+      }
+    }
+  }
+
+  return normalizeAdditionalPacks(Array.from(requiredPacks));
+}
+
+function isReconnectableUnityMcpError(error) {
+  const message = String(error?.message || "").toLowerCase();
+  return (
+    message.includes("transport closed") ||
+    message.includes("connection closed") ||
+    message.includes("disconnected") ||
+    message.includes("disposed object") ||
+    message.includes("timed out waiting for unity mcp response") ||
+    message.includes("timed out waiting for response") ||
+    message.includes("exited before tool response") ||
+    message.includes("produced no stdout output") ||
+    message.includes("broken pipe")
+  );
+}
+
+function buildUnityMcpTimeoutError(toolName, timeoutSeconds) {
+  if (toolName === "Unity_RunCommand") {
+    return new Error(
+      `Unity MCP tool '${toolName}' timed out after ${timeoutSeconds} seconds. Verify on-disk or scene state before retrying because Unity may have applied part of the command before the transport died.`
     );
   }
 
-  try {
-    return JSON.parse(result.stdout);
-  } catch (error) {
-    throw new Error(`Failed to parse Unity MCP output for '${toolName}': ${error.message}`);
+  return new Error(`Unity MCP tool '${toolName}' timed out after ${timeoutSeconds} seconds.`);
+}
+
+function writeFramedMessage(child, payload) {
+  const body = Buffer.from(JSON.stringify(payload), "utf8");
+  child.stdin.write(`Content-Length: ${body.length}\r\n\r\n`);
+  child.stdin.write(body);
+}
+
+class UnityMcpLensSession {
+  constructor(projectPath) {
+    this.projectRoot = resolveProjectPath(projectPath);
+    this.child = null;
+    this.buffer = Buffer.alloc(0);
+    this.stderrChunks = [];
+    this.pending = new Map();
+    this.nextRequestId = 1;
+    this.initializePromise = null;
+    this.currentAdditionalPacks = new Set();
+    this.desiredAdditionalPacks = new Set();
+    this.packSetupPromise = null;
   }
+
+  async ensureStarted(timeoutMs = 30000) {
+    if (this.child && !this.initializePromise) {
+      return;
+    }
+    if (this.initializePromise) {
+      return await this.initializePromise;
+    }
+
+    const lensBinary = getLensBinaryState();
+    if (!lensBinary.exists) {
+      throw new Error(
+        `Unity MCP Lens server not found at '${lensBinary.path}'. Reinstall or republish unity-mcp-lens before running helper scripts.`
+      );
+    }
+    if (!lensBinary.executable) {
+      throw new Error(`Unity MCP Lens server exists but is not executable at '${lensBinary.path}'.`);
+    }
+
+    this.child = spawn(lensBinary.path, [], {
+      cwd: this.projectRoot,
+      stdio: ["pipe", "pipe", "pipe"],
+      windowsHide: true,
+    });
+    this.buffer = Buffer.alloc(0);
+    this.stderrChunks = [];
+
+    this.child.stdout.on("data", (chunk) => {
+      this.buffer = Buffer.concat([this.buffer, chunk]);
+      this.parseFrames();
+    });
+
+    this.child.stderr.on("data", (chunk) => {
+      this.stderrChunks.push(chunk);
+    });
+
+    this.child.on("error", (error) => {
+      this.handleTransportClosed(`Failed to start unity-mcp-lens: ${error.message}`);
+    });
+
+    this.child.on("exit", (code) => {
+      const stderrText = Buffer.concat(this.stderrChunks).toString("utf8").trim();
+      const message = stderrText || `unity-mcp-lens exited before tool response (code ${code || 1}).`;
+      this.handleTransportClosed(message);
+    });
+
+    this.initializePromise = (async () => {
+      try {
+        const initResponse = await this.sendRequest(
+          "initialize",
+          {
+            protocolVersion: "2025-06-18",
+            capabilities: {},
+            clientInfo: {
+              name: "codex-unity-tool-lens",
+              version: "1.0.0",
+            },
+          },
+          timeoutMs
+        );
+
+        if (initResponse?.error) {
+          throw new Error(initResponse.error.message || "Failed to initialize unity-mcp-lens.");
+        }
+
+        this.sendNotification("notifications/initialized", {});
+
+        const desiredPacks = normalizeAdditionalPacks(Array.from(this.desiredAdditionalPacks));
+        if (desiredPacks.length > 0) {
+          const response = await this.sendToolCallRequest("Unity_SetToolPacks", { packs: desiredPacks }, timeoutMs);
+          const outcome = getToolObject(response);
+          if (outcome?.success === false) {
+            throw new Error(
+              `Failed to restore required Lens packs [${desiredPacks.join(", ")}]: ${outcome.error || outcome.message || "Unknown error."}`
+            );
+          }
+          this.currentAdditionalPacks = new Set(desiredPacks);
+        }
+      } finally {
+        this.initializePromise = null;
+      }
+    })();
+
+    return await this.initializePromise;
+  }
+
+  sendNotification(method, params) {
+    if (!this.child) {
+      return;
+    }
+    writeFramedMessage(this.child, {
+      jsonrpc: "2.0",
+      method,
+      params,
+    });
+  }
+
+  sendRequest(method, params, timeoutMs = 30000) {
+    if (!this.child) {
+      return Promise.reject(new Error("unity-mcp-lens session is not connected."));
+    }
+
+    const id = this.nextRequestId++;
+    return new Promise((resolve, reject) => {
+      const timeoutHandle = setTimeout(() => {
+        this.pending.delete(id);
+        reject(new Error(`Timed out waiting for Unity MCP response to '${method}'.`));
+      }, Math.max(1000, Number(timeoutMs || 30000)));
+
+      this.pending.set(id, {
+        resolve,
+        reject,
+        timeoutHandle,
+      });
+
+      writeFramedMessage(this.child, {
+        jsonrpc: "2.0",
+        id,
+        method,
+        params,
+      });
+    });
+  }
+
+  parseFrames() {
+    while (true) {
+      const separator = this.buffer.indexOf(Buffer.from("\r\n\r\n"));
+      if (separator === -1) {
+        return;
+      }
+
+      const header = this.buffer.subarray(0, separator).toString("ascii");
+      const match = /Content-Length:\s*(\d+)/i.exec(header);
+      if (!match) {
+        this.handleTransportClosed("Missing Content-Length header from unity-mcp-lens.");
+        return;
+      }
+
+      const contentLength = Number(match[1]);
+      const messageEnd = separator + 4 + contentLength;
+      if (this.buffer.length < messageEnd) {
+        return;
+      }
+
+      const body = this.buffer.subarray(separator + 4, messageEnd).toString("utf8");
+      this.buffer = this.buffer.subarray(messageEnd);
+
+      let message;
+      try {
+        message = JSON.parse(body);
+      } catch (error) {
+        this.handleTransportClosed(`Invalid JSON message from unity-mcp-lens: ${error.message}`);
+        return;
+      }
+
+      if (message?.id != null && this.pending.has(message.id)) {
+        const pending = this.pending.get(message.id);
+        this.pending.delete(message.id);
+        clearTimeout(pending.timeoutHandle);
+        pending.resolve(message);
+      }
+    }
+  }
+
+  handleTransportClosed(message) {
+    if (this.child) {
+      try {
+        this.child.kill();
+      } catch (_error) {
+      }
+    }
+    this.child = null;
+    this.buffer = Buffer.alloc(0);
+    this.initializePromise = null;
+    this.packSetupPromise = null;
+
+    const error = new Error(message);
+    for (const [id, pending] of this.pending.entries()) {
+      clearTimeout(pending.timeoutHandle);
+      pending.reject(error);
+      this.pending.delete(id);
+    }
+  }
+
+  async restart() {
+    this.handleTransportClosed("unity-mcp-lens session restart requested.");
+    await sleep(1500);
+  }
+
+  async dispose() {
+    this.desiredAdditionalPacks.clear();
+    this.currentAdditionalPacks.clear();
+    this.handleTransportClosed("unity-mcp-lens session closed.");
+  }
+
+  async callToolRaw(toolName, toolArguments = {}, timeoutMs = 30000) {
+    await this.ensureStarted(timeoutMs);
+    return await this.sendToolCallRequest(toolName, toolArguments, timeoutMs);
+  }
+
+  async sendToolCallRequest(toolName, toolArguments = {}, timeoutMs = 30000) {
+    return await this.sendRequest(
+      "tools/call",
+      {
+        name: toolName,
+        arguments: toolArguments,
+      },
+      timeoutMs
+    );
+  }
+
+  async setAdditionalPacksRaw(packs, timeoutMs = 30000) {
+    const normalizedPacks = normalizeAdditionalPacks(packs);
+    const response = await this.sendToolCallRequest("Unity_SetToolPacks", { packs: normalizedPacks }, timeoutMs);
+    const outcome = getToolObject(response);
+    if (outcome?.success === false) {
+      throw new Error(
+        `Failed to activate required Lens packs [${normalizedPacks.join(", ")}]: ${outcome.error || outcome.message || "Unknown error."}`
+      );
+    }
+    this.currentAdditionalPacks = new Set(normalizedPacks);
+    return response;
+  }
+
+  async ensureAdditionalPacks(packs, timeoutMs = 30000) {
+    const normalizedPacks = normalizeAdditionalPacks(packs);
+    if (normalizedPacks.length === 0) {
+      return;
+    }
+
+    const desiredPacks = normalizeAdditionalPacks([
+      ...Array.from(this.desiredAdditionalPacks),
+      ...normalizedPacks,
+    ]);
+    this.desiredAdditionalPacks = new Set(desiredPacks);
+
+    const currentPacks = normalizeAdditionalPacks(Array.from(this.currentAdditionalPacks));
+    if (JSON.stringify(currentPacks) === JSON.stringify(desiredPacks)) {
+      return;
+    }
+
+    if (!this.packSetupPromise) {
+      this.packSetupPromise = this.ensureStarted(timeoutMs)
+        .then(() => {
+          const activePacks = normalizeAdditionalPacks(Array.from(this.currentAdditionalPacks));
+          if (JSON.stringify(activePacks) === JSON.stringify(desiredPacks)) {
+            return null;
+          }
+          return this.setAdditionalPacksRaw(desiredPacks, timeoutMs);
+        })
+        .finally(() => {
+          this.packSetupPromise = null;
+        });
+    }
+
+    await this.packSetupPromise;
+  }
+}
+
+const unityMcpSessions = new Map();
+let unityMcpSessionCleanupRegistered = false;
+
+function ensureUnityMcpSessionCleanup() {
+  if (unityMcpSessionCleanupRegistered) {
+    return;
+  }
+
+  unityMcpSessionCleanupRegistered = true;
+  process.once("exit", () => {
+    for (const session of unityMcpSessions.values()) {
+      session.dispose().catch(() => {});
+    }
+    unityMcpSessions.clear();
+  });
+}
+
+function getUnityMcpSession(projectPath) {
+  ensureUnityMcpSessionCleanup();
+  const projectRoot = resolveProjectPath(projectPath);
+  const key = normalizeProjectRootForCompare(projectRoot);
+  if (!unityMcpSessions.has(key)) {
+    unityMcpSessions.set(key, new UnityMcpLensSession(projectRoot));
+  }
+  return unityMcpSessions.get(key);
+}
+
+async function ensureUnityToolPacks(projectPath, packs = [], options = {}) {
+  const session = getUnityMcpSession(projectPath);
+  await session.ensureAdditionalPacks(packs, Math.max(5000, Number(options.timeoutSeconds || 30) * 1000));
+}
+
+async function resetUnityMcpSession(projectPath) {
+  const projectRoot = resolveProjectPath(projectPath);
+  const key = normalizeProjectRootForCompare(projectRoot);
+  const session = unityMcpSessions.get(key);
+  if (!session) {
+    return;
+  }
+  await session.dispose();
+  unityMcpSessions.delete(key);
+}
+
+async function shutdownUnityMcpSessions() {
+  const sessions = Array.from(unityMcpSessions.values());
+  unityMcpSessions.clear();
+  for (const session of sessions) {
+    try {
+      await session.dispose();
+    } catch (_error) {
+    }
+  }
+}
+
+async function invokeUnityMcpToolJson(projectPath, toolName, toolArguments = {}, options = {}) {
+  const projectRoot = resolveProjectPath(projectPath);
+  const timeoutSeconds = Math.max(1, Number(options.timeoutSeconds || 45));
+  const expectedReloadState = getUnityExpectedReloadState(projectRoot);
+  const allowReconnect = options.allowReconnect === true || expectedReloadState.IsActive;
+  const maxAttempts = allowReconnect ? 2 : 1;
+  const retryDelayMs = Math.max(250, Number(options.retryDelayMs || 1500));
+  const requiredPacks = normalizeAdditionalPacks(options.requiredPacks || inferRequiredPacks(toolName));
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const session = getUnityMcpSession(projectRoot);
+    try {
+      if (requiredPacks.length > 0 && normalizeToolName(toolName) !== normalizeToolName("Unity.SetToolPacks")) {
+        await session.ensureAdditionalPacks(requiredPacks, Math.max(15000, timeoutSeconds * 1000));
+      }
+
+      return await session.callToolRaw(toolName, toolArguments, Math.max(1000, timeoutSeconds * 1000));
+    } catch (error) {
+      const normalizedError = error instanceof Error ? error : new Error(String(error));
+      const lowerMessage = normalizedError.message.toLowerCase();
+      const timedOut =
+        lowerMessage.includes("timed out waiting for unity mcp response") ||
+        lowerMessage.includes("timed out waiting for response");
+      if (timedOut) {
+        throw buildUnityMcpTimeoutError(toolName, timeoutSeconds);
+      }
+
+      if (attempt >= maxAttempts || !isReconnectableUnityMcpError(normalizedError)) {
+        throw normalizedError;
+      }
+
+      await session.restart();
+      await sleep(retryDelayMs);
+    }
+  }
+
+  throw new Error(`Unity MCP tool '${toolName}' failed without a response.`);
 }
 
 function getToolObject(response) {
@@ -348,6 +801,16 @@ async function getUnityEditorState(projectPath, timeoutSeconds = 30) {
     projectPath,
     "Unity_ManageEditor",
     { Action: "GetState" },
+    { timeoutSeconds }
+  );
+  return getToolObject(response);
+}
+
+async function getUnityCompactEditorState(projectPath, timeoutSeconds = 30) {
+  const response = await invokeUnityMcpToolJson(
+    projectPath,
+    "Unity_ManageEditor",
+    { Action: "GetCompactState" },
     { timeoutSeconds }
   );
   return getToolObject(response);
@@ -1092,7 +1555,7 @@ async function waitUnityEditorIdle(projectPath, options = {}) {
 
   while (Date.now() < deadline) {
     try {
-      const state = await getUnityEditorState(projectPath, 20);
+      const state = await getUnityCompactEditorState(projectPath, 20);
       lastState = state;
       const snapshot = getUnityReadinessSnapshot(state);
       const reloadState = getUnityExpectedReloadState(projectPath);
@@ -1123,7 +1586,7 @@ async function waitUnityEditorIdle(projectPath, options = {}) {
             attempts,
             lastState,
             beaconWait,
-            source: beaconWait ? "EditorStatusBeacon.WaitStable+DirectEditorState" : "DirectEditorState",
+            source: beaconWait ? "EditorStatusBeacon.WaitStable+Unity_ManageEditor.GetCompactState" : "Unity_ManageEditor.GetCompactState",
           };
         }
       } else {
@@ -1163,7 +1626,7 @@ async function waitUnityEditorIdle(projectPath, options = {}) {
     lastState,
     lastError,
     beaconWait,
-    source: beaconWait ? "EditorStatusBeacon.WaitStable+DirectEditorState" : "DirectEditorState",
+    source: beaconWait ? "EditorStatusBeacon.WaitStable+Unity_ManageEditor.GetCompactState" : "Unity_ManageEditor.GetCompactState",
   };
 }
 
@@ -1178,7 +1641,7 @@ async function waitUnityCompileOrUpdateStart(projectPath, options = {}) {
 
   while (Date.now() < deadline) {
     try {
-      const state = await getUnityEditorState(projectPath, 15);
+      const state = await getUnityCompactEditorState(projectPath, 15);
       lastState = state;
       const snapshot = getUnityReadinessSnapshot(state);
       const reloadState = getUnityExpectedReloadState(projectPath);
@@ -1325,7 +1788,7 @@ async function waitUnityPlayReady(projectPath, options = {}) {
         continue;
       }
 
-      const state = await getUnityEditorState(projectPath, 15);
+      const state = await getUnityCompactEditorState(projectPath, 15);
       lastState = state;
       const snapshot = getUnityReadinessSnapshot(state);
       const timeAdvanced = previousUnscaledTime != null && snapshot.RuntimeProbeUnscaledTime > previousUnscaledTime;
@@ -1664,6 +2127,93 @@ function getCompactEditorStateSummary(editorState) {
     ActiveSceneName: valueOf(probe, "ActiveSceneName", "activeSceneName") || null,
     RuntimeProbeReady: !!probe && boolOf(probe, "IsAvailable", "isAvailable") && boolOf(probe, "HasAdvancedFrames", "hasAdvancedFrames"),
     RuntimeUpdateCount: Number(valueOf(probe, "UpdateCount", "updateCount") || 0),
+  };
+}
+
+async function testUnityDirectEditorHealthy(projectPath, options = {}) {
+  const timeoutSeconds = options.timeoutSeconds ?? 20;
+  const consecutiveHealthyPolls = options.consecutiveHealthyPolls ?? 2;
+  const pollIntervalSeconds = options.pollIntervalSeconds ?? 0.5;
+  const deadline = Date.now() + Math.max(1, timeoutSeconds) * 1000;
+  const attempts = [];
+  let consecutiveHealthyObserved = 0;
+  let lastState = null;
+  let lastLensHealth = null;
+  let lastError = null;
+
+  await resetUnityMcpSession(projectPath);
+
+  while (Date.now() < deadline) {
+    try {
+      const lensHealth = await getUnityLensHealth(projectPath, Math.max(8, Math.ceil(pollIntervalSeconds * 4)));
+      const state = await getUnityCompactEditorState(projectPath, 15);
+      lastLensHealth = lensHealth;
+      lastState = state;
+
+      const snapshot = getUnityReadinessSnapshot(state);
+      const lensData = valueOf(lensHealth, "data", "Data") || {};
+      const bridgeStatus = valueOf(valueOf(lensData, "bridgeStatus", "BridgeStatus") || {}, "status", "Status") || null;
+      const editorStable = valueOf(valueOf(lensData, "editorStability", "EditorStability") || {}, "isStable", "IsStable") === true;
+      const expectedRecoveryActive = valueOf(valueOf(lensData, "expectedRecovery", "ExpectedRecovery") || {}, "isActive", "IsActive") === true;
+      const healthy =
+        valueOf(lensHealth, "success", "Success") === true &&
+        bridgeStatus === "ready" &&
+        editorStable &&
+        !expectedRecoveryActive &&
+        snapshot.Success === true &&
+        snapshot.IdleReady === true;
+
+      attempts.push({
+        ...snapshot,
+        LensHealthSuccess: valueOf(lensHealth, "success", "Success") === true,
+        LensBridgeStatus: bridgeStatus,
+        LensEditorStable: editorStable,
+        LensExpectedRecoveryActive: expectedRecoveryActive,
+      });
+
+      if (healthy) {
+        consecutiveHealthyObserved += 1;
+        if (consecutiveHealthyObserved >= consecutiveHealthyPolls) {
+          return {
+            success: true,
+            message: "Lens helper recovery probes are healthy and the Unity editor is idle.",
+            timeoutSeconds,
+            pollIntervalSeconds,
+            consecutiveHealthyPollsRequired: consecutiveHealthyPolls,
+            consecutiveHealthyObserved,
+            attempts,
+            lastState,
+            lastLensHealth,
+            lastError,
+          };
+        }
+      } else {
+        consecutiveHealthyObserved = 0;
+      }
+    } catch (error) {
+      lastError = error.message;
+      consecutiveHealthyObserved = 0;
+      attempts.push({
+        Timestamp: nowIso(),
+        Success: false,
+        Error: lastError,
+      });
+    }
+
+    await sleep(pollIntervalSeconds * 1000);
+  }
+
+  return {
+    success: false,
+    message: "Lens helper recovery probes did not reach a stable idle state before timeout.",
+    timeoutSeconds,
+    pollIntervalSeconds,
+    consecutiveHealthyPollsRequired: consecutiveHealthyPolls,
+    consecutiveHealthyObserved,
+    attempts,
+    lastState,
+    lastLensHealth,
+    lastError,
   };
 }
 
@@ -2023,11 +2573,16 @@ module.exports = {
   writeJsonFile,
   pathExists,
   getLensBinaryState,
+  inferRequiredPacks,
+  ensureUnityToolPacks,
+  resetUnityMcpSession,
+  shutdownUnityMcpSessions,
   invokeUnityMcpToolJson,
   getToolObject,
   valueOf,
   boolOf,
   getUnityEditorState,
+  getUnityCompactEditorState,
   getUnityConsoleEntries,
   convertToUnityRunCommandScript,
   invokeUnityRunCommandObject,
@@ -2051,6 +2606,7 @@ module.exports = {
   tailFile,
   getUnityAssistantPackageState,
   getCompactEditorStateSummary,
+  testUnityDirectEditorHealthy,
   checkUnityMcp,
   escapeCSharpString,
   newUnityArtifactDirectory,

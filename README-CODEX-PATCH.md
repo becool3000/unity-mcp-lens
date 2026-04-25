@@ -20,6 +20,18 @@ Codex MCP settings should launch the Lens binary directly with no arguments, or 
 node .agents/plugins/lens-dev-plugin/skills/unity-mcp-bridge/scripts/Launch-UnityMcpLens.js
 ```
 
+For Unity workflow health checks, use the `unity-dev-assistant` helper path:
+
+```powershell
+.agents/plugins/lens-dev-plugin/skills/unity-dev-assistant/scripts/Check-UnityDevSession.ps1
+```
+
+or on macOS/Linux:
+
+```bash
+node .agents/plugins/lens-dev-plugin/skills/unity-dev-assistant/scripts/Check-UnityDevSession.js
+```
+
 ## Important Constraints
 
 - Keep helper scripts on the Lens path.
@@ -27,6 +39,65 @@ node .agents/plugins/lens-dev-plugin/skills/unity-mcp-bridge/scripts/Launch-Unit
 - Keep the default pack surface narrow and expand packs explicitly.
 - Use `Unity.ReadDetailRef` only when a compact preview is insufficient.
 - Treat Unity compile/import/reload windows as expected recovery windows, not as reasons to spam tool discovery.
+- Treat `Check-UnityDevSession` as a split signal: `ProceedWithLensHelpers` means the helper path is healthy, while `ProceedWithDirectLensTools` means direct MCP is healthy and only the wrapper path is degraded.
+- Prefer the Phase 11 `project` tools for package/import/Input System and active input handler work before custom `Unity_RunCommand` probes, raw `Editor.log` grep, or YAML edits.
+- Prefer the Phase 12 `ui` and split `scene` binding tools for persistent HUD hierarchy, serialized scene references, and screen-layout verification before custom `Unity_RunCommand` editor scripts.
+- Prefer helper-driven `Invoke-UnityRunCommand` for runtime probes now that it can bypass idle-wait gating in healthy play mode and preserve structured `ReturnResult(...)` payloads.
+- Keep `foundation` at `12` exported tools, `foundation + scene` at `32`, and `foundation + ui` at `22` unless a deliberate pack-surface change updates the metadata audit.
+
+## Current Tool Surface Reality
+
+- `foundation` is the default and always active.
+- `scene` contains the Phase 8 split GameObject TSAM surface.
+- `scene` also contains the Phase 12 serialized-reference preview/apply binding pair.
+- `ui` contains the Phase 12 split UI hierarchy/layout authoring tools plus read-only screen-layout verification.
+- `project` contains project/package/import diagnostics, missing script/reference checks, Input System diagnostics, input-action asset inspection, package compatibility, and active input handler preview/apply.
+- `debug` contains usage reporting through `Unity.GetLensUsageReport`.
+- `Unity.ManageGameObject` remains a compatibility fallback for uncovered split-tool behavior.
+- Helper scripts are still important for orchestration-heavy flows such as session checks, script sync, play-mode entry, and long-running build/reload monitoring.
+
+## Current Dogfood Priorities
+
+- Reduce helper-script session/setup churn and repeated schema requests.
+- Fix payload shaping for large `Unity.ManageEditor` and tool snapshot rows.
+- Reduce noisy repeated package/editor-log signals so healthy compatibility reads stay high signal.
+- Keep `Unity.ProjectSettings.PreviewActiveInputHandler` and `Unity.ProjectSettings.SetActiveInputHandler` as the editor-authored backend change path.
+- Keep `Unity.Project.PackageCompatibility` and `Unity.InputActions.InspectAsset` as the preferred package/import read surface before raw `Editor.log` grep.
+- Improve `Unity.RunCommand` failure-stage metadata, detail refs, and structured `ReturnResult(...)` output.
+- Add reliable restart/reload orchestration with save/dirty handling and bridge reacquire.
+- Dogfood the new Phase 12 UI authoring/binding/verification path on a real host project without custom editor C#.
+
+## Latest Completed Smoke
+
+The 2026-04-24 smoke against `D:\2DUnityNewGame` on Unity `6000.4.3f1` passed
+with a residual payload-shaping warning. Metadata audit passed with `foundation=12`, `foundation+scene=30`,
+`project=21`, and `debug=22`. `Unity.Project.PackageCompatibility`,
+`Unity.InputActions.InspectAsset`, `Unity.InputSystem.Diagnostics`, and the
+active input handler preview/set tools all emitted complete TSAM stage coverage
+with zero failure classes.
+
+Highlights from that smoke:
+
+- Package compatibility reported `com.unity.inputsystem@1.17.0` with matching manifest and registered versions.
+- Input-action inspection returned concrete wrapper metadata:
+  `generateWrapperCode=false`, `wrapperClassName=SandPrototypeControls`,
+  `wrapperCodePath=Assets/Scripts/SandPrototype/SandPrototypeControls.cs`.
+- Compact compatibility summary now collapses repeated `Unity.InputSystem.IntegrationTests.dll` skip lines into one informational issue with overall status `ok`.
+- No-op active input handler preview/apply now returns `restartRequired=false`.
+- Post-smoke usage reporting now excludes its own in-flight request, so the final `Unity_GetLensUsageReport` call does not appear as unmatched.
+
+Latest Phase 12 hardening smoke on 2026-04-25:
+
+- Metadata audit passed with `foundation=12`, `foundation+scene=32`, `foundation+ui=22`, `project=21`, and `debug=22`.
+- `Sync-UnityScriptChanges.ps1` recovered through a transient `console` pack timeout by falling back to direct Lens health and compact editor-state probes instead of failing the workflow.
+- Helper-driven `Ensure-UnityUiHierarchy.ps1`, `Bind-UnitySceneSerializedReferences.ps1`, and `Set-UnityUiLayout.ps1` all no-op cleanly with `applied=false` and `willModify=false` on the existing quick-select HUD.
+- `Verify-UnityUiScreenLayout.ps1` passed in play mode using `inside_screen`, `ordered_stack`, and the new `below_center` relation for slot count labels.
+- `Invoke-UnityRunCommand.ps1` now bypasses idle wait in healthy play mode, returns `playModeBypass.applied=true`, and surfaced structured `returnedData` with `panelIsRightOfMap=true` and `panelGapFromMap=24`.
+
+Remaining follow-ups:
+
+- Payload telemetry still reports `NoShapingRecorded=true` for the focused helper-driven scope.
+- Helper/session churn is lower than earlier runs but still nontrivial, and the remaining failure row in the focused scope is a `Unity_ManageEditor` disposed-transport response during a reconnect-prone play transition.
 
 ## Maintenance
 
@@ -37,6 +108,14 @@ powershell -ExecutionPolicy Bypass -File Tools~/Test-McpPackageIdentity.ps1
 powershell -ExecutionPolicy Bypass -File Tools~/Test-McpStandaloneBoundary.ps1
 powershell -ExecutionPolicy Bypass -File Tools~/Test-McpToolOwnership.ps1
 powershell -ExecutionPolicy Bypass -File Tools~/Test-McpLensPresentation.ps1
+```
+
+For live tool-pack metadata, schema, read-only annotations, and required-tool
+coverage, run the pack-switch helper app in metadata audit mode against an idle
+Unity host project:
+
+```powershell
+dotnet run --project Tools~/UnityMcpLensPackSwitchBenchApp~/UnityMcpLensPackSwitchBench.csproj -c Release -p:UseAppHost=false -- --project-path C:\Path\To\UnityProject --server-path C:\Users\<you>\.unity\unity-mcp-lens\unity_mcp_lens_win.exe --metadata-audit
 ```
 
 ## Repo-local Codex Plugin

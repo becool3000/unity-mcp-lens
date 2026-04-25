@@ -5,13 +5,13 @@
 Add Unity MCP Lens to a Unity project's `Packages/manifest.json`:
 
 ```json
-"com.becool3000.unity-mcp-lens": "file:C:/UnityAIAssistantPatch"
+"com.becool3000.unity-mcp-lens": "file:C:/dev/unity-mcp-lens"
 ```
 
 Use a relative path if your project and package checkout live near each other:
 
 ```json
-"com.becool3000.unity-mcp-lens": "file:../UnityAIAssistantPatch"
+"com.becool3000.unity-mcp-lens": "file:../unity-mcp-lens"
 ```
 
 ## Configure the MCP server
@@ -25,6 +25,10 @@ The Lens server installs to:
 ```
 
 The preferred MCP client entry is `unity-mcp-lens`, launched directly without `--mcp`.
+
+The default model-facing tool surface is the `foundation` pack. Use
+`Unity.ListToolPacks` and `Unity.SetToolPacks` to expand temporarily for
+project, scene, scripting, assets, UI, console, or debug work.
 
 ## Relationship to the official Assistant package
 

@@ -1,6 +1,6 @@
 {
   "name": "lens-dev-plugin",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Unity MCP Lens development workflow bundle for Codex.",
   "author": {
     "name": "kanaw",

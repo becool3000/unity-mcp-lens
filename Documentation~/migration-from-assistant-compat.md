@@ -3,13 +3,13 @@
 Earlier Lens builds were consumed through the official Assistant package id. Standalone Lens uses its own package id:
 
 ```json
-"com.becool3000.unity-mcp-lens": "file:C:/UnityAIAssistantPatch"
+"com.becool3000.unity-mcp-lens": "file:C:/dev/unity-mcp-lens"
 ```
 
 Remove the old local dependency entry if present:
 
 ```json
-"com.unity.ai.assistant": "file:C:/UnityAIAssistantPatch"
+"com.unity.ai.assistant": "file:C:/dev/unity-mcp-lens"
 ```
 
 ## Settings migration

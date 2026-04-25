@@ -129,13 +129,36 @@ async function main() {
   } finally {
     result.durationSeconds = Math.round(((Date.now() - startedAt) / 1000) * 1000) / 1000;
     result.expectedReloadState = common.getUnityExpectedReloadState(projectPath, true);
+
+    if (!result.success) {
+      try {
+        const directHealth = await common.testUnityDirectEditorHealthy(projectPath, {
+          timeoutSeconds: 20,
+          consecutiveHealthyPolls: 2,
+          pollIntervalSeconds: common.getArgNumber(args, ["PollIntervalSeconds"], 0.5),
+        });
+        result.directHealthFallback = directHealth;
+
+        if (directHealth.success) {
+          result.success = true;
+          result.fallbackClassification = "LensHelpersRecovered";
+          result.message = "Lens helper sync recovered: direct Lens health and compact editor-state probes are healthy and idle.";
+          if (!result.editorIdle) {
+            result.editorIdle = directHealth;
+          }
+          common.clearUnityExpectedReloadState(projectPath);
+        }
+      } catch (_error) {
+      }
+    }
   }
 
   console.log(JSON.stringify(result, null, 2));
+  await common.shutdownUnityMcpSessions();
   process.exit(result.success ? 0 : 1);
 }
 
 main().catch((error) => {
   console.error(error.message);
-  process.exit(1);
+  common.shutdownUnityMcpSessions().finally(() => process.exit(1));
 });

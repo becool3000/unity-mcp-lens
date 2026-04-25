@@ -72,8 +72,6 @@ namespace Becool.UnityMcpLens.Editor.Lens
 
         static string NormalizeToolName(string toolName) => McpToolRegistry.NormalizeToolName(toolName) ?? string.Empty;
 
-        static string NormalizeToolPrefix(string toolPrefix) => McpToolRegistry.NormalizeToolName(toolPrefix) ?? string.Empty;
-
         static readonly string[] k_FoundationToolNames =
         {
             NormalizeToolName(GetLensHealthToolName),
@@ -108,7 +106,7 @@ namespace Becool.UnityMcpLens.Editor.Lens
             [ProjectPackId] = new(
                 ProjectPackId,
                 "Project Diagnostics",
-                "Project-wide scans, guidelines, and lightweight validation.",
+                "Project-wide scans, package/import diagnostics, guidelines, and lightweight validation.",
                 includeGroups: new[] { "project", "validation" },
                 includeTools: new[] { NormalizeToolName("Unity.Project.GetInfo"), NormalizeToolName("Unity.Project.GetPackages") },
                 recommendedNextPacks: new[] { ScriptingPackId, AssetsPackId }),
@@ -120,8 +118,8 @@ namespace Becool.UnityMcpLens.Editor.Lens
                 recommendedNextPacks: new[] { UiPackId, DebugPackId }),
             [UiPackId] = new(
                 UiPackId,
-                "UI Inspection",
-                "UI hierarchy, raycasts, regions, and capture tools.",
+                "UI Authoring",
+                "UI hierarchy authoring, layout verification, raycasts, regions, and capture tools.",
                 includeGroups: new[] { "ui" },
                 recommendedNextPacks: new[] { ScenePackId, DebugPackId }),
             [ScriptingPackId] = new(
@@ -302,23 +300,7 @@ namespace Becool.UnityMcpLens.Editor.Lens
 
         public static bool IsReadOnlyHint(string toolName)
         {
-            if (string.IsNullOrWhiteSpace(toolName))
-                return false;
-
-            var normalizedToolName = NormalizeToolName(toolName);
-            return normalizedToolName.StartsWith(NormalizeToolPrefix("Unity.Read"), StringComparison.OrdinalIgnoreCase) ||
-                normalizedToolName.StartsWith(NormalizeToolPrefix("Unity.Get"), StringComparison.OrdinalIgnoreCase) ||
-                normalizedToolName.StartsWith(NormalizeToolPrefix("Unity.List"), StringComparison.OrdinalIgnoreCase) ||
-                normalizedToolName.StartsWith(NormalizeToolPrefix("Unity.Find"), StringComparison.OrdinalIgnoreCase) ||
-                normalizedToolName.StartsWith(NormalizeToolPrefix("Unity.Validate"), StringComparison.OrdinalIgnoreCase) ||
-                normalizedToolName.StartsWith(NormalizeToolPrefix("Unity.Object.Validate"), StringComparison.OrdinalIgnoreCase) ||
-                normalizedToolName.StartsWith(NormalizeToolPrefix("Unity.Project.Scan"), StringComparison.OrdinalIgnoreCase) ||
-                normalizedToolName.StartsWith(NormalizeToolPrefix("Unity.Runtime.Get"), StringComparison.OrdinalIgnoreCase) ||
-                normalizedToolName.StartsWith(NormalizeToolPrefix("Unity.UI.Get"), StringComparison.OrdinalIgnoreCase) ||
-                normalizedToolName.StartsWith(NormalizeToolPrefix("Unity.UI.Raycast"), StringComparison.OrdinalIgnoreCase) ||
-                normalizedToolName.StartsWith(NormalizeToolPrefix("Unity.Asset.Search"), StringComparison.OrdinalIgnoreCase) ||
-                normalizedToolName.StartsWith(NormalizeToolPrefix("Unity.Project.Get"), StringComparison.OrdinalIgnoreCase) ||
-                normalizedToolName.StartsWith(NormalizeToolPrefix("Unity.Profiler.Query"), StringComparison.OrdinalIgnoreCase);
+            return ToolMetadataPolicy.IsReadOnlyHint(toolName);
         }
 
         static bool MatchesDefinition(ToolPackDefinition definition, string toolName, IReadOnlyCollection<string> groups)

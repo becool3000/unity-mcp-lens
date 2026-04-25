@@ -42,12 +42,14 @@ namespace Becool.UnityMcpLens.Editor.Tools.RunCommandSupport
         public static readonly Regex PlaceholderRegex = new(@"^(\d+)(?:,(-?\d+))?(?::(.+))?$", RegexOptions.Compiled);
 
         int m_UndoGroup;
+        bool m_HasUndoGroup;
 
         public int Id = 1;
         public readonly string CommandName;
         public List<ExecutionLog> Logs = new();
         public string ConsoleLogs;
         public bool SuccessfullyStarted;
+        public object ReturnedData;
 
         public ExecutionResult(string commandName) => CommandName = commandName;
 
@@ -96,21 +98,40 @@ namespace Becool.UnityMcpLens.Editor.Tools.RunCommandSupport
         public void Start()
         {
             SuccessfullyStarted = true;
-            Undo.IncrementCurrentGroup();
-            Undo.SetCurrentGroupName(CommandName ?? "Run command execution");
-            m_UndoGroup = Undo.GetCurrentGroup();
             Application.logMessageReceived += HandleConsoleLog;
+
+            try
+            {
+                Undo.IncrementCurrentGroup();
+                m_UndoGroup = Undo.GetCurrentGroup();
+                m_HasUndoGroup = true;
+            }
+            catch
+            {
+                m_UndoGroup = -1;
+                m_HasUndoGroup = false;
+            }
         }
 
         public void End()
         {
             Application.logMessageReceived -= HandleConsoleLog;
-            Undo.CollapseUndoOperations(m_UndoGroup);
+            if (!m_HasUndoGroup || m_UndoGroup < 0)
+                return;
+
+            try
+            {
+                Undo.CollapseUndoOperations(m_UndoGroup);
+            }
+            catch
+            {
+            }
         }
 
         public void Log(string log, params object[] references) => Logs.Add(new ExecutionLog(log, LogType.Log, references));
         public void LogWarning(string log, params object[] references) => Logs.Add(new ExecutionLog(log, LogType.Warning, references));
         public void LogError(string log, params object[] references) => Logs.Add(new ExecutionLog(log, LogType.Error, references));
+        public void ReturnResult(object value) => ReturnedData = value;
 
         internal static string FormatLogTemplate(string logTemplate, object[] arguments)
         {
@@ -216,6 +237,8 @@ namespace Becool.UnityMcpLens.Editor.Tools.RunCommandSupport
         public bool IsCompilationSuccessful;
         public string CompilationLogs;
         public string LocalFixedCode;
+        public bool HasUnauthorizedNamespaceUsage;
+        public LensRunCommand Command;
     }
 
     [Serializable]
@@ -224,6 +247,13 @@ namespace Becool.UnityMcpLens.Editor.Tools.RunCommandSupport
         public bool IsExecutionSuccessful;
         public int ExecutionId;
         public string ExecutionLogs;
+        public string ConsoleLogs;
+        public object ReturnedData;
+        public int LogCount;
+        public int WarningCount;
+        public int ErrorCount;
+        public string ErrorKind;
+        public string FailureReason;
     }
 
     static class LensRunCommandValidator
@@ -233,12 +263,14 @@ namespace Becool.UnityMcpLens.Editor.Tools.RunCommandSupport
             if (string.IsNullOrWhiteSpace(code))
                 throw new ArgumentException("Code parameter cannot be empty.");
 
-            var success = LensRunCommandCompiler.TryCompileCode(code, out var errors, out var compilation, out var localFixedCode);
+            var command = LensRunCommandCompiler.BuildRunCommand(code);
             return new LensCompileOutput
             {
-                IsCompilationSuccessful = success,
-                CompilationLogs = errors.ToString(),
-                LocalFixedCode = localFixedCode ?? compilation?.SyntaxTrees.FirstOrDefault()?.GetText().ToString() ?? code
+                IsCompilationSuccessful = command?.CompilationSuccess ?? false,
+                CompilationLogs = command?.CompilationErrors?.ToString() ?? string.Empty,
+                LocalFixedCode = command?.Script ?? code,
+                HasUnauthorizedNamespaceUsage = command?.HasUnauthorizedNamespaceUsage() ?? false,
+                Command = command
             };
         }
     }
@@ -247,35 +279,68 @@ namespace Becool.UnityMcpLens.Editor.Tools.RunCommandSupport
     {
         const string k_DynamicCommandFullClassName = LensRunCommandCompiler.DynamicCommandNamespace + ".CommandScript";
 
-        public static LensExecutionOutput Execute(string code, string title)
+        public static LensExecutionOutput Execute(LensRunCommand agentCommand, string title)
         {
-            var agentCommand = LensRunCommandCompiler.BuildRunCommand(code);
             if (agentCommand == null)
-                throw new InvalidOperationException("Failed to build Lens command.");
+            {
+                return new LensExecutionOutput
+                {
+                    IsExecutionSuccessful = false,
+                    ErrorKind = "invalid_command",
+                    FailureReason = "Failed to build Lens command."
+                };
+            }
 
             if (!agentCommand.CompilationSuccess)
-                throw new InvalidOperationException($"Command compilation failed:\n{agentCommand.CompilationErrors}");
+            {
+                return new LensExecutionOutput
+                {
+                    IsExecutionSuccessful = false,
+                    ErrorKind = agentCommand.HasUnauthorizedNamespaceUsage() ? "unauthorized_namespace" : "compilation_failed",
+                    FailureReason = $"Command compilation failed:\n{agentCommand.CompilationErrors}"
+                };
+            }
 
             var executionResult = ExecuteCompiled(agentCommand, title);
             var formattedLogs = executionResult?.Logs == null ? string.Empty : string.Join("\n", executionResult.GetFormattedLogs());
+            int warningCount = executionResult?.Logs?.Count(log => log.LogType == LogType.Warning) ?? 0;
+            int errorCount = executionResult?.Logs?.Count(log =>
+                log.LogType == LogType.Error ||
+                log.LogType == LogType.Exception ||
+                log.LogType == LogType.Assert) ?? 0;
+            int logCount = executionResult?.Logs?.Count ?? 0;
 
             if (executionResult == null || !executionResult.SuccessfullyStarted)
-                throw new InvalidOperationException($"Execution failed:\n{(string.IsNullOrEmpty(formattedLogs) ? "No logs available" : formattedLogs)}");
-
-            if (executionResult.Logs != null && executionResult.Logs.Any(log =>
-                    log.LogType == LogType.Warning ||
-                    log.LogType == LogType.Error ||
-                    log.LogType == LogType.Exception))
             {
-                throw new InvalidOperationException(
-                    $"Command was executed partially, but reported warnings or errors:\n{(string.IsNullOrEmpty(formattedLogs) ? "No logs available" : formattedLogs)}\nConsider reverting changes that may have happened if you retry.");
+                return new LensExecutionOutput
+                {
+                    IsExecutionSuccessful = false,
+                    ExecutionId = executionResult?.Id ?? 0,
+                    ExecutionLogs = formattedLogs,
+                    ConsoleLogs = executionResult?.ConsoleLogs ?? string.Empty,
+                    LogCount = logCount,
+                    WarningCount = warningCount,
+                    ErrorCount = errorCount,
+                    ErrorKind = "execution_not_started",
+                    FailureReason = $"Execution failed:\n{(string.IsNullOrEmpty(formattedLogs) ? "No logs available" : formattedLogs)}"
+                };
             }
 
+            bool hasProblemLogs = warningCount > 0 || errorCount > 0;
             return new LensExecutionOutput
             {
-                IsExecutionSuccessful = true,
+                IsExecutionSuccessful = !hasProblemLogs,
                 ExecutionId = executionResult.Id,
-                ExecutionLogs = formattedLogs
+                ExecutionLogs = formattedLogs,
+                ConsoleLogs = executionResult.ConsoleLogs ?? string.Empty,
+                ReturnedData = executionResult.ReturnedData,
+                LogCount = logCount,
+                WarningCount = warningCount,
+                ErrorCount = errorCount,
+                ErrorKind = errorCount > 0 ? "execution_logged_errors" : warningCount > 0 ? "execution_logged_warnings" : null,
+                FailureReason = hasProblemLogs
+                    ? $"Command was executed partially, but reported warnings or errors:\n{(string.IsNullOrEmpty(formattedLogs) ? "No logs available" : formattedLogs)}\nConsider reverting changes that may have happened if you retry."
+                    : null
             };
         }
 
@@ -385,6 +450,7 @@ namespace Becool.UnityMcpLens.Editor.Tools.RunCommandSupport
 
             if (command.HasUnauthorizedNamespaceUsage())
             {
+                errors.Add("Unauthorized namespace usage detected. System.Net, System.Diagnostics, System.Runtime.InteropServices, and System.Reflection are not allowed in Unity.RunCommand.");
                 command.CompilationSuccess = false;
             }
             else if (success)

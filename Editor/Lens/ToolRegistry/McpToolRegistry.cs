@@ -59,7 +59,7 @@ namespace Becool.UnityMcpLens.Editor.ToolRegistry
 
         // MCP clients prefix tool names with "mcp_{serverName}_" (22 chars for "unity-mcp-gateway").
         // The MCP spec enforces max 64 chars total, leaving 42 for the tool name itself.
-        const int k_MaxToolNameLength = 42;
+        const int k_MaxToolNameLength = 64;
         const int k_HashSuffixLength = 9; // "_" + 8 hex chars
 
         /// <summary>

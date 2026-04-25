@@ -3,11 +3,10 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using Newtonsoft.Json.Linq;
+using Becool.UnityMcpLens.Editor.Adapters.Unity;
 using Becool.UnityMcpLens.Editor.Helpers;
-using Becool.UnityMcpLens.Editor.ToolRegistry;
 using Becool.UnityMcpLens.Editor.Tools.Parameters;
 using UnityEditor;
-using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -15,260 +14,312 @@ namespace Becool.UnityMcpLens.Editor.Tools
 {
     public static class UiAuthoringTools
     {
-        public const string EnsureNamedHierarchyDescription = @"Ensures a named UI hierarchy exists under a scene object or canvas root.
-
-Args:
-    Target: Scene GameObject, path, or instance id to use as the root parent.
-    SearchMethod: How to find the target root ('by_name', 'by_id', 'by_path').
-    Nodes: Named UI node specs to ensure under the root target.
-      Name: UI GameObject name.
-      ComponentTypes: Component type names that must exist on the node.
-      Children: Child node specs that must exist under the node.
-    PreviewOnly: When true, reports the create or recreate operations without saving the scene.
-
-Returns:
-    Dictionary with success/message/data. Data contains resolved paths and create or recreate actions.";
-
-        public const string SetLayoutPropertiesDescription = @"Sets authored UI layout and display properties on a scene object.
-
-Args:
-    Target: Scene GameObject, path, or instance id to edit.
-    SearchMethod: How to find the target ('by_name', 'by_id', 'by_path').
-    TargetPath: Optional relative child path under the target root. Use '.' or omit for the root GameObject.
-    PreviewOnly: When true, validates and reports the layout changes without saving the scene.
-    RectTransform fields: AnchorMin, AnchorMax, Pivot, SizeDelta, AnchoredPosition, SiblingIndex.
-    GameObject field: Active.
-    CanvasGroup fields: CanvasGroupAlpha, CanvasGroupInteractable, CanvasGroupBlocksRaycasts.
-    Image fields: ImageSpritePath, ImageColor.
-    Text fields: Text, TextColor.
-    Button field: ButtonInteractable.
-
-Returns:
-    Dictionary with success/message/data. Data contains the applied or previewed property changes.";
-
-        [McpTool("Unity.UI.EnsureNamedHierarchy", EnsureNamedHierarchyDescription, Groups = new[] { "ui", "editor" }, EnabledByDefault = true)]
-        public static object EnsureNamedHierarchy(EnsureNamedHierarchyParams parameters)
+        internal static bool TryResolveRoot(JToken target, string searchMethod, bool includeInactive, out GameObject targetRoot, out string error)
         {
-            parameters ??= new EnsureNamedHierarchyParams();
-            if (parameters.Target == null)
+            targetRoot = null;
+            error = null;
+            if (target == null)
             {
-                return Response.Error("Target is required.");
-            }
-
-            var nodeSpecs = EnumerateRootNodeSpecs(parameters.Nodes).ToList();
-            if (nodeSpecs.Count == 0)
-            {
-                return Response.Error("At least one node spec is required.");
+                error = "Target is required.";
+                return false;
             }
 
             JObject findParams = new()
             {
-                ["search_inactive"] = parameters.IncludeInactive
+                ["search_inactive"] = includeInactive
             };
-            GameObject targetRoot = ObjectsHelper.FindObject(parameters.Target, parameters.SearchMethod, findParams);
+            targetRoot = ObjectsHelper.FindObject(target, searchMethod, findParams);
             if (targetRoot == null)
             {
-                return Response.Error("UI root target not found.");
+                error = "UI root target not found.";
+                return false;
             }
 
-            var resolvedNodes = new List<object>();
-            foreach (UiNamedHierarchyNodeSpec node in nodeSpecs)
-            {
-                EnsureNode(targetRoot.transform, node, parameters.PreviewOnly, resolvedNodes, out string error);
-                if (!string.IsNullOrWhiteSpace(error))
-                {
-                    return Response.Error(error, new
-                    {
-                        target = UiDiagnosticsHelper.GetHierarchyPath(targetRoot.transform),
-                        nodes = resolvedNodes
-                    });
-                }
-            }
-
-            if (!parameters.PreviewOnly)
-            {
-                EditorSceneManager.MarkSceneDirty(targetRoot.scene);
-                EditorSceneManager.SaveOpenScenes();
-            }
-
-            return Response.Success(parameters.PreviewOnly
-                ? $"Validated named UI hierarchy under '{UiDiagnosticsHelper.GetHierarchyPath(targetRoot.transform)}'."
-                : $"Ensured named UI hierarchy under '{UiDiagnosticsHelper.GetHierarchyPath(targetRoot.transform)}'.", new
-            {
-                target = UiDiagnosticsHelper.GetHierarchyPath(targetRoot.transform),
-                previewOnly = parameters.PreviewOnly,
-                nodes = resolvedNodes
-            });
+            return true;
         }
 
-        [McpTool("Unity.UI.SetLayoutProperties", SetLayoutPropertiesDescription, Groups = new[] { "ui", "editor" }, EnabledByDefault = true)]
-        public static object SetLayoutProperties(SetUiLayoutPropertiesParams parameters)
+        internal static bool TryResolveLayoutTarget(string target, string searchMethod, string targetPath, bool includeInactive, out GameObject targetRoot, out Transform targetTransform, out string error)
         {
-            parameters ??= new SetUiLayoutPropertiesParams();
-            if (string.IsNullOrWhiteSpace(parameters.Target))
+            targetRoot = null;
+            targetTransform = null;
+            error = null;
+            if (string.IsNullOrWhiteSpace(target))
             {
-                return Response.Error("Target is required.");
+                error = "Target is required.";
+                return false;
             }
 
             JObject findParams = new()
             {
-                ["search_inactive"] = parameters.IncludeInactive
+                ["search_inactive"] = includeInactive
             };
-            GameObject targetRoot = ObjectsHelper.FindObject(new JValue(parameters.Target), parameters.SearchMethod, findParams);
+            targetRoot = ObjectsHelper.FindObject(new JValue(target), searchMethod, findParams);
             if (targetRoot == null)
             {
-                return Response.Error("UI target root not found.");
+                error = "UI target root not found.";
+                return false;
             }
 
-            string targetPath = string.IsNullOrWhiteSpace(parameters.TargetPath) ? "." : parameters.TargetPath.Trim();
-            Transform targetTransform = targetPath == "." ? targetRoot.transform : targetRoot.transform.Find(targetPath);
+            string normalizedTargetPath = string.IsNullOrWhiteSpace(targetPath) ? "." : targetPath.Trim();
+            targetTransform = normalizedTargetPath == "." ? targetRoot.transform : targetRoot.transform.Find(normalizedTargetPath);
             if (targetTransform == null)
             {
-                return Response.Error($"TargetPath '{targetPath}' was not found under '{UiDiagnosticsHelper.GetHierarchyPath(targetRoot.transform)}'.");
+                error = $"TargetPath '{normalizedTargetPath}' was not found under '{UiDiagnosticsHelper.GetHierarchyPath(targetRoot.transform)}'.";
+                return false;
             }
 
-            var changes = new List<object>();
-            if (!ApplyLayoutChanges(targetTransform.gameObject, parameters, changes, out string error))
-            {
-                return Response.Error(error, new
-                {
-                    target = UiDiagnosticsHelper.GetHierarchyPath(targetTransform),
-                    changes
-                });
-            }
-
-            if (!parameters.PreviewOnly)
-            {
-                EditorSceneManager.MarkSceneDirty(targetTransform.gameObject.scene);
-                EditorSceneManager.SaveOpenScenes();
-            }
-
-            return Response.Success(parameters.PreviewOnly
-                ? $"Validated UI layout changes on '{UiDiagnosticsHelper.GetHierarchyPath(targetTransform)}'."
-                : $"Saved UI layout changes on '{UiDiagnosticsHelper.GetHierarchyPath(targetTransform)}'.", new
-            {
-                target = UiDiagnosticsHelper.GetHierarchyPath(targetTransform),
-                previewOnly = parameters.PreviewOnly,
-                changes
-            });
+            return true;
         }
 
-        static void EnsureNode(Transform parent, UiNamedHierarchyNodeSpec spec, bool previewOnly, List<object> resolvedNodes, out string error)
+        internal static List<UiNamedHierarchyNodeSpec> ParseRootNodeSpecs(JToken nodesToken)
+        {
+            return EnumerateRootNodeSpecs(nodesToken).ToList();
+        }
+
+        internal static bool TryEnsureNamedHierarchy(
+            GameObject targetRoot,
+            IReadOnlyList<UiNamedHierarchyNodeSpec> nodeSpecs,
+            bool previewOnly,
+            out List<object> resolvedNodes,
+            out bool applied,
+            out string error)
+        {
+            resolvedNodes = new List<object>();
+            applied = false;
+            error = null;
+            if (targetRoot == null)
+            {
+                error = "Target is required.";
+                return false;
+            }
+
+            foreach (UiNamedHierarchyNodeSpec node in nodeSpecs ?? Array.Empty<UiNamedHierarchyNodeSpec>())
+            {
+                if (!EnsureNode(targetRoot.transform, node, previewOnly, resolvedNodes, ref applied, out error))
+                    return false;
+            }
+
+            return true;
+        }
+
+        internal static bool TryApplyLayout(
+            GameObject target,
+            SetUiLayoutPropertiesParams parameters,
+            out List<object> changes,
+            out bool wouldModify,
+            out string error)
+        {
+            changes = new List<object>();
+            return ApplyLayoutChanges(target, parameters, changes, out wouldModify, out error);
+        }
+
+        internal static SetUiLayoutPropertiesParams CreateLayoutParams(UiNodeLayoutSpec layout, bool previewOnly)
+        {
+            if (layout == null)
+                return null;
+
+            return new SetUiLayoutPropertiesParams
+            {
+                PreviewOnly = previewOnly,
+                AnchorMin = layout.AnchorMin,
+                AnchorMax = layout.AnchorMax,
+                Pivot = layout.Pivot,
+                SizeDelta = layout.SizeDelta,
+                AnchoredPosition = layout.AnchoredPosition,
+                SiblingIndex = layout.SiblingIndex,
+                Active = layout.Active,
+                CanvasGroupAlpha = layout.CanvasGroupAlpha,
+                CanvasGroupInteractable = layout.CanvasGroupInteractable,
+                CanvasGroupBlocksRaycasts = layout.CanvasGroupBlocksRaycasts,
+                ImageSpritePath = layout.ImageSpritePath,
+                ImageColor = layout.ImageColor,
+                Text = layout.Text,
+                TextColor = layout.TextColor,
+                ButtonInteractable = layout.ButtonInteractable
+            };
+        }
+
+        static bool EnsureNode(
+            Transform parent,
+            UiNamedHierarchyNodeSpec spec,
+            bool previewOnly,
+            List<object> resolvedNodes,
+            ref bool applied,
+            out string error)
         {
             error = null;
             if (spec == null || string.IsNullOrWhiteSpace(spec.Name))
             {
                 error = "Each UI node spec must include a Name.";
-                return;
+                return false;
             }
 
             Transform existing = FindDirectChild(parent, spec.Name);
-            string completenessError = null;
-            bool isComplete = existing != null && IsNodeComplete(existing, spec, out completenessError);
-            if (!string.IsNullOrWhiteSpace(completenessError))
-            {
-                error = completenessError;
-                return;
-            }
+            string path = UiDiagnosticsHelper.GetHierarchyPath(parent) + "/" + spec.Name;
 
-            if (!isComplete)
+            if (existing == null)
             {
-                string action = existing == null ? "create" : "recreate";
-                string path = UiDiagnosticsHelper.GetHierarchyPath(parent) + "/" + spec.Name;
+                applied = true;
                 if (previewOnly)
                 {
-                    resolvedNodes.Add(new
-                    {
-                        path,
-                        action,
-                        existed = existing != null,
-                        componentTypes = spec.ComponentTypes ?? Array.Empty<string>()
-                    });
-                    return;
-                }
-
-                if (existing != null)
-                {
-                    Undo.DestroyObjectImmediate(existing.gameObject);
+                    AppendSpecRows(UiDiagnosticsHelper.GetHierarchyPath(parent) + "/" + spec.Name, spec, "create", resolvedNodes, existed: false);
+                    return true;
                 }
 
                 GameObject created = CreateNodeRecursive(parent, spec, out error);
-                if (!string.IsNullOrWhiteSpace(error))
+                if (created == null)
+                    return false;
+
+                if (!ApplySpecRecursive(created.transform, spec, previewOnly: false, out error))
+                    return false;
+
+                AppendSpecRows(UiDiagnosticsHelper.GetHierarchyPath(parent) + "/" + spec.Name, spec, "create", resolvedNodes, existed: false);
+                return true;
+            }
+
+            if (RequiresRecreate(existing, out string recreateReason))
+            {
+                applied = true;
+                if (previewOnly)
                 {
-                    return;
+                    AppendSpecRows(UiDiagnosticsHelper.GetHierarchyPath(parent) + "/" + spec.Name, spec, "recreate", resolvedNodes, existed: true, recreateReason);
+                    return true;
                 }
 
-                resolvedNodes.Add(new
-                {
-                    path = UiDiagnosticsHelper.GetHierarchyPath(created.transform),
-                    action,
-                    existed = existing != null,
-                    instanceId = UnityApiAdapter.GetObjectId(created),
-                    componentTypes = created.GetComponents<Component>().Where(component => component != null).Select(component => component.GetType().FullName).ToArray()
-                });
-                return;
+                Undo.DestroyObjectImmediate(existing.gameObject);
+                GameObject recreated = CreateNodeRecursive(parent, spec, out error);
+                if (recreated == null)
+                    return false;
+
+                if (!ApplySpecRecursive(recreated.transform, spec, previewOnly: false, out error))
+                    return false;
+
+                AppendSpecRows(UiDiagnosticsHelper.GetHierarchyPath(parent) + "/" + spec.Name, spec, "recreate", resolvedNodes, existed: true, recreateReason);
+                return true;
             }
+
+            if (!TryApplyNodeSpec(existing.gameObject, spec, previewOnly, out var nodeChanges, out var nodeUpdated, out error))
+                return false;
 
             resolvedNodes.Add(new
             {
-                path = UiDiagnosticsHelper.GetHierarchyPath(existing),
-                action = "preserve",
+                path,
+                action = nodeUpdated ? "update" : "preserve",
                 existed = true,
                 instanceId = UnityApiAdapter.GetObjectId(existing.gameObject),
-                componentTypes = existing.GetComponents<Component>().Where(component => component != null).Select(component => component.GetType().FullName).ToArray()
+                componentTypes = existing.GetComponents<Component>().Where(component => component != null).Select(component => component.GetType().FullName).ToArray(),
+                changes = nodeChanges.ToArray()
+            });
+            applied |= nodeUpdated;
+
+            foreach (UiNamedHierarchyNodeSpec child in EnumerateChildren(spec))
+            {
+                if (!EnsureNode(existing, child, previewOnly, resolvedNodes, ref applied, out error))
+                    return false;
+            }
+
+            return true;
+        }
+
+        static void AppendSpecRows(string path, UiNamedHierarchyNodeSpec spec, string action, List<object> rows, bool existed, string reason = null)
+        {
+            rows.Add(new
+            {
+                path,
+                action,
+                existed,
+                reason,
+                requestedComponents = DescribeRequestedComponentTypes(spec),
+                requestedLayout = spec.Layout != null
             });
 
             foreach (UiNamedHierarchyNodeSpec child in EnumerateChildren(spec))
             {
-                EnsureNode(existing, child, previewOnly, resolvedNodes, out error);
-                if (!string.IsNullOrWhiteSpace(error))
-                {
-                    return;
-                }
+                AppendSpecRows(path + "/" + child.Name, child, action == "preserve" ? "create" : action, rows, existed: false);
             }
         }
 
-        static bool IsNodeComplete(Transform node, UiNamedHierarchyNodeSpec spec, out string error)
+        static bool RequiresRecreate(Transform existing, out string recreateReason)
+        {
+            recreateReason = null;
+            bool shouldHaveRectTransform = existing.parent is RectTransform || existing.GetComponentInParent<Canvas>(true) != null;
+            if (shouldHaveRectTransform && existing is not RectTransform)
+            {
+                recreateReason = "Existing node must use RectTransform in a UI subtree.";
+                return true;
+            }
+
+            return false;
+        }
+
+        static bool ApplySpecRecursive(Transform node, UiNamedHierarchyNodeSpec spec, bool previewOnly, out string error)
         {
             error = null;
-            if (node == null)
-            {
+            if (node == null || spec == null)
+                return true;
+
+            if (!TryApplyNodeSpec(node.gameObject, spec, previewOnly, out _, out _, out error))
                 return false;
-            }
-
-            bool shouldHaveRectTransform = node.parent is RectTransform || node.GetComponentInParent<Canvas>(true) != null;
-            if (shouldHaveRectTransform && node is not RectTransform)
-            {
-                return false;
-            }
-
-            foreach (string componentTypeName in spec.ComponentTypes ?? Array.Empty<string>())
-            {
-                Type componentType = ManageGameObject.FindType(componentTypeName);
-                if (componentType == null || !typeof(Component).IsAssignableFrom(componentType))
-                {
-                    error = $"Component type '{componentTypeName}' could not be resolved.";
-                    return false;
-                }
-
-                if (componentType == typeof(Transform) || componentType == typeof(RectTransform))
-                {
-                    continue;
-                }
-
-                if (node.GetComponent(componentType) == null)
-                {
-                    return false;
-                }
-            }
 
             foreach (UiNamedHierarchyNodeSpec childSpec in EnumerateChildren(spec))
             {
                 Transform child = FindDirectChild(node, childSpec.Name);
-                if (!IsNodeComplete(child, childSpec, out error))
-                {
+                if (!ApplySpecRecursive(child, childSpec, previewOnly, out error))
                     return false;
+            }
+
+            return true;
+        }
+
+        static bool TryApplyNodeSpec(
+            GameObject node,
+            UiNamedHierarchyNodeSpec spec,
+            bool previewOnly,
+            out List<object> changes,
+            out bool wouldModify,
+            out string error)
+        {
+            changes = new List<object>();
+            wouldModify = false;
+            error = null;
+            if (node == null || spec == null)
+                return true;
+
+            List<Type> desiredComponentTypes = GetDesiredComponentTypes(node, spec, out error);
+            if (!string.IsNullOrWhiteSpace(error))
+                return false;
+
+            foreach (Type componentType in desiredComponentTypes)
+            {
+                if (componentType == null || componentType == typeof(Transform) || componentType == typeof(RectTransform))
+                    continue;
+
+                if (node.GetComponent(componentType) != null)
+                    continue;
+
+                wouldModify = true;
+                changes.Add(new
+                {
+                    property = "component",
+                    previousValue = (string)null,
+                    newValue = componentType.FullName
+                });
+
+                if (!previewOnly)
+                {
+                    Component added = Undo.AddComponent(node, componentType);
+                    InitializeAddedComponent(added);
+                    EditorUtility.SetDirty(node);
                 }
+            }
+
+            SetUiLayoutPropertiesParams layoutParams = CreateLayoutParams(spec.Layout, previewOnly);
+            if (layoutParams != null)
+            {
+                if (!ApplyLayoutChanges(node, layoutParams, changes, out bool layoutWouldModify, out error))
+                    return false;
+
+                wouldModify |= layoutWouldModify;
             }
 
             return true;
@@ -277,60 +328,146 @@ Returns:
         static GameObject CreateNodeRecursive(Transform parent, UiNamedHierarchyNodeSpec spec, out string error)
         {
             error = null;
+            List<Type> desiredTypes = GetDesiredComponentTypes(parent?.gameObject, spec, out error);
+            if (!string.IsNullOrWhiteSpace(error))
+                return null;
+
+            Type[] componentTypes = desiredTypes
+                .Where(type => type != null && type != typeof(Transform) && type != typeof(RectTransform))
+                .Distinct()
+                .ToArray();
+
             bool useRectTransform = parent is RectTransform || parent.GetComponentInParent<Canvas>(true) != null;
-            var componentTypes = new List<Type>();
-            if (useRectTransform)
-            {
-                componentTypes.Add(typeof(RectTransform));
-            }
-
-            foreach (string componentTypeName in spec.ComponentTypes ?? Array.Empty<string>())
-            {
-                Type componentType = ManageGameObject.FindType(componentTypeName);
-                if (componentType == null || !typeof(Component).IsAssignableFrom(componentType))
-                {
-                    error = $"Component type '{componentTypeName}' could not be resolved.";
-                    return null;
-                }
-
-                if (componentType == typeof(Transform) || componentType == typeof(RectTransform))
-                {
-                    continue;
-                }
-
-                if (!componentTypes.Contains(componentType))
-                {
-                    componentTypes.Add(componentType);
-                }
-            }
-
-            GameObject created = componentTypes.Count > 0
-                ? new GameObject(spec.Name, componentTypes.ToArray())
+            GameObject created = useRectTransform
+                ? new GameObject(spec.Name, typeof(RectTransform))
                 : new GameObject(spec.Name);
             Undo.RegisterCreatedObjectUndo(created, $"Create UI node {spec.Name}");
             created.transform.SetParent(parent, false);
 
+            foreach (Type componentType in componentTypes)
+            {
+                Component added = Undo.AddComponent(created, componentType);
+                InitializeAddedComponent(added);
+            }
+
             foreach (UiNamedHierarchyNodeSpec child in EnumerateChildren(spec))
             {
                 if (CreateNodeRecursive(created.transform, child, out error) == null)
-                {
                     return null;
-                }
             }
 
             EditorUtility.SetDirty(created);
             return created;
         }
 
+        static void InitializeAddedComponent(Component component)
+        {
+            if (component == null)
+                return;
+
+            string typeName = component.GetType().FullName ?? component.GetType().Name;
+            if (!typeName.Contains("UnityEngine.UI.Text", StringComparison.Ordinal) &&
+                !string.Equals(component.GetType().Name, "Text", StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            PropertyInfo fontProperty = component.GetType().GetProperty("font", BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
+            if (fontProperty == null || !fontProperty.CanWrite)
+                return;
+
+            Font font = LoadDefaultLegacyFont();
+            if (font != null)
+                fontProperty.SetValue(component, font);
+        }
+
+        static Font LoadDefaultLegacyFont()
+        {
+            Font font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            if (font == null)
+                font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            return font;
+        }
+
+        static List<Type> GetDesiredComponentTypes(GameObject contextNode, UiNamedHierarchyNodeSpec spec, out string error)
+        {
+            error = null;
+            var componentTypes = new List<Type>();
+            bool useRectTransform = contextNode == null || contextNode.transform is RectTransform || contextNode.GetComponentInParent<Canvas>(true) != null;
+            if (useRectTransform)
+                componentTypes.Add(typeof(RectTransform));
+
+            foreach (string componentTypeName in spec.ComponentTypes ?? Array.Empty<string>())
+            {
+                if (!TryResolveComponentType(componentTypeName, out Type componentType, out error))
+                    return componentTypes;
+
+                if (!componentTypes.Contains(componentType))
+                    componentTypes.Add(componentType);
+            }
+
+            foreach (string componentTypeName in EnumerateRequestedComponentNames(spec))
+            {
+                if (!TryResolveComponentType(componentTypeName, out Type componentType, out error))
+                    return componentTypes;
+
+                if (!componentTypes.Contains(componentType))
+                    componentTypes.Add(componentType);
+            }
+
+            return componentTypes;
+        }
+
+        static IEnumerable<string> EnumerateRequestedComponentNames(UiNamedHierarchyNodeSpec spec)
+        {
+            UiNodeComponentsSpec components = spec?.Components;
+            UiNodeLayoutSpec layout = spec?.Layout;
+
+            if (components?.CanvasGroup == true || layout?.CanvasGroupAlpha != null || layout?.CanvasGroupBlocksRaycasts != null || layout?.CanvasGroupInteractable != null)
+                yield return "CanvasGroup";
+            if (components?.Image == true || !string.IsNullOrWhiteSpace(layout?.ImageSpritePath) || (layout?.ImageColor != null && layout.ImageColor.Type != JTokenType.Null))
+                yield return "Image";
+            if (components?.Button == true || layout?.ButtonInteractable != null)
+                yield return "Button";
+
+            bool wantsTmpText = components?.TmpText == true;
+            bool wantsLegacyText = components?.Text == true;
+            bool wantsAnyText = wantsTmpText || wantsLegacyText || layout?.Text != null || (layout?.TextColor != null && layout.TextColor.Type != JTokenType.Null);
+            if (wantsAnyText)
+                yield return wantsTmpText && !wantsLegacyText ? "TextMeshProUGUI" : "Text";
+        }
+
+        static string[] DescribeRequestedComponentTypes(UiNamedHierarchyNodeSpec spec)
+        {
+            return (spec.ComponentTypes ?? Array.Empty<string>())
+                .Concat(EnumerateRequestedComponentNames(spec))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+        }
+
+        static bool TryResolveComponentType(string componentTypeName, out Type componentType, out string error)
+        {
+            error = null;
+            componentType = UnityComponentResolver.FindType(componentTypeName);
+            if (componentType == null || !typeof(Component).IsAssignableFrom(componentType))
+            {
+                error = $"Component type '{componentTypeName}' could not be resolved.";
+                return false;
+            }
+
+            return true;
+        }
+
         static Transform FindDirectChild(Transform parent, string childName)
         {
+            if (parent == null || string.IsNullOrWhiteSpace(childName))
+                return null;
+
             for (int i = 0; i < parent.childCount; i++)
             {
                 Transform child = parent.GetChild(i);
                 if (child != null && string.Equals(child.name, childName, StringComparison.Ordinal))
-                {
                     return child;
-                }
             }
 
             return null;
@@ -339,55 +476,59 @@ Returns:
         static IEnumerable<UiNamedHierarchyNodeSpec> EnumerateChildren(UiNamedHierarchyNodeSpec spec)
         {
             if (spec?.Children is not JArray array)
-            {
                 yield break;
-            }
 
             foreach (JToken childToken in array)
             {
                 if (childToken == null || childToken.Type == JTokenType.Null)
-                {
                     continue;
-                }
 
                 UiNamedHierarchyNodeSpec child = childToken.ToObject<UiNamedHierarchyNodeSpec>();
                 if (child != null)
-                {
                     yield return child;
-                }
             }
         }
 
         static IEnumerable<UiNamedHierarchyNodeSpec> EnumerateRootNodeSpecs(JToken nodesToken)
         {
             if (nodesToken is not JArray array)
-            {
                 yield break;
-            }
 
             foreach (JToken nodeToken in array)
             {
                 if (nodeToken == null || nodeToken.Type == JTokenType.Null)
-                {
                     continue;
-                }
 
                 UiNamedHierarchyNodeSpec node = nodeToken.ToObject<UiNamedHierarchyNodeSpec>();
                 if (node != null)
-                {
                     yield return node;
-                }
             }
         }
 
-        static bool ApplyLayoutChanges(GameObject target, SetUiLayoutPropertiesParams parameters, List<object> changes, out string error)
+        internal static bool ApplyLayoutChanges(GameObject target, SetUiLayoutPropertiesParams parameters, List<object> changes, out bool wouldModify, out string error)
         {
             error = null;
+            wouldModify = false;
+            bool hasChanges = false;
             RectTransform rectTransform = target.transform as RectTransform;
             if (rectTransform == null)
             {
                 error = $"Target '{UiDiagnosticsHelper.GetHierarchyPath(target.transform)}' does not have a RectTransform.";
                 return false;
+            }
+
+            void RecordChange(string property, object previousValue, object newValue)
+            {
+                if (AreValuesEquivalent(previousValue, newValue))
+                    return;
+
+                hasChanges = true;
+                changes.Add(new
+                {
+                    property,
+                    previousValue = NormalizeValue(previousValue),
+                    newValue = NormalizeValue(newValue)
+                });
             }
 
             if (parameters.AnchorMin != null && parameters.AnchorMin.Type != JTokenType.Null)
@@ -398,11 +539,9 @@ Returns:
                     return false;
                 }
 
-                changes.Add(BuildChange("anchorMin", rectTransform.anchorMin, value));
+                RecordChange("anchorMin", rectTransform.anchorMin, value);
                 if (!parameters.PreviewOnly)
-                {
                     rectTransform.anchorMin = value;
-                }
             }
 
             if (parameters.AnchorMax != null && parameters.AnchorMax.Type != JTokenType.Null)
@@ -413,11 +552,9 @@ Returns:
                     return false;
                 }
 
-                changes.Add(BuildChange("anchorMax", rectTransform.anchorMax, value));
+                RecordChange("anchorMax", rectTransform.anchorMax, value);
                 if (!parameters.PreviewOnly)
-                {
                     rectTransform.anchorMax = value;
-                }
             }
 
             if (parameters.Pivot != null && parameters.Pivot.Type != JTokenType.Null)
@@ -428,11 +565,9 @@ Returns:
                     return false;
                 }
 
-                changes.Add(BuildChange("pivot", rectTransform.pivot, value));
+                RecordChange("pivot", rectTransform.pivot, value);
                 if (!parameters.PreviewOnly)
-                {
                     rectTransform.pivot = value;
-                }
             }
 
             if (parameters.SizeDelta != null && parameters.SizeDelta.Type != JTokenType.Null)
@@ -443,11 +578,9 @@ Returns:
                     return false;
                 }
 
-                changes.Add(BuildChange("sizeDelta", rectTransform.sizeDelta, value));
+                RecordChange("sizeDelta", rectTransform.sizeDelta, value);
                 if (!parameters.PreviewOnly)
-                {
                     rectTransform.sizeDelta = value;
-                }
             }
 
             if (parameters.AnchoredPosition != null && parameters.AnchoredPosition.Type != JTokenType.Null)
@@ -458,29 +591,23 @@ Returns:
                     return false;
                 }
 
-                changes.Add(BuildChange("anchoredPosition", rectTransform.anchoredPosition, value));
+                RecordChange("anchoredPosition", rectTransform.anchoredPosition, value);
                 if (!parameters.PreviewOnly)
-                {
                     rectTransform.anchoredPosition = value;
-                }
             }
 
             if (parameters.SiblingIndex.HasValue)
             {
-                changes.Add(BuildChange("siblingIndex", rectTransform.GetSiblingIndex(), parameters.SiblingIndex.Value));
+                RecordChange("siblingIndex", rectTransform.GetSiblingIndex(), parameters.SiblingIndex.Value);
                 if (!parameters.PreviewOnly)
-                {
                     rectTransform.SetSiblingIndex(parameters.SiblingIndex.Value);
-                }
             }
 
             if (parameters.Active.HasValue)
             {
-                changes.Add(BuildChange("activeSelf", target.activeSelf, parameters.Active.Value));
+                RecordChange("activeSelf", target.activeSelf, parameters.Active.Value);
                 if (!parameters.PreviewOnly)
-                {
                     target.SetActive(parameters.Active.Value);
-                }
             }
 
             CanvasGroup canvasGroup = target.GetComponent<CanvasGroup>();
@@ -494,29 +621,23 @@ Returns:
 
                 if (parameters.CanvasGroupAlpha.HasValue)
                 {
-                    changes.Add(BuildChange("canvasGroup.alpha", canvasGroup.alpha, parameters.CanvasGroupAlpha.Value));
+                    RecordChange("canvasGroup.alpha", canvasGroup.alpha, parameters.CanvasGroupAlpha.Value);
                     if (!parameters.PreviewOnly)
-                    {
                         canvasGroup.alpha = parameters.CanvasGroupAlpha.Value;
-                    }
                 }
 
                 if (parameters.CanvasGroupInteractable.HasValue)
                 {
-                    changes.Add(BuildChange("canvasGroup.interactable", canvasGroup.interactable, parameters.CanvasGroupInteractable.Value));
+                    RecordChange("canvasGroup.interactable", canvasGroup.interactable, parameters.CanvasGroupInteractable.Value);
                     if (!parameters.PreviewOnly)
-                    {
                         canvasGroup.interactable = parameters.CanvasGroupInteractable.Value;
-                    }
                 }
 
                 if (parameters.CanvasGroupBlocksRaycasts.HasValue)
                 {
-                    changes.Add(BuildChange("canvasGroup.blocksRaycasts", canvasGroup.blocksRaycasts, parameters.CanvasGroupBlocksRaycasts.Value));
+                    RecordChange("canvasGroup.blocksRaycasts", canvasGroup.blocksRaycasts, parameters.CanvasGroupBlocksRaycasts.Value);
                     if (!parameters.PreviewOnly)
-                    {
                         canvasGroup.blocksRaycasts = parameters.CanvasGroupBlocksRaycasts.Value;
-                    }
                 }
             }
 
@@ -539,11 +660,9 @@ Returns:
                         return false;
                     }
 
-                    changes.Add(BuildChange("image.sprite", image.sprite != null ? image.sprite.name : "null", sprite.name));
+                    RecordChange("image.sprite", image.sprite != null ? image.sprite.name : "null", sprite.name);
                     if (!parameters.PreviewOnly)
-                    {
                         image.sprite = sprite;
-                    }
                 }
 
                 if (parameters.ImageColor != null && parameters.ImageColor.Type != JTokenType.Null)
@@ -554,11 +673,9 @@ Returns:
                         return false;
                     }
 
-                    changes.Add(BuildChange("image.color", image.color, color));
+                    RecordChange("image.color", image.color, color);
                     if (!parameters.PreviewOnly)
-                    {
                         image.color = color;
-                    }
                 }
             }
 
@@ -575,11 +692,9 @@ Returns:
                 if (parameters.Text != null)
                 {
                     string previousText = GetTextValue(textComponent);
-                    changes.Add(BuildChange("text", previousText, parameters.Text));
+                    RecordChange("text", previousText, parameters.Text);
                     if (!parameters.PreviewOnly)
-                    {
                         SetTextValue(textComponent, parameters.Text);
-                    }
                 }
 
                 if (parameters.TextColor != null && parameters.TextColor.Type != JTokenType.Null)
@@ -596,11 +711,9 @@ Returns:
                         return false;
                     }
 
-                    changes.Add(BuildChange("text.color", textGraphic.color, color));
+                    RecordChange("text.color", textGraphic.color, color);
                     if (!parameters.PreviewOnly)
-                    {
                         textGraphic.color = color;
-                    }
                 }
             }
 
@@ -613,43 +726,32 @@ Returns:
                     return false;
                 }
 
-                changes.Add(BuildChange("button.interactable", button.interactable, parameters.ButtonInteractable.Value));
+                RecordChange("button.interactable", button.interactable, parameters.ButtonInteractable.Value);
                 if (!parameters.PreviewOnly)
-                {
                     button.interactable = parameters.ButtonInteractable.Value;
-                }
             }
 
-            if (!parameters.PreviewOnly)
+            wouldModify = hasChanges;
+
+            if (!parameters.PreviewOnly && wouldModify)
             {
                 EditorUtility.SetDirty(target);
                 if (canvasGroup != null)
-                {
                     EditorUtility.SetDirty(canvasGroup);
-                }
-
                 if (image != null)
-                {
                     EditorUtility.SetDirty(image);
-                }
-
                 if (textComponent != null)
-                {
                     EditorUtility.SetDirty(textComponent);
-                }
             }
 
             return true;
         }
 
-        static object BuildChange(string property, object previousValue, object newValue)
+        static bool AreValuesEquivalent(object left, object right)
         {
-            return new
-            {
-                property,
-                previousValue = NormalizeValue(previousValue),
-                newValue = NormalizeValue(newValue)
-            };
+            JToken leftToken = left == null ? JValue.CreateNull() : JToken.FromObject(NormalizeValue(left));
+            JToken rightToken = right == null ? JValue.CreateNull() : JToken.FromObject(NormalizeValue(right));
+            return JToken.DeepEquals(leftToken, rightToken);
         }
 
         static object NormalizeValue(object value)
@@ -665,34 +767,25 @@ Returns:
             };
         }
 
-        static Component FindTextComponent(GameObject target)
+        internal static Component FindTextComponent(GameObject target)
         {
-            var textType = ManageGameObject.FindType("Text");
+            Type textType = UnityComponentResolver.FindType("Text");
             if (textType != null)
             {
                 Component legacyText = target.GetComponent(textType);
                 if (legacyText != null)
-                {
                     return legacyText;
-                }
             }
 
-            var tmpType = ManageGameObject.FindType("TMP_Text") ?? ManageGameObject.FindType("TextMeshProUGUI");
-            if (tmpType != null)
-            {
-                return target.GetComponent(tmpType);
-            }
-
-            return null;
+            Type tmpType = UnityComponentResolver.FindType("TMP_Text") ?? UnityComponentResolver.FindType("TextMeshProUGUI");
+            return tmpType != null ? target.GetComponent(tmpType) : null;
         }
 
         static string GetTextValue(Component component)
         {
             PropertyInfo property = component.GetType().GetProperty("text", BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
             if (property != null && property.CanRead)
-            {
                 return property.GetValue(component)?.ToString() ?? string.Empty;
-            }
 
             FieldInfo field = component.GetType().GetField("text", BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
             return field?.GetValue(component)?.ToString() ?? string.Empty;
@@ -711,13 +804,11 @@ Returns:
             field?.SetValue(component, value);
         }
 
-        static bool TryParseVector2(JToken value, out Vector2 vector)
+        internal static bool TryParseVector2(JToken value, out Vector2 vector)
         {
             vector = default;
             if (value == null || value.Type == JTokenType.Null)
-            {
                 return false;
-            }
 
             if (value is JArray array && array.Count >= 2)
             {
@@ -736,13 +827,11 @@ Returns:
             return false;
         }
 
-        static bool TryParseColor(JToken value, out Color color)
+        internal static bool TryParseColor(JToken value, out Color color)
         {
             color = default;
             if (value == null || value.Type == JTokenType.Null)
-            {
                 return false;
-            }
 
             if (value is JArray array && array.Count >= 3)
             {
@@ -764,12 +853,10 @@ Returns:
             return false;
         }
 
-        static string SanitizeAssetPath(string path)
+        internal static string SanitizeAssetPath(string path)
         {
             if (string.IsNullOrWhiteSpace(path))
-            {
                 return path;
-            }
 
             string normalized = path.Replace('\\', '/');
             if (normalized.StartsWith("Assets/", StringComparison.OrdinalIgnoreCase) ||

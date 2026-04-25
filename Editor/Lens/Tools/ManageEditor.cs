@@ -431,7 +431,12 @@ Returns:
 
         static EditorCompactStateData BuildCompactEditorStateData()
         {
-            var fullState = BuildEditorStateData();
+            return BuildCompactEditorStateData(out _);
+        }
+
+        static EditorCompactStateData BuildCompactEditorStateData(out EditorStateData fullState)
+        {
+            fullState = BuildEditorStateData();
             var runtimeProbe = fullState.RuntimeProbe ?? new PlayModeRuntimeProbeData();
             bool isEditorIdle = !fullState.IsCompiling &&
                 !fullState.IsUpdating &&
@@ -608,19 +613,29 @@ Returns:
         static async Task<object> WaitForStableEditorAsync(int timeoutMs, int pollIntervalMs, int stablePollCountRequired, int postStableDelayMs)
         {
             var attempts = new List<EditorStabilityAttemptData>();
+            var attemptDetails = new List<EditorStabilityAttemptDetailData>();
             var startTime = EditorApplication.timeSinceStartup;
             int stablePollCountReached = 0;
+            EditorCompactStateData editorState = null;
+            EditorStateData fullEditorState = null;
 
             while (((EditorApplication.timeSinceStartup - startTime) * 1000d) < timeoutMs)
             {
                 var blockingReasons = EditorStabilityUtility.GetBlockingReasons();
-                var editorState = BuildEditorStateData();
+                editorState = BuildCompactEditorStateData(out fullEditorState);
                 attempts.Add(new EditorStabilityAttemptData
                 {
                     Timestamp = System.DateTime.UtcNow.ToString("o"),
                     IsStable = blockingReasons.Count == 0,
                     BlockingReasons = blockingReasons,
                     EditorState = editorState,
+                });
+                attemptDetails.Add(new EditorStabilityAttemptDetailData
+                {
+                    Timestamp = System.DateTime.UtcNow.ToString("o"),
+                    IsStable = blockingReasons.Count == 0,
+                    BlockingReasons = blockingReasons,
+                    EditorState = fullEditorState,
                 });
 
                 if (blockingReasons.Count == 0)
@@ -632,13 +647,20 @@ Returns:
                         {
                             await Task.Delay(postStableDelayMs);
                             blockingReasons = EditorStabilityUtility.GetBlockingReasons();
-                            editorState = BuildEditorStateData();
+                            editorState = BuildCompactEditorStateData(out fullEditorState);
                             attempts.Add(new EditorStabilityAttemptData
                             {
                                 Timestamp = System.DateTime.UtcNow.ToString("o"),
                                 IsStable = blockingReasons.Count == 0,
                                 BlockingReasons = blockingReasons,
                                 EditorState = editorState,
+                            });
+                            attemptDetails.Add(new EditorStabilityAttemptDetailData
+                            {
+                                Timestamp = System.DateTime.UtcNow.ToString("o"),
+                                IsStable = blockingReasons.Count == 0,
+                                BlockingReasons = blockingReasons,
+                                EditorState = fullEditorState,
                             });
 
                             if (blockingReasons.Count != 0)
@@ -650,6 +672,7 @@ Returns:
                         }
 
                         BridgeStatusTracker.MarkReady();
+                        var inlineAttempts = CreateInlineStabilityAttempts(attempts);
                         return Response.Success("Editor reached a stable idle state.", new EditorStabilityResultData
                         {
                             IsStable = true,
@@ -657,8 +680,13 @@ Returns:
                             WaitedMilliseconds = (int)((EditorApplication.timeSinceStartup - startTime) * 1000d),
                             StablePollCountReached = stablePollCountReached,
                             BlockingReasons = blockingReasons,
-                            Attempts = attempts,
+                            AttemptCount = attempts.Count,
+                            StableAttemptCount = attempts.Count(attempt => attempt.IsStable),
+                            InlineAttemptCount = inlineAttempts.Count,
+                            Attempts = inlineAttempts,
+                            AttemptsDetailRef = CreateStabilityAttemptsDetailRef(attemptDetails),
                             EditorState = editorState,
+                            FullStateDetailRef = editorState?.FullStateDetailRef,
                         });
                     }
                 }
@@ -671,6 +699,8 @@ Returns:
             }
 
             var finalBlockingReasons = EditorStabilityUtility.GetBlockingReasons();
+            editorState = BuildCompactEditorStateData(out fullEditorState);
+            var timeoutInlineAttempts = CreateInlineStabilityAttempts(attempts);
             return Response.Error("EDITOR_NOT_STABLE", new EditorStabilityResultData
             {
                 IsStable = false,
@@ -678,9 +708,47 @@ Returns:
                 WaitedMilliseconds = (int)((EditorApplication.timeSinceStartup - startTime) * 1000d),
                 StablePollCountReached = stablePollCountReached,
                 BlockingReasons = finalBlockingReasons,
-                Attempts = attempts,
-                EditorState = BuildEditorStateData(),
+                AttemptCount = attempts.Count,
+                StableAttemptCount = attempts.Count(attempt => attempt.IsStable),
+                InlineAttemptCount = timeoutInlineAttempts.Count,
+                Attempts = timeoutInlineAttempts,
+                AttemptsDetailRef = CreateStabilityAttemptsDetailRef(attemptDetails),
+                EditorState = editorState,
+                FullStateDetailRef = editorState?.FullStateDetailRef,
             });
+        }
+
+        static List<EditorStabilityAttemptData> CreateInlineStabilityAttempts(List<EditorStabilityAttemptData> attempts)
+        {
+            const int maxInlineAttempts = 6;
+            if (attempts == null || attempts.Count <= maxInlineAttempts)
+                return attempts ?? new List<EditorStabilityAttemptData>();
+
+            var inline = new List<EditorStabilityAttemptData>();
+            inline.Add(attempts[0]);
+            int tailCount = maxInlineAttempts - 1;
+            inline.AddRange(attempts.Skip(Math.Max(1, attempts.Count - tailCount)));
+            return inline;
+        }
+
+        static object CreateStabilityAttemptsDetailRef(List<EditorStabilityAttemptDetailData> attempts)
+        {
+            attempts ??= new List<EditorStabilityAttemptDetailData>();
+            string serialized = JsonConvert.SerializeObject(attempts, Formatting.None);
+            int rawBytes = PayloadBudgeting.GetUtf8ByteCount(serialized);
+            return ToolResultCompactor.CreateStoredDetailRef(
+                "Unity.ManageEditor.WaitForStableEditor",
+                new
+                {
+                    count = attempts.Count,
+                    attempts
+                },
+                rawBytes,
+                new
+                {
+                    kind = "editor_stability_attempts",
+                    count = attempts.Count
+                });
         }
 
         static PlayModeRuntimeProbeData BuildRuntimeProbeData()

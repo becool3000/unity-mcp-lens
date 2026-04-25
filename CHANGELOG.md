@@ -2,6 +2,52 @@
 
 All notable Unity MCP Lens package changes are documented here.
 
+## [Unreleased]
+
+### Added
+
+- Added Phase 8 split GameObject TSAM tools for inspect, component reads, preview/apply mutation, create, and delete behind the `scene` pack.
+- Added Phase 10 project/Input System tools for diagnostics and active input handler preview/apply behind the `project` pack.
+- Added Phase 11 `project`-pack diagnostics for `Unity.Project.PackageCompatibility` and `Unity.InputActions.InspectAsset`.
+- Added Phase 12 `ui` tools for `Unity.UI.PreviewEnsureHierarchy`, `Unity.UI.ApplyEnsureHierarchy`, `Unity.UI.PreviewLayoutProperties`, `Unity.UI.ApplyLayoutProperties`, and `Unity.UI.VerifyScreenLayout`.
+- Added Phase 12 `scene` tools for `Unity.Scene.PreviewBindSerializedReferences` and `Unity.Scene.ApplyBindSerializedReferences`.
+- Added Lens usage reporting for payload, bridge, pack transition, tool snapshot, and TSAM stage coverage analysis.
+- Added metadata audit coverage for foundation, scene, ui, project, and debug pack surfaces, including required tools, schema checks, and read-only annotations.
+- Added center-based `Unity.UI.VerifyScreenLayout` relative-position relations: `right_of_center`, `left_of_center`, `above_center`, and `below_center`.
+
+### Changed
+
+- Kept `foundation` as the narrow default export surface with a `12` tool baseline.
+- Raised the `foundation + scene` baseline from `30` to `32` tools and added a `foundation + ui` baseline of `22` tools.
+- Raised the `project` pack smoke baseline from `19` to `21` tools while keeping `foundation` and `scene` unchanged.
+- Replaced the public `Unity.UI.EnsureNamedHierarchy` and `Unity.UI.SetLayoutProperties` registrations with split preview/apply tool pairs.
+- Extended `Unity.InputSystem.Diagnostics` with compatibility signals and concrete `.inputactions` wrapper metadata.
+- Collapsed known benign repeated Input System integration-test log-skip lines into one informational compatibility issue so healthy package diagnostics stay `ok`.
+- Excluded the in-flight `Unity.GetLensUsageReport` request from self-analysis so appended usage-report reruns no longer classify their own final call as unmatched.
+- Updated Codex workflow guidance to prefer the Phase 11 `project` tools for package/import/Input System diagnostics and active input handler work.
+- Improved `Unity.RunCommand` output to support structured `ExecutionResult.ReturnResult(...)` payloads plus explicit result-serialization failure classification.
+- Improved `Unity.ManageEditor WaitForStableEditor` output contracts toward stage-aware compact results with detail refs.
+- Suppressed restart-required noise for no-op active input handler preview/apply results.
+- Improved `Check-UnityDevSession` so it distinguishes direct MCP health from helper-path degradation and can recommend `ProceedWithDirectLensTools` when wrappers are the only failing layer.
+- Improved `Sync-UnityScriptChanges` so it no longer fails up front on a transient `console` pack restore and can recover through direct Lens health plus compact editor-state probes.
+- Improved `Invoke-UnityRunCommand` so healthy play mode can bypass helper-side idle gating and still return structured `ReturnResult(...)` payloads.
+
+### Known Follow-Up
+
+- Reduce helper-script session/setup churn, repeated `get_tool_schema` requests, and pack transition noise.
+- Improve payload shaping so large editor-state and tool-snapshot rows produce measurable savings.
+- Decide whether default package assembly filtering should exclude doc/sample/test-support asmdefs from compact compatibility reads.
+- Reduce reconnect-prone `Unity_ManageEditor` transport-noise during play transitions.
+- Add reliable editor restart/reload orchestration and prefab/serialized-reference authoring workflows.
+
+### Validation
+
+- Phase 11 smoke passed with a residual payload-shaping warning on Unity `6000.4.3f1` in `D:\2DUnityNewGame`.
+- Phase 12 helper-driven hardening smoke passed with a residual payload-shaping warning on Unity `6000.4.3f1` in `D:\2DUnityNewGame`.
+- Metadata audit passed with `foundation=12`, `foundation+scene=32`, `foundation+ui=22`, `project=21`, and `debug=22`.
+- Phase 11 package compatibility, input-actions inspection, diagnostics, preview, and set calls emitted complete TSAM stage coverage with no failure classes.
+- Phase 12 UI hierarchy, scene binding, layout, and verify calls emitted complete TSAM stage coverage with no tool failure rows in the focused helper-driven scope.
+
 ## [0.1.0-alpha.1] - 2026-04-20
 
 ### Fixed

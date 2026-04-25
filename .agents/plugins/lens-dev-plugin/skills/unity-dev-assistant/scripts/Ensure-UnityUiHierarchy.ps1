@@ -49,7 +49,8 @@ $payload = [ordered]@{
     Nodes = @($nodes)
 }
 
-$response = Invoke-UnityMcpToolJson -ProjectPath $resolvedProjectPath -ToolName "Unity_UI_EnsureNamedHierarchy" -Arguments $payload -TimeoutSeconds $TimeoutSeconds
+$toolName = if ($PreviewOnly) { "Unity_UI_PreviewEnsureHierarchy" } else { "Unity_UI_ApplyEnsureHierarchy" }
+$response = Invoke-UnityMcpToolJson -ProjectPath $resolvedProjectPath -ToolName $toolName -Arguments $payload -TimeoutSeconds $TimeoutSeconds
 $toolResult = Get-UnityToolObject -Response $response
 
 [ordered]@{

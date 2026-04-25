@@ -2,86 +2,167 @@
 
 Telemetry is a core part of this project.
 
-The goal is not just performance monitoring, but understanding:
+The goal is not just performance monitoring. The useful question is:
 
-**how efficiently an agent can operate the system**
+> How expensive is it for an agent to stay oriented and keep making progress?
 
 ---
 
-## What is Measured
+## What Is Measured
 
-At a minimum:
+Lens records several classes of rows:
 
-- tool name
-- execution duration
-- success / failure
-- output size
-- input summary
-- call sequence (what came before/after)
+- Tool execution payload rows.
+- Bridge request and response rows.
+- Tool snapshot rows.
+- Pack transition rows.
+- Coverage rows for TSAM stages.
+- Detail-ref and shaped-output metadata when available.
+
+For TSAM tools, the expected stage coverage is:
+
+- `normalization`
+- `service`
+- `adapter`
+- `result_shaping`
 
 ---
 
 ## Why Telemetry Matters
 
-In agent-driven systems, cost is not just time.
+In agent-driven Unity work, cost includes more than runtime duration:
 
-Cost includes:
+- token and context usage
+- repeated schema requests
+- reconnect/setup loops
+- pack churn
+- ambiguous results that trigger custom probes
+- large editor-state or snapshot payloads
+- missing tools that force `Unity.RunCommand` or raw file/log inspection
 
-- token usage
-- recovery loops
-- repeated calls
-- ambiguous results
-- unnecessary payloads
-
-Telemetry helps identify:
-
-- tools that cause retries
-- tools that return too much data
-- missing intermediate capabilities
-- inefficient call chains
+Telemetry should make those costs visible enough to choose the next fix.
 
 ---
 
-## Types of Issues Telemetry Reveals
+## Current Dogfood Baseline
 
-### 1. Tool Ambiguity
-Agent calls multiple tools to recover from unclear results.
+The 2026-04-24 dogfood run in `D:\2DUnityNewGame` produced these important
+signals:
 
-### 2. Payload Bloat
-Large responses increase token usage and slow reasoning.
+- `2,574` total usage rows.
+- `1,134` bridge requests and `1,140` bridge responses.
+- `34` bridge connections.
+- `127` setup cycles.
+- `184` pack-set transitions.
+- `356` `get_tool_schema` requests.
+- `6` unmatched bridge requests, all tied to `Unity_ManageEditor` transport closure during domain reload.
+- `0.00%` recorded shaping savings on eligible payload rows.
+- Largest payload rows were `Unity_ManageEditor` results above `220 KB`.
+- Tool snapshots contributed about `2.50 MB` raw payload across `29` rows.
 
-### 3. Missing Capabilities
-Agent chains many low-level tools to achieve one goal.
+The same run confirmed that the exercised Phase 10 project tools emitted full
+TSAM stage coverage:
 
-### 4. Retry Loops
-Same tool called repeatedly with small variations.
+- `Unity.InputSystem.Diagnostics`
+- `Unity.ProjectSettings.PreviewActiveInputHandler`
+- `Unity.ProjectSettings.SetActiveInputHandler`
 
-### 5. Redundant Work
-Repeated scene scans or asset queries.
+## Phase 11 Smoke Baseline
+
+A focused Phase 11 smoke test on 2026-04-24 passed with a residual payload-shaping warning:
+
+- Host project: `D:\2DUnityNewGame`.
+- Unity version: `6000.4.3f1`.
+- Metadata audit: pass.
+- Export counts: `foundation=12`, `foundation+scene=30`, `project=21`, `debug=22`.
+- Compact rerun span: `44` rows, lines `1279..1324`.
+- Bridge churn in compact rerun: `1` connection, `0` setup cycles, `0` unmatched requests.
+- Phase 11 TSAM coverage: complete for package compatibility, input-actions inspection, diagnostics, preview, and set.
+- Phase 11 failure classes: none.
+
+Smoke notes:
+
+- Compatibility signals now collapse repeated `Unity.InputSystem.IntegrationTests.dll` log-skip messages into one informational issue and keep overall status `ok`.
+- The post-smoke usage report now excludes its own in-flight request and no longer flags the final `Unity_GetLensUsageReport` call as unmatched.
+- Payload report still shows `NoShapingRecorded=true`.
+
+## Phase 12 Hardening Smoke Baseline
+
+A focused helper-driven Phase 12 hardening smoke test on 2026-04-25 passed with a residual payload-shaping warning:
+
+- Host project: `D:\2DUnityNewGame`.
+- Unity version: `6000.4.3f1`.
+- Metadata audit: pass.
+- Export counts: `foundation=12`, `foundation+scene=32`, `foundation+ui=22`, `project=21`, `debug=22`.
+- Helper-driven rerun scope: lines `1432..1790`, `358` rows.
+- Bridge churn in the focused rerun: `25` connections, `0` setup cycles, `0` unmatched requests.
+- Phase 12 TSAM coverage: complete for UI hierarchy preview/apply, scene binding preview/apply, UI layout preview/apply, and UI verify.
+- Phase 12 tool failure rows: none.
+
+Smoke notes:
+
+- `Sync-UnityScriptChanges.ps1` recovered through a transient `console` pack timeout by falling back to direct Lens health and compact editor-state probes.
+- `Verify-UnityUiScreenLayout` passed in play mode with the new `below_center` relation for count labels inside slot cards.
+- `Invoke-UnityRunCommand` now bypasses idle wait in healthy play mode and returned structured HUD placement data through `returnedData`.
+- The focused usage-report scope still shows `NoShapingRecorded=true`.
+- The only recorded failure class in that focused scope is a `Unity_ManageEditor` disposed-transport response during a reconnect-prone play transition.
 
 ---
 
-## Key Concept
+## Current Findings
 
-Telemetry measures:
+### Session And Schema Churn
 
-> how expensive it is for an agent to stay oriented
+Repeated setup cycles, connections, pack transitions, and schema requests are a
+major source of control-plane noise. Helper scripts should reuse sessions and
+avoid broad setup work when the editor status beacon and existing manifest are
+fresh enough.
 
-Not just how fast a tool runs.
+The helper path is now better at distinguishing wrapper degradation from direct
+bridge health, but the focused Phase 12 scope still showed `17` connections and
+`26` pack transitions for one end-to-end smoke. That remains a control-plane
+cost problem even though the happy path now succeeds.
+
+### Payload Shaping Gaps
+
+Large `Unity.ManageEditor` and tool-snapshot rows show that compact output is
+not yet consistently reducing recorded payload size. This may mean shaping is
+missing expensive rows, or telemetry is recording the raw side of the operation
+instead of the shaped side.
+
+### Diagnostic Surface Gaps
+
+Phase 11 closed the biggest package/import/Input System read-only gap, and the
+compact compatibility view now keeps known benign repeated Input System
+integration-test skip lines informational instead of escalating overall status.
+The next TSAM diagnostics cluster should cover missing scripts, reference
+validation, and import side effects with the same compact/read-first behavior.
+
+### Result Ambiguity
+
+`Unity.RunCommand` must keep failure stage, compilation state, execution state,
+and logs internally consistent. Ambiguous stage metadata leads directly to
+smaller manual probes and slower recovery.
+
+Structured `ExecutionResult.ReturnResult(...)` payloads should stay compact,
+prefer detail refs when large, and remain available even when execution logs
+warnings or errors.
+
+The helper-driven play-mode path now preserves structured `returnedData`
+correctly when it can prove direct Lens health and healthy play-mode state,
+instead of forcing a failing idle wait first.
 
 ---
 
-## Future Direction
+## Definition Of A Good Telemetry Outcome
 
-As the architecture evolves (TSAM):
+A good Lens change should usually improve at least one of these:
 
-Telemetry can be extended to:
-
-- Service-level timing
-- Adapter-level cost (Unity calls)
-- Model size and complexity
-- Decision path tracing
-
-This will allow more precise optimization of both:
-- runtime cost
-- token cost
+- fewer bridge connections per task
+- fewer setup cycles
+- fewer `get_tool_schema` calls
+- fewer pack transitions
+- smaller shaped payloads
+- fewer unmatched requests outside expected reload/play transitions
+- full TSAM stage coverage for split tools
+- clearer failure classes and recovery hints

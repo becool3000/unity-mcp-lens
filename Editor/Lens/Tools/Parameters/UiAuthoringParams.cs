@@ -3,6 +3,72 @@ using Becool.UnityMcpLens.Editor.ToolRegistry;
 
 namespace Becool.UnityMcpLens.Editor.Tools.Parameters
 {
+    public record UiNodeComponentsSpec
+    {
+        [McpDescription("Ensure a CanvasGroup component exists on this node.", Required = false)]
+        public bool? CanvasGroup { get; set; }
+
+        [McpDescription("Ensure an Image component exists on this node.", Required = false)]
+        public bool? Image { get; set; }
+
+        [McpDescription("Ensure a Button component exists on this node.", Required = false)]
+        public bool? Button { get; set; }
+
+        [McpDescription("Ensure a legacy UnityEngine.UI.Text component exists on this node.", Required = false)]
+        public bool? Text { get; set; }
+
+        [McpDescription("Ensure a TMPro.TextMeshProUGUI component exists on this node.", Required = false)]
+        public bool? TmpText { get; set; }
+    }
+
+    public record UiNodeLayoutSpec
+    {
+        [McpDescription("RectTransform anchorMin value, as {x,y} or [x,y].", Required = false)]
+        public JToken AnchorMin { get; set; }
+
+        [McpDescription("RectTransform anchorMax value, as {x,y} or [x,y].", Required = false)]
+        public JToken AnchorMax { get; set; }
+
+        [McpDescription("RectTransform pivot value, as {x,y} or [x,y].", Required = false)]
+        public JToken Pivot { get; set; }
+
+        [McpDescription("RectTransform sizeDelta value, as {x,y} or [x,y].", Required = false)]
+        public JToken SizeDelta { get; set; }
+
+        [McpDescription("RectTransform anchoredPosition value, as {x,y} or [x,y].", Required = false)]
+        public JToken AnchoredPosition { get; set; }
+
+        [McpDescription("Sibling index to set on the target transform.", Required = false)]
+        public int? SiblingIndex { get; set; }
+
+        [McpDescription("Set the target GameObject active state.", Required = false)]
+        public bool? Active { get; set; }
+
+        [McpDescription("CanvasGroup alpha value.", Required = false)]
+        public float? CanvasGroupAlpha { get; set; }
+
+        [McpDescription("CanvasGroup interactable flag.", Required = false)]
+        public bool? CanvasGroupInteractable { get; set; }
+
+        [McpDescription("CanvasGroup blocksRaycasts flag.", Required = false)]
+        public bool? CanvasGroupBlocksRaycasts { get; set; }
+
+        [McpDescription("Sprite asset path to assign to an Image component.", Required = false)]
+        public string ImageSpritePath { get; set; }
+
+        [McpDescription("Image color as {r,g,b,a} or [r,g,b,a].", Required = false)]
+        public JToken ImageColor { get; set; }
+
+        [McpDescription("Text content for a UI Text or TMP_Text component.", Required = false)]
+        public string Text { get; set; }
+
+        [McpDescription("Text color as {r,g,b,a} or [r,g,b,a].", Required = false)]
+        public JToken TextColor { get; set; }
+
+        [McpDescription("Button interactable flag.", Required = false)]
+        public bool? ButtonInteractable { get; set; }
+    }
+
     public record UiNamedHierarchyNodeSpec
     {
         [McpDescription("Name of the UI GameObject to find or create.", Required = true)]
@@ -10,6 +76,12 @@ namespace Becool.UnityMcpLens.Editor.Tools.Parameters
 
         [McpDescription("Component type names that must exist on this node.", Required = false)]
         public string[] ComponentTypes { get; set; }
+
+        [McpDescription("Optional common UI component presence to ensure on this node.", Required = false)]
+        public UiNodeComponentsSpec Components { get; set; }
+
+        [McpDescription("Optional authored RectTransform and display properties for this node.", Required = false)]
+        public UiNodeLayoutSpec Layout { get; set; }
 
         [McpDescription("Child UI nodes that must exist under this node. Pass as an array of node objects.", Required = false)]
         public JToken Children { get; set; }

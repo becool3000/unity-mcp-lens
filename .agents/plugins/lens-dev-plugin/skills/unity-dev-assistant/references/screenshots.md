@@ -24,7 +24,7 @@ Capture path strategy:
    - optionally step one or more frames (`StepFramesBeforeCapture`) while paused for deterministic movement states
    - capture the paused frame into a temporary render texture, then read back and write the PNG from that texture
    - prefer relative project paths for Unity-side screenshot writes unless the caller explicitly needs a different staging location
-   - pair it with `Unity_ManageEditor GetState`
+   - pair it with `Unity_ManageEditor GetCompactState`
    - optionally run `PreCaptureCode` to lock scene state before the shot
    - optionally run a custom runtime probe after the state lock
 2. Desktop fallback second

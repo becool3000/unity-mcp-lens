@@ -2,113 +2,143 @@
 
 This project is a Unity MCP package designed for agent-driven workflows.
 
-It exposes Unity capabilities as structured tools that can be called from external agents (e.g. Codex), while maintaining a focus on token efficiency, low-noise communication, and measurable behavior via telemetry.
+It exposes Unity capabilities as structured tools that can be called from
+external agents such as Codex, while maintaining a focus on narrow tool
+exposure, compact outputs, bridge resilience, and measurable behavior through
+telemetry.
 
 ---
 
 ## High-Level Flow
 
-Agent (Codex / external host)
-→ MCP server (UnityMcpLensApp~)
-→ Bridge (named pipe / socket)
-→ Tool Registry
-→ Tools
-→ Unity APIs
+```text
+Agent or MCP client
+-> unity-mcp-lens stdio server
+-> Unity Lens bridge
+-> Tool registry
+-> Tool implementation
+-> Unity APIs
+```
 
-Unity acts as the execution and inspection environment.
-
----
-
-## Current Architecture (Reality)
-
-The current system is **tool-centric**:
-
-- Tools are defined with `[McpTool]`
-- Each tool is responsible for:
-  - querying Unity state
-  - performing logic
-  - applying changes
-  - formatting results
-
-There is no strict separation between:
-- decision logic
-- Unity API access
-- data models
-
-This makes the system simple and flexible, but can lead to:
-- duplicated logic across tools
-- large tool files
-- harder-to-reason-about behavior for agents
+Unity acts as the source of truth for project/editor state and the execution
+environment for mutations. The MCP server and helper scripts orchestrate access
+from outside the Unity process.
 
 ---
 
-## Target Direction
+## Current Architecture
 
-The system is evolving toward a structured separation:
+The repo is now a mixed architecture:
 
-**Tool → Service → Adapter → Model (TSAM)**
+- Legacy broad tools still exist for compatibility and escape hatches.
+- Newer high-value surfaces are being split into TSAM layers: Tool, Service, Adapter, Model.
+- Tool packs keep the model-facing surface narrow by default.
+- Helper scripts handle orchestration-heavy flows such as compile/idle waits, play-mode entry, build monitoring, and bridge reacquire.
+- Telemetry records payload rows, bridge rows, pack transitions, tool snapshots, and TSAM stage coverage.
+
+Current TSAM-covered surfaces include:
+
+- Phase 8 scene/GameObject tools: inspect, list components, get component, preview/apply object changes, preview/apply component changes, create, and delete.
+- Phase 11 project/package/import tools: package compatibility, input-action asset inspection, Input System diagnostics, active input handler preview, and active input handler apply.
+- Phase 12 UI tools: preview/apply hierarchy authoring, preview/apply layout authoring, and read-only screen-layout verification.
+- Phase 12 scene binding tools: preview/apply serialized object-reference binding for scene components.
+
+Current baselines:
+
+- `foundation`: `12` exported tools.
+- `foundation + scene`: `32` exported tools.
+- `foundation + ui`: `22` exported tools.
+- `project`: `21` exported tools.
+- `debug`: `22` exported tools.
+
+Pack additions must not widen the default `foundation` surface. Any deliberate
+pack-surface change must update the metadata audit, smoke prompts, and package
+docs at the same time.
+
+---
+
+## TSAM Pattern
+
+The target shape for new or heavily revised tools is:
+
+```text
+Tool -> Service -> Adapter -> Model
+```
 
 ### Tool
-- MCP entry point
-- validates input
-- calls a service
-- returns structured results
+
+- MCP entry point.
+- Normalizes inputs.
+- Measures the `normalization` and `result_shaping` stages.
+- Calls a service.
+- Returns compact, structured results.
 
 ### Service
-- contains decision logic
-- coordinates operations
-- does not directly depend on Unity APIs (ideally)
+
+- Contains decision logic and operation planning.
+- Coordinates reads, previews, applies, and verification.
+- Measures service work separately from Unity API access.
 
 ### Adapter
-- wraps Unity APIs
-- handles scene queries, asset access, mutations
+
+- Wraps Unity APIs and reflection.
+- Handles editor state, assets, scene objects, project settings, packages, logs, and serialized objects.
+- Measures Unity-facing work in the `adapter` stage.
 
 ### Model
-- typed data structures
-- passed between layers
-- avoids ad hoc anonymous objects
+
+- Defines typed request, response, plan, and validation structures.
+- Avoids anonymous result drift across tools.
+- Keeps output contracts stable enough for agents and audits.
 
 ---
 
-## Design Goals
+## Tool Packs
 
-### 1. Agent-Friendly Tools
-Tools should:
-- be predictable
-- return structured data
-- avoid excessive output
-- reduce ambiguity
+`foundation` is always active. Other packs are explicit, temporary expansions.
+Lens currently enforces at most two non-foundation packs at once unless `full`
+is selected as an administrative escape hatch.
 
-### 2. Token Efficiency
-- minimize payload size
-- avoid repeated scans
-- avoid redundant tool calls
-- reduce recovery loops
+Important packs:
 
-### 3. Low-Noise Synchronization
-- narrow tool exposure
-- reduce irrelevant context
-- keep tool schemas stable
-
-### 4. Observable Behavior
-- measure tool usage
-- measure payload size
-- detect retry loops
-- detect agent confusion
+- `console`: console reads, editor health, and lightweight troubleshooting.
+- `project`: project/package/import metadata, validation, missing script/reference checks, Input System diagnostics/settings, package compatibility, and input-action inspection.
+- `scene`: scene hierarchy, runtime snapshots, GameObject operations, and serialized-reference binding.
+- `ui`: UI Toolkit reads, uGUI hierarchy/layout authoring, and screen-layout verification.
+- `scripting`: script/resource reads, edits, validation, and `Unity.RunCommand`.
+- `assets`: asset, prefab, import, and generation operations.
+- `debug`: profiler, usage reports, and deeper diagnostics.
 
 ---
 
-## Unity’s Role
+## Compatibility Surfaces
 
-Unity is:
+Broad legacy tools remain part of the architecture while TSAM coverage expands.
+They are useful for compatibility, unusual editor operations, and emergency
+escape hatches. The preferred direction for new high-use work is:
 
-- the source of truth for project state
-- the execution environment for mutations
-- the visualization layer for humans
+1. Add or extend a pack-scoped TSAM slice.
+2. Keep diagnostics read-only unless mutation is required.
+3. Use preview/apply pairs for durable scene, UI, project, or asset mutation.
+4. Keep output compact by default and put full detail behind `detailRef`.
+5. Confirm stage coverage through `Unity.GetLensUsageReport`.
 
-Unity is **not** the orchestration layer.
+This lets the public tool surface improve without breaking older agents that
+still depend on broader facade tools.
 
-Agents operate through MCP tools, not through the editor UI.
+---
+
+## Known Architectural Debt
+
+The current dogfood data points to these high-value fixes:
+
+- Helper scripts still create too much session/setup/pack churn.
+- Tool schema requests are repeated more often than useful.
+- Some large editor-state and tool-snapshot payloads are not shaped enough.
+- `Unity.RunCommand` now supports structured `ReturnResult(...)` payloads, but failure-stage and detail-ref behavior still need more dogfood.
+- Restart/reload orchestration cannot rely only on in-editor tools because Unity loses transport during process exit and domain reload.
+- Prefab authoring still needs first-class inspect/preview/apply workflows.
+- Existing missing-script and reference-validation tools should move toward TSAM shape after the package/import cluster.
 
 ---
 
@@ -116,23 +146,10 @@ Agents operate through MCP tools, not through the editor UI.
 
 This project is intentionally evolving incrementally:
 
-1. Keep tools working
-2. Refactor high-impact tools into TSAM structure
-3. Extract reusable logic into services
-4. Reduce duplication across tools
-5. Improve telemetry visibility
+1. Keep existing tools working.
+2. Move painful, high-use workflows into TSAM surfaces.
+3. Keep `foundation` narrow.
+4. Add pack-specific diagnostics where dogfooding shows repeated manual probes.
+5. Use telemetry to decide which tool outputs and helper flows to fix next.
 
 No full rewrite is planned.
-
----
-
-## Key Insight
-
-This is not trying to replace Unity.
-
-It is turning Unity into a system that can be:
-- inspected
-- queried
-- and acted upon
-
-by external agents in a structured, efficient way.

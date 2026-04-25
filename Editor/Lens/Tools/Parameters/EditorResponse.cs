@@ -219,7 +219,22 @@ namespace Becool.UnityMcpLens.Editor.Tools.Parameters
         [McpDescription("Blocking reasons preventing a stable editor state")]
         public List<string> BlockingReasons { get; set; }
 
-        [McpDescription("Editor state captured for this sample")]
+        [McpDescription("Compact editor state captured for this sample")]
+        public EditorCompactStateData EditorState { get; set; }
+    }
+
+    public record EditorStabilityAttemptDetailData
+    {
+        [McpDescription("UTC timestamp for this sample")]
+        public string Timestamp { get; set; }
+
+        [McpDescription("Whether the editor was stable at this sample")]
+        public bool IsStable { get; set; }
+
+        [McpDescription("Blocking reasons preventing a stable editor state")]
+        public List<string> BlockingReasons { get; set; }
+
+        [McpDescription("Full editor state captured for this sample")]
         public EditorStateData EditorState { get; set; }
     }
 
@@ -240,11 +255,26 @@ namespace Becool.UnityMcpLens.Editor.Tools.Parameters
         [McpDescription("Blocking reasons from the last sampled state")]
         public List<string> BlockingReasons { get; set; }
 
-        [McpDescription("Sample history captured while waiting")]
+        [McpDescription("Number of samples captured while waiting")]
+        public int AttemptCount { get; set; }
+
+        [McpDescription("Number of stable samples captured while waiting")]
+        public int StableAttemptCount { get; set; }
+
+        [McpDescription("Number of sample summaries returned inline")]
+        public int InlineAttemptCount { get; set; }
+
+        [McpDescription("Compact sample summaries captured while waiting")]
         public List<EditorStabilityAttemptData> Attempts { get; set; }
 
-        [McpDescription("Editor state captured at completion")]
-        public EditorStateData EditorState { get; set; }
+        [McpDescription("Detail ref for the full sample history when available")]
+        public object AttemptsDetailRef { get; set; }
+
+        [McpDescription("Compact editor state captured at completion")]
+        public EditorCompactStateData EditorState { get; set; }
+
+        [McpDescription("Detail ref for the full final editor state when available")]
+        public object FullStateDetailRef { get; set; }
     }
 
 

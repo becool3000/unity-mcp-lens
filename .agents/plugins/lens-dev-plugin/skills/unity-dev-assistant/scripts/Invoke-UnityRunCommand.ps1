@@ -21,8 +21,6 @@ param(
     [double]$BuildPollIntervalSeconds = 5.0
 )
 
-. "$PSScriptRoot\UnityDevCommon.ps1"
-
 function ConvertTo-BoolFlag {
     param(
         [object]$Value,
@@ -67,86 +65,63 @@ if ([string]::IsNullOrWhiteSpace($Code) -and [string]::IsNullOrWhiteSpace($CodeP
     throw "Provide -Code or -CodePath."
 }
 
-if (-not [string]::IsNullOrWhiteSpace($CodePath)) {
-    $Code = Get-Content -Path $CodePath -Raw
-}
-
-$resolvedProjectPath = Resolve-UnityProjectPath -ProjectPath $ProjectPath
-$idleResult = $null
-$PausePlayMode = ConvertTo-BoolFlag -Value $PausePlayMode -Default $false
-$RestorePauseState = ConvertTo-BoolFlag -Value $RestorePauseState -Default $true
-$monitorBuild = -not [string]::IsNullOrWhiteSpace($MonitorBuildMode)
-
-if ($monitorBuild -and $MonitorBuildMode -ne "WebGL") {
-    throw "Unsupported -MonitorBuildMode '$MonitorBuildMode'. Supported values: WebGL."
-}
-
-if ($WaitForEditorIdle) {
-    $idleResult = Wait-UnityEditorIdle -ProjectPath $resolvedProjectPath -TimeoutSeconds $IdleTimeoutSeconds -StablePollCount $IdleStablePollCount -PollIntervalSeconds $IdlePollIntervalSeconds -PostIdleDelaySeconds $PostIdleDelaySeconds
-    if (-not $idleResult.success) {
-        [ordered]@{
-            success    = $false
-            error      = $idleResult.message
-            editorIdle = $idleResult
-        } | ConvertTo-Json -Depth 30
-        exit 1
-    }
-}
-
-$result = $null
-$exitCode = 0
+$nodePath = (Get-Command node -ErrorAction Stop).Source
+$scriptPath = Join-Path $PSScriptRoot "Invoke-UnityRunCommand.js"
+$temporaryCodePath = $null
 
 try {
-    $result = Invoke-UnityRunCommandObject -ProjectPath $resolvedProjectPath -Code $Code -Title $Title -Usings $Using -TimeoutSeconds $TimeoutSeconds -PausePlayMode $PausePlayMode -StepFrames $StepFrames -RestorePauseState $RestorePauseState
-}
-catch {
-    if (-not $monitorBuild) {
-        throw
+    $effectiveCodePath = $CodePath
+    if ([string]::IsNullOrWhiteSpace($effectiveCodePath)) {
+        $tempDirectory = Join-Path ([System.IO.Path]::GetTempPath()) "codex-unity"
+        New-Item -ItemType Directory -Force -Path $tempDirectory | Out-Null
+        $temporaryCodePath = Join-Path $tempDirectory ("run-command-" + [guid]::NewGuid().ToString("N") + ".csx")
+        Set-Content -LiteralPath $temporaryCodePath -Value $Code -Encoding UTF8
+        $effectiveCodePath = $temporaryCodePath
     }
 
-    $runCommandError = $_.Exception.Message
-    $initialMonitorState = Get-UnityBuildMonitorState -ProjectPath $resolvedProjectPath -Mode $MonitorBuildMode -BuildOutputPath $BuildOutputPath -BuildReportPath $BuildReportPath -SuccessArtifactPath $SuccessArtifactPath
+    $scriptArgs = @(
+        $scriptPath,
+        "--ProjectPath", $ProjectPath,
+        "--CodePath", $effectiveCodePath,
+        "--TimeoutSeconds", [string]$TimeoutSeconds,
+        "--PausePlayMode", [string](ConvertTo-BoolFlag -Value $PausePlayMode -Default $false),
+        "--StepFrames", [string]$StepFrames,
+        "--RestorePauseState", [string](ConvertTo-BoolFlag -Value $RestorePauseState -Default $true),
+        "--WaitForEditorIdle", [string]$WaitForEditorIdle,
+        "--IdleTimeoutSeconds", [string]$IdleTimeoutSeconds,
+        "--IdleStablePollCount", [string]$IdleStablePollCount,
+        "--IdlePollIntervalSeconds", [string]$IdlePollIntervalSeconds,
+        "--PostIdleDelaySeconds", [string]$PostIdleDelaySeconds,
+        "--BuildTimeoutSeconds", [string]$BuildTimeoutSeconds,
+        "--BuildPollIntervalSeconds", [string]$BuildPollIntervalSeconds
+    )
 
-    if ($initialMonitorState.Status -eq "Succeeded") {
-        $result = [ordered]@{
-            success             = $true
-            monitorFallbackUsed = $true
-            message             = "Unity build completed after the MCP response path became unavailable."
-            runCommandError     = $runCommandError
-            buildMonitor        = $initialMonitorState
+    if (-not [string]::IsNullOrWhiteSpace($Title)) {
+        $scriptArgs += @("--Title", $Title)
+    }
+    foreach ($usingEntry in $Using) {
+        if (-not [string]::IsNullOrWhiteSpace($usingEntry)) {
+            $scriptArgs += @("--Using", $usingEntry)
         }
     }
-    elseif ($initialMonitorState.Status -eq "Failed") {
-        $result = [ordered]@{
-            success             = $false
-            monitorFallbackUsed = $true
-            error               = $initialMonitorState.Summary
-            runCommandError     = $runCommandError
-            buildMonitor        = $initialMonitorState
-        }
-        $exitCode = 1
+    if (-not [string]::IsNullOrWhiteSpace($MonitorBuildMode)) {
+        $scriptArgs += @("--MonitorBuildMode", $MonitorBuildMode)
     }
-    elseif ($initialMonitorState.Status -eq "InProgress") {
-        $monitorWait = Wait-UnityBuildMonitor -ProjectPath $resolvedProjectPath -Mode $MonitorBuildMode -BuildOutputPath $BuildOutputPath -BuildReportPath $BuildReportPath -SuccessArtifactPath $SuccessArtifactPath -TimeoutSeconds $BuildTimeoutSeconds -PollIntervalSeconds $BuildPollIntervalSeconds
-        $result = [ordered]@{
-            success             = $monitorWait.success
-            monitorFallbackUsed = $true
-            message             = $monitorWait.message
-            runCommandError     = $runCommandError
-            buildMonitor        = $monitorWait
-        }
-        if (-not $monitorWait.success) {
-            $result.error = $monitorWait.message
-            $exitCode = 1
-        }
+    if (-not [string]::IsNullOrWhiteSpace($BuildOutputPath)) {
+        $scriptArgs += @("--BuildOutputPath", $BuildOutputPath)
     }
-    else {
-        throw
+    if (-not [string]::IsNullOrWhiteSpace($BuildReportPath)) {
+        $scriptArgs += @("--BuildReportPath", $BuildReportPath)
+    }
+    if (-not [string]::IsNullOrWhiteSpace($SuccessArtifactPath)) {
+        $scriptArgs += @("--SuccessArtifactPath", $SuccessArtifactPath)
+    }
+
+    & $nodePath @scriptArgs
+    exit $LASTEXITCODE
+}
+finally {
+    if ($temporaryCodePath -and (Test-Path -LiteralPath $temporaryCodePath)) {
+        Remove-Item -LiteralPath $temporaryCodePath -Force -ErrorAction SilentlyContinue
     }
 }
-
-if ($null -ne $idleResult) {
-    $result | Add-Member -NotePropertyName editorIdle -NotePropertyValue $idleResult -Force
-}
-$result | ConvertTo-Json -Depth 30
-exit $exitCode

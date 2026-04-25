@@ -18,6 +18,9 @@ Editor UI is Lens-owned and lives under **Tools > Unity MCP Lens** and **Project
 - Compact tool outputs with `detailRef` expansion for large payloads.
 - Local Unity editor/dev tools for console, project, scene, UI, scripting, assets, diagnostics, and package workflows.
 - Payload and bridge telemetry for measuring context and control-plane noise.
+- Split Phase 8 GameObject TSAM tools behind the `scene` pack.
+- Phase 11 project/package/import diagnostics and active input handler tools behind the `project` pack.
+- Phase 12 UI authoring, scene serialized-reference binding, and screen-layout verification tools behind the `ui` and `scene` packs.
 
 Lens does not own Unity's official Assistant chat UI, cloud asset generation, Assistant Gateway workflows, or Assistant-specific UI. Install the official Assistant package separately if you want those features.
 
@@ -73,6 +76,33 @@ Standalone Lens does not bundle or install the legacy Unity relay. If a project 
 - `Documentation~/`: package docs.
 - `docs/`: repo-maintenance notes and audits.
 
+## TSAM Direction
+
+Lens is being refactored incrementally around TSAM surfaces: Tool, Service,
+Adapter, and Model. The goal is not a rewrite. The goal is to move the
+workflows that create the most agent friction into compact, typed,
+telemetry-covered tools while keeping older broad tools available as
+compatibility fallbacks.
+
+TSAM-covered tools are expected to:
+
+- keep the public MCP schema narrow and explicit at the Tool layer
+- put planning and validation in Services
+- isolate Unity API and reflection access in Adapters
+- return stable typed Models instead of drifting anonymous result shapes
+- emit `normalization`, `service`, `adapter`, and `result_shaping` telemetry rows
+- prefer preview/apply pairs for mutations and read-only tools for diagnostics
+
+Current TSAM surfaces:
+
+- `scene`: Phase 8 split GameObject inspection, component reads, preview/apply mutation, create, and delete.
+- `scene`: Phase 12 serialized-reference preview/apply binding.
+- `project`: Phase 11 package compatibility, input-action asset inspection, Input System diagnostics, and active input handler preview/apply.
+- `ui`: Phase 12 uGUI hierarchy/layout preview/apply authoring and read-only screen-layout verification.
+
+The legacy broad tools remain available where split coverage is not complete,
+but new high-use workflows should move into TSAM slices first.
+
 ## Validation
 
 Useful static checks:
@@ -84,9 +114,31 @@ powershell -ExecutionPolicy Bypass -File Tools~/Test-McpToolOwnership.ps1
 powershell -ExecutionPolicy Bypass -File Tools~/Test-McpLensPresentation.ps1
 ```
 
+Useful live metadata audit, run against a Unity host project with the Lens
+server installed and the editor idle:
+
+```powershell
+dotnet run --project Tools~/UnityMcpLensPackSwitchBenchApp~/UnityMcpLensPackSwitchBench.csproj -c Release -p:UseAppHost=false -- --project-path C:\Path\To\UnityProject --server-path C:\Users\<you>\.unity\unity-mcp-lens\unity_mcp_lens_win.exe --metadata-audit
+```
+
 ## Status
 
-Lens is usable but still evolving. The high-priority direction is to keep reducing bridge chatter, keep the default tool surface narrow, and make tool output compact and recoverable by default.
+Lens is usable but still evolving. The current stable direction is to keep the
+default `foundation` surface narrow, preserve the pack baselines, and continue
+moving high-friction workflows into compact TSAM tools.
+
+Current live metadata baselines:
+
+- `foundation`: `12` exported tools.
+- `foundation + scene`: `32` exported tools.
+- `foundation + ui`: `22` exported tools.
+- `project`: `21` exported tools.
+- `debug`: `22` exported tools.
+
+Current near-term work is focused on bridge/session churn, payload shaping,
+structured console and RunCommand result quality, restart/reload orchestration,
+prefab authoring, and extending the `project` pack beyond Input System into
+missing-script, reference, and import-side-effect diagnostics.
 
 This is not an official Unity release channel.
 

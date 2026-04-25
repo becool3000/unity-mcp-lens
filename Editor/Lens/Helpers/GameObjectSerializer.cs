@@ -397,6 +397,12 @@ namespace Becool.UnityMcpLens.Editor.Helpers
 
                 // --- End Skip Transform Properties ---
 
+                // MeshFilter.mesh instantiates a unique mesh in edit mode; use sharedMesh instead.
+                if (componentType == typeof(MeshFilter) && propName == "mesh")
+                {
+                    skipProperty = true;
+                }
+
                 // Skip if flagged
                 if (skipProperty)
                 {
