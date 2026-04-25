@@ -39,8 +39,10 @@ node .agents/plugins/lens-dev-plugin/skills/unity-dev-assistant/scripts/Check-Un
 - Keep the default pack surface narrow and expand packs explicitly.
 - Use `Unity.ReadDetailRef` only when a compact preview is insufficient.
 - Treat Unity compile/import/reload windows as expected recovery windows, not as reasons to spam tool discovery.
+- Treat `Check-UnityDevSession` as a split signal: `ProceedWithLensHelpers` means the helper path is healthy, while `ProceedWithDirectLensTools` means direct MCP is healthy and only the wrapper path is degraded.
 - Prefer the Phase 11 `project` tools for package/import/Input System and active input handler work before custom `Unity_RunCommand` probes, raw `Editor.log` grep, or YAML edits.
 - Prefer the Phase 12 `ui` and split `scene` binding tools for persistent HUD hierarchy, serialized scene references, and screen-layout verification before custom `Unity_RunCommand` editor scripts.
+- Prefer helper-driven `Invoke-UnityRunCommand` for runtime probes now that it can bypass idle-wait gating in healthy play mode and preserve structured `ReturnResult(...)` payloads.
 - Keep `foundation` at `12` exported tools, `foundation + scene` at `32`, and `foundation + ui` at `22` unless a deliberate pack-surface change updates the metadata audit.
 
 ## Current Tool Surface Reality
@@ -84,10 +86,18 @@ Highlights from that smoke:
 - No-op active input handler preview/apply now returns `restartRequired=false`.
 - Post-smoke usage reporting now excludes its own in-flight request, so the final `Unity_GetLensUsageReport` call does not appear as unmatched.
 
+Latest Phase 12 hardening smoke on 2026-04-25:
+
+- Metadata audit passed with `foundation=12`, `foundation+scene=32`, `foundation+ui=22`, `project=21`, and `debug=22`.
+- `Sync-UnityScriptChanges.ps1` recovered through a transient `console` pack timeout by falling back to direct Lens health and compact editor-state probes instead of failing the workflow.
+- Helper-driven `Ensure-UnityUiHierarchy.ps1`, `Bind-UnitySceneSerializedReferences.ps1`, and `Set-UnityUiLayout.ps1` all no-op cleanly with `applied=false` and `willModify=false` on the existing quick-select HUD.
+- `Verify-UnityUiScreenLayout.ps1` passed in play mode using `inside_screen`, `ordered_stack`, and the new `below_center` relation for slot count labels.
+- `Invoke-UnityRunCommand.ps1` now bypasses idle wait in healthy play mode, returns `playModeBypass.applied=true`, and surfaced structured `returnedData` with `panelIsRightOfMap=true` and `panelGapFromMap=24`.
+
 Remaining follow-ups:
 
-- Payload telemetry still reports no shaping recorded.
-- Phase 12 UI authoring, scene binding, and structured `RunCommand` return-value smoke is the next validation gate.
+- Payload telemetry still reports `NoShapingRecorded=true` for the focused helper-driven scope.
+- Helper/session churn is lower than earlier runs but still nontrivial, and the remaining failure row in the focused scope is a `Unity_ManageEditor` disposed-transport response during a reconnect-prone play transition.
 
 ## Maintenance
 

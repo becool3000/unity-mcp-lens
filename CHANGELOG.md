@@ -13,6 +13,7 @@ All notable Unity MCP Lens package changes are documented here.
 - Added Phase 12 `scene` tools for `Unity.Scene.PreviewBindSerializedReferences` and `Unity.Scene.ApplyBindSerializedReferences`.
 - Added Lens usage reporting for payload, bridge, pack transition, tool snapshot, and TSAM stage coverage analysis.
 - Added metadata audit coverage for foundation, scene, ui, project, and debug pack surfaces, including required tools, schema checks, and read-only annotations.
+- Added center-based `Unity.UI.VerifyScreenLayout` relative-position relations: `right_of_center`, `left_of_center`, `above_center`, and `below_center`.
 
 ### Changed
 
@@ -27,20 +28,25 @@ All notable Unity MCP Lens package changes are documented here.
 - Improved `Unity.RunCommand` output to support structured `ExecutionResult.ReturnResult(...)` payloads plus explicit result-serialization failure classification.
 - Improved `Unity.ManageEditor WaitForStableEditor` output contracts toward stage-aware compact results with detail refs.
 - Suppressed restart-required noise for no-op active input handler preview/apply results.
+- Improved `Check-UnityDevSession` so it distinguishes direct MCP health from helper-path degradation and can recommend `ProceedWithDirectLensTools` when wrappers are the only failing layer.
+- Improved `Sync-UnityScriptChanges` so it no longer fails up front on a transient `console` pack restore and can recover through direct Lens health plus compact editor-state probes.
+- Improved `Invoke-UnityRunCommand` so healthy play mode can bypass helper-side idle gating and still return structured `ReturnResult(...)` payloads.
 
 ### Known Follow-Up
 
 - Reduce helper-script session/setup churn, repeated `get_tool_schema` requests, and pack transition noise.
 - Improve payload shaping so large editor-state and tool-snapshot rows produce measurable savings.
 - Decide whether default package assembly filtering should exclude doc/sample/test-support asmdefs from compact compatibility reads.
-- Finish Phase 12 smoke validation and investigate the helper-driven forced-refresh `Undo.SetCurrentGroupName` assertion seen while syncing into the host project.
+- Reduce reconnect-prone `Unity_ManageEditor` transport-noise during play transitions.
 - Add reliable editor restart/reload orchestration and prefab/serialized-reference authoring workflows.
 
 ### Validation
 
 - Phase 11 smoke passed with a residual payload-shaping warning on Unity `6000.4.3f1` in `D:\2DUnityNewGame`.
-- Metadata audit passed with `foundation=12`, `foundation+scene=30`, `project=21`, and `debug=22`.
+- Phase 12 helper-driven hardening smoke passed with a residual payload-shaping warning on Unity `6000.4.3f1` in `D:\2DUnityNewGame`.
+- Metadata audit passed with `foundation=12`, `foundation+scene=32`, `foundation+ui=22`, `project=21`, and `debug=22`.
 - Phase 11 package compatibility, input-actions inspection, diagnostics, preview, and set calls emitted complete TSAM stage coverage with no failure classes.
+- Phase 12 UI hierarchy, scene binding, layout, and verify calls emitted complete TSAM stage coverage with no tool failure rows in the focused helper-driven scope.
 
 ## [0.1.0-alpha.1] - 2026-04-20
 

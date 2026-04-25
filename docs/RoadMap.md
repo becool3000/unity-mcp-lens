@@ -15,7 +15,7 @@ when Unity reloads, recompiles, or changes project/package state.
 - Current `foundation + scene` baseline: `32` exported tools.
 - Current `foundation + ui` baseline: `22` exported tools.
 - Current Phase 8 surface: split GameObject TSAM tools for inspect, component reads, preview/apply mutation, create, and delete.
-- Current Phase 12 surface: split UI hierarchy/layout preview/apply, scene serialized-reference preview/apply binding, UI screen-layout verification, and structured `Unity.RunCommand` return values.
+- Current Phase 12 surface: split UI hierarchy/layout preview/apply, scene serialized-reference preview/apply binding, UI screen-layout verification, center-based UI verify relations, and structured `Unity.RunCommand` return values.
 - Current Phase 11 surface: project/Input System diagnostics, package compatibility, input-action asset inspection, and active input handler preview/apply.
 - Current validation surface: static package checks plus a metadata audit in the pack-switch helper app.
 - Current telemetry surface: payload stats, bridge request/response rows, tool snapshot rows, pack transition rows, and TSAM stage rows.
@@ -29,6 +29,13 @@ The productive paths for the latest Unity work were helper scripts plus
 `Sync-UnityScriptChanges`, `Invoke-UnityRunCommand`, and
 `Enter-UnityPlayMode` were useful for health checks, compile/idle loops,
 editor probes, live ProjectSettings mutation, and play-mode smoke checks.
+
+The 2026-04-25 hardening pass improved the helper path itself:
+
+- `Check-UnityDevSession` now separates direct MCP health from helper-path health and can recommend `ProceedWithDirectLensTools` when wrappers degrade but the bridge is still usable.
+- `Sync-UnityScriptChanges` no longer fails up front on a transient `console` pack restore; it can wait through the reload cycle and recover through direct Lens health.
+- `Invoke-UnityRunCommand` now skips helper-side idle gating in healthy play mode and still returns structured `ReturnResult(...)` payloads.
+- `Unity.UI.VerifyScreenLayout` now supports `right_of_center`, `left_of_center`, `above_center`, and `below_center` in addition to the strict non-overlap relations.
 
 The largest delays came from project-state and lifecycle work:
 
@@ -60,6 +67,14 @@ A focused Phase 11 smoke test then passed with a residual payload-shaping warnin
 - Compact telemetry showed complete TSAM coverage and no Phase 11 failures.
 - Follow-up remains for `NoShapingRecorded=true` and possible default filtering for doc/sample/test-support package asmdefs.
 
+A focused helper-driven Phase 12 hardening smoke then passed with a residual payload-shaping warning:
+
+- Metadata audit passed with `foundation=12`, `foundation+scene=32`, `foundation+ui=22`, `project=21`, and `debug=22`.
+- Helper-driven no-op preview/apply flows for UI hierarchy, scene binding, and UI layout all returned `applied=false` and `willModify=false`.
+- `Verify-UnityUiScreenLayout` passed in play mode using `inside_screen`, `ordered_stack`, and `below_center`.
+- `Invoke-UnityRunCommand` returned structured HUD placement data through the helper path with `playModeBypass.applied=true`.
+- The focused usage-report slice still recorded `NoShapingRecorded=true`; its only failure class was a `Unity_ManageEditor` disposed-transport response during a reconnect-prone play transition.
+
 ---
 
 ## Near-Term Priorities
@@ -70,6 +85,7 @@ A focused Phase 11 smoke test then passed with a residual payload-shaping warnin
 - Avoid unnecessary pack flips and repeated setup cycles.
 - Reduce schema churn after the manifest is already known.
 - Treat domain reload transport closure as expected only when the editor state explains it.
+- Keep helper-path degradation distinct from direct bridge health so wrappers stop escalating recoverable play/reload states into false failures.
 
 ### 2. Payload Shaping Correctness
 
@@ -91,12 +107,13 @@ A focused Phase 11 smoke test then passed with a residual payload-shaping warnin
 - Dogfood `ExecutionResult.ReturnResult(...)` so focused probes no longer rely on warning-level console output to return structured measurements.
 - Keep compilation, execution, and console logs compact with detail refs for full output.
 - Add or improve structured recent-console reads so critical package/import errors do not require raw `Editor.log` grep.
+- Keep the play-aware helper preflight keyed to direct Lens health plus compact editor state, not to stale reconnect-classification state.
 
 ### 5. UI Authoring Dogfood And Recovery
 
 - Replace custom editor-C# HUD authoring flows with the new Phase 12 UI and scene binding tools.
 - Keep `ui`-pack preview/apply flows deterministic and compact.
-- Add a stable helper-driven verification flow for `Unity.UI.VerifyScreenLayout`.
+- Keep helper-driven verification stable for `Unity.UI.VerifyScreenLayout`, including center-based relations for in-card labels and similar HUD layouts.
 
 ### 6. Restart And Reload Orchestration
 

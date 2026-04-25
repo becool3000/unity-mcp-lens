@@ -12,6 +12,7 @@ namespace Becool.UnityMcpLens.Editor.Lens.Usage
     class PayloadStatsWindow : EditorWindow
     {
         const string k_WindowName = "Lens Usage";
+        const string k_ClipboardReportHeading = "Unity MCP Lens Usage Report";
         const int k_TopCount = 8;
 
         Vector2 m_ScrollPosition;
@@ -130,7 +131,7 @@ namespace Becool.UnityMcpLens.Editor.Lens.Usage
                 return;
 
             EditorGUIUtility.systemCopyBuffer = PayloadStatsReportFormatter.BuildClipboardReport(m_Report);
-            ShowNotification(new GUIContent("Lens usage summary copied"));
+            ShowNotification(new GUIContent($"{k_ClipboardReportHeading} copied"));
         }
 
         void ResetStatsFile()

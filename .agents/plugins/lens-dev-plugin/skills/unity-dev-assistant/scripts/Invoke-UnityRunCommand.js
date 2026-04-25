@@ -140,6 +140,68 @@ async function waitForBuildMonitor(projectPath, options = {}) {
   };
 }
 
+async function getRunCommandPreflight(projectPath, args) {
+  const lensHealthResponse = await common.invokeUnityMcpToolJson(projectPath, "Unity_GetLensHealth", {}, {
+    timeoutSeconds: common.getArgNumber(args, ["HealthTimeoutSeconds"], 10),
+  });
+  const lensHealth = common.getToolObject(lensHealthResponse);
+  const lensData = common.valueOf(lensHealth, "data", "Data") || {};
+  const bridgeStatus = common.valueOf(
+    common.valueOf(lensData, "bridgeStatus", "BridgeStatus") || {},
+    "status",
+    "Status"
+  ) || null;
+  const expectedRecoveryActive = common.valueOf(
+    common.valueOf(lensData, "expectedRecovery", "ExpectedRecovery") || {},
+    "isActive",
+    "IsActive"
+  ) === true;
+
+  const result = {
+    lensHealth: {
+      success: common.valueOf(lensHealth, "success", "Success") === true,
+      bridgeStatus,
+      expectedRecoveryActive,
+      activeToolPacks: common.valueOf(lensData, "activeToolPacks", "ActiveToolPacks") || [],
+      recommendedNextAction: common.valueOf(lensData, "recommendedNextAction", "RecommendedNextAction") || null,
+    },
+    directMcpHealthy:
+      common.valueOf(lensHealth, "success", "Success") === true &&
+      bridgeStatus === "ready" &&
+      !expectedRecoveryActive,
+    editorState: null,
+    readiness: null,
+    canBypassIdleWait: false,
+    reason: "fallback_to_idle_wait",
+  };
+
+  if (!result.directMcpHealthy) {
+    return result;
+  }
+
+  const editorState = await common.getUnityCompactEditorState(
+    projectPath,
+    common.getArgNumber(args, ["EditorStateTimeoutSeconds"], 15)
+  );
+  const readiness = common.getUnityReadinessSnapshot(editorState);
+
+  result.editorState = editorState;
+  result.readiness = readiness;
+  result.canBypassIdleWait =
+    result.directMcpHealthy &&
+    readiness.Success === true &&
+    readiness.IsPlaying === true &&
+    readiness.IsCompiling !== true &&
+    readiness.IsUpdating !== true;
+  result.reason = result.canBypassIdleWait
+    ? "healthy_play_mode"
+    : readiness.Success === true && readiness.IsPlaying !== true
+      ? "edit_mode"
+      : "fallback_to_idle_wait";
+
+  return result;
+}
+
 async function main() {
   const args = common.parseCliArgs(process.argv.slice(2));
   const projectPath = common.resolveProjectPath(common.getArgString(args, ["ProjectPath"], process.cwd()));
@@ -158,14 +220,38 @@ async function main() {
   }
 
   const waitForEditorIdle = common.getArgBool(args, ["WaitForEditorIdle"], true);
+  let playModeBypass = {
+    applied: false,
+    reason: waitForEditorIdle ? "fallback_to_idle_wait" : null,
+  };
+  let runCommandPreflight = null;
+
+  if (waitForEditorIdle) {
+    try {
+      runCommandPreflight = await getRunCommandPreflight(projectPath, args);
+      playModeBypass = {
+        applied: runCommandPreflight.canBypassIdleWait,
+        reason: runCommandPreflight.reason,
+      };
+    } catch (error) {
+      runCommandPreflight = {
+        error: error.message,
+      };
+      playModeBypass = {
+        applied: false,
+        reason: "fallback_to_idle_wait",
+      };
+    }
+  }
+
   await common.ensureUnityToolPacks(
     projectPath,
-    waitForEditorIdle ? ["console", "scripting"] : ["scripting"],
+    waitForEditorIdle && !playModeBypass.applied ? ["console", "scripting"] : ["scripting"],
     { timeoutSeconds: 20 }
   );
 
   let idleResult = null;
-  if (waitForEditorIdle) {
+  if (waitForEditorIdle && !playModeBypass.applied) {
     idleResult = await common.waitUnityEditorIdle(projectPath, {
       timeoutSeconds: common.getArgNumber(args, ["IdleTimeoutSeconds"], 60),
       stablePollCount: common.getArgNumber(args, ["IdleStablePollCount"], 3),
@@ -173,7 +259,13 @@ async function main() {
       postIdleDelaySeconds: common.getArgNumber(args, ["PostIdleDelaySeconds"], 1.0),
     });
     if (!idleResult.success) {
-      console.log(JSON.stringify({ success: false, error: idleResult.message, editorIdle: idleResult }, null, 2));
+      console.log(JSON.stringify({
+        success: false,
+        error: idleResult.message,
+        editorIdle: idleResult,
+        playModeBypass,
+        preflight: runCommandPreflight,
+      }, null, 2));
       await common.shutdownUnityMcpSessions();
       process.exit(1);
       return;
@@ -245,6 +337,21 @@ async function main() {
 
   if (idleResult) {
     result.editorIdle = idleResult;
+  }
+  result.playModeBypass = playModeBypass;
+  if (runCommandPreflight) {
+    result.preflight = runCommandPreflight.error
+      ? runCommandPreflight
+      : {
+          lensHealth: runCommandPreflight.lensHealth,
+          directMcpHealthy: runCommandPreflight.directMcpHealthy,
+          editorState: runCommandPreflight.editorState
+            ? common.getCompactEditorStateSummary(runCommandPreflight.editorState)
+            : null,
+          readiness: runCommandPreflight.readiness,
+          canBypassIdleWait: runCommandPreflight.canBypassIdleWait,
+          reason: runCommandPreflight.reason,
+        };
   }
   console.log(JSON.stringify(result, null, 2));
   await common.shutdownUnityMcpSessions();

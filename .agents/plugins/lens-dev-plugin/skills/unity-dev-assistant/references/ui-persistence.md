@@ -40,6 +40,7 @@ This is the shared pattern behind end-screen groups, leaderboard groups, pause o
 - `Bind-UnitySceneSerializedReferences.ps1` to bind serialized scene refs through the split Phase 12 preview/apply tools
 - `Set-UnityUiLayout.ps1` to move or resize authored UI after the hierarchy is persistent
 - `Verify-UnityUiScreenLayout.ps1` or `Unity.UI.VerifyScreenLayout` to verify authored layout assertions and screen rects
+  Use strict `below`/`above` for non-overlap relations, and `below_center`/`above_center` for in-card label placement such as count text inside quick-slot HUD cards.
 
 ## Verification
 

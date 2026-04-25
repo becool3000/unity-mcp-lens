@@ -18,6 +18,7 @@ latest dogfood findings.
 - Phase 11 package/import/Input System diagnostics and active input handler tools are in the `project` pack.
 - Project-pack additions must not widen the default `foundation` surface.
 - TSAM tools must emit `normalization`, `service`, `adapter`, and `result_shaping` coverage rows.
+- The helper path now distinguishes direct MCP health from wrapper degradation, and `Invoke-UnityRunCommand` can bypass idle wait in healthy play mode.
 
 ---
 
@@ -86,6 +87,63 @@ Smoke notes:
 
 ---
 
+## Latest Phase 12 Hardening Smoke
+
+Date: 2026-04-25
+
+Result: passed with a residual payload-shaping warning.
+
+Host project:
+
+- `D:\2DUnityNewGame`
+- Unity `6000.4.3f1`
+
+Pack/export and helper-path result:
+
+- Metadata audit: pass.
+- Export counts: `foundation=12`, `foundation+scene=32`, `foundation+ui=22`, `project=21`, `debug=22`.
+- `Check-UnityDevSession.ps1` reports `DirectMcpHealthy=true` and `ProceedWithLensHelpers` in the settled idle state.
+- `Sync-UnityScriptChanges.ps1` now tolerates transient helper degradation: this smoke recovered through a temporary `console` pack timeout by using direct Lens health and compact editor-state probes instead of failing the whole workflow.
+
+UI/binding/layout result:
+
+- `Ensure-UnityUiHierarchy.ps1` preview/apply no-op cleanly for the quick-select HUD subtree under `Quick Select Canvas`.
+- `Bind-UnitySceneSerializedReferences.ps1` preview/apply no-op cleanly for `SandQuickSelectHud`.
+- `Set-UnityUiLayout.ps1` preview/apply no-op cleanly for `Quick Select Panel`.
+
+Play-mode verification result:
+
+- `Enter-UnityPlayMode.ps1` succeeded after an expected reconnect-prone play transition.
+- `Verify-UnityUiScreenLayout.ps1` passed with:
+  - `inside_screen` on the panel
+  - `ordered_stack` for slots
+  - `below_center` for all four count labels relative to their slot cards
+- `Invoke-UnityRunCommand.ps1` now bypasses helper-side idle wait in healthy play mode and returned structured `returnedData` inline:
+  - `panelIsRightOfMap=true`
+  - `panelGapFromMap=24`
+
+Telemetry result:
+
+- Focused rerun scope: lines `1432..1790`, `358` rows.
+- Bridge churn in focused rerun: `25` connections, `0` setup cycles, `0` unmatched requests.
+- Full TSAM coverage with zero failure rows for:
+  - `Unity.UI.PreviewEnsureHierarchy`
+  - `Unity.UI.ApplyEnsureHierarchy`
+  - `Unity.Scene.PreviewBindSerializedReferences`
+  - `Unity.Scene.ApplyBindSerializedReferences`
+  - `Unity.UI.PreviewLayoutProperties`
+  - `Unity.UI.ApplyLayoutProperties`
+  - `Unity.UI.VerifyScreenLayout`
+- Failure classes in scope: one `coverage_bridge_command_response` row for `Unity_ManageEditor` with `disposed_transport` during a reconnect-prone play transition.
+
+Smoke notes:
+
+- The new center-based verify relation fixed the HUD count-label case without weakening strict `below`.
+- `Invoke-UnityRunCommand` preflight now keys off direct `Unity.GetLensHealth` plus compact editor state, not stale reconnect-classification state.
+- Payload report still shows `NoShapingRecorded=true`.
+
+---
+
 ## P0
 
 ### Bridge And Helper Session Churn
@@ -141,7 +199,8 @@ Work:
 - Dogfood the full Phase 12 HUD authoring flow in `D:\2DUnityNewGame` without custom editor C#.
 - Keep no-op apply responses truly clean: `applied=false`, no unnecessary dirty/save.
 - Make `Unity.RunCommand` structured `ReturnResult(...)` the preferred probe return path over console-warning abuse.
-- Investigate the Unity `Undo.SetCurrentGroupName` assertion seen during helper-driven forced refresh so sync/reload orchestration does not wedge the bridge.
+- Keep helper-driven runtime probes play-aware so healthy play mode does not get blocked by idle-wait wrappers.
+- Investigate the remaining reconnect-prone `Unity_ManageEditor` disposed-transport row in the focused play-mode scope.
 
 ### Input System Diagnosis
 
@@ -168,6 +227,7 @@ Work:
 - Compact compilation, execution, and console logs by default.
 - Store full logs behind detail refs.
 - Add or improve structured recent-console reads so package/import errors do not require raw `Editor.log` grep.
+- Keep the play-mode helper bypass keyed to direct Lens health and compact editor state, even when `IsPlayingOrWillChangePlaymode` keeps the editor-stability label at `play_transition`.
 
 ### Restart And Reload Orchestration
 

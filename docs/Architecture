@@ -40,12 +40,20 @@ Current TSAM-covered surfaces include:
 
 - Phase 8 scene/GameObject tools: inspect, list components, get component, preview/apply object changes, preview/apply component changes, create, and delete.
 - Phase 11 project/package/import tools: package compatibility, input-action asset inspection, Input System diagnostics, active input handler preview, and active input handler apply.
+- Phase 12 UI tools: preview/apply hierarchy authoring, preview/apply layout authoring, and read-only screen-layout verification.
+- Phase 12 scene binding tools: preview/apply serialized object-reference binding for scene components.
 
 Current baselines:
 
 - `foundation`: `12` exported tools.
-- `foundation + scene`: `30` exported tools.
-- The current `project` smoke baseline is `21` tools, and project/package/import tools must not widen the default `foundation` surface.
+- `foundation + scene`: `32` exported tools.
+- `foundation + ui`: `22` exported tools.
+- `project`: `21` exported tools.
+- `debug`: `22` exported tools.
+
+Pack additions must not widen the default `foundation` surface. Any deliberate
+pack-surface change must update the metadata audit, smoke prompts, and package
+docs at the same time.
 
 ---
 
@@ -94,12 +102,29 @@ is selected as an administrative escape hatch.
 Important packs:
 
 - `console`: console reads, editor health, and lightweight troubleshooting.
-- `project`: project/package metadata, validation, missing script/reference checks, and Input System diagnostics/settings.
-- `project`: project/package/import metadata, validation, missing script/reference checks, Input System diagnostics/settings, and input-action inspection.
-- `scene`: scene hierarchy, runtime snapshots, and GameObject operations.
+- `project`: project/package/import metadata, validation, missing script/reference checks, Input System diagnostics/settings, package compatibility, and input-action inspection.
+- `scene`: scene hierarchy, runtime snapshots, GameObject operations, and serialized-reference binding.
+- `ui`: UI Toolkit reads, uGUI hierarchy/layout authoring, and screen-layout verification.
 - `scripting`: script/resource reads, edits, validation, and `Unity.RunCommand`.
 - `assets`: asset, prefab, import, and generation operations.
 - `debug`: profiler, usage reports, and deeper diagnostics.
+
+---
+
+## Compatibility Surfaces
+
+Broad legacy tools remain part of the architecture while TSAM coverage expands.
+They are useful for compatibility, unusual editor operations, and emergency
+escape hatches. The preferred direction for new high-use work is:
+
+1. Add or extend a pack-scoped TSAM slice.
+2. Keep diagnostics read-only unless mutation is required.
+3. Use preview/apply pairs for durable scene, UI, project, or asset mutation.
+4. Keep output compact by default and put full detail behind `detailRef`.
+5. Confirm stage coverage through `Unity.GetLensUsageReport`.
+
+This lets the public tool surface improve without breaking older agents that
+still depend on broader facade tools.
 
 ---
 
@@ -110,9 +135,10 @@ The current dogfood data points to these high-value fixes:
 - Helper scripts still create too much session/setup/pack churn.
 - Tool schema requests are repeated more often than useful.
 - Some large editor-state and tool-snapshot payloads are not shaped enough.
-- `Unity.RunCommand` needs stricter failure-stage and log/detail-ref behavior.
+- `Unity.RunCommand` now supports structured `ReturnResult(...)` payloads, but failure-stage and detail-ref behavior still need more dogfood.
 - Restart/reload orchestration cannot rely only on in-editor tools because Unity loses transport during process exit and domain reload.
-- Prefab authoring and serialized reference binding need first-class workflows.
+- Prefab authoring still needs first-class inspect/preview/apply workflows.
+- Existing missing-script and reference-validation tools should move toward TSAM shape after the package/import cluster.
 
 ---
 

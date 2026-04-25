@@ -226,10 +226,14 @@ namespace Becool.UnityMcpLens.Editor.Adapters.Unity.UI
                         "left_of" => target.ScreenRect.xMax <= otherTarget.ScreenRect.xMin + tolerance,
                         "above" => target.ScreenRect.yMin >= otherTarget.ScreenRect.yMax - tolerance,
                         "below" => target.ScreenRect.yMax <= otherTarget.ScreenRect.yMin + tolerance,
+                        "right_of_center" => target.ScreenRect.center.x >= otherTarget.ScreenRect.center.x - tolerance,
+                        "left_of_center" => target.ScreenRect.center.x <= otherTarget.ScreenRect.center.x + tolerance,
+                        "above_center" => target.ScreenRect.center.y >= otherTarget.ScreenRect.center.y - tolerance,
+                        "below_center" => target.ScreenRect.center.y <= otherTarget.ScreenRect.center.y + tolerance,
                         _ => false
                     };
 
-                    if (relation is not ("right_of" or "left_of" or "above" or "below"))
+                    if (relation is not ("right_of" or "left_of" or "above" or "below" or "right_of_center" or "left_of_center" or "above_center" or "below_center"))
                     {
                         error = $"Unsupported relative_position relation '{assertion.relation}'.";
                         return false;
@@ -246,6 +250,8 @@ namespace Becool.UnityMcpLens.Editor.Adapters.Unity.UI
                         {
                             targetRect = ToRectObject(target.ScreenRect),
                             otherRect = ToRectObject(otherTarget.ScreenRect),
+                            targetCenter = ToVector2Object(target.ScreenRect.center),
+                            otherCenter = ToVector2Object(otherTarget.ScreenRect.center),
                             tolerance
                         },
                         message = relationPassed

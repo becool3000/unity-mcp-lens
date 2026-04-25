@@ -86,6 +86,27 @@ Smoke notes:
 - The post-smoke usage report now excludes its own in-flight request and no longer flags the final `Unity_GetLensUsageReport` call as unmatched.
 - Payload report still shows `NoShapingRecorded=true`.
 
+## Phase 12 Hardening Smoke Baseline
+
+A focused helper-driven Phase 12 hardening smoke test on 2026-04-25 passed with a residual payload-shaping warning:
+
+- Host project: `D:\2DUnityNewGame`.
+- Unity version: `6000.4.3f1`.
+- Metadata audit: pass.
+- Export counts: `foundation=12`, `foundation+scene=32`, `foundation+ui=22`, `project=21`, `debug=22`.
+- Helper-driven rerun scope: lines `1432..1790`, `358` rows.
+- Bridge churn in the focused rerun: `25` connections, `0` setup cycles, `0` unmatched requests.
+- Phase 12 TSAM coverage: complete for UI hierarchy preview/apply, scene binding preview/apply, UI layout preview/apply, and UI verify.
+- Phase 12 tool failure rows: none.
+
+Smoke notes:
+
+- `Sync-UnityScriptChanges.ps1` recovered through a transient `console` pack timeout by falling back to direct Lens health and compact editor-state probes.
+- `Verify-UnityUiScreenLayout` passed in play mode with the new `below_center` relation for count labels inside slot cards.
+- `Invoke-UnityRunCommand` now bypasses idle wait in healthy play mode and returned structured HUD placement data through `returnedData`.
+- The focused usage-report scope still shows `NoShapingRecorded=true`.
+- The only recorded failure class in that focused scope is a `Unity_ManageEditor` disposed-transport response during a reconnect-prone play transition.
+
 ---
 
 ## Current Findings
@@ -96,6 +117,11 @@ Repeated setup cycles, connections, pack transitions, and schema requests are a
 major source of control-plane noise. Helper scripts should reuse sessions and
 avoid broad setup work when the editor status beacon and existing manifest are
 fresh enough.
+
+The helper path is now better at distinguishing wrapper degradation from direct
+bridge health, but the focused Phase 12 scope still showed `17` connections and
+`26` pack transitions for one end-to-end smoke. That remains a control-plane
+cost problem even though the happy path now succeeds.
 
 ### Payload Shaping Gaps
 
@@ -121,6 +147,10 @@ smaller manual probes and slower recovery.
 Structured `ExecutionResult.ReturnResult(...)` payloads should stay compact,
 prefer detail refs when large, and remain available even when execution logs
 warnings or errors.
+
+The helper-driven play-mode path now preserves structured `returnedData`
+correctly when it can prove direct Lens health and healthy play-mode state,
+instead of forcing a failing idle wait first.
 
 ---
 

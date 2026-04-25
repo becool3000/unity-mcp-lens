@@ -36,7 +36,7 @@ Uses the same target/search semantics as the earlier ensure hierarchy tool, with
 
         const string VerifyScreenLayoutDescription = @"Verifies measured screen-space UI layout assertions without mutation.
 
-Supports inside-screen, relative-position, axis-alignment, and ordered-stack assertions over keyed UI targets.";
+Supports inside-screen, relative-position, axis-alignment, and ordered-stack assertions over keyed UI targets. Relative-position keeps strict rect relations (`right_of`, `left_of`, `above`, `below`) and also supports center-based comparisons (`right_of_center`, `left_of_center`, `above_center`, `below_center`).";
 
         static readonly UnityUiAuthoringAdapter Adapter = new UnityUiAuthoringAdapter();
         static readonly UiAuthoringService Service = new UiAuthoringService(Adapter);
@@ -73,8 +73,47 @@ Supports inside-screen, relative-position, axis-alignment, and ordered-stack ass
                 type = "object",
                 properties = new
                 {
-                    targets = new { type = "array", description = "Keyed UI targets to resolve and measure." },
-                    assertions = new { type = "array", description = "Layout assertions to evaluate over the keyed targets." }
+                    targets = new
+                    {
+                        type = "array",
+                        description = "Keyed UI targets to resolve and measure.",
+                        items = new
+                        {
+                            type = "object",
+                            properties = new
+                            {
+                                key = new { type = "string", description = "Stable key used by assertions." },
+                                target = new { description = "Scene GameObject, path, or instance id to resolve." },
+                                searchMethod = new { type = "string", description = "How to resolve the target ('by_name', 'by_id', 'by_path')." },
+                                targetPath = new { type = "string", description = "Optional relative child path under the root target." },
+                                includeInactive = new { type = "boolean", description = "Include inactive scene objects when resolving the target." }
+                            },
+                            required = new[] { "key", "target" }
+                        }
+                    },
+                    assertions = new
+                    {
+                        type = "array",
+                        description = "Layout assertions to evaluate over the keyed targets. relative_position supports strict rect relations (`right_of`, `left_of`, `above`, `below`) plus center-based relations (`right_of_center`, `left_of_center`, `above_center`, `below_center`).",
+                        items = new
+                        {
+                            type = "object",
+                            properties = new
+                            {
+                                type = new { type = "string", description = "Assertion type: inside_screen, relative_position, axis_alignment, or ordered_stack." },
+                                targetKey = new { type = "string", description = "Primary target key for inside_screen, relative_position, and axis_alignment." },
+                                otherTargetKey = new { type = "string", description = "Secondary target key for relative_position and axis_alignment." },
+                                targetKeys = new { type = "array", description = "Ordered keys for ordered_stack assertions." },
+                                relation = new { type = "string", description = "For relative_position: right_of, left_of, above, below, right_of_center, left_of_center, above_center, or below_center." },
+                                axis = new { type = "string", description = "For axis_alignment: horizontal_center, vertical_center, left, right, top, or bottom." },
+                                edge = new { type = "string", description = "Alias for axis in axis_alignment assertions." },
+                                direction = new { type = "string", description = "For ordered_stack: top_to_bottom, bottom_to_top, left_to_right, or right_to_left." },
+                                tolerance = new { type = "number", description = "Allowed delta for relative_position, axis_alignment, or ordered_stack checks." },
+                                margin = new { type = "number", description = "Screen margin for inside_screen checks." }
+                            },
+                            required = new[] { "type" }
+                        }
+                    }
                 },
                 required = new[] { "targets", "assertions" }
             };

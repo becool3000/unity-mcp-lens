@@ -12,7 +12,6 @@ async function main() {
     .filter((entry, index, entries) => entries.indexOf(entry) === index);
   const relevantChangedPaths = changedPaths.length > 0 ? common.getUnityCompileAffectingChanges(projectPath, changedPaths) : [];
   const relevantChangesDetected = changedPaths.length === 0 || relevantChangedPaths.length > 0;
-  await common.ensureUnityToolPacks(projectPath, ["console"], { timeoutSeconds: 15 });
 
   const result = {
     success: false,
