@@ -265,7 +265,7 @@ Returns:
             }
         }
 
-        static bool TryResolveObjectReference(JToken value, out UnityEngine.Object resolved, out string error)
+        internal static bool TryResolveObjectReference(JToken value, out UnityEngine.Object resolved, out string error)
         {
             resolved = null;
             error = null;
@@ -468,7 +468,7 @@ Returns:
             return false;
         }
 
-        static string DescribeProperty(SerializedProperty property)
+        internal static string DescribeProperty(SerializedProperty property)
         {
             return property.propertyType switch
             {
@@ -487,7 +487,7 @@ Returns:
             };
         }
 
-        static string SanitizeAssetPath(string path)
+        internal static string SanitizeAssetPath(string path)
         {
             if (string.IsNullOrWhiteSpace(path))
             {

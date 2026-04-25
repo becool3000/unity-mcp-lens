@@ -12,8 +12,10 @@ when Unity reloads, recompiles, or changes project/package state.
 - Preferred MCP transport: the owned `unity-mcp-lens` stdio server.
 - Default model-facing tool surface: `foundation`.
 - Current `foundation` baseline: `12` exported tools.
-- Current `foundation + scene` baseline: `30` exported tools.
+- Current `foundation + scene` baseline: `32` exported tools.
+- Current `foundation + ui` baseline: `22` exported tools.
 - Current Phase 8 surface: split GameObject TSAM tools for inspect, component reads, preview/apply mutation, create, and delete.
+- Current Phase 12 surface: split UI hierarchy/layout preview/apply, scene serialized-reference preview/apply binding, UI screen-layout verification, and structured `Unity.RunCommand` return values.
 - Current Phase 11 surface: project/Input System diagnostics, package compatibility, input-action asset inspection, and active input handler preview/apply.
 - Current validation surface: static package checks plus a metadata audit in the pack-switch helper app.
 - Current telemetry surface: payload stats, bridge request/response rows, tool snapshot rows, pack transition rows, and TSAM stage rows.
@@ -86,10 +88,17 @@ A focused Phase 11 smoke test then passed with a residual payload-shaping warnin
 ### 4. RunCommand And Console Result Quality
 
 - Make `Unity.RunCommand` failure stage and `errorKind` unambiguous across validation, compilation, execution, result serialization, transport/unknown, and unexpected exceptions.
+- Dogfood `ExecutionResult.ReturnResult(...)` so focused probes no longer rely on warning-level console output to return structured measurements.
 - Keep compilation, execution, and console logs compact with detail refs for full output.
 - Add or improve structured recent-console reads so critical package/import errors do not require raw `Editor.log` grep.
 
-### 5. Restart And Reload Orchestration
+### 5. UI Authoring Dogfood And Recovery
+
+- Replace custom editor-C# HUD authoring flows with the new Phase 12 UI and scene binding tools.
+- Keep `ui`-pack preview/apply flows deterministic and compact.
+- Add a stable helper-driven verification flow for `Unity.UI.VerifyScreenLayout`.
+
+### 6. Restart And Reload Orchestration
 
 - Add a reliable save/quit/relaunch/reacquire workflow around the helper scripts.
 - Keep any in-editor quit tool explicit about dirty state and expected transport loss.
@@ -99,19 +108,19 @@ A focused Phase 11 smoke test then passed with a residual payload-shaping warnin
 
 ## Mid-Term Priorities
 
-### 6. Prefab And Serialized Reference Authoring
+### 7. Prefab And Serialized Reference Authoring
 
 - Add prefab-aware inspect/preview/apply workflows for durable prefab edits.
 - Add first-class serialized reference inspect/bind/verify tools.
 - Support common authoring workflows such as child rig setup, animation hook validation, and saved reference verification without custom project editor utilities.
 
-### 7. Project Diagnostics Beyond Input
+### 8. Project Diagnostics Beyond Input
 
 - Expand the `project` pack in the same TSAM style for missing scripts, reference validation, and import side effects now that package compatibility and input-action inspection are covered.
 - Keep these diagnostics read-first and compact by default.
 - Avoid growing the default `foundation` surface.
 
-### 8. Scene Tool Dogfooding
+### 9. Scene Tool Dogfooding
 
 - Exercise the split GameObject TSAM tools on real scene work before expanding them further.
 - Keep `Unity.ManageGameObject` as a compatibility fallback until split coverage has been proven on practical authoring tasks.

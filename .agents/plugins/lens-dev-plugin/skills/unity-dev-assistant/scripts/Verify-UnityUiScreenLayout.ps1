@@ -1,10 +1,7 @@
 param(
     [string]$ProjectPath = (Get-Location).Path,
-    [Parameter(Mandatory = $true)][string]$Target,
-    [string]$SearchMethod = "by_name",
-    [Parameter()][string]$NodesJson,
-    [Parameter()][string]$NodesPath,
-    [bool]$PreviewOnly = $false,
+    [Parameter(Mandatory = $true)][string]$TargetsJson,
+    [Parameter(Mandatory = $true)][string]$AssertionsJson,
     [bool]$WaitForEditorIdle = $true,
     [int]$IdleTimeoutSeconds = 60,
     [int]$IdleStablePollCount = 3,
@@ -15,17 +12,8 @@ param(
 
 . "$PSScriptRoot\UnityDevCommon.ps1"
 
-if ([string]::IsNullOrWhiteSpace($NodesJson) -and [string]::IsNullOrWhiteSpace($NodesPath)) {
-    throw "Provide -NodesJson or -NodesPath."
-}
-
-$nodes = if (-not [string]::IsNullOrWhiteSpace($NodesPath)) {
-    Get-Content -LiteralPath (Resolve-Path -LiteralPath $NodesPath).Path -Raw | ConvertFrom-Json
-}
-else {
-    $NodesJson | ConvertFrom-Json
-}
-$nodes = @($nodes)
+$targets = @($TargetsJson | ConvertFrom-Json)
+$assertions = @($AssertionsJson | ConvertFrom-Json)
 
 $resolvedProjectPath = Resolve-UnityProjectPath -ProjectPath $ProjectPath
 $idleWait = $null
@@ -35,7 +23,6 @@ if ($WaitForEditorIdle) {
         [ordered]@{
             success    = $false
             message    = $idleWait.message
-            target     = $Target
             editorIdle = $idleWait
         } | ConvertTo-Json -Depth 20
         exit 1
@@ -43,20 +30,16 @@ if ($WaitForEditorIdle) {
 }
 
 $payload = [ordered]@{
-    Target = $Target
-    SearchMethod = $SearchMethod
-    PreviewOnly = $PreviewOnly
-    Nodes = @($nodes)
+    Targets = @($targets)
+    Assertions = @($assertions)
 }
 
-$toolName = if ($PreviewOnly) { "Unity_UI_PreviewEnsureHierarchy" } else { "Unity_UI_ApplyEnsureHierarchy" }
-$response = Invoke-UnityMcpToolJson -ProjectPath $resolvedProjectPath -ToolName $toolName -Arguments $payload -TimeoutSeconds $TimeoutSeconds
+$response = Invoke-UnityMcpToolJson -ProjectPath $resolvedProjectPath -ToolName "Unity_UI_VerifyScreenLayout" -Arguments $payload -TimeoutSeconds $TimeoutSeconds
 $toolResult = Get-UnityToolObject -Response $response
 
 [ordered]@{
     success    = $toolResult.success -eq $true
-    message    = if ($toolResult.success -eq $true) { "UI hierarchy ensure operation completed." } else { $toolResult.error }
-    target     = $Target
+    message    = if ($toolResult.success -eq $true) { "UI screen layout verification completed." } else { $toolResult.error }
     payload    = $payload
     editorIdle = $idleWait
     result     = $toolResult

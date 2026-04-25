@@ -59,7 +59,17 @@ The current Phase 11 project surface includes package/import/Input System diagno
 - Prefer `Unity.InputSystem.Diagnostics` for one-call Input System package, assembly, device, `.inputactions`, define, compatibility, and editor-log signals.
 - Prefer `Unity.ProjectSettings.PreviewActiveInputHandler` before changing the active input backend.
 - Use `Unity.ProjectSettings.SetActiveInputHandler` for editor-authored active input backend changes; do not hand-edit `ProjectSettings.asset` as the first path.
-- `foundation` remains `12` tools, `foundation + scene` remains `30` tools, and the current `project` smoke baseline is `21` tools.
+- `foundation` remains `12` tools, `foundation + scene` now targets `32` tools, `foundation + ui` now targets `22`, and the current `project` smoke baseline remains `21` tools.
+
+## Phase 12 UI And Scene Binding Truth
+
+The current Phase 12 authoring surface adds split UI hierarchy/layout preview/apply tools, scene serialized-reference preview/apply binding tools, UI screen-layout verification, and structured `Unity.RunCommand` return values.
+
+- Prefer `Unity.UI.PreviewEnsureHierarchy` and `Unity.UI.ApplyEnsureHierarchy` over the removed one-shot UI hierarchy tool.
+- Prefer `Unity.UI.PreviewLayoutProperties` and `Unity.UI.ApplyLayoutProperties` over the removed one-shot UI layout tool.
+- Prefer `Unity.Scene.PreviewBindSerializedReferences` and `Unity.Scene.ApplyBindSerializedReferences` for scene object-reference fields and arrays before low-level `Unity.Scene.SetSerializedProperties`.
+- Prefer `Unity.UI.VerifyScreenLayout` for measured HUD/layout assertions instead of ad hoc screen-rect probes.
+- Keep `Unity.Scene.SetSerializedProperties` as the low-level fallback, not the first authoring path.
 
 ## Maintenance Rules
 

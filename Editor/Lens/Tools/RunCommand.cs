@@ -1,5 +1,6 @@
 using System;
 using System.Threading.Tasks;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Becool.UnityMcpLens.Editor.Helpers;
 using Becool.UnityMcpLens.Editor.Lens;
@@ -105,6 +106,10 @@ internal class CommandScript : IRunCommand
                             localFixedCodeChanged = new { type = "boolean", description = "Whether Lens locally rewrote the submitted command before compilation" },
                             localFixedCodeDetailRef = new { type = "object", description = "Detail ref for the locally rewritten command when omitted from the inline response" },
                             localFixedCodeIncluded = new { type = "boolean", description = "Whether localFixedCode is included inline" },
+                            returnedData = new { description = "Structured result returned from ExecutionResult.ReturnResult when included inline." },
+                            returnedDataIncluded = new { type = "boolean", description = "Whether returnedData is included inline." },
+                            returnedDataBytes = new { type = "integer", description = "UTF-8 byte count of the serialized returnedData payload." },
+                            returnedDataDetailRef = new { type = "object", description = "Detail ref for structured returnedData when omitted from the inline response." },
                             playModeExecution = new
                             {
                                 type = "object",
@@ -201,6 +206,10 @@ internal class CommandScript : IRunCommand
                         localFixedCodeChanged = !string.Equals(validationResult.LocalFixedCode, code, StringComparison.Ordinal),
                         localFixedCodeIncluded = includeLocalFixedCode,
                         localFixedCodeDetailRef = localFixedCodeDetailRef,
+                        returnedData = (object)null,
+                        returnedDataIncluded = false,
+                        returnedDataBytes = 0,
+                        returnedDataDetailRef = (object)null,
                         result = responseMessage,
                         failureStage,
                         errorKind,
@@ -238,6 +247,10 @@ internal class CommandScript : IRunCommand
                         executionLogs = string.Empty,
                         consoleLogs = string.Empty,
                         localFixedCode = validationResult.LocalFixedCode,
+                        returnedData = (object)null,
+                        returnedDataIncluded = false,
+                        returnedDataBytes = 0,
+                        returnedDataDetailRef = (object)null,
                         result = responseMessage,
                         failureStage = (string)null,
                         errorKind = (string)null,
@@ -292,6 +305,73 @@ internal class CommandScript : IRunCommand
                 var shapedCompilationLogs = ShapeLogText("compilation_logs", validationResult.CompilationLogs, mode, out var compilationLogsDetailRef, out var compilationLogsTruncated, out var compilationLogsBytes);
                 var shapedExecutionLogs = ShapeLogText("execution_logs", executionResult.ExecutionLogs, mode, out var executionLogsDetailRef, out var executionLogsTruncated, out var executionLogsBytes);
                 var shapedConsoleLogs = ShapeLogText("console_logs", executionResult.ConsoleLogs, mode, out var consoleLogsDetailRef, out var consoleLogsTruncated, out var consoleLogsBytes);
+                if (!TryShapeReturnedData(
+                        executionResult.ReturnedData,
+                        mode,
+                        out object returnedData,
+                        out bool returnedDataIncluded,
+                        out int returnedDataBytes,
+                        out object returnedDataDetailRef,
+                        out string returnedDataError))
+                {
+                    failureStage = "result_serialization";
+                    errorKind = "result_serialization_failed";
+                    exceptionType = typeof(JsonException).FullName;
+                    exceptionMessage = returnedDataError;
+                    responseSuccess = false;
+                    responseMessage = $"RESULT_SERIALIZATION_FAILED: {returnedDataError}";
+                    responseData = new
+                    {
+                        isCompilationSuccessful = true,
+                        isExecutionSuccessful = false,
+                        mode,
+                        executionSkipped = false,
+                        executionId = executionResult.ExecutionId,
+                        compilationLogs = shapedCompilationLogs,
+                        compilationLogsDetailRef,
+                        compilationLogsTruncated,
+                        compilationLogsBytes,
+                        executionLogs = shapedExecutionLogs,
+                        executionLogsDetailRef,
+                        executionLogsTruncated,
+                        executionLogsBytes,
+                        consoleLogs = shapedConsoleLogs,
+                        consoleLogsDetailRef,
+                        consoleLogsTruncated,
+                        consoleLogsBytes,
+                        localFixedCode = includeLocalFixedCode ? validationResult.LocalFixedCode : null,
+                        localFixedCodeChanged = !string.Equals(validationResult.LocalFixedCode, code, StringComparison.Ordinal),
+                        localFixedCodeIncluded = includeLocalFixedCode,
+                        localFixedCodeDetailRef = includeLocalFixedCode
+                            ? null
+                            : CreateLocalFixedCodeDetailRef(validationResult.LocalFixedCode, code, mode),
+                        returnedData = (object)null,
+                        returnedDataIncluded = false,
+                        returnedDataBytes = 0,
+                        returnedDataDetailRef = (object)null,
+                        result = responseMessage,
+                        failureStage,
+                        errorKind,
+                        exceptionType,
+                        exceptionMessage,
+                        logCounts = new
+                        {
+                            execution = executionResult.LogCount,
+                            warnings = executionResult.WarningCount,
+                            errors = executionResult.ErrorCount
+                        },
+                        validationSummary = new
+                        {
+                            isCompilationSuccessful = true,
+                            localFixedCodeChanged = !string.Equals(validationResult.LocalFixedCode, code, StringComparison.Ordinal),
+                            compilationLogLength = validationResult.CompilationLogs?.Length ?? 0,
+                            compilationLogBytes = compilationLogsBytes,
+                            hasUnauthorizedNamespaceUsage = false
+                        }
+                    };
+                    goto ReturnResponse;
+                }
+
                 responseData = new
                 {
                     isCompilationSuccessful = true,
@@ -317,6 +397,10 @@ internal class CommandScript : IRunCommand
                     localFixedCodeDetailRef = includeLocalFixedCode
                         ? null
                         : CreateLocalFixedCodeDetailRef(validationResult.LocalFixedCode, code, mode),
+                    returnedData,
+                    returnedDataIncluded,
+                    returnedDataBytes,
+                    returnedDataDetailRef,
                     result = executionResult.IsExecutionSuccessful ? resultMessage : executionResult.FailureReason ?? resultMessage,
                     failureStage,
                     errorKind,
@@ -366,6 +450,10 @@ internal class CommandScript : IRunCommand
                     consoleLogsTruncated,
                     consoleLogsBytes,
                     localFixedCode = validationCompleted ? validationResult.LocalFixedCode : string.Empty,
+                    returnedData = (object)null,
+                    returnedDataIncluded = false,
+                    returnedDataBytes = 0,
+                    returnedDataDetailRef = (object)null,
                     result = responseMessage,
                     failureStage,
                     errorKind,
@@ -470,6 +558,61 @@ internal class CommandScript : IRunCommand
                     })
                 : null;
             return preview;
+        }
+
+        static bool TryShapeReturnedData(
+            object returnedData,
+            string mode,
+            out object inlineValue,
+            out bool included,
+            out int bytes,
+            out object detailRef,
+            out string error)
+        {
+            inlineValue = null;
+            included = false;
+            bytes = 0;
+            detailRef = null;
+            error = null;
+
+            if (returnedData == null)
+                return true;
+
+            try
+            {
+                string serialized = JsonConvert.SerializeObject(returnedData, Formatting.None);
+                bytes = PayloadBudgeting.GetUtf8ByteCount(serialized);
+                if (bytes <= PayloadBudgetPolicy.MaxToolResultBytes)
+                {
+                    inlineValue = JsonConvert.DeserializeObject(serialized);
+                    included = true;
+                    return true;
+                }
+
+                detailRef = ToolResultCompactor.CreateStoredDetailRef(
+                    ToolName,
+                    returnedData,
+                    bytes,
+                    new
+                    {
+                        kind = "returned_data",
+                        mode,
+                        sha256 = PayloadBudgeting.ComputeSha256(serialized)
+                    });
+
+                if (detailRef == null)
+                {
+                    inlineValue = JsonConvert.DeserializeObject(serialized);
+                    included = true;
+                }
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                error = ex.Message;
+                return false;
+            }
         }
     }
 }

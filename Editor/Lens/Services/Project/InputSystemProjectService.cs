@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Becool.UnityMcpLens.Editor.Adapters.Unity.Project;
 using Becool.UnityMcpLens.Editor.Models.Project;
-using Becool.UnityMcpLens.Editor.Services.GameObjects;
+using Becool.UnityMcpLens.Editor.Services;
 
 namespace Becool.UnityMcpLens.Editor.Services.Project
 {
@@ -19,7 +19,7 @@ namespace Becool.UnityMcpLens.Editor.Services.Project
             m_Adapter = adapter ?? throw new ArgumentNullException(nameof(adapter));
         }
 
-        public ProjectOperationResult Diagnostics(InputSystemDiagnosticsRequest request, GameObjectToolTiming timing)
+        public ProjectOperationResult Diagnostics(InputSystemDiagnosticsRequest request, ToolOperationTiming timing)
         {
             request ??= new InputSystemDiagnosticsRequest();
             request.MaxItems = Math.Max(1, request.MaxItems);
@@ -81,7 +81,7 @@ namespace Becool.UnityMcpLens.Editor.Services.Project
             });
         }
 
-        public ProjectOperationResult PackageCompatibility(PackageCompatibilityRequest request, GameObjectToolTiming timing)
+        public ProjectOperationResult PackageCompatibility(PackageCompatibilityRequest request, ToolOperationTiming timing)
         {
             request ??= new PackageCompatibilityRequest();
             request.MaxItems = Math.Max(1, request.MaxItems);
@@ -120,7 +120,7 @@ namespace Becool.UnityMcpLens.Editor.Services.Project
             });
         }
 
-        public ProjectOperationResult InspectInputActionsAsset(InputActionsInspectRequest request, GameObjectToolTiming timing)
+        public ProjectOperationResult InspectInputActionsAsset(InputActionsInspectRequest request, ToolOperationTiming timing)
         {
             request ??= new InputActionsInspectRequest();
             request.MaxItems = Math.Max(1, request.MaxItems);
@@ -141,7 +141,7 @@ namespace Becool.UnityMcpLens.Editor.Services.Project
             return ProjectOperationResult.Ok("Retrieved input actions asset diagnostics.", result);
         }
 
-        public ProjectOperationResult PreviewActiveInputHandler(ActiveInputHandlerRequest request, GameObjectToolTiming timing)
+        public ProjectOperationResult PreviewActiveInputHandler(ActiveInputHandlerRequest request, ToolOperationTiming timing)
         {
             if (!TryBuildPlan(request, timing, out var plan, out var error))
                 return error;
@@ -149,7 +149,7 @@ namespace Becool.UnityMcpLens.Editor.Services.Project
             return ProjectOperationResult.Ok("Previewed active input handler setting.", plan);
         }
 
-        public ProjectOperationResult SetActiveInputHandler(ActiveInputHandlerRequest request, GameObjectToolTiming timing)
+        public ProjectOperationResult SetActiveInputHandler(ActiveInputHandlerRequest request, ToolOperationTiming timing)
         {
             if (!TryBuildPlan(request, timing, out var plan, out var error))
                 return error;
@@ -216,7 +216,7 @@ namespace Becool.UnityMcpLens.Editor.Services.Project
 
         bool TryBuildPlan(
             ActiveInputHandlerRequest request,
-            GameObjectToolTiming timing,
+            ToolOperationTiming timing,
             out InputHandlerPlan plan,
             out ProjectOperationResult error)
         {

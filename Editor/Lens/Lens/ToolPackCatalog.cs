@@ -118,8 +118,8 @@ namespace Becool.UnityMcpLens.Editor.Lens
                 recommendedNextPacks: new[] { UiPackId, DebugPackId }),
             [UiPackId] = new(
                 UiPackId,
-                "UI Inspection",
-                "UI hierarchy, raycasts, regions, and capture tools.",
+                "UI Authoring",
+                "UI hierarchy authoring, layout verification, raycasts, regions, and capture tools.",
                 includeGroups: new[] { "ui" },
                 recommendedNextPacks: new[] { ScenePackId, DebugPackId }),
             [ScriptingPackId] = new(

@@ -2,8 +2,8 @@ param(
     [string]$ProjectPath = (Get-Location).Path,
     [Parameter(Mandatory = $true)][string]$Target,
     [string]$SearchMethod = "by_name",
-    [Parameter()][string]$NodesJson,
-    [Parameter()][string]$NodesPath,
+    [Parameter()][string]$BindingsJson,
+    [Parameter()][string]$BindingsPath,
     [bool]$PreviewOnly = $false,
     [bool]$WaitForEditorIdle = $true,
     [int]$IdleTimeoutSeconds = 60,
@@ -15,17 +15,17 @@ param(
 
 . "$PSScriptRoot\UnityDevCommon.ps1"
 
-if ([string]::IsNullOrWhiteSpace($NodesJson) -and [string]::IsNullOrWhiteSpace($NodesPath)) {
-    throw "Provide -NodesJson or -NodesPath."
+if ([string]::IsNullOrWhiteSpace($BindingsJson) -and [string]::IsNullOrWhiteSpace($BindingsPath)) {
+    throw "Provide -BindingsJson or -BindingsPath."
 }
 
-$nodes = if (-not [string]::IsNullOrWhiteSpace($NodesPath)) {
-    Get-Content -LiteralPath (Resolve-Path -LiteralPath $NodesPath).Path -Raw | ConvertFrom-Json
+$bindings = if (-not [string]::IsNullOrWhiteSpace($BindingsPath)) {
+    Get-Content -LiteralPath (Resolve-Path -LiteralPath $BindingsPath).Path -Raw | ConvertFrom-Json
 }
 else {
-    $NodesJson | ConvertFrom-Json
+    $BindingsJson | ConvertFrom-Json
 }
-$nodes = @($nodes)
+$bindings = @($bindings)
 
 $resolvedProjectPath = Resolve-UnityProjectPath -ProjectPath $ProjectPath
 $idleWait = $null
@@ -45,17 +45,16 @@ if ($WaitForEditorIdle) {
 $payload = [ordered]@{
     Target = $Target
     SearchMethod = $SearchMethod
-    PreviewOnly = $PreviewOnly
-    Nodes = @($nodes)
+    Bindings = @($bindings)
 }
 
-$toolName = if ($PreviewOnly) { "Unity_UI_PreviewEnsureHierarchy" } else { "Unity_UI_ApplyEnsureHierarchy" }
+$toolName = if ($PreviewOnly) { "Unity_Scene_PreviewBindSerializedReferences" } else { "Unity_Scene_ApplyBindSerializedReferences" }
 $response = Invoke-UnityMcpToolJson -ProjectPath $resolvedProjectPath -ToolName $toolName -Arguments $payload -TimeoutSeconds $TimeoutSeconds
 $toolResult = Get-UnityToolObject -Response $response
 
 [ordered]@{
     success    = $toolResult.success -eq $true
-    message    = if ($toolResult.success -eq $true) { "UI hierarchy ensure operation completed." } else { $toolResult.error }
+    message    = if ($toolResult.success -eq $true) { "Scene serialized reference binding operation completed." } else { $toolResult.error }
     target     = $Target
     payload    = $payload
     editorIdle = $idleWait

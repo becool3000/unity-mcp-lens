@@ -118,6 +118,10 @@ validation, and import side effects with the same compact/read-first behavior.
 and logs internally consistent. Ambiguous stage metadata leads directly to
 smaller manual probes and slower recovery.
 
+Structured `ExecutionResult.ReturnResult(...)` payloads should stay compact,
+prefer detail refs when large, and remain available even when execution logs
+warnings or errors.
+
 ---
 
 ## Definition Of A Good Telemetry Outcome

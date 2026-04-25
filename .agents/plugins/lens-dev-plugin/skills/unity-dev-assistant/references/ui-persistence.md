@@ -37,9 +37,9 @@ This is the shared pattern behind end-screen groups, leaderboard groups, pause o
 ## Recommended tools
 
 - `Ensure-UnityUiHierarchy.ps1` to create or repair the named UI subtree under a scene root
-- `Set-UnitySceneSerializedProperties.ps1` to bind serialized scene refs
+- `Bind-UnitySceneSerializedReferences.ps1` to bind serialized scene refs through the split Phase 12 preview/apply tools
 - `Set-UnityUiLayout.ps1` to move or resize authored UI after the hierarchy is persistent
-- `Unity.UI.GetLayoutSnapshot` to verify authored layout and screen rects
+- `Verify-UnityUiScreenLayout.ps1` or `Unity.UI.VerifyScreenLayout` to verify authored layout assertions and screen rects
 
 ## Verification
 

@@ -43,14 +43,15 @@ if ($WaitForEditorIdle) {
 $payload = [ordered]@{
     Target = $Target
     SearchMethod = $SearchMethod
-    PreviewOnly = $PreviewOnly
+    TargetPath = "."
 }
 
 foreach ($property in $properties.PSObject.Properties) {
     $payload[$property.Name] = $property.Value
 }
 
-$response = Invoke-UnityMcpToolJson -ProjectPath $resolvedProjectPath -ToolName "Unity_UI_SetLayoutProperties" -Arguments $payload -TimeoutSeconds $TimeoutSeconds
+$toolName = if ($PreviewOnly) { "Unity_UI_PreviewLayoutProperties" } else { "Unity_UI_ApplyLayoutProperties" }
+$response = Invoke-UnityMcpToolJson -ProjectPath $resolvedProjectPath -ToolName $toolName -Arguments $payload -TimeoutSeconds $TimeoutSeconds
 $toolResult = Get-UnityToolObject -Response $response
 
 [ordered]@{

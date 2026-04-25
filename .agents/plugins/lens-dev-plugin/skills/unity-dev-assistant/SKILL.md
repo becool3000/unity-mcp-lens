@@ -113,17 +113,18 @@ or YAML edits.
 20. For deterministic sprite importer changes, use `scripts/Import-UnitySpriteAsset.ps1`.
 21. For narrow prefab field verification after a sprite or property mutation, use `scripts/Verify-UnityPrefabSerializedFields.ps1`.
 22. For runtime visual ownership inspection, use `scripts/Get-UnityVisualOwnership.ps1`, which wraps `Unity.Runtime.GetVisualBoundsSnapshot` with ownership output enabled.
-23. For scene component refs or other scene-authored serialized fields, use `scripts/Set-UnitySceneSerializedProperties.ps1`.
-24. For persistent scene UI subtree repair or creation, use `scripts/Ensure-UnityUiHierarchy.ps1`.
-25. For deterministic UI layout edits on authored scene objects, use `scripts/Set-UnityUiLayout.ps1`.
-26. If a `Unity_RunCommand` starts a long WebGL build on Windows, pass `-MonitorBuildMode WebGL` plus any known output/report/artifact paths so the PowerShell helper can fall back to passive log/disk monitoring when MCP stdout becomes unreliable. On macOS/Linux, launch the build with the JS helper, then use the session check build monitor and `Editor.log` while the build is active.
-27. For autoplay or scripted validation, use `scripts/Run-UnityAutoplayPlaytest.ps1`.
-28. For screenshots, use `scripts/Capture-UnityPlaytestArtifacts.js` on macOS/Linux or `scripts/Capture-UnityPlaytestArtifacts.ps1` on Windows. It waits for idle, supports pre-capture state locks, prefers relative project paths, and falls back to desktop capture when Unity-aware capture is flaky.
-29. When a scene looks correct in edit mode but different in play mode, treat runtime ownership drift as the default suspect before retuning values. Read `references/authoring-drift.md` and use a small runtime probe to compare the same fields in edit mode and play mode.
-30. For score, initials, or other first-run gating backed by `PlayerPrefs`, distinguish a missing key from a saved `0` value. Use `HasKey` when deciding whether a flow is truly first-run.
-31. When reading Unity console output, treat known MCP/package chatter as bridge self-noise unless real compiler or gameplay errors are mixed in.
-32. For package/import/Input System failures, activate `project` and run `Unity.Project.PackageCompatibility`, `Unity.InputActions.InspectAsset`, or `Unity.InputSystem.Diagnostics` before editing `ProjectSettings.asset`, grepping `Editor.log`, or writing a custom probe.
-33. For active input backend changes, use the preview/apply ProjectSettings tools and verify readback before restarting Unity.
+23. For scene object-reference fields or arrays that should bind to authored scene objects, use `scripts/Bind-UnitySceneSerializedReferences.ps1`.
+24. For persistent scene UI subtree repair or creation, use `scripts/Ensure-UnityUiHierarchy.ps1`, which now targets the split Phase 12 preview/apply UI hierarchy tools.
+25. For deterministic UI layout edits on authored scene objects, use `scripts/Set-UnityUiLayout.ps1`, which now targets the split Phase 12 preview/apply layout tools.
+26. For measured HUD/layout assertions such as inside-screen, right-of, below, or ordered-stack checks, use `scripts/Verify-UnityUiScreenLayout.ps1` or `Unity.UI.VerifyScreenLayout`.
+27. If a `Unity_RunCommand` starts a long WebGL build on Windows, pass `-MonitorBuildMode WebGL` plus any known output/report/artifact paths so the PowerShell helper can fall back to passive log/disk monitoring when MCP stdout becomes unreliable. On macOS/Linux, launch the build with the JS helper, then use the session check build monitor and `Editor.log` while the build is active.
+28. For autoplay or scripted validation, use `scripts/Run-UnityAutoplayPlaytest.ps1`.
+29. For screenshots, use `scripts/Capture-UnityPlaytestArtifacts.js` on macOS/Linux or `scripts/Capture-UnityPlaytestArtifacts.ps1` on Windows. It waits for idle, supports pre-capture state locks, prefers relative project paths, and falls back to desktop capture when Unity-aware capture is flaky.
+30. When a scene looks correct in edit mode but different in play mode, treat runtime ownership drift as the default suspect before retuning values. Read `references/authoring-drift.md` and use a small runtime probe to compare the same fields in edit mode and play mode.
+31. For score, initials, or other first-run gating backed by `PlayerPrefs`, distinguish a missing key from a saved `0` value. Use `HasKey` when deciding whether a flow is truly first-run.
+32. When reading Unity console output, treat known MCP/package chatter as bridge self-noise unless real compiler or gameplay errors are mixed in.
+33. For package/import/Input System failures, activate `project` and run `Unity.Project.PackageCompatibility`, `Unity.InputActions.InspectAsset`, or `Unity.InputSystem.Diagnostics` before editing `ProjectSettings.asset`, grepping `Editor.log`, or writing a custom probe.
+34. For active input backend changes, use the preview/apply ProjectSettings tools and verify readback before restarting Unity.
 
 ## Scene Debugger Pattern
 
@@ -153,9 +154,11 @@ Prefer a scene-owned debugger component when a project needs fast UI or state it
 - Mandatory first step for Unity work in a fresh chat: `scripts/Check-UnityDevSession.js` on macOS/Linux or `scripts/Check-UnityDevSession.ps1` on Windows
 - Preferred transport: `unity-mcp-lens`
 - Default exported tool surface: `foundation`
-- Current Phase 8 `foundation` + `scene` surface: `30` tools
+- Current `foundation` + `scene` surface: `32` tools
+- Current `foundation` + `ui` surface: `22` tools
 - Prefer split GameObject TSAM tools before legacy `Unity.ManageGameObject`
 - Prefer Phase 11 `project` tools for package/import/Input System diagnostics and active input handler changes
+- Prefer Phase 12 `ui` and scene-binding tools for persistent HUD authoring, scene reference binding, and screen-layout verification before custom editor-side `Unity_RunCommand`
 - Expand packs explicitly, not heuristically
 - Use `Unity.GetLensUsageReport` in `debug` for telemetry baselines, appended smoke rows, and TSAM stage coverage
 - Session and bridge checks are compact by default; use `-IncludeDiagnostics` only for explicit maintenance

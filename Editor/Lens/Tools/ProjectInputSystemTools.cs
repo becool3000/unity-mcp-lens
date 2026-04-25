@@ -7,7 +7,7 @@ using Becool.UnityMcpLens.Editor.Helpers;
 using Becool.UnityMcpLens.Editor.Adapters.Unity.Project;
 using Becool.UnityMcpLens.Editor.Lens;
 using Becool.UnityMcpLens.Editor.Models.Project;
-using Becool.UnityMcpLens.Editor.Services.GameObjects;
+using Becool.UnityMcpLens.Editor.Services;
 using Becool.UnityMcpLens.Editor.Services.Project;
 using Becool.UnityMcpLens.Editor.ToolRegistry;
 
@@ -113,7 +113,7 @@ Modes: legacy, inputSystem, both. Usually requires an editor restart or script r
         public static object Diagnostics(JObject @params)
         {
             @params ??= new JObject();
-            var timing = new GameObjectToolTiming(DiagnosticsToolName, "diagnostics", GetUtf8ByteCount(@params.ToString(Formatting.None)));
+            var timing = new ToolOperationTiming(DiagnosticsToolName, "diagnostics", GetUtf8ByteCount(@params.ToString(Formatting.None)));
             ProjectOperationResult result;
             string errorKind = null;
 
@@ -181,7 +181,7 @@ Modes: legacy, inputSystem, both. Usually requires an editor restart or script r
         static object HandleActiveInputHandlerTool(string toolName, string action, JObject @params, bool apply)
         {
             @params ??= new JObject();
-            var timing = new GameObjectToolTiming(toolName, action, GetUtf8ByteCount(@params.ToString(Formatting.None)));
+            var timing = new ToolOperationTiming(toolName, action, GetUtf8ByteCount(@params.ToString(Formatting.None)));
             ProjectOperationResult result;
             string errorKind = null;
 
@@ -275,7 +275,7 @@ Modes: legacy, inputSystem, both. Usually requires an editor restart or script r
             };
         }
 
-        static object ShapeResponse(string toolName, ProjectOperationResult result, GameObjectToolTiming timing, string fallbackErrorKind, bool compactSuccessData)
+        static object ShapeResponse(string toolName, ProjectOperationResult result, ToolOperationTiming timing, string fallbackErrorKind, bool compactSuccessData)
         {
             object response;
             using (timing.Measure("result_shaping"))
@@ -296,11 +296,11 @@ Modes: legacy, inputSystem, both. Usually requires an editor restart or script r
             string action,
             JObject @params,
             Func<JObject, TRequest> normalize,
-            Func<TRequest, GameObjectToolTiming, ProjectOperationResult> execute,
+            Func<TRequest, ToolOperationTiming, ProjectOperationResult> execute,
             string errorFormat)
         {
             @params ??= new JObject();
-            var timing = new GameObjectToolTiming(toolName, action, GetUtf8ByteCount(@params.ToString(Formatting.None)));
+            var timing = new ToolOperationTiming(toolName, action, GetUtf8ByteCount(@params.ToString(Formatting.None)));
             ProjectOperationResult result;
             string errorKind = null;
 

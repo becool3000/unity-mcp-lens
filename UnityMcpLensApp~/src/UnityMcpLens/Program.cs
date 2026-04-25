@@ -18,6 +18,10 @@ sealed class UnityMcpLensHost
         "Unity_FindInFile",
         "Unity_GetSha",
         "Unity_ValidateScript",
+        "Unity_UI_PreviewEnsureHierarchy",
+        "Unity_UI_PreviewLayoutProperties",
+        "Unity_UI_VerifyScreenLayout",
+        "Unity_Scene_PreviewBindSerializedReferences",
         "Unity_UI_Raycast",
         "Unity_Asset_Search",
         "Unity_Object_ValidateReferences",
@@ -50,11 +54,12 @@ sealed class UnityMcpLensHost
         "Unity_Asset_ConfigureSpriteImport",
         "Unity_Prefab_SetSerializedProperties",
         "Unity_Scene_SetSerializedProperties",
+        "Unity_Scene_ApplyBindSerializedReferences",
         "Unity_Tile_BuildSet",
         "Unity_Tilemap_Setup",
         "Unity_Tilemap_Paint",
-        "Unity_UI_EnsureNamedHierarchy",
-        "Unity_UI_SetLayoutProperties",
+        "Unity_UI_ApplyEnsureHierarchy",
+        "Unity_UI_ApplyLayoutProperties",
         "Unity_UI_Toolkit"
     };
 

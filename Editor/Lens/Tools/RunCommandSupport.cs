@@ -42,12 +42,14 @@ namespace Becool.UnityMcpLens.Editor.Tools.RunCommandSupport
         public static readonly Regex PlaceholderRegex = new(@"^(\d+)(?:,(-?\d+))?(?::(.+))?$", RegexOptions.Compiled);
 
         int m_UndoGroup;
+        bool m_HasUndoGroup;
 
         public int Id = 1;
         public readonly string CommandName;
         public List<ExecutionLog> Logs = new();
         public string ConsoleLogs;
         public bool SuccessfullyStarted;
+        public object ReturnedData;
 
         public ExecutionResult(string commandName) => CommandName = commandName;
 
@@ -96,21 +98,40 @@ namespace Becool.UnityMcpLens.Editor.Tools.RunCommandSupport
         public void Start()
         {
             SuccessfullyStarted = true;
-            Undo.IncrementCurrentGroup();
-            Undo.SetCurrentGroupName(CommandName ?? "Run command execution");
-            m_UndoGroup = Undo.GetCurrentGroup();
             Application.logMessageReceived += HandleConsoleLog;
+
+            try
+            {
+                Undo.IncrementCurrentGroup();
+                m_UndoGroup = Undo.GetCurrentGroup();
+                m_HasUndoGroup = true;
+            }
+            catch
+            {
+                m_UndoGroup = -1;
+                m_HasUndoGroup = false;
+            }
         }
 
         public void End()
         {
             Application.logMessageReceived -= HandleConsoleLog;
-            Undo.CollapseUndoOperations(m_UndoGroup);
+            if (!m_HasUndoGroup || m_UndoGroup < 0)
+                return;
+
+            try
+            {
+                Undo.CollapseUndoOperations(m_UndoGroup);
+            }
+            catch
+            {
+            }
         }
 
         public void Log(string log, params object[] references) => Logs.Add(new ExecutionLog(log, LogType.Log, references));
         public void LogWarning(string log, params object[] references) => Logs.Add(new ExecutionLog(log, LogType.Warning, references));
         public void LogError(string log, params object[] references) => Logs.Add(new ExecutionLog(log, LogType.Error, references));
+        public void ReturnResult(object value) => ReturnedData = value;
 
         internal static string FormatLogTemplate(string logTemplate, object[] arguments)
         {
@@ -227,6 +248,7 @@ namespace Becool.UnityMcpLens.Editor.Tools.RunCommandSupport
         public int ExecutionId;
         public string ExecutionLogs;
         public string ConsoleLogs;
+        public object ReturnedData;
         public int LogCount;
         public int WarningCount;
         public int ErrorCount;
@@ -311,6 +333,7 @@ namespace Becool.UnityMcpLens.Editor.Tools.RunCommandSupport
                 ExecutionId = executionResult.Id,
                 ExecutionLogs = formattedLogs,
                 ConsoleLogs = executionResult.ConsoleLogs ?? string.Empty,
+                ReturnedData = executionResult.ReturnedData,
                 LogCount = logCount,
                 WarningCount = warningCount,
                 ErrorCount = errorCount,

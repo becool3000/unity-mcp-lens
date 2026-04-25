@@ -9,9 +9,12 @@ latest dogfood findings.
 ## Current Baselines
 
 - `foundation` exports `12` tools.
-- `foundation + scene` exports `30` tools.
-- Latest Phase 11 metadata audit passed with `project=21` and `debug=22`.
+- `foundation + scene` now targets `32` tools.
+- `foundation + ui` now targets `22` tools.
+- Latest completed metadata audit passed with `project=21` and `debug=22`; Phase 12 raises the expected `scene` and `ui` counts.
 - Phase 8 split GameObject tools are in the `scene` pack.
+- Phase 12 scene serialized-reference preview/apply binding tools are in the `scene` pack.
+- Phase 12 UI hierarchy/layout preview/apply tools and `Unity.UI.VerifyScreenLayout` are in the `ui` pack.
 - Phase 11 package/import/Input System diagnostics and active input handler tools are in the `project` pack.
 - Project-pack additions must not widen the default `foundation` surface.
 - TSAM tools must emit `normalization`, `service`, `adapter`, and `result_shaping` coverage rows.
@@ -120,6 +123,25 @@ Work:
 ---
 
 ## P1
+
+### UI Authoring And Structured Probe Returns
+
+Current tools:
+
+- `Unity.UI.PreviewEnsureHierarchy`
+- `Unity.UI.ApplyEnsureHierarchy`
+- `Unity.UI.PreviewLayoutProperties`
+- `Unity.UI.ApplyLayoutProperties`
+- `Unity.UI.VerifyScreenLayout`
+- `Unity.Scene.PreviewBindSerializedReferences`
+- `Unity.Scene.ApplyBindSerializedReferences`
+
+Work:
+
+- Dogfood the full Phase 12 HUD authoring flow in `D:\2DUnityNewGame` without custom editor C#.
+- Keep no-op apply responses truly clean: `applied=false`, no unnecessary dirty/save.
+- Make `Unity.RunCommand` structured `ReturnResult(...)` the preferred probe return path over console-warning abuse.
+- Investigate the Unity `Undo.SetCurrentGroupName` assertion seen during helper-driven forced refresh so sync/reload orchestration does not wedge the bridge.
 
 ### Input System Diagnosis
 

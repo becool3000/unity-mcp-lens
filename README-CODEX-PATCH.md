@@ -40,12 +40,15 @@ node .agents/plugins/lens-dev-plugin/skills/unity-dev-assistant/scripts/Check-Un
 - Use `Unity.ReadDetailRef` only when a compact preview is insufficient.
 - Treat Unity compile/import/reload windows as expected recovery windows, not as reasons to spam tool discovery.
 - Prefer the Phase 11 `project` tools for package/import/Input System and active input handler work before custom `Unity_RunCommand` probes, raw `Editor.log` grep, or YAML edits.
-- Keep `foundation` at `12` exported tools and `foundation + scene` at `30` exported tools unless a deliberate pack-surface change updates the metadata audit.
+- Prefer the Phase 12 `ui` and split `scene` binding tools for persistent HUD hierarchy, serialized scene references, and screen-layout verification before custom `Unity_RunCommand` editor scripts.
+- Keep `foundation` at `12` exported tools, `foundation + scene` at `32`, and `foundation + ui` at `22` unless a deliberate pack-surface change updates the metadata audit.
 
 ## Current Tool Surface Reality
 
 - `foundation` is the default and always active.
 - `scene` contains the Phase 8 split GameObject TSAM surface.
+- `scene` also contains the Phase 12 serialized-reference preview/apply binding pair.
+- `ui` contains the Phase 12 split UI hierarchy/layout authoring tools plus read-only screen-layout verification.
 - `project` contains project/package/import diagnostics, missing script/reference checks, Input System diagnostics, input-action asset inspection, package compatibility, and active input handler preview/apply.
 - `debug` contains usage reporting through `Unity.GetLensUsageReport`.
 - `Unity.ManageGameObject` remains a compatibility fallback for uncovered split-tool behavior.
@@ -58,11 +61,11 @@ node .agents/plugins/lens-dev-plugin/skills/unity-dev-assistant/scripts/Check-Un
 - Reduce noisy repeated package/editor-log signals so healthy compatibility reads stay high signal.
 - Keep `Unity.ProjectSettings.PreviewActiveInputHandler` and `Unity.ProjectSettings.SetActiveInputHandler` as the editor-authored backend change path.
 - Keep `Unity.Project.PackageCompatibility` and `Unity.InputActions.InspectAsset` as the preferred package/import read surface before raw `Editor.log` grep.
-- Improve `Unity.RunCommand` failure-stage metadata and detail refs.
+- Improve `Unity.RunCommand` failure-stage metadata, detail refs, and structured `ReturnResult(...)` output.
 - Add reliable restart/reload orchestration with save/dirty handling and bridge reacquire.
-- Add first-class prefab authoring and serialized reference inspect/bind/verify workflows.
+- Dogfood the new Phase 12 UI authoring/binding/verification path on a real host project without custom editor C#.
 
-## Latest Phase 11 Smoke
+## Latest Completed Smoke
 
 The 2026-04-24 smoke against `D:\2DUnityNewGame` on Unity `6000.4.3f1` passed
 with a residual payload-shaping warning. Metadata audit passed with `foundation=12`, `foundation+scene=30`,
@@ -84,6 +87,7 @@ Highlights from that smoke:
 Remaining follow-ups:
 
 - Payload telemetry still reports no shaping recorded.
+- Phase 12 UI authoring, scene binding, and structured `RunCommand` return-value smoke is the next validation gate.
 
 ## Maintenance
 
