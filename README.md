@@ -2,6 +2,11 @@
 
 `unity-mcp-lens` is a standalone Unity package for running a focused MCP bridge between the Unity Editor and external agents such as Codex, Claude Code, Cursor, and other standard MCP clients.
 
+TSAM gives agents a smaller MCP surface, safer preview/apply mutation flows,
+compact default outputs, typed contracts, `detailRef` expansion for large data,
+and telemetry that shows payload size, bridge churn, pack churn, and recovery
+events. The result is less custom `Unity.RunCommand` code for common workflows
+and more auditable Unity changes.
 The package id is:
 
 ```json
@@ -32,11 +37,6 @@ enters play mode, imports packages, and mutates serialized scene state. Broad
 tools make that expensive: they expose too much surface, return large payloads,
 and make failures harder to classify.
 
-TSAM gives agents a smaller MCP surface, safer preview/apply mutation flows,
-compact default outputs, typed contracts, `detailRef` expansion for large data,
-and telemetry that shows payload size, bridge churn, pack churn, and recovery
-events. The result is less custom `Unity.RunCommand` code for common workflows
-and more auditable Unity changes.
 
 ## Quick Start
 
