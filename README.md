@@ -10,6 +10,86 @@ The package id is:
 
 Editor UI is Lens-owned and lives under **Tools > Unity MCP Lens** and **Project Settings > Tools > Unity MCP Lens**.
 
+## TSAM Refactor Direction
+
+TSAM means **Tool, Service, Adapter, Model**. In Lens, it is the incremental
+refactor path for turning broad Unity MCP tools into smaller, typed, easier to
+audit workflows behind explicit tool packs.
+
+- **Tool**: the MCP-facing entry point. It owns the public schema, normalizes inputs, calls the service, shapes compact results, and emits telemetry.
+- **Service**: the workflow layer. It plans reads, previews, applies, validation, and verification.
+- **Adapter**: the Unity API boundary. It touches GameObjects, assets, project settings, packages, serialized objects, logs, editor state, and other Unity surfaces.
+- **Model**: the typed request, result, and plan structures that keep contracts stable instead of drifting through anonymous objects.
+
+This is not a full rewrite. Legacy broad tools remain available for compatibility
+and escape hatches while painful, high-use workflows move into compact TSAM
+tools. More detail lives in [docs/TSAM.md](docs/TSAM.md).
+
+## Why This Matters For Codex-Style Unity Agents
+
+Unity agents need to stay oriented while Unity recompiles, reloads domains,
+enters play mode, imports packages, and mutates serialized scene state. Broad
+tools make that expensive: they expose too much surface, return large payloads,
+and make failures harder to classify.
+
+TSAM gives agents a smaller MCP surface, safer preview/apply mutation flows,
+compact default outputs, typed contracts, `detailRef` expansion for large data,
+and telemetry that shows payload size, bridge churn, pack churn, and recovery
+events. The result is less custom `Unity.RunCommand` code for common workflows
+and more auditable Unity changes.
+
+## Quick Start
+
+1. Clone this repository.
+
+2. Add Lens to a Unity project's `Packages/manifest.json`:
+
+```json
+"com.becool3000.unity-mcp-lens": "file:C:/dev/unity-mcp-lens"
+```
+
+Use a relative path if your project and package checkout live near each other:
+
+```json
+"com.becool3000.unity-mcp-lens": "file:../unity-mcp-lens"
+```
+
+3. In Unity, run **Tools > Unity MCP Lens > Install/Refresh Lens Server**.
+
+4. Point your MCP client at the installed Lens server with no `--mcp` argument:
+
+```text
+~/.unity/unity-mcp-lens/<platform binary>
+```
+
+For example on Windows:
+
+```text
+C:\Users\<you>\.unity\unity-mcp-lens\unity_mcp_lens_win.exe
+```
+
+5. Verify the bridge and editor state from this repo:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .agents/plugins/lens-dev-plugin/skills/unity-dev-assistant/scripts/Check-UnityDevSession.ps1 -ProjectPath C:\Path\To\UnityProject
+```
+
+6. Run the live metadata audit against an idle Unity host project:
+
+```powershell
+dotnet run --project Tools~/UnityMcpLensPackSwitchBenchApp~/UnityMcpLensPackSwitchBench.csproj -c Release -p:UseAppHost=false -- --project-path C:\Path\To\UnityProject --server-path C:\Users\<you>\.unity\unity-mcp-lens\unity_mcp_lens_win.exe --metadata-audit
+```
+
+## Example Workflow
+
+For package, import, or Input System diagnosis, prefer the `project` pack before
+custom editor scripts or raw `Editor.log` grep:
+
+1. Activate the `project` pack with `Unity.SetToolPacks`.
+2. Run `Unity.InputSystem.Diagnostics`, `Unity.Project.PackageCompatibility`, or `Unity.InputActions.InspectAsset`.
+3. Use the compact result first; read `detailRef` only when the preview is insufficient.
+4. Activate `debug` and run `Unity.GetLensUsageReport` to confirm TSAM stage coverage and inspect payload/session cost.
+
 ## What Lens Owns
 
 - An owned MCP-only stdio server named `unity-mcp-lens`.
@@ -24,37 +104,17 @@ Editor UI is Lens-owned and lives under **Tools > Unity MCP Lens** and **Project
 
 Lens does not own Unity's official Assistant chat UI, cloud asset generation, Assistant Gateway workflows, or Assistant-specific UI. Install the official Assistant package separately if you want those features.
 
-## Install In A Unity Project
+## Before vs After TSAM
 
-Use this repo as a local package source:
+Before TSAM, common agent workflows leaned on broad tools, larger payloads,
+manual probes, and harder-to-audit mutation paths. That made it slower to find
+the real failure stage when Unity was compiling, importing packages, or
+changing serialized state.
 
-```json
-"com.becool3000.unity-mcp-lens": "file:C:/dev/unity-mcp-lens"
-```
-
-or with a relative path:
-
-```json
-"com.becool3000.unity-mcp-lens": "file:../unity-mcp-lens"
-```
-
-If an older project points this checkout at the Assistant package id, replace that dependency with the Lens package id above.
-
-## MCP Server
-
-The owned Lens server installs under:
-
-```text
-~/.unity/unity-mcp-lens/
-```
-
-The MCP client command should point directly at the installed Lens binary, for example on Windows:
-
-```text
-C:\Users\<you>\.unity\unity-mcp-lens\unity_mcp_lens_win.exe
-```
-
-Do not pass `--mcp` to the Lens server. That argument belongs to the legacy Unity relay path, not Lens.
+After TSAM, common workflows move into explicit packs with typed models,
+read-only diagnostics, preview/apply mutation pairs, compact default output,
+`detailRef` expansion for large data, and telemetry rows for
+`normalization`, `service`, `adapter`, and `result_shaping`.
 
 ## Side-by-side With Official Assistant
 
@@ -76,33 +136,6 @@ Standalone Lens does not bundle or install the legacy Unity relay. If a project 
 - `Documentation~/`: package docs.
 - `docs/`: repo-maintenance notes and audits.
 
-## TSAM Direction
-
-Lens is being refactored incrementally around TSAM surfaces: Tool, Service,
-Adapter, and Model. The goal is not a rewrite. The goal is to move the
-workflows that create the most agent friction into compact, typed,
-telemetry-covered tools while keeping older broad tools available as
-compatibility fallbacks.
-
-TSAM-covered tools are expected to:
-
-- keep the public MCP schema narrow and explicit at the Tool layer
-- put planning and validation in Services
-- isolate Unity API and reflection access in Adapters
-- return stable typed Models instead of drifting anonymous result shapes
-- emit `normalization`, `service`, `adapter`, and `result_shaping` telemetry rows
-- prefer preview/apply pairs for mutations and read-only tools for diagnostics
-
-Current TSAM surfaces:
-
-- `scene`: Phase 8 split GameObject inspection, component reads, preview/apply mutation, create, and delete.
-- `scene`: Phase 12 serialized-reference preview/apply binding.
-- `project`: Phase 11 package compatibility, input-action asset inspection, Input System diagnostics, and active input handler preview/apply.
-- `ui`: Phase 12 uGUI hierarchy/layout preview/apply authoring and read-only screen-layout verification.
-
-The legacy broad tools remain available where split coverage is not complete,
-but new high-use workflows should move into TSAM slices first.
-
 ## Validation
 
 Useful static checks:
@@ -119,6 +152,36 @@ server installed and the editor idle:
 
 ```powershell
 dotnet run --project Tools~/UnityMcpLensPackSwitchBenchApp~/UnityMcpLensPackSwitchBench.csproj -c Release -p:UseAppHost=false -- --project-path C:\Path\To\UnityProject --server-path C:\Users\<you>\.unity\unity-mcp-lens\unity_mcp_lens_win.exe --metadata-audit
+```
+
+## Benchmark And Telemetry
+
+Telemetry is part of the TSAM refactor. `Unity.GetLensUsageReport` reports
+payload rows, bridge request/response rows, pack transitions, tool snapshots,
+detail refs, shaping metadata, and TSAM stage coverage.
+
+Existing dogfood data is tracked in [docs/Telemetry](docs/Telemetry). Current
+recorded signals include:
+
+- Phase 11 focused smoke on Unity `6000.4.3f1`: metadata audit passed; compact rerun span was `44` rows; bridge churn was `1` connection, `0` setup cycles, and `0` unmatched requests; TSAM coverage was complete for package compatibility, input-actions inspection, diagnostics, preview, and set.
+- Phase 12 helper-driven smoke on Unity `6000.4.3f1`: metadata audit passed with `foundation=12`, `foundation+scene=32`, `foundation+ui=22`, `project=21`, and `debug=22`; rerun scope was `358` rows; bridge churn was `25` connections, `0` setup cycles, and `0` unmatched requests; TSAM coverage was complete for UI hierarchy, scene binding, layout, and verify.
+- Payload shaping is still underway. The recorded smoke reports still showed `NoShapingRecorded=true`, so current docs should not claim measurable shaping savings yet.
+
+Future benchmark reports should include:
+
+```text
+Scope:
+Unity version:
+Host project:
+Tool packs:
+Payload size:
+Result shaping savings:
+Tool calls:
+Bridge/session churn:
+Pack transitions:
+Error/recovery events:
+TSAM stage coverage:
+Known caveats:
 ```
 
 ## Status

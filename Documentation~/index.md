@@ -15,6 +15,7 @@ split tools.
 
 - [Getting started](getting-started.md)
 - [Tool packs and MCP surface](tool-packs.md)
+- [TSAM refactor direction](../docs/TSAM.md)
 - [Migrating from the compatibility package](migration-from-assistant-compat.md)
 - [Troubleshooting](troubleshooting.md)
 

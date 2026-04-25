@@ -6,6 +6,7 @@ All notable Unity MCP Lens package changes are documented here.
 
 ### Added
 
+- Added public TSAM refactor documentation for the Tool, Service, Adapter, Model direction, covering split GameObject tools, Input System diagnostics and active input handler preview/apply, package compatibility, input-action asset inspection, UI hierarchy/layout preview/apply tools, scene serialized-reference binding, usage reporting, and TSAM stage telemetry.
 - Added Phase 8 split GameObject TSAM tools for inspect, component reads, preview/apply mutation, create, and delete behind the `scene` pack.
 - Added Phase 10 project/Input System tools for diagnostics and active input handler preview/apply behind the `project` pack.
 - Added Phase 11 `project`-pack diagnostics for `Unity.Project.PackageCompatibility` and `Unity.InputActions.InspectAsset`.

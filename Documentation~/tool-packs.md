@@ -33,6 +33,9 @@ TSAM-covered tools should emit `normalization`, `service`, `adapter`, and
 preview/apply mutation pairs over custom `Unity.RunCommand` snippets when a
 split tool exists for the workflow.
 
+See [TSAM refactor direction](../docs/TSAM.md) for the layer responsibilities
+and current split-tool surfaces.
+
 Large results should return a compact preview with `detailRef` when full detail is available. Use `Unity.ReadDetailRef` only when the preview is insufficient.
 
 Use `Unity.GetLensUsageReport` from the `debug` pack when validating payload
