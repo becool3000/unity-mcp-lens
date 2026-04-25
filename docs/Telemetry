@@ -67,24 +67,24 @@ TSAM stage coverage:
 - `Unity.ProjectSettings.PreviewActiveInputHandler`
 - `Unity.ProjectSettings.SetActiveInputHandler`
 
-## Phase 10 Smoke Baseline
+## Phase 11 Smoke Baseline
 
-A focused Phase 10 smoke test on 2026-04-24 passed with warnings:
+A focused Phase 11 smoke test on 2026-04-24 passed with a residual payload-shaping warning:
 
 - Host project: `D:\2DUnityNewGame`.
 - Unity version: `6000.4.3f1`.
 - Metadata audit: pass.
-- Export counts: `foundation=12`, `foundation+scene=30`, `project=19`, `debug=22`.
-- Compact rerun span: `78` rows, lines `236..314`.
-- Bridge churn in compact rerun: `3` connections, `2` pack transitions, `0` setup cycles, `4` schema requests.
-- Phase 10 TSAM coverage: complete for diagnostics, preview, and set.
-- Phase 10 failure classes: none.
+- Export counts: `foundation=12`, `foundation+scene=30`, `project=21`, `debug=22`.
+- Compact rerun span: `44` rows, lines `1279..1324`.
+- Bridge churn in compact rerun: `1` connection, `0` setup cycles, `0` unmatched requests.
+- Phase 11 TSAM coverage: complete for package compatibility, input-actions inspection, diagnostics, preview, and set.
+- Phase 11 failure classes: none.
 
-Smoke warnings:
+Smoke notes:
 
-- No-op active input handler preview/apply still reports restart-required messaging.
+- Compatibility signals now collapse repeated `Unity.InputSystem.IntegrationTests.dll` log-skip messages into one informational issue and keep overall status `ok`.
+- The post-smoke usage report now excludes its own in-flight request and no longer flags the final `Unity_GetLensUsageReport` call as unmatched.
 - Payload report still shows `NoShapingRecorded=true`.
-- Expanded diagnostics was about `4.4 KB` raw/shaped.
 
 ---
 
@@ -104,12 +104,13 @@ not yet consistently reducing recorded payload size. This may mean shaping is
 missing expensive rows, or telemetry is recording the raw side of the operation
 instead of the shaped side.
 
-### Missing Diagnostic Surfaces
+### Diagnostic Surface Gaps
 
-The Input System debugging path still required custom probes, package pinning,
-log grep, and asset edits. `Unity.InputSystem.Diagnostics` should become the
-first stop for backend, defines, package version, type-load errors, devices,
-action assets, wrapper generation, and recent Input System log signals.
+Phase 11 closed the biggest package/import/Input System read-only gap, and the
+compact compatibility view now keeps known benign repeated Input System
+integration-test skip lines informational instead of escalating overall status.
+The next TSAM diagnostics cluster should cover missing scripts, reference
+validation, and import side effects with the same compact/read-first behavior.
 
 ### Result Ambiguity
 

@@ -8,6 +8,7 @@ All notable Unity MCP Lens package changes are documented here.
 
 - Added Phase 8 split GameObject TSAM tools for inspect, component reads, preview/apply mutation, create, and delete behind the `scene` pack.
 - Added Phase 10 project/Input System tools for diagnostics and active input handler preview/apply behind the `project` pack.
+- Added Phase 11 `project`-pack diagnostics for `Unity.Project.PackageCompatibility` and `Unity.InputActions.InspectAsset`.
 - Added Lens usage reporting for payload, bridge, pack transition, tool snapshot, and TSAM stage coverage analysis.
 - Added metadata audit coverage for foundation, scene, project, and debug pack surfaces, including required tools, schema checks, and read-only annotations.
 
@@ -15,22 +16,26 @@ All notable Unity MCP Lens package changes are documented here.
 
 - Kept `foundation` as the narrow default export surface with a `12` tool baseline.
 - Kept `foundation + scene` at a `30` tool smoke baseline while adding project-pack capabilities separately.
-- Updated Codex workflow guidance to prefer Phase 10 project tools for Input System and active input handler work.
+- Raised the `project` pack smoke baseline from `19` to `21` tools while keeping `foundation` and `scene` unchanged.
+- Extended `Unity.InputSystem.Diagnostics` with compatibility signals and concrete `.inputactions` wrapper metadata.
+- Collapsed known benign repeated Input System integration-test log-skip lines into one informational compatibility issue so healthy package diagnostics stay `ok`.
+- Excluded the in-flight `Unity.GetLensUsageReport` request from self-analysis so appended usage-report reruns no longer classify their own final call as unmatched.
+- Updated Codex workflow guidance to prefer the Phase 11 `project` tools for package/import/Input System diagnostics and active input handler work.
 - Improved `Unity.RunCommand` and `Unity.ManageEditor WaitForStableEditor` output contracts toward stage-aware compact results with detail refs.
+- Suppressed restart-required noise for no-op active input handler preview/apply results.
 
 ### Known Follow-Up
 
 - Reduce helper-script session/setup churn, repeated `get_tool_schema` requests, and pack transition noise.
 - Improve payload shaping so large editor-state and tool-snapshot rows produce measurable savings.
-- Extend Input System diagnostics to cover package compatibility, type-load failures, wrapper generation conflicts, devices, bindings, and recent log signals in one call.
-- Suppress restart-required messaging for no-op active input handler preview/apply results.
+- Decide whether default package assembly filtering should exclude doc/sample/test-support asmdefs from compact compatibility reads.
 - Add reliable editor restart/reload orchestration and prefab/serialized-reference authoring workflows.
 
 ### Validation
 
-- Phase 10 smoke passed with warnings on Unity `6000.4.3f1` in `D:\2DUnityNewGame`.
-- Metadata audit passed with `foundation=12`, `foundation+scene=30`, `project=19`, and `debug=22`.
-- Phase 10 diagnostics, preview, and set calls emitted complete TSAM stage coverage with no failure classes.
+- Phase 11 smoke passed with a residual payload-shaping warning on Unity `6000.4.3f1` in `D:\2DUnityNewGame`.
+- Metadata audit passed with `foundation=12`, `foundation+scene=30`, `project=21`, and `debug=22`.
+- Phase 11 package compatibility, input-actions inspection, diagnostics, preview, and set calls emitted complete TSAM stage coverage with no failure classes.
 
 ## [0.1.0-alpha.1] - 2026-04-20
 

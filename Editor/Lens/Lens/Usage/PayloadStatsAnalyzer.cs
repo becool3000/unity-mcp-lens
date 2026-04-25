@@ -17,6 +17,8 @@ namespace Becool.UnityMcpLens.Editor.Lens.Usage
         public int? LastRows { get; set; }
         public bool AllRows { get; set; }
         public int MaxItems { get; set; } = PayloadStatsAnalyzer.DefaultMaxItems;
+        public string ExcludeConnectionId { get; set; }
+        public string ExcludeRequestId { get; set; }
     }
 
     sealed class PayloadStatsException : Exception
@@ -107,7 +109,27 @@ namespace Becool.UnityMcpLens.Editor.Lens.Usage
                 scope = query.AllRows ? "all" : $"lastRows:{lastRows}";
             }
 
+            if (!string.IsNullOrWhiteSpace(query.ExcludeRequestId))
+            {
+                scopedRows = scopedRows
+                    .Where(row => !ShouldExcludeRow(row, query.ExcludeConnectionId, query.ExcludeRequestId))
+                    .ToList();
+                scope = $"{scope},excludeRequest:{query.ExcludeRequestId}";
+            }
+
             return BuildReport(statsPath, rows.Count, totalLineCount, skippedLines, startLine, totalLineCount + 1, scope, maxItems, scopedRows);
+        }
+
+        static bool ShouldExcludeRow(PayloadRow row, string connectionId, string requestId)
+        {
+            if (row == null || string.IsNullOrWhiteSpace(requestId))
+                return false;
+
+            if (!string.Equals(row.RequestId, requestId, StringComparison.Ordinal))
+                return false;
+
+            return string.IsNullOrWhiteSpace(connectionId) ||
+                string.Equals(row.ConnectionId, connectionId, StringComparison.Ordinal);
         }
 
         static List<PayloadRow> ReadRows(string statsPath, out int totalLineCount, out int skippedLines)

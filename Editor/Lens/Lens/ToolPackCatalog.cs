@@ -106,7 +106,7 @@ namespace Becool.UnityMcpLens.Editor.Lens
             [ProjectPackId] = new(
                 ProjectPackId,
                 "Project Diagnostics",
-                "Project-wide scans, guidelines, and lightweight validation.",
+                "Project-wide scans, package/import diagnostics, guidelines, and lightweight validation.",
                 includeGroups: new[] { "project", "validation" },
                 includeTools: new[] { NormalizeToolName("Unity.Project.GetInfo"), NormalizeToolName("Unity.Project.GetPackages") },
                 recommendedNextPacks: new[] { ScriptingPackId, AssetsPackId }),

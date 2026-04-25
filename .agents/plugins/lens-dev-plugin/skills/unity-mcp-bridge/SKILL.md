@@ -106,7 +106,7 @@ powershell -ExecutionPolicy Bypass -File $script -ProjectPath "$PWD"
 ## Diagnostics
 
 - Compact output is the default operator view. Reach for diagnostics mode only when the maintenance task actually requires raw editor detail.
-- For Input System backend or device failures, prefer `project` pack tools (`Unity.InputSystem.Diagnostics` and the active input handler preview/apply tools) before resorting to ad hoc editor probes.
+- For package/import/Input System failures, prefer `project` pack tools (`Unity.Project.PackageCompatibility`, `Unity.InputActions.InspectAsset`, `Unity.InputSystem.Diagnostics`, and the active input handler preview/apply tools) before resorting to ad hoc editor probes or raw `Editor.log` grep.
 - Inspect `%USERPROFILE%\.unity\mcp\connections\bridge-status-*.json` for the current bridge status.
 - Inspect `%LOCALAPPDATA%\Unity\Editor\Editor.log` for approval, handshake, disconnect, compile, and auth signals.
 - On macOS inspect `~/Library/Logs/Unity/Editor.log` for the same signals.

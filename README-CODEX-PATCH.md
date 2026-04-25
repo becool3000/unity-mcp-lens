@@ -39,14 +39,14 @@ node .agents/plugins/lens-dev-plugin/skills/unity-dev-assistant/scripts/Check-Un
 - Keep the default pack surface narrow and expand packs explicitly.
 - Use `Unity.ReadDetailRef` only when a compact preview is insufficient.
 - Treat Unity compile/import/reload windows as expected recovery windows, not as reasons to spam tool discovery.
-- Prefer Phase 10 project tools for Input System and active input handler work before custom `Unity_RunCommand` probes or YAML edits.
+- Prefer the Phase 11 `project` tools for package/import/Input System and active input handler work before custom `Unity_RunCommand` probes, raw `Editor.log` grep, or YAML edits.
 - Keep `foundation` at `12` exported tools and `foundation + scene` at `30` exported tools unless a deliberate pack-surface change updates the metadata audit.
 
 ## Current Tool Surface Reality
 
 - `foundation` is the default and always active.
 - `scene` contains the Phase 8 split GameObject TSAM surface.
-- `project` contains project/package diagnostics, missing script/reference checks, Input System diagnostics, and active input handler preview/apply.
+- `project` contains project/package/import diagnostics, missing script/reference checks, Input System diagnostics, input-action asset inspection, package compatibility, and active input handler preview/apply.
 - `debug` contains usage reporting through `Unity.GetLensUsageReport`.
 - `Unity.ManageGameObject` remains a compatibility fallback for uncovered split-tool behavior.
 - Helper scripts are still important for orchestration-heavy flows such as session checks, script sync, play-mode entry, and long-running build/reload monitoring.
@@ -55,25 +55,35 @@ node .agents/plugins/lens-dev-plugin/skills/unity-dev-assistant/scripts/Check-Un
 
 - Reduce helper-script session/setup churn and repeated schema requests.
 - Fix payload shaping for large `Unity.ManageEditor` and tool snapshot rows.
-- Extend `Unity.InputSystem.Diagnostics` so package, define, device, `.inputactions`, wrapper, and recent log failures can be diagnosed in one call.
+- Reduce noisy repeated package/editor-log signals so healthy compatibility reads stay high signal.
 - Keep `Unity.ProjectSettings.PreviewActiveInputHandler` and `Unity.ProjectSettings.SetActiveInputHandler` as the editor-authored backend change path.
-- Suppress restart-required noise for active input handler no-op preview/apply results.
+- Keep `Unity.Project.PackageCompatibility` and `Unity.InputActions.InspectAsset` as the preferred package/import read surface before raw `Editor.log` grep.
 - Improve `Unity.RunCommand` failure-stage metadata and detail refs.
 - Add reliable restart/reload orchestration with save/dirty handling and bridge reacquire.
 - Add first-class prefab authoring and serialized reference inspect/bind/verify workflows.
 
-## Latest Phase 10 Smoke
+## Latest Phase 11 Smoke
 
 The 2026-04-24 smoke against `D:\2DUnityNewGame` on Unity `6000.4.3f1` passed
-with warnings. Metadata audit passed with `foundation=12`, `foundation+scene=30`,
-`project=19`, and `debug=22`. Phase 10 diagnostics, preview, and set calls all
-emitted complete TSAM stage coverage and zero failure classes.
+with a residual payload-shaping warning. Metadata audit passed with `foundation=12`, `foundation+scene=30`,
+`project=21`, and `debug=22`. `Unity.Project.PackageCompatibility`,
+`Unity.InputActions.InspectAsset`, `Unity.InputSystem.Diagnostics`, and the
+active input handler preview/set tools all emitted complete TSAM stage coverage
+with zero failure classes.
 
-Follow-ups from that smoke:
+Highlights from that smoke:
 
-- No-op active input handler preview/apply still reports restart-required messaging.
+- Package compatibility reported `com.unity.inputsystem@1.17.0` with matching manifest and registered versions.
+- Input-action inspection returned concrete wrapper metadata:
+  `generateWrapperCode=false`, `wrapperClassName=SandPrototypeControls`,
+  `wrapperCodePath=Assets/Scripts/SandPrototype/SandPrototypeControls.cs`.
+- Compact compatibility summary now collapses repeated `Unity.InputSystem.IntegrationTests.dll` skip lines into one informational issue with overall status `ok`.
+- No-op active input handler preview/apply now returns `restartRequired=false`.
+- Post-smoke usage reporting now excludes its own in-flight request, so the final `Unity_GetLensUsageReport` call does not appear as unmatched.
+
+Remaining follow-ups:
+
 - Payload telemetry still reports no shaping recorded.
-- The check-session helper path is under `unity-dev-assistant/scripts`, not `unity-mcp-bridge/scripts`.
 
 ## Maintenance
 

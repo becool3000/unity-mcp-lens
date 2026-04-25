@@ -290,6 +290,8 @@ const exactPackMap = new Map(
     Unity_ImportExternalModel: ["assets"],
     Unity_Project_ManagePackages: ["full"],
     Unity_InputSystem_Diagnostics: ["project"],
+    Unity_Project_PackageCompatibility: ["project"],
+    Unity_InputActions_InspectAsset: ["project"],
     Unity_ProjectSettings_PreviewActiveInputHandler: ["project"],
     Unity_ProjectSettings_SetActiveInputHandler: ["project"],
     Unity_Object_ValidateReferences: ["project"],

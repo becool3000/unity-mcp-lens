@@ -10,19 +10,19 @@ latest dogfood findings.
 
 - `foundation` exports `12` tools.
 - `foundation + scene` exports `30` tools.
-- Latest Phase 10 metadata audit passed with `project=19` and `debug=22`.
+- Latest Phase 11 metadata audit passed with `project=21` and `debug=22`.
 - Phase 8 split GameObject tools are in the `scene` pack.
-- Phase 10 Input System and active input handler tools are in the `project` pack.
+- Phase 11 package/import/Input System diagnostics and active input handler tools are in the `project` pack.
 - Project-pack additions must not widen the default `foundation` surface.
 - TSAM tools must emit `normalization`, `service`, `adapter`, and `result_shaping` coverage rows.
 
 ---
 
-## Latest Phase 10 Smoke
+## Latest Phase 11 Smoke
 
 Date: 2026-04-24
 
-Result: passed with warnings.
+Result: passed with a residual payload-shaping warning.
 
 Host project:
 
@@ -34,42 +34,52 @@ Pack/export result:
 - Initial active packs: `foundation`.
 - Smoke active packs: `foundation + project`.
 - Metadata audit: pass.
-- Export counts: `foundation=12`, `foundation+scene=30`, `project=19`, `debug=22`.
-- Phase 10 schemas and read-only metadata validated for:
+- Export counts: `foundation=12`, `foundation+scene=30`, `project=21`, `debug=22`.
+- Phase 11 schemas and read-only metadata validated for:
   - `Unity_InputSystem_Diagnostics`
+  - `Unity_Project_PackageCompatibility`
+  - `Unity_InputActions_InspectAsset`
   - `Unity_ProjectSettings_PreviewActiveInputHandler`
   - `Unity_ProjectSettings_SetActiveInputHandler`
 
-Diagnostics result:
+Package/import result:
 
-- Active input handler: `both`, raw value `2`, source `ProjectSettings.m_ActiveInputHandler`.
-- Input System package: `com.unity.inputsystem@1.17.0`.
-- Assembly/type load: OK.
-- Devices found: Keyboard, Mouse, Xbox Controller.
-- Asset checked: `Assets/Input/SandPrototypeControls.inputactions`.
-- Asset summary: `1` map, `4` actions, `18` bindings, `2` control schemes.
+- `Unity.Project.PackageCompatibility` returned `com.unity.inputsystem@1.17.0` with matching manifest and registered versions.
+- Package assembly signals returned `3` rows and all reported `loaded=true`, `typeLoadOk=true`.
+- `Unity.InputActions.InspectAsset` returned `Assets/Input/SandPrototypeControls.inputactions` with `1` map, `4` actions, `18` bindings, and `2` control schemes.
+- Wrapper generation now reports concrete importer metadata:
+  - `generateWrapperCode=false`
+  - `wrapperClassName=SandPrototypeControls`
+  - `wrapperCodePath=Assets/Scripts/SandPrototype/SandPrototypeControls.cs`
 
-Preview/apply result:
+Diagnostics/preview result:
 
-- `legacy`: current `both`, requested `legacy`, `willModify=true`.
-- `inputSystem`: current `both`, requested `inputSystem`, `willModify=true`.
-- `both`: current `both`, requested `both`, `willModify=false`.
-- Safe apply used `mode=both`, `save=true`, `requestScriptReload=false`.
-- Apply was a no-op and readback stayed `both`.
+- `Unity.InputSystem.Diagnostics` returned:
+  - active input handler `both`, raw value `2`, source `ProjectSettings.m_ActiveInputHandler`
+  - package `com.unity.inputsystem@1.17.0`
+  - assembly/type load OK
+  - `3` devices: Keyboard, Mouse, Xbox Controller
+  - the same `.inputactions` asset summary and wrapper metadata as the dedicated inspect tool
+- `Unity.ProjectSettings.PreviewActiveInputHandler` for `both` returned `willModify=false` and `restartRequired=false`.
+- `Unity.ProjectSettings.SetActiveInputHandler` for `both` remained a no-op with `applied=false` and `restartRequired=false`.
 
 Telemetry result:
 
-- Compact rerun span: lines `236..314`, `78` rows.
-- Bridge churn in compact rerun: `3` connections, `2` pack transitions, `0` setup cycles, `4` schema requests.
-- Phase 10 TSAM coverage was complete for diagnostics, preview, and set.
-- Phase 10 failure classes: none.
+- Compact rerun span: lines `1279..1324`, `44` rows.
+- Bridge churn in compact rerun: `1` connection, `0` setup cycles, `0` unmatched requests.
+- Phase 11 TSAM coverage was complete for:
+  - `Unity.Project.PackageCompatibility`
+  - `Unity.InputActions.InspectAsset`
+  - `Unity.InputSystem.Diagnostics`
+  - `Unity.ProjectSettings.PreviewActiveInputHandler`
+  - `Unity.ProjectSettings.SetActiveInputHandler`
+- Failure classes: none.
 
-Smoke warnings:
+Smoke notes:
 
-- No-op `both` preview/apply still reports `restartRequired=true` and `restart_required`, which is noisy when `willModify=false` or `applied=false`.
-- Payload report still shows `NoShapingRecorded=true`; expanded diagnostics was about `4.4 KB` raw/shaped.
-- The session-check helper path is `unity-dev-assistant/scripts/Check-UnityDevSession.*`, not under `unity-mcp-bridge/scripts`.
-- Host project already had `ProjectSettings/ProjectSettings.asset` changed from `activeInputHandler: 0` to `2`; timestamp predates the smoke.
+- Package compatibility and diagnostics now collapse the repeated `Unity.InputSystem.IntegrationTests.dll` skip lines into one informational compatibility issue, and overall status stays `ok`.
+- The post-smoke usage report now excludes its own in-flight request and no longer classifies the final `Unity_GetLensUsageReport` call as unmatched.
+- Payload report still shows `NoShapingRecorded=true`.
 
 ---
 
@@ -96,7 +106,7 @@ Work:
 Observed dogfood signals:
 
 - `0.00%` recorded shaping savings.
-- Latest Phase 10 smoke still reported `NoShapingRecorded=true`.
+- Latest Phase 11 smoke still reported `NoShapingRecorded=true`.
 - `Unity_ManageEditor` emitted payload rows above `220 KB`.
 - Tool snapshots contributed about `2.50 MB` raw payload across `29` rows.
 
@@ -116,13 +126,16 @@ Work:
 Current tools:
 
 - `Unity.InputSystem.Diagnostics`
+- `Unity.Project.PackageCompatibility`
+- `Unity.InputActions.InspectAsset`
 - `Unity.ProjectSettings.PreviewActiveInputHandler`
 - `Unity.ProjectSettings.SetActiveInputHandler`
 
 Work:
 
-- Suppress restart-required messaging for active input handler no-op preview/apply results.
-- Extend diagnostics to cover package version/source/cache path, editor compatibility signals, assembly/type-load errors, scripting defines, device count, keyboard/gamepad presence, `.inputactions` maps/bindings, wrapper generation status, and recent Input System editor-log signals.
+- Keep benign repeated package log-skip lines collapsed to informational issues rather than warning/error compatibility status.
+- Decide whether package assembly filtering should exclude doc/sample-style asmdefs such as `DocCodeSamples.Tests` from the default compatibility surface.
+- Keep package/import/Input System diagnosis read-only and compact so these tools stay preferred over raw `Editor.log` grep and custom `Unity.RunCommand` probes.
 - Keep active input backend changes editor-authored through PlayerSettings/SerializedObject, with preview, readback, save state, restart/reload warning, and expected define signals.
 
 ### RunCommand And Console Results
@@ -159,7 +172,7 @@ Work:
 
 Work:
 
-- Expand project-pack TSAM diagnostics for package compatibility, missing scripts, reference validation, and import side effects.
+- Expand project-pack TSAM diagnostics beyond Input System to missing scripts, reference validation, and import side effects.
 - Keep results compact and read-first.
 
 ### Scene Tool Dogfooding

@@ -23,6 +23,8 @@ namespace Becool.UnityMcpLens.Editor.Lens
             NormalizeToolName("Unity.GameObject.PreviewDelete"),
             NormalizeToolName("Unity.GetLensUsageReport"),
             NormalizeToolName("Unity.InputSystem.Diagnostics"),
+            NormalizeToolName("Unity.Project.PackageCompatibility"),
+            NormalizeToolName("Unity.InputActions.InspectAsset"),
             NormalizeToolName("Unity.ProjectSettings.PreviewActiveInputHandler"),
             NormalizeToolName("Unity.GetLensHealth"),
             NormalizeToolName("Unity.ListToolPacks"),

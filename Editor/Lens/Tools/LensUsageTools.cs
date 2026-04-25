@@ -39,6 +39,13 @@ namespace Becool.UnityMcpLens.Editor.Tools
                 MaxItems = maxItems > 0 ? maxItems : PayloadStatsAnalyzer.DefaultMaxItems
             };
 
+            var execution = McpToolExecutionScope.Current;
+            if (!string.IsNullOrWhiteSpace(execution?.RequestId))
+            {
+                query.ExcludeConnectionId = execution.ConnectionId;
+                query.ExcludeRequestId = execution.RequestId;
+            }
+
             if (sinceLine > 0)
             {
                 query.SinceLine = sinceLine;

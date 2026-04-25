@@ -14,7 +14,7 @@ when Unity reloads, recompiles, or changes project/package state.
 - Current `foundation` baseline: `12` exported tools.
 - Current `foundation + scene` baseline: `30` exported tools.
 - Current Phase 8 surface: split GameObject TSAM tools for inspect, component reads, preview/apply mutation, create, and delete.
-- Current Phase 10 surface: project/Input System diagnostics plus active input handler preview/apply.
+- Current Phase 11 surface: project/Input System diagnostics, package compatibility, input-action asset inspection, and active input handler preview/apply.
 - Current validation surface: static package checks plus a metadata audit in the pack-switch helper app.
 - Current telemetry surface: payload stats, bridge request/response rows, tool snapshot rows, pack transition rows, and TSAM stage rows.
 
@@ -46,14 +46,17 @@ The latest usage report also showed operational cost to attack next:
 - Large `Unity.ManageEditor` rows above `220 KB`.
 - `Unity.ProjectSettings.*` and `Unity.InputSystem.Diagnostics` emitted complete TSAM stage coverage for the exercised calls.
 
-A focused Phase 10 smoke test then passed with warnings:
+A focused Phase 11 smoke test then passed with a residual payload-shaping warning:
 
 - Metadata audit passed.
-- Export counts were `foundation=12`, `foundation+scene=30`, `project=19`, `debug=22`.
-- `Unity.InputSystem.Diagnostics` verified active input handler, defines, package status, assembly/type load, devices, and a `.inputactions` asset.
-- Preview/apply flows worked without `Unity.RunCommand` or YAML edits.
-- Compact telemetry showed complete TSAM coverage and no Phase 10 failures.
-- Follow-up remains for no-op restart-required noise and `NoShapingRecorded=true`.
+- Export counts were `foundation=12`, `foundation+scene=30`, `project=21`, `debug=22`.
+- `Unity.Project.PackageCompatibility` and `Unity.InputActions.InspectAsset` worked end to end in a real Unity host project.
+- `Unity.InputSystem.Diagnostics` now verified active input handler, package status, assembly/type load, devices, `.inputactions` summary, wrapper metadata, and compatibility signals in one call.
+- Known benign repeated `Unity.InputSystem.IntegrationTests.dll` log-skip lines are now collapsed to one informational compatibility issue, so healthy package diagnostics stay `ok`.
+- Preview/apply no-op flows now return `restartRequired=false` with no restart warning noise.
+- The post-smoke usage report now excludes its own in-flight request, so the final `Unity_GetLensUsageReport` call no longer appears as unmatched in scope.
+- Compact telemetry showed complete TSAM coverage and no Phase 11 failures.
+- Follow-up remains for `NoShapingRecorded=true` and possible default filtering for doc/sample/test-support package asmdefs.
 
 ---
 
@@ -73,12 +76,12 @@ A focused Phase 10 smoke test then passed with warnings:
 - Verify payload telemetry records the shaped result, not only the raw result.
 - Keep tool snapshots compact enough that routine pack switching does not dominate context cost.
 
-### 3. Project/Input System Reliability
+### 3. Project/Package Diagnostic Follow-Through
 
-- Extend `Unity.InputSystem.Diagnostics` into a one-call diagnosis path for backend, defines, package version, loaded assembly/type status, device count, `.inputactions` binding/wrapper signals, and recent log errors.
+- Keep `Unity.InputSystem.Diagnostics`, `Unity.Project.PackageCompatibility`, and `Unity.InputActions.InspectAsset` as the first-stop read-only diagnosis path before raw `Editor.log` grep or custom `Unity.RunCommand` probes.
+- Keep known benign repeated package log-skip lines informational rather than warning/error compatibility status.
+- Decide whether default package assembly filtering should exclude doc/sample/test-support asmdefs from the compact compatibility view.
 - Keep `Unity.ProjectSettings.PreviewActiveInputHandler` and `Unity.ProjectSettings.SetActiveInputHandler` as the editor-authored path for active input backend changes.
-- Report post-apply readback, expected define changes, and restart/reload requirements clearly.
-- Suppress restart-required warnings when preview/apply is a no-op.
 
 ### 4. RunCommand And Console Result Quality
 
@@ -104,7 +107,7 @@ A focused Phase 10 smoke test then passed with warnings:
 
 ### 7. Project Diagnostics Beyond Input
 
-- Expand the `project` pack in the same TSAM style for package compatibility, missing scripts, reference validation, and import side effects.
+- Expand the `project` pack in the same TSAM style for missing scripts, reference validation, and import side effects now that package compatibility and input-action inspection are covered.
 - Keep these diagnostics read-first and compact by default.
 - Avoid growing the default `foundation` surface.
 

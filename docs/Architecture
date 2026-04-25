@@ -39,13 +39,13 @@ The repo is now a mixed architecture:
 Current TSAM-covered surfaces include:
 
 - Phase 8 scene/GameObject tools: inspect, list components, get component, preview/apply object changes, preview/apply component changes, create, and delete.
-- Phase 10 project/Input System tools: diagnostics, active input handler preview, and active input handler apply.
+- Phase 11 project/package/import tools: package compatibility, input-action asset inspection, Input System diagnostics, active input handler preview, and active input handler apply.
 
 Current baselines:
 
 - `foundation`: `12` exported tools.
 - `foundation + scene`: `30` exported tools.
-- Project/Input System tools live behind the `project` pack and must not widen the default `foundation` surface.
+- The current `project` smoke baseline is `21` tools, and project/package/import tools must not widen the default `foundation` surface.
 
 ---
 
@@ -95,6 +95,7 @@ Important packs:
 
 - `console`: console reads, editor health, and lightweight troubleshooting.
 - `project`: project/package metadata, validation, missing script/reference checks, and Input System diagnostics/settings.
+- `project`: project/package/import metadata, validation, missing script/reference checks, Input System diagnostics/settings, and input-action inspection.
 - `scene`: scene hierarchy, runtime snapshots, and GameObject operations.
 - `scripting`: script/resource reads, edits, validation, and `Unity.RunCommand`.
 - `assets`: asset, prefab, import, and generation operations.

@@ -168,6 +168,7 @@ sealed class MetadataAudit(BenchmarkOptions options)
 {
     const int ExpectedFoundationToolCount = 12;
     const int ExpectedSceneToolCount = 30;
+    const int ExpectedProjectToolCount = 21;
 
     static readonly string[] k_RequiredFoundationTools =
     [
@@ -217,6 +218,8 @@ sealed class MetadataAudit(BenchmarkOptions options)
         "Unity_Project_GetInfo",
         "Unity_Project_GetPackages",
         "Unity_InputSystem_Diagnostics",
+        "Unity_Project_PackageCompatibility",
+        "Unity_InputActions_InspectAsset",
         "Unity_ProjectSettings_PreviewActiveInputHandler",
         "Unity_ProjectSettings_SetActiveInputHandler"
     ];
@@ -274,7 +277,7 @@ sealed class MetadataAudit(BenchmarkOptions options)
         var failures = new List<string>();
         ValidateToolSet("foundation", foundationTools, ExpectedFoundationToolCount, k_RequiredFoundationTools, failures);
         ValidateToolSet("foundation+scene", sceneTools, ExpectedSceneToolCount, k_RequiredSceneTools, failures);
-        ValidateToolSet("foundation+project", projectTools, null, k_RequiredProjectTools, failures);
+        ValidateToolSet("foundation+project", projectTools, ExpectedProjectToolCount, k_RequiredProjectTools, failures);
         ValidateToolSet("foundation+debug", debugTools, null, k_RequiredDebugTools, failures);
         ValidateReadOnlyHint(sceneTools, "Unity_GameObject_Inspect", expected: true, failures);
         ValidateReadOnlyHint(sceneTools, "Unity_GameObject_ListComponents", expected: true, failures);
@@ -289,6 +292,8 @@ sealed class MetadataAudit(BenchmarkOptions options)
         ValidateReadOnlyHint(sceneTools, "Unity_GameObject_Delete", expected: false, failures);
         ValidateReadOnlyHint(sceneTools, "Unity_ManageGameObject", expected: false, failures);
         ValidateReadOnlyHint(projectTools, "Unity_InputSystem_Diagnostics", expected: true, failures);
+        ValidateReadOnlyHint(projectTools, "Unity_Project_PackageCompatibility", expected: true, failures);
+        ValidateReadOnlyHint(projectTools, "Unity_InputActions_InspectAsset", expected: true, failures);
         ValidateReadOnlyHint(projectTools, "Unity_ProjectSettings_PreviewActiveInputHandler", expected: true, failures);
         ValidateReadOnlyHint(projectTools, "Unity_ProjectSettings_SetActiveInputHandler", expected: false, failures);
         ValidateReadOnlyHint(debugTools, "Unity_GetLensUsageReport", expected: true, failures);
@@ -470,8 +475,20 @@ sealed class MetadataAudit(BenchmarkOptions options)
         ValidateSplitGameObjectSchema(
             tools,
             "Unity_InputSystem_Diagnostics",
-            ["assetPath", "includeDevices", "includeBindings", "includeEditorLogSignals", "maxItems", "includeDetails"],
+            ["assetPath", "includeDevices", "includeBindings", "includeEditorLogSignals", "includeCompatibilitySignals", "maxItems", "includeDetails"],
             [],
+            failures);
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_Project_PackageCompatibility",
+            ["packageName", "expectedVersion", "includeEditorLogSignals", "includeAssemblySignals", "maxItems"],
+            ["packageName"],
+            failures);
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_InputActions_InspectAsset",
+            ["assetPath", "includeBindings", "maxItems"],
+            ["assetPath"],
             failures);
         ValidateSplitGameObjectSchema(
             tools,
