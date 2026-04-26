@@ -43,22 +43,55 @@ async function main() {
     wrapperError = `Skipped Lens editor-state probe because the editor status beacon reports phase '${bridgeCheck.result.EditorStatusBeacon.Phase}'.`;
   } else if (bridgeCheck.result.Classification === "Ready") {
     try {
-      await common.ensureUnityToolPacks(projectPath, ["console"], { timeoutSeconds: 15 });
-      const stableWait = await common.waitUnityEditorIdle(projectPath, {
-        timeoutSeconds: common.getArgNumber(args, ["EditorStateTimeoutSeconds"], 90),
-        stablePollCount: 3,
-        pollIntervalSeconds: 0.5,
-        postIdleDelaySeconds: 1.0,
-      });
-      editorState = stableWait.lastState || null;
-      wrapperHealthy = stableWait.success === true && editorState && (editorState.success === true || editorState.Success === true);
+      const lensHealth = await common.getUnityLensHealth(projectPath, common.getArgNumber(args, ["EditorStateTimeoutSeconds"], 15));
+      const lensData = common.valueOf(lensHealth, "data", "Data") || {};
+      const bridgeStatus = common.valueOf(common.valueOf(lensData, "bridgeStatus", "BridgeStatus") || {}, "status", "Status") || null;
+      const toolDiscoveryMode = common.valueOf(common.valueOf(lensData, "bridgeStatus", "BridgeStatus") || {}, "toolDiscoveryMode", "ToolDiscoveryMode") || null;
+      const editorStability = common.valueOf(lensData, "editorStability", "EditorStability") || {};
+      const expectedRecovery = common.valueOf(lensData, "expectedRecovery", "ExpectedRecovery") || {};
+      const isCompiling = common.valueOf(editorStability, "isCompiling", "IsCompiling") === true;
+      const isUpdating = common.valueOf(editorStability, "isUpdating", "IsUpdating") === true;
+      const isPlayingOrWillChangePlaymode = common.valueOf(editorStability, "isPlayingOrWillChangePlaymode", "IsPlayingOrWillChangePlaymode") === true;
+      const isBuildingPlayer = common.valueOf(editorStability, "isBuildingPlayer", "IsBuildingPlayer") === true;
+      const editorStable = common.valueOf(editorStability, "isStable", "IsStable") === true;
+      const expectedRecoveryActive = common.valueOf(expectedRecovery, "isActive", "IsActive") === true;
+      wrapperHealthy =
+        common.valueOf(lensHealth, "success", "Success") === true &&
+        bridgeStatus === "ready" &&
+        editorStable &&
+        !expectedRecoveryActive &&
+        !isCompiling &&
+        !isUpdating &&
+        !isPlayingOrWillChangePlaymode &&
+        !isBuildingPlayer;
+      editorState = {
+        success: wrapperHealthy,
+        message: "Derived compact editor readiness from Unity.GetLensHealth.",
+        data: {
+          IsPlaying: false,
+          IsPaused: false,
+          IsCompiling: isCompiling,
+          IsUpdating: isUpdating,
+          IsPlayingOrWillChangePlaymode: isPlayingOrWillChangePlaymode,
+          IsBuildingPlayer: isBuildingPlayer,
+          IsEditorIdle: wrapperHealthy,
+          RuntimeAdvanced: false,
+          RuntimeProbe: null,
+          ActiveSceneName: null,
+          BridgeStatus: bridgeStatus,
+          BridgeReason: null,
+          BridgeExpectedRecovery: expectedRecoveryActive,
+          ToolDiscoveryMode: toolDiscoveryMode,
+          ToolCount: Number(common.valueOf(lensData, "internalRegistryToolCount", "InternalRegistryToolCount") || 0),
+        },
+      };
       if (wrapperHealthy) {
         const readiness = common.getUnityReadinessSnapshot(editorState);
         editorIdleSnapshot = {
-          Ready: stableWait.success === true && readiness.IdleReady,
-          StablePollRequirement: 3,
-          PollIntervalSeconds: 0.5,
-          PostIdleDelaySeconds: 1.0,
+          Ready: wrapperHealthy && readiness.IdleReady,
+          StablePollRequirement: 0,
+          PollIntervalSeconds: 0,
+          PostIdleDelaySeconds: 0,
           Snapshot: readiness,
         };
         playReadySnapshot = {
@@ -72,7 +105,7 @@ async function main() {
           Snapshot: readiness,
         };
       } else {
-        wrapperError = stableWait.message || stableWait.lastError || "Unity editor did not reach a stable idle state.";
+        wrapperError = common.valueOf(lensHealth, "message", "error", "Error") || "Unity Lens health did not report a stable idle editor.";
       }
     } catch (error) {
       wrapperError = error.message;

@@ -59,7 +59,7 @@ node .agents/plugins/lens-dev-plugin/skills/unity-dev-assistant/scripts/Check-Un
 ## Current Dogfood Priorities
 
 - Reduce helper-script session/setup churn and repeated schema requests.
-- Fix payload shaping for large `Unity.ManageEditor` and tool snapshot rows.
+- Continue payload shaping for large tool execution/result rows now that tool snapshots and usage reports show measurable savings.
 - Reduce noisy repeated package/editor-log signals so healthy compatibility reads stay high signal.
 - Keep `Unity.ProjectSettings.PreviewActiveInputHandler` and `Unity.ProjectSettings.SetActiveInputHandler` as the editor-authored backend change path.
 - Keep `Unity.Project.PackageCompatibility` and `Unity.InputActions.InspectAsset` as the preferred package/import read surface before raw `Editor.log` grep.
@@ -94,10 +94,21 @@ Latest Phase 12 hardening smoke on 2026-04-25:
 - `Verify-UnityUiScreenLayout.ps1` passed in play mode using `inside_screen`, `ordered_stack`, and the new `below_center` relation for slot count labels.
 - `Invoke-UnityRunCommand.ps1` now bypasses idle wait in healthy play mode, returns `playModeBypass.applied=true`, and surfaced structured `returnedData` with `panelIsRightOfMap=true` and `panelGapFromMap=24`.
 
+Latest Phase 13 payload-shaping smoke on 2026-04-26:
+
+- Focused scope lines `2201..2446` contained `244` rows with `68` payload rows and `176` TSAM coverage rows.
+- Payload telemetry now reports `NoShapingRecorded=false`, with `210,510` raw bytes shaped to `120,867` bytes and `89,643` bytes saved (`42.58%`).
+- Top savings were `Bridge.RefreshToolsSnapshotIfNeeded` snapshot shaping: `100,016` raw bytes to `9,481` shaped bytes, saving `90,535` bytes (`90.52%`).
+- `Check-UnityDevSession.ps1` returned `ProceedWithLensHelpers` with `DirectMcpHealthy=true` after the reload window settled.
+- `Sync-UnityScriptChanges.ps1` completed a forced refresh and recovered via direct Lens health.
+- Helper-driven UI hierarchy, scene binding, and layout no-op apply paths still return `willModify=false` and `applied=false`.
+- `Unity.UI.VerifyScreenLayout` passed in edit mode with `inside_screen`, `ordered_stack`, and `below_center`.
+
 Remaining follow-ups:
 
-- Payload telemetry still reports `NoShapingRecorded=true` for the focused helper-driven scope.
-- Helper/session churn is lower than earlier runs but still nontrivial, and the remaining failure row in the focused scope is a `Unity_ManageEditor` disposed-transport response during a reconnect-prone play transition.
+- Payload shaping remains incomplete for large tool execution/result rows such as UI verify, scene binding, Input System diagnostics, and `Unity.ManageEditor`.
+- Helper/session churn is lower than earlier runs but still nontrivial: the Phase 13 focused scope had `12` connections, `25` schema requests, and `12` pack transitions because separate helper processes still open separate Lens sessions.
+- The only unmatched request in the Phase 13 scope was a `Unity_ManageEditor` domain-reload transport close during the expected forced script-refresh window.
 
 ## Maintenance
 

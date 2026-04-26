@@ -372,6 +372,14 @@ namespace Becool.UnityMcpLens.Editor.Lens.Usage
                     .OrderByDescending(row => row.RawBytes)
                     .Take(maxItems)
                     .ToList(),
+                TopSavings = payloadRows
+                    .Where(row => row.RawBytes > row.ShapedBytes)
+                    .GroupBy(row => $"{(string.IsNullOrWhiteSpace(row.Stage) ? "(none)" : row.Stage)}:{(string.IsNullOrWhiteSpace(row.Name) ? "(none)" : row.Name)}")
+                    .Select(CreateSummaryRow)
+                    .OrderByDescending(row => row.SavedBytes)
+                    .ThenByDescending(row => row.RawBytes)
+                    .Take(maxItems)
+                    .ToList(),
                 RunSummaries = scopedRows
                     .GroupBy(row => string.IsNullOrWhiteSpace(row.RunId) ? "(none)" : row.RunId)
                     .Select(group => new RunSummaryRow
@@ -491,6 +499,9 @@ namespace Becool.UnityMcpLens.Editor.Lens.Usage
             var findings = new List<UsageFindingRow>();
             if (report.NormalizedRepeatedRawPct >= 10d)
                 findings.Add(new UsageFindingRow("repeated_context", "warning", $"Normalized repeated payload estimate is {report.NormalizedRepeatedRawPct:F2}% of raw payload bytes."));
+
+            if ((report.ShapingApplicability?.PayloadRowsWithSavings ?? 0) > 0)
+                findings.Add(new UsageFindingRow("shaping_recorded", "info", $"{report.ShapingApplicability.PayloadRowsWithSavings} eligible payload row(s) recorded shaped savings."));
 
             int schemaRequests = report.BridgeTopCommands?.FirstOrDefault(row => string.Equals(row.Label, "get_tool_schema", StringComparison.Ordinal))?.Count ?? 0;
             if (schemaRequests > 5)
@@ -619,17 +630,17 @@ namespace Becool.UnityMcpLens.Editor.Lens.Usage
             string summary;
             if (payloadRowsEligible == 0)
                 summary = "No payload rows recorded; coverage rows are shaping n/a.";
-            else if (rawBytes > 0 && rawBytes == shapedBytes)
+            else if (payloadRowsWithSavings == 0)
                 summary = "No shaping recorded for eligible payload rows; coverage rows are shaping n/a.";
             else
-                summary = "Payload rows are shaping eligible; coverage rows are shaping n/a.";
+                summary = $"{payloadRowsWithSavings} eligible payload row(s) recorded shaped savings; coverage rows are shaping n/a.";
 
             return new ShapingApplicabilityRow
             {
                 PayloadRowsEligible = payloadRowsEligible,
                 CoverageRowsNotApplicable = coverageRowsNotApplicable,
                 PayloadRowsWithSavings = payloadRowsWithSavings,
-                NoShapingRecorded = rawBytes > 0 && rawBytes == shapedBytes,
+                NoShapingRecorded = payloadRowsEligible > 0 && payloadRowsWithSavings == 0,
                 Summary = summary
             };
         }
@@ -885,6 +896,7 @@ namespace Becool.UnityMcpLens.Editor.Lens.Usage
                 largePayloads = report.LargestEntries,
                 topStages = report.TopStages,
                 topNames = report.TopNames,
+                topSavings = report.TopSavings,
                 findings = report.Findings,
                 detailRef
             };
@@ -920,6 +932,7 @@ namespace Becool.UnityMcpLens.Editor.Lens.Usage
             AppendPackSetTransitions(builder, report.PackSetTransitions);
             AppendUnmatchedRequests(builder, report.UnmatchedRequests);
             AppendLargePayloads(builder, report.LargestEntries);
+            AppendSummaryRows(builder, "Top payload savings", report.TopSavings);
             AppendSummaryRows(builder, "Top payload stages", report.TopStages);
             AppendSummaryRows(builder, "Top payload names", report.TopNames);
             AppendRunSummaries(builder, report.RunSummaries);
@@ -1126,6 +1139,7 @@ namespace Becool.UnityMcpLens.Editor.Lens.Usage
         public int FalseStableMinimalTransitions { get; set; }
         public List<PayloadSummaryRow> TopStages { get; set; }
         public List<PayloadSummaryRow> TopNames { get; set; }
+        public List<PayloadSummaryRow> TopSavings { get; set; }
         public List<RunSummaryRow> RunSummaries { get; set; }
         public LatencyReport Latency { get; set; }
         public List<TsamCoverageRow> TsamCoverage { get; set; }

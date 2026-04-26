@@ -244,12 +244,6 @@ async function main() {
     }
   }
 
-  await common.ensureUnityToolPacks(
-    projectPath,
-    waitForEditorIdle && !playModeBypass.applied ? ["console", "scripting"] : ["scripting"],
-    { timeoutSeconds: 20 }
-  );
-
   let idleResult = null;
   if (waitForEditorIdle && !playModeBypass.applied) {
     idleResult = await common.waitUnityEditorIdle(projectPath, {

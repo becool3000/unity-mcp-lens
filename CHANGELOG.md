@@ -32,11 +32,14 @@ All notable Unity MCP Lens package changes are documented here.
 - Improved `Check-UnityDevSession` so it distinguishes direct MCP health from helper-path degradation and can recommend `ProceedWithDirectLensTools` when wrappers are the only failing layer.
 - Improved `Sync-UnityScriptChanges` so it no longer fails up front on a transient `console` pack restore and can recover through direct Lens health plus compact editor-state probes.
 - Improved `Invoke-UnityRunCommand` so healthy play mode can bypass helper-side idle gating and still return structured `ReturnResult(...)` payloads.
+- Improved payload accounting so tool snapshot rows and usage-report rows can record the actual shaped payload size instead of reporting only raw source-object size.
+- Improved `Unity.GetLensUsageReport` findings with a positive shaping signal and top-savings summaries when eligible rows record `rawBytes > shapedBytes`.
+- Reduced helper recovery-path churn by deriving compact editor readiness from `Unity.GetLensHealth` when direct MCP health is enough.
 
 ### Known Follow-Up
 
 - Reduce helper-script session/setup churn, repeated `get_tool_schema` requests, and pack transition noise.
-- Improve payload shaping so large editor-state and tool-snapshot rows produce measurable savings.
+- Continue payload shaping for large tool execution/result rows, especially UI verify, scene binding, Input System diagnostics, and `Unity.ManageEditor`.
 - Decide whether default package assembly filtering should exclude doc/sample/test-support asmdefs from compact compatibility reads.
 - Reduce reconnect-prone `Unity_ManageEditor` transport-noise during play transitions.
 - Add reliable editor restart/reload orchestration and prefab/serialized-reference authoring workflows.
@@ -45,9 +48,11 @@ All notable Unity MCP Lens package changes are documented here.
 
 - Phase 11 smoke passed with a residual payload-shaping warning on Unity `6000.4.3f1` in `D:\2DUnityNewGame`.
 - Phase 12 helper-driven hardening smoke passed with a residual payload-shaping warning on Unity `6000.4.3f1` in `D:\2DUnityNewGame`.
+- Phase 13 payload-shaping smoke passed the primary shaping target on Unity `6000.4.3f1` in `D:\2DUnityNewGame`: `NoShapingRecorded=false`, `89,643` bytes saved (`42.58%`) in the focused scope, and tool snapshot shaping reduced `100,016` raw bytes to `9,481` shaped bytes.
 - Metadata audit passed with `foundation=12`, `foundation+scene=32`, `foundation+ui=22`, `project=21`, and `debug=22`.
 - Phase 11 package compatibility, input-actions inspection, diagnostics, preview, and set calls emitted complete TSAM stage coverage with no failure classes.
 - Phase 12 UI hierarchy, scene binding, layout, and verify calls emitted complete TSAM stage coverage with no tool failure rows in the focused helper-driven scope.
+- Phase 13 focused smoke emitted complete TSAM stage coverage with no failure rows for Input System diagnostics, UI hierarchy preview/apply, scene binding preview/apply, UI layout preview/apply, and UI verify.
 
 ## [0.1.0-alpha.1] - 2026-04-20
 

@@ -1854,6 +1854,27 @@ namespace Becool.UnityMcpLens.Editor
             return JsonConvert.SerializeObject(snapshot, Formatting.None);
         }
 
+        static string BuildToolsSnapshotCompactJson(McpToolInfo[] tools)
+        {
+            var orderedTools = (tools ?? Array.Empty<McpToolInfo>())
+                .OrderBy(tool => tool?.name, StringComparer.Ordinal)
+                .Select(tool => new
+                {
+                    tool?.name,
+                    tool?.title,
+                    hasInputSchema = tool?.inputSchema != null,
+                    hasOutputSchema = tool?.outputSchema != null,
+                    hasAnnotations = tool?.annotations != null
+                })
+                .ToArray();
+
+            return JsonConvert.SerializeObject(new
+            {
+                toolCount = orderedTools.Length,
+                tools = orderedTools
+            }, Formatting.None);
+        }
+
         static string ComputeToolsSnapshotHash(McpToolInfo[] tools, bool includeExtendedFields)
         {
             using var sha256 = System.Security.Cryptography.SHA256.Create();
@@ -2542,10 +2563,12 @@ namespace Becool.UnityMcpLens.Editor
                     }
 
                     var snapshotJson = BuildToolsSnapshotJson(snapshot, includeExtendedFields: true);
+                    var compactSnapshotJson = BuildToolsSnapshotCompactJson(snapshot);
                     PayloadStats.RecordText(
                         "tool_snapshot",
                         "Bridge.RefreshToolsSnapshotIfNeeded",
                         snapshotJson,
+                        compactSnapshotJson,
                         meta: meta,
                         options: options);
                 }
