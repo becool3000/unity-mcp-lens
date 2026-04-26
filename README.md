@@ -172,6 +172,33 @@ recorded signals include:
 - Phase 14 compact-result smoke on Unity `6000.4.3f1`: batch rerun scope was `98` rows; payload size was `50,566` raw bytes -> `24,025` shaped bytes; recorded savings were `26,541` bytes (`52.49%`); `7` eligible rows saved bytes; the batch helper reduced churn to `3` connections, `6` schema requests, and `4` pack transitions.
 - Payload shaping is still underway for log-heavy and edge-case surfaces, but the large Phase 14 TSAM target results now default to compact inline data with full data behind `detailRef`.
 
+- ## Telemetry & Privacy
+
+Unity MCP Lens includes telemetry for **local system behavior only**.
+
+Telemetry is used to measure:
+- payload size
+- tool usage
+- bridge/session churn
+- TSAM stage coverage
+- error and recovery events
+
+This telemetry is:
+- **local to your machine**
+- **not transmitted anywhere**
+- **not tied to users or identities**
+- available so you can inspect your own Lens usage and debugging data
+
+Unity MCP Lens does **not** collect:
+- project files or assets
+- source code
+- personal data
+- usage analytics or tracking information
+
+Telemetry exists to help you track how Lens is behaving, improve agent workflows, reduce token usage, and make Unity MCP interactions more reliable and debuggable.
+
+If you want help debugging or comparing results, you can copy and share telemetry output manually. Sharing is optional and fully under your control.
+
 ## Status
 
 Active refactor.
