@@ -81,11 +81,23 @@ Phase 14 keeps the public tool surface stable and makes high-volume TSAM results
 - Pack baselines remain unchanged: `foundation=12`, `foundation+scene=32`, `foundation+ui=22`, `project=21`, and `debug=22`.
 - Current Phase 14 smoke baseline: `NoShapingRecorded=false`, `7` saving rows, `50,566` raw bytes -> `24,025` shaped bytes, `3` connections, `6` schema requests, and `4` pack transitions.
 
+## Phase 15 RunCommand And Console Truth
+
+Phase 15 keeps the public tool surface stable and makes log-heavy probe results compact by default.
+
+- `Unity.RunCommand` inline `compilationLogs`, `executionLogs`, and `consoleLogs` are short previews by default.
+- Use `logSummary` for byte counts, line counts, truncation flags, detail refs, first warning/error lines, and severity counts.
+- `Unity.ReadConsole` summary results should keep grouped rows inline and store full scanned entries behind `detailRef`.
+- `IncludeLocalFixedCode=false` must omit rewritten code inline in both `execute` and `validate` modes while preserving `localFixedCodeDetailRef`.
+- Current Phase 15 smoke baseline: `NoShapingRecorded=false`, `16,720` bytes saved, `Unity.RunCommand` saved `11,433` bytes (`65.69%`), and `Unity.ReadConsole` saved `2,219` bytes (`77.00%`).
+- Direct `Unity.ReadDetailRef` resolves RunCommand and ReadConsole details; the batch helper still needs normalization for unwrapped detail-ref responses.
+
 ## Maintenance Rules
 
 - Any pack membership change must update the metadata audit expected counts and required-tool assertions.
 - Any TSAM-covered tool path must emit `normalization`, `service`, `adapter`, and `result_shaping` telemetry rows.
 - `Unity.RunCommand` result metadata must distinguish validation, compilation, execution, result serialization, and transport/unknown failures.
+- `Unity.RunCommand` log previews must preserve enough inline summary data to decide pass/fail without forcing full detail reads.
 - `Unity.ManageEditor WaitForStableEditor` should keep inline output compact and store full attempt/state detail behind detail refs.
 - New compact-result work should preserve pass/fail decision data inline and move only bulky evidence/readback arrays behind detail refs.
 - Smoke prompts must cover split tools, the legacy facade, metadata annotations, usage telemetry, and the `MeshFilter.mesh` edit-mode warning regression.

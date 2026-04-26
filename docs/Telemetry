@@ -211,6 +211,56 @@ Smoke notes:
 - UI layout preview/apply remained small and unchanged rather than receiving artificial shaping.
 - Some lower-level `tool_execution` telemetry rows still show `rawBytes == shapedBytes` because they record the already-compacted tool response; the measured savings are now visible in explicit `tool_result` rows.
 
+## Phase 15 RunCommand And Console Compact Log Smoke Baseline
+
+A focused Phase 15 smoke test on 2026-04-26 passed the compact log-result
+targets:
+
+- Host project: `D:\2DUnityNewGame`.
+- Unity version: `6000.4.3f1`.
+- Metadata audit: pass with `foundation=12`, `foundation+scene=32`, `foundation+ui=22`, `project=21`, and `debug=22`.
+- Scope: from fresh marker line `262`, `27` rows.
+- Payload rows: `6`; coverage rows: `21`.
+- Payload size: `56,370` raw bytes -> `39,650` shaped bytes.
+- Recorded savings: `16,720` bytes, `29.66%`.
+- `NoShapingRecorded=false`.
+- Connections: `2`.
+- Pack transitions: `3`.
+- Unmatched requests: `0`.
+- Failure rows: `0`.
+
+Top savings in the focused scope:
+
+- `tool_result:Unity.RunCommand`: `17,405` raw bytes -> `5,972` shaped bytes, saving `11,433` bytes (`65.69%`).
+- `tool_result:Unity.GetLensUsageReport`: `13,119` raw bytes -> `10,051` shaped bytes, saving `3,068` bytes (`23.39%`).
+- `tool_result:Unity.ReadConsole`: `2,882` raw bytes -> `663` shaped bytes, saving `2,219` bytes (`77.00%`).
+
+RunCommand smoke details:
+
+- The successful probe emitted `80` `result.Log(...)` execution lines and `40` `Debug.LogWarning(...)` console lines.
+- Inline execution log preview stayed at `1,421` characters with `executionLogsBytes=9,429`.
+- Inline result included structured `returnedData`.
+- `logSummary.execution` and `logSummary.console` included counts, first warning/error lines, truncation flags, and detail refs.
+- Direct `Unity.ReadDetailRef` resolved the execution-log detail payload (`9,429` bytes).
+
+Console smoke details:
+
+- `Unity.ReadConsole` in `Summary` format returned `entryCount=1`, `groupCount=1`, compact type counts, and one grouped row.
+- Direct `Unity.ReadDetailRef` resolved the full scanned console payload (`2,882` bytes).
+- The console summary used an existing large error row already present before the fresh marker; no expected-failure `RunCommand` call occurred in the happy-path scope.
+
+Expected-failure smoke details:
+
+- Compilation failure reported `failureStage=compilation` and `errorKind=compilation_failed`.
+- Execution log error reported `failureStage=execution` and `errorKind=execution_logged_errors`.
+- Unserializable `ReturnResult(...)` reported `failureStage=result_serialization`, `errorKind=result_serialization_failed`, and `exceptionType=Newtonsoft.Json.JsonException`.
+- All expected-failure responses kept compact log summaries and detail refs intact.
+
+Residual notes:
+
+- Small failure payloads can be larger after adding summary/detail metadata; this is expected and not counted as a saving row.
+- `Unity.ReadDetailRef` resolves correctly through direct MCP. The Phase 14 batch helper currently treats its unwrapped structured payload as a failed step in the batch summary, so detail-ref smoke reads used direct MCP.
+
 ---
 
 ## Current Findings
@@ -237,12 +287,13 @@ diagnostic sequence needs multiple packs.
 Phase 13 fixed the first measurable accounting gap for tool snapshots and usage
 reports. Phase 14 extended explicit `tool_result` shaping to large TSAM results:
 UI hierarchy preview/apply, scene binding preview/apply, UI verify, and Input
-System diagnostics now have compact inline data plus full detail refs.
+System diagnostics now have compact inline data plus full detail refs. Phase 15
+extended compact defaults to log-heavy `Unity.RunCommand` and `Unity.ReadConsole`
+summary results.
 
-Remaining shaping work should focus on log-heavy `Unity.RunCommand` and console
-results, any residual `Unity.ManageEditor` edge cases, and making telemetry
-presentation clearer when `tool_execution` rows record already-compacted
-responses.
+Remaining shaping work should focus on residual `Unity.ManageEditor` edge cases,
+batch-helper detail-ref normalization, and making telemetry presentation clearer
+when `tool_execution` rows record already-compacted responses.
 
 ### Diagnostic Surface Gaps
 

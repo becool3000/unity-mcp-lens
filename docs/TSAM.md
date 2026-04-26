@@ -133,7 +133,8 @@ and deeper investigation.
 
 Current compact-by-default TSAM result targets include Input System diagnostics,
 UI hierarchy preview/apply, scene serialized-reference binding preview/apply,
-and UI screen-layout verification. These inline results should contain enough
+UI screen-layout verification, `Unity.RunCommand` log blocks, and
+`Unity.ReadConsole` summary reads. These inline results should contain enough
 data for pass/fail decisions while moving bulky device, binding, log, corner,
 and readback rows behind `detailRef`.
 
@@ -152,10 +153,12 @@ TSAM tools should emit coverage rows for these stages:
 payload size, shaping metadata, bridge churn, pack transitions, tool snapshots,
 detail refs, and TSAM stage coverage.
 
-Current state: Phase 14 smoke records `NoShapingRecorded=false` and shows
-measurable savings for tool snapshots, usage reports, and large TSAM tool
-results. The focused Phase 14 batch smoke shaped `50,566` raw bytes to `24,025`
-bytes, saving `26,541` bytes (`52.49%`) with `7` saving rows.
+Current state: Phase 15 smoke records `NoShapingRecorded=false` and shows
+measurable savings for tool snapshots, usage reports, large TSAM tool results,
+and log-heavy probe/console results. The focused Phase 15 log smoke shaped
+`56,370` raw bytes to `39,650` bytes, saving `16,720` bytes (`29.66%`).
+`Unity.RunCommand` saved `11,433` bytes (`65.69%`) and `Unity.ReadConsole`
+saved `2,219` bytes (`77.00%`) in explicit `tool_result` rows.
 
 Use `Invoke-UnityMcpBatch` for repeated smoke/workflow calls that span packs.
 The Phase 14 batch smoke ran `9` ordered project/ui/scene/debug steps with `3`
@@ -173,6 +176,7 @@ Current TSAM-covered surfaces include:
 - Package compatibility and input-action asset inspection.
 - UI hierarchy/layout preview/apply tools and screen-layout verification.
 - Scene serialized-reference preview/apply binding.
+- Compact `Unity.RunCommand` log summaries and `Unity.ReadConsole` summary reads.
 - Usage reporting for payload, bridge, pack transition, tool snapshot, detail-ref, and TSAM stage coverage analysis.
 
 Broad legacy tools remain available where split coverage is incomplete.

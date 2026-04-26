@@ -93,6 +93,15 @@ control-plane churn:
 - The new batch helper ran `9` ordered project/ui/scene/debug steps with `3` connections, `6` schema requests, `4` pack transitions, `0` unmatched requests, and `0` failure rows.
 - Detail-ref readback was verified for a compacted full scene-binding result.
 
+A focused Phase 15 compact-log smoke then covered the log-heavy probe path:
+
+- Scope contained `27` rows with `6` payload rows and `21` coverage rows.
+- Payload size was `56,370` raw bytes -> `39,650` shaped bytes, saving `16,720` bytes (`29.66%`).
+- `Unity.RunCommand` saved `11,433` bytes (`65.69%`) while preserving `80` execution log lines, `40` captured console warning lines, and structured `returnedData`.
+- `Unity.ReadConsole` summary saved `2,219` bytes (`77.00%`) with grouped inline rows and full scanned entries behind `detailRef`.
+- Direct `Unity.ReadDetailRef` read back both RunCommand and ReadConsole detail payloads.
+- Expected-failure smoke confirmed stable compilation, execution, and result-serialization failure stages and error kinds.
+
 ---
 
 ## Near-Term Priorities
@@ -109,8 +118,9 @@ control-plane churn:
 
 - Keep compact TSAM results as the default for high-volume preview/apply and diagnostic tools.
 - Store full wait attempts, editor state, bindings, devices, logs, and measured geometry behind detail refs when inline data is enough for pass/fail decisions.
-- Continue compact shaping for log-heavy `Unity.RunCommand`, console results, and remaining editor-state edge cases.
+- Continue compact shaping for remaining editor-state edge cases.
 - Keep telemetry presentation clear when `tool_execution` rows record already-compacted responses and explicit `tool_result` rows carry the savings proof.
+- Normalize batch-helper handling for `Unity.ReadDetailRef`, whose direct MCP response is healthy but currently unwrapped for the batch result normalizer.
 
 ### 3. Project/Package Diagnostic Follow-Through
 
@@ -121,7 +131,7 @@ control-plane churn:
 
 ### 4. RunCommand And Console Result Quality
 
-- Make `Unity.RunCommand` failure stage and `errorKind` unambiguous across validation, compilation, execution, result serialization, transport/unknown, and unexpected exceptions.
+- Keep `Unity.RunCommand` failure stage and `errorKind` unambiguous across validation, compilation, execution, result serialization, transport/unknown, and unexpected exceptions.
 - Dogfood `ExecutionResult.ReturnResult(...)` so focused probes no longer rely on warning-level console output to return structured measurements.
 - Keep compilation, execution, and console logs compact with detail refs for full output.
 - Add or improve structured recent-console reads so critical package/import errors do not require raw `Editor.log` grep.

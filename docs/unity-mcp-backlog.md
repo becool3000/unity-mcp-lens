@@ -20,6 +20,7 @@ latest dogfood findings.
 - TSAM tools must emit `normalization`, `service`, `adapter`, and `result_shaping` coverage rows.
 - The helper path now distinguishes direct MCP health from wrapper degradation, and `Invoke-UnityRunCommand` can bypass idle wait in healthy play mode.
 - Phase 14 payload telemetry records measurable compact-result savings for large TSAM results, and the batch helper reduces repeated smoke/session churn.
+- Phase 15 payload telemetry records measurable compact-log savings for `Unity.RunCommand` and `Unity.ReadConsole` summary results.
 
 ---
 
@@ -262,6 +263,49 @@ Smoke notes:
 
 ---
 
+## Latest Phase 15 RunCommand And Console Compact Log Smoke
+
+Date: 2026-04-26
+
+Result: passed compact-log happy path, with one helper follow-up.
+
+Host project:
+
+- `D:\2DUnityNewGame`
+- Unity `6000.4.3f1`
+
+Pack/export result:
+
+- Metadata audit: pass.
+- Export counts unchanged: `foundation=12`, `foundation+scene=32`, `foundation+ui=22`, `project=21`, `debug=22`.
+
+Telemetry result:
+
+- Focused happy-path scope: from fresh marker line `262`, `27` rows.
+- Payload rows: `6`; coverage rows: `21`.
+- Payload size: `56,370` raw bytes -> `39,650` shaped bytes.
+- Recorded savings: `16,720` bytes (`29.66%`).
+- `NoShapingRecorded=false`.
+- Connections: `2`.
+- Pack transitions: `3`.
+- Unmatched requests: `0`.
+- Failure rows: `0`.
+- Top savings:
+  - `Unity.RunCommand`: `17,405` raw bytes -> `5,972` shaped bytes, saving `11,433` bytes (`65.69%`).
+  - `Unity.ReadConsole`: `2,882` raw bytes -> `663` shaped bytes, saving `2,219` bytes (`77.00%`).
+  - `Unity.GetLensUsageReport`: `13,119` raw bytes -> `10,051` shaped bytes, saving `3,068` bytes (`23.39%`).
+
+Smoke notes:
+
+- Successful `Unity.RunCommand` emitted `80` execution log lines, `40` captured console warning lines, and inline structured `returnedData`.
+- Inline logs are short previews; `logSummary` carries counts, first warning/error lines, truncation flags, and detail refs.
+- `Unity.ReadConsole` summary returns counts and grouped rows inline while full scanned entries move behind `detailRef`.
+- Direct `Unity.ReadDetailRef` resolved both RunCommand and ReadConsole detail payloads.
+- Separate expected-failure smoke confirmed stable `failureStage`/`errorKind` values for compilation, execution, and result serialization.
+- Follow-up: the batch helper currently marks `Unity.ReadDetailRef` as failed because the detail tool returns an unwrapped structured payload; direct MCP detail reads are healthy.
+
+---
+
 ## P0
 
 ### Bridge And Helper Session Churn
@@ -289,13 +333,14 @@ Observed dogfood signals:
 - `Unity_ManageEditor` emitted payload rows above `220 KB`.
 - Tool snapshots contributed about `2.50 MB` raw payload across `29` rows.
 - Phase 14 compact-result smoke now reports `NoShapingRecorded=false` and `7` saving rows, including UI hierarchy, scene binding, UI verify, and Input System diagnostics.
+- Phase 15 compact-log smoke now reports `Unity.RunCommand` and `Unity.ReadConsole` `tool_result` savings.
 
 Work:
 
 - Keep `Unity.ManageEditor WaitForStableEditor` inline output compact.
 - Store full attempts and full editor state behind detail refs.
 - Reduce routine tool snapshot payload cost.
-- Compact log-heavy `Unity.RunCommand` and console outputs next.
+- Normalize batch-helper handling for `Unity.ReadDetailRef` responses.
 
 ---
 
@@ -342,9 +387,8 @@ Work:
 
 Work:
 
-- Make `Unity.RunCommand` failure stage and `errorKind` consistent across validation, compilation, execution, result serialization, transport/unknown, and unexpected exceptions.
-- Compact compilation, execution, and console logs by default.
-- Store full logs behind detail refs.
+- Keep `Unity.RunCommand` failure stage and `errorKind` consistent across validation, compilation, execution, result serialization, transport/unknown, and unexpected exceptions.
+- Keep compilation, execution, and console logs compact by default with full logs behind detail refs.
 - Add or improve structured recent-console reads so package/import errors do not require raw `Editor.log` grep.
 - Keep the play-mode helper bypass keyed to direct Lens health and compact editor state, even when `IsPlayingOrWillChangePlaymode` keeps the editor-stability label at `play_transition`.
 

@@ -97,8 +97,10 @@ or YAML edits.
 14. For `Unity_RunCommand`, use `scripts/Invoke-UnityRunCommand.js` on macOS/Linux or `scripts/Invoke-UnityRunCommand.ps1` on Windows instead of hand-escaping JSON, and prefer small focused probes over one large validation script.
    - In healthy play mode, the helper should skip its own idle-wait gate and run directly.
    - Prefer `result.ReturnResult(...)` for structured probe output; do not promote probe data to warning logs just to make it visible.
+   - Treat `compilationLogs`, `executionLogs`, and `consoleLogs` as compact previews. Use `logSummary` first, then `Unity.ReadDetailRef` only when full log text is needed.
 15. For console reads, prefer direct `Unity.ReadConsole` through MCP.
    - Default to summary/small reads.
+   - Treat summary output as the decision surface: counts, grouped rows, cursor, and `detailRef`.
    - Use `Unity.ReadDetailRef` if the result was compacted and the full payload matters.
    - Reach for `scripts/Get-UnityConsole.js` on macOS/Linux or `scripts/Get-UnityConsole.ps1` on Windows only when the task explicitly needs the helper path or Lens is unavailable.
 16. For menu operations, prefer the direct Unity tool surface when available. Use `scripts/Invoke-UnityMenuItem.ps1` only when there is no direct tool or when a script is operationally safer for the specific task.

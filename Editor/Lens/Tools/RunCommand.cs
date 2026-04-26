@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -110,6 +112,11 @@ internal class CommandScript : IRunCommand
                             returnedDataIncluded = new { type = "boolean", description = "Whether returnedData is included inline." },
                             returnedDataBytes = new { type = "integer", description = "UTF-8 byte count of the serialized returnedData payload." },
                             returnedDataDetailRef = new { type = "object", description = "Detail ref for structured returnedData when omitted from the inline response." },
+                            logSummary = new { type = "object", description = "Compact per-log-block counts, first warning/error lines, truncation flags, and detail refs." },
+                            detailAvailable = new { type = "boolean", description = "Whether a full structured result detail ref is available." },
+                            detailRef = new { type = "object", description = "Detail ref for the full unshaped result payload when available." },
+                            rawBytes = new { type = "integer", description = "UTF-8 byte count of the full unshaped result payload." },
+                            shapedBytes = new { type = "integer", description = "UTF-8 byte count of the compact inline result payload." },
                             playModeExecution = new
                             {
                                 type = "object",
@@ -135,6 +142,9 @@ internal class CommandScript : IRunCommand
         /// The MCP tool name used to identify this tool in the registry.
         /// </summary>
         public const string ToolName = "Unity.RunCommand";
+
+        const int LogPreviewMaxLines = 12;
+        const int LogPreviewMaxBytes = 1536;
 
         /// <summary>
         /// Main handler for script compilation and execution.
@@ -234,6 +244,9 @@ internal class CommandScript : IRunCommand
                     responseSuccess = true;
                     responseMessage = "Command validation succeeded.";
                     var compilationLog = ShapeLogText("compilation_logs", validationResult.CompilationLogs, mode, out var compilationLogDetailRef, out var compilationLogTruncated, out var compilationLogBytes);
+                    var localFixedCodeDetailRef = includeLocalFixedCode
+                        ? null
+                        : CreateLocalFixedCodeDetailRef(validationResult.LocalFixedCode, code, mode);
                     responseData = new
                     {
                         mode,
@@ -246,7 +259,10 @@ internal class CommandScript : IRunCommand
                         compilationLogsBytes = compilationLogBytes,
                         executionLogs = string.Empty,
                         consoleLogs = string.Empty,
-                        localFixedCode = validationResult.LocalFixedCode,
+                        localFixedCode = includeLocalFixedCode ? validationResult.LocalFixedCode : null,
+                        localFixedCodeChanged = !string.Equals(validationResult.LocalFixedCode, code, StringComparison.Ordinal),
+                        localFixedCodeIncluded = includeLocalFixedCode,
+                        localFixedCodeDetailRef,
                         returnedData = (object)null,
                         returnedDataIncluded = false,
                         returnedDataBytes = 0,
@@ -449,7 +465,12 @@ internal class CommandScript : IRunCommand
                     consoleLogsDetailRef,
                     consoleLogsTruncated,
                     consoleLogsBytes,
-                    localFixedCode = validationCompleted ? validationResult.LocalFixedCode : string.Empty,
+                    localFixedCode = includeLocalFixedCode && validationCompleted ? validationResult.LocalFixedCode : null,
+                    localFixedCodeChanged = validationCompleted && !string.Equals(validationResult.LocalFixedCode, code, StringComparison.Ordinal),
+                    localFixedCodeIncluded = includeLocalFixedCode && validationCompleted,
+                    localFixedCodeDetailRef = validationCompleted && !includeLocalFixedCode
+                        ? CreateLocalFixedCodeDetailRef(validationResult.LocalFixedCode, code, mode)
+                        : null,
                     returnedData = (object)null,
                     returnedDataIncluded = false,
                     returnedDataBytes = 0,
@@ -510,7 +531,36 @@ internal class CommandScript : IRunCommand
 
                 combined["playStateRestored"] = JToken.FromObject(!shouldPauseForExecution || !restorePauseState || EditorApplication.isPaused == wasPaused);
                 combined["playModeExecution"] = JToken.FromObject(playModeExecution);
-                return combined;
+
+                string rawCompilationLogs = validationCompleted
+                    ? validationResult.CompilationLogs ?? string.Empty
+                    : string.Empty;
+                string rawExecutionLogs = executionResult.ExecutionLogs ?? string.Empty;
+                string rawConsoleLogs = executionResult.ConsoleLogs ?? string.Empty;
+
+                combined["logSummary"] = JToken.FromObject(BuildLogSummary(
+                    combined,
+                    rawCompilationLogs,
+                    rawExecutionLogs,
+                    rawConsoleLogs));
+
+                JObject rawData = (JObject)combined.DeepClone();
+                rawData["compilationLogs"] = rawCompilationLogs;
+                rawData["executionLogs"] = rawExecutionLogs;
+                rawData["consoleLogs"] = rawConsoleLogs;
+
+                return ToolResultCompactor.ShapeStructuredPayload(
+                    ToolName,
+                    rawData,
+                    combined,
+                    new
+                    {
+                        kind = "run_command_full_result",
+                        mode,
+                        failureStage = failureStage ?? "none",
+                        errorKind
+                    },
+                    "run_command_result");
             }
 
             return Task.FromResult(BuildResponse(responseSuccess, responseMessage, responseData));
@@ -544,9 +594,10 @@ internal class CommandScript : IRunCommand
         {
             text ??= string.Empty;
             bytes = PayloadBudgeting.GetUtf8ByteCount(text);
-            string preview = PayloadBudgeting.CreateTextPreview(text, 80, Math.Min(4096, PayloadBudgetPolicy.MaxToolResultBytes), out truncated);
-            detailRef = truncated
-                ? ToolResultCompactor.CreateStoredDetailRef(
+            string preview = PayloadBudgeting.CreateTextPreview(text, LogPreviewMaxLines, LogPreviewMaxBytes, out truncated);
+            detailRef = string.IsNullOrEmpty(text)
+                ? null
+                : ToolResultCompactor.CreateStoredDetailRef(
                     ToolName,
                     text,
                     bytes,
@@ -555,9 +606,122 @@ internal class CommandScript : IRunCommand
                         kind,
                         mode,
                         sha256 = PayloadBudgeting.ComputeSha256(text)
-                    })
-                : null;
+                    });
             return preview;
+        }
+
+        static object BuildLogSummary(
+            JObject compactData,
+            string compilationLogs,
+            string executionLogs,
+            string consoleLogs)
+        {
+            return new
+            {
+                compilation = BuildLogBlockSummary(
+                    compilationLogs,
+                    compactData["compilationLogsDetailRef"],
+                    compactData.Value<bool?>("compilationLogsTruncated") ?? false,
+                    compactData.Value<int?>("compilationLogsBytes") ?? 0),
+                execution = BuildLogBlockSummary(
+                    executionLogs,
+                    compactData["executionLogsDetailRef"],
+                    compactData.Value<bool?>("executionLogsTruncated") ?? false,
+                    compactData.Value<int?>("executionLogsBytes") ?? 0),
+                console = BuildLogBlockSummary(
+                    consoleLogs,
+                    compactData["consoleLogsDetailRef"],
+                    compactData.Value<bool?>("consoleLogsTruncated") ?? false,
+                    compactData.Value<int?>("consoleLogsBytes") ?? 0)
+            };
+        }
+
+        static object BuildLogBlockSummary(
+            string text,
+            JToken detailRef,
+            bool truncated,
+            int bytes)
+        {
+            var lines = SplitLogLines(text);
+            var warnings = new List<string>();
+            var errors = new List<string>();
+            int warningCount = 0;
+            int errorCount = 0;
+
+            foreach (string line in lines)
+            {
+                if (LooksLikeError(line))
+                {
+                    errorCount += 1;
+                    if (errors.Count < 3)
+                        errors.Add(TrimLine(line));
+                }
+                else if (LooksLikeWarning(line))
+                {
+                    warningCount += 1;
+                    if (warnings.Count < 3)
+                        warnings.Add(TrimLine(line));
+                }
+            }
+
+            return new
+            {
+                bytes,
+                lineCount = lines.Count,
+                previewLineLimit = LogPreviewMaxLines,
+                previewByteLimit = LogPreviewMaxBytes,
+                truncated,
+                detailAvailable = detailRef != null && detailRef.Type != JTokenType.Null,
+                detailRef = detailRef != null && detailRef.Type != JTokenType.Null ? detailRef : null,
+                severityCounts = new
+                {
+                    errors = errorCount,
+                    warnings = warningCount,
+                    info = Math.Max(0, lines.Count - errorCount - warningCount)
+                },
+                firstWarnings = warnings,
+                firstErrors = errors
+            };
+        }
+
+        static List<string> SplitLogLines(string text)
+        {
+            if (string.IsNullOrEmpty(text))
+                return new List<string>();
+
+            return text.Split(new[] { "\r\n", "\n", "\r" }, StringSplitOptions.None)
+                .Where(line => !string.IsNullOrWhiteSpace(line))
+                .ToList();
+        }
+
+        static bool LooksLikeWarning(string line)
+        {
+            if (string.IsNullOrWhiteSpace(line))
+                return false;
+
+            return line.IndexOf("warning", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                   line.IndexOf("LogWarning", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                   line.StartsWith("Warning:", StringComparison.OrdinalIgnoreCase);
+        }
+
+        static bool LooksLikeError(string line)
+        {
+            if (string.IsNullOrWhiteSpace(line))
+                return false;
+
+            return line.IndexOf("error", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                   line.IndexOf("exception", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                   line.IndexOf("LogError", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                   line.StartsWith("Error:", StringComparison.OrdinalIgnoreCase);
+        }
+
+        static string TrimLine(string line)
+        {
+            if (string.IsNullOrEmpty(line))
+                return string.Empty;
+
+            var trimmed = line.Trim();
+            return trimmed.Length <= 240 ? trimmed : trimmed.Substring(0, 240);
         }
 
         static bool TryShapeReturnedData(
