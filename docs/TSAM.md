@@ -131,6 +131,12 @@ then call `Unity.ReadDetailRef` only when the compact result is insufficient.
 This keeps routine tool calls smaller while preserving full detail for audits
 and deeper investigation.
 
+Current compact-by-default TSAM result targets include Input System diagnostics,
+UI hierarchy preview/apply, scene serialized-reference binding preview/apply,
+and UI screen-layout verification. These inline results should contain enough
+data for pass/fail decisions while moving bulky device, binding, log, corner,
+and readback rows behind `detailRef`.
+
 ---
 
 ## Telemetry Stages
@@ -146,10 +152,15 @@ TSAM tools should emit coverage rows for these stages:
 payload size, shaping metadata, bridge churn, pack transitions, tool snapshots,
 detail refs, and TSAM stage coverage.
 
-Current state: Phase 13 smoke now records `NoShapingRecorded=false` and shows
-measurable savings for tool snapshots and usage reports. Payload shaping is not
-complete; large tool execution/result rows still need compact inline forms and
-detail refs for bulky readback data.
+Current state: Phase 14 smoke records `NoShapingRecorded=false` and shows
+measurable savings for tool snapshots, usage reports, and large TSAM tool
+results. The focused Phase 14 batch smoke shaped `50,566` raw bytes to `24,025`
+bytes, saving `26,541` bytes (`52.49%`) with `7` saving rows.
+
+Use `Invoke-UnityMcpBatch` for repeated smoke/workflow calls that span packs.
+The Phase 14 batch smoke ran `9` ordered project/ui/scene/debug steps with `3`
+connections, `6` schema requests, `4` pack transitions, and no unmatched
+requests or failure rows.
 
 ---
 

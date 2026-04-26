@@ -15,6 +15,7 @@ All notable Unity MCP Lens package changes are documented here.
 - Added Lens usage reporting for payload, bridge, pack transition, tool snapshot, and TSAM stage coverage analysis.
 - Added metadata audit coverage for foundation, scene, ui, project, and debug pack surfaces, including required tools, schema checks, and read-only annotations.
 - Added center-based `Unity.UI.VerifyScreenLayout` relative-position relations: `right_of_center`, `left_of_center`, `above_center`, and `below_center`.
+- Added `Invoke-UnityMcpBatch` repo-local helpers for ordered multi-tool smoke/workflow calls that reuse one Lens session.
 
 ### Changed
 
@@ -35,11 +36,13 @@ All notable Unity MCP Lens package changes are documented here.
 - Improved payload accounting so tool snapshot rows and usage-report rows can record the actual shaped payload size instead of reporting only raw source-object size.
 - Improved `Unity.GetLensUsageReport` findings with a positive shaping signal and top-savings summaries when eligible rows record `rawBytes > shapedBytes`.
 - Reduced helper recovery-path churn by deriving compact editor readiness from `Unity.GetLensHealth` when direct MCP health is enough.
+- Improved compact default results for Input System diagnostics, UI hierarchy preview/apply, scene serialized-reference binding preview/apply, and UI screen-layout verification, with full data preserved behind detail refs.
+- Reduced repeated smoke/session churn by allowing the batch helper to switch exact pack sets inside one Lens session instead of launching separate helper processes.
 
 ### Known Follow-Up
 
-- Reduce helper-script session/setup churn, repeated `get_tool_schema` requests, and pack transition noise.
-- Continue payload shaping for large tool execution/result rows, especially UI verify, scene binding, Input System diagnostics, and `Unity.ManageEditor`.
+- Use the batch helper for repeated smoke/workflow paths while keeping individual helper scripts stable for one-off tasks.
+- Continue payload shaping for log-heavy `Unity.RunCommand`, console results, and remaining `Unity.ManageEditor` edge cases.
 - Decide whether default package assembly filtering should exclude doc/sample/test-support asmdefs from compact compatibility reads.
 - Reduce reconnect-prone `Unity_ManageEditor` transport-noise during play transitions.
 - Add reliable editor restart/reload orchestration and prefab/serialized-reference authoring workflows.
@@ -49,10 +52,12 @@ All notable Unity MCP Lens package changes are documented here.
 - Phase 11 smoke passed with a residual payload-shaping warning on Unity `6000.4.3f1` in `D:\2DUnityNewGame`.
 - Phase 12 helper-driven hardening smoke passed with a residual payload-shaping warning on Unity `6000.4.3f1` in `D:\2DUnityNewGame`.
 - Phase 13 payload-shaping smoke passed the primary shaping target on Unity `6000.4.3f1` in `D:\2DUnityNewGame`: `NoShapingRecorded=false`, `89,643` bytes saved (`42.58%`) in the focused scope, and tool snapshot shaping reduced `100,016` raw bytes to `9,481` shaped bytes.
+- Phase 14 compact-result and batch-helper smoke passed on Unity `6000.4.3f1` in `D:\2DUnityNewGame`: `NoShapingRecorded=false`, `26,541` bytes saved (`52.49%`) in the focused scope, `7` saving rows, and batch churn reduced to `3` connections, `6` schema requests, and `4` pack transitions.
 - Metadata audit passed with `foundation=12`, `foundation+scene=32`, `foundation+ui=22`, `project=21`, and `debug=22`.
 - Phase 11 package compatibility, input-actions inspection, diagnostics, preview, and set calls emitted complete TSAM stage coverage with no failure classes.
 - Phase 12 UI hierarchy, scene binding, layout, and verify calls emitted complete TSAM stage coverage with no tool failure rows in the focused helper-driven scope.
 - Phase 13 focused smoke emitted complete TSAM stage coverage with no failure rows for Input System diagnostics, UI hierarchy preview/apply, scene binding preview/apply, UI layout preview/apply, and UI verify.
+- Phase 14 focused batch smoke emitted complete TSAM stage coverage with no failure rows for Input System diagnostics, UI hierarchy preview/apply, scene binding preview/apply, UI layout preview/apply, and UI verify.
 
 ## [0.1.0-alpha.1] - 2026-04-20
 

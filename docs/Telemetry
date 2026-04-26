@@ -157,6 +157,60 @@ Smoke notes:
 - Payload shaping is now measurable for tool snapshots and usage reports, but large tool execution/result rows for UI verify, scene binding, Input System diagnostics, and `Unity.ManageEditor` still need compact result shaping.
 - Helper session churn remains visible because separate helper processes open separate Lens sessions and re-activate packs.
 
+## Phase 14 Compact TSAM And Batch Helper Smoke Baseline
+
+A focused Phase 14 smoke test on 2026-04-26 passed the compact-result and
+session-hygiene targets:
+
+- Host project: `D:\2DUnityNewGame`.
+- Unity version: `6000.4.3f1`.
+- Metadata audit: pass with `foundation=12`, `foundation+scene=32`, `foundation+ui=22`, `project=21`, and `debug=22`.
+- Scope: from fresh marker line `2592`, `98` rows.
+- Payload rows: `51`; coverage rows: `47`.
+- Payload size: `50,566` raw bytes -> `24,025` shaped bytes.
+- Recorded savings: `26,541` bytes, `52.49%`.
+- Shaping rows with savings: `7`.
+- `NoShapingRecorded=false`.
+
+Top savings in the focused scope:
+
+- `tool_result:Unity.Scene.ApplyBindSerializedReferences`: `7,261` raw bytes -> `466` shaped bytes, saving `6,795` bytes (`93.58%`).
+- `tool_result:Unity.Scene.PreviewBindSerializedReferences`: `7,261` raw bytes -> `468` shaped bytes, saving `6,793` bytes (`93.55%`).
+- `tool_result:Unity.UI.ApplyEnsureHierarchy`: `4,689` raw bytes -> `432` shaped bytes, saving `4,257` bytes (`90.79%`).
+- `tool_result:Unity.UI.PreviewEnsureHierarchy`: `4,689` raw bytes -> `434` shaped bytes, saving `4,255` bytes (`90.74%`).
+- `tool_result:Unity.UI.VerifyScreenLayout`: `7,394` raw bytes -> `5,085` shaped bytes, saving `2,309` bytes (`31.23%`).
+- `tool_result:Unity.InputSystem.Diagnostics`: `4,823` raw bytes -> `2,870` shaped bytes, saving `1,953` bytes (`40.49%`).
+- `tool_result:Unity.GetLensUsageReport`: `1,394` raw bytes -> `1,215` shaped bytes, saving `179` bytes (`12.84%`).
+
+Bridge/control-plane result:
+
+- The new `Invoke-UnityMcpBatch` helper ran `9` ordered project/ui/scene/debug steps in one Lens session.
+- Connections: `3`.
+- `get_tool_schema` requests: `6`.
+- Pack transitions: `4`.
+- Tool snapshot rows: `0`.
+- Unmatched requests: `0`.
+- Failure rows: `0`.
+
+TSAM coverage was complete with zero failure rows for:
+
+- `Unity.InputSystem.Diagnostics`
+- `Unity.UI.PreviewEnsureHierarchy`
+- `Unity.UI.ApplyEnsureHierarchy`
+- `Unity.Scene.PreviewBindSerializedReferences`
+- `Unity.Scene.ApplyBindSerializedReferences`
+- `Unity.UI.PreviewLayoutProperties`
+- `Unity.UI.ApplyLayoutProperties`
+- `Unity.UI.VerifyScreenLayout`
+
+Smoke notes:
+
+- Compact defaults now cover the large Phase 14 target tools: Input System diagnostics, UI hierarchy preview/apply, scene binding preview/apply, and UI verify.
+- Inline results still contain enough pass/fail data for the smoke without reading detail refs.
+- `Unity.ReadDetailRef` successfully read back a compacted full scene-binding result detail.
+- UI layout preview/apply remained small and unchanged rather than receiving artificial shaping.
+- Some lower-level `tool_execution` telemetry rows still show `rawBytes == shapedBytes` because they record the already-compacted tool response; the measured savings are now visible in explicit `tool_result` rows.
+
 ---
 
 ## Current Findings
@@ -169,22 +223,26 @@ avoid broad setup work when the editor status beacon and existing manifest are
 fresh enough.
 
 The helper path is now better at distinguishing wrapper degradation from direct
-bridge health. The focused Phase 13 scope reduced setup cycles to `0` and kept
-tool snapshot rows to `1`, but it still showed `12` connections, `25`
-`get_tool_schema` requests, and `12` pack transitions because separate helper
-processes establish separate Lens sessions. That remains a control-plane cost
-problem even though the happy path now succeeds.
+bridge health. Phase 14 added a batch helper for workflow/smoke calls that share
+one Lens session. In the focused scope, churn dropped from the Phase 13 baseline
+of `12` connections, `25` schema requests, and `12` pack transitions to `3`
+connections, `6` schema requests, and `4` pack transitions.
+
+Individual helper scripts still open separate sessions. Use the batch helper
+for repeated same-workflow reads/previews/applies when a compact smoke or
+diagnostic sequence needs multiple packs.
 
 ### Payload Shaping Gaps
 
-Phase 13 fixed the first measurable accounting gap: focused smoke now reports
-`NoShapingRecorded=false`, and tool snapshots record the compact shaped payload
-instead of only the raw source object.
+Phase 13 fixed the first measurable accounting gap for tool snapshots and usage
+reports. Phase 14 extended explicit `tool_result` shaping to large TSAM results:
+UI hierarchy preview/apply, scene binding preview/apply, UI verify, and Input
+System diagnostics now have compact inline data plus full detail refs.
 
-Remaining shaping work is still material. Large tool execution/result rows for
-UI verify, scene binding, Input System diagnostics, and `Unity.ManageEditor`
-still show `rawBytes == shapedBytes` in the focused smoke. Those tools need
-more compact inline results and detail refs for bulky readback data.
+Remaining shaping work should focus on log-heavy `Unity.RunCommand` and console
+results, any residual `Unity.ManageEditor` edge cases, and making telemetry
+presentation clearer when `tool_execution` rows record already-compacted
+responses.
 
 ### Diagnostic Surface Gaps
 

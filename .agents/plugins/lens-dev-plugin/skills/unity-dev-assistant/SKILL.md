@@ -80,6 +80,7 @@ or YAML edits.
 8. Prefer direct MCP tools through the Lens path by default.
    - Use helper scripts for orchestration-heavy flows such as long builds, autoplay, or deterministic screenshot capture.
    - Those helper scripts must also stay on the Lens path; do not bounce into legacy relay or stale fallback behavior.
+   - When a known workflow needs multiple project/ui/scene/debug calls, prefer `scripts/Invoke-UnityMcpBatch.js` on macOS/Linux or `scripts/Invoke-UnityMcpBatch.ps1` on Windows so the steps share one Lens session.
 9. For large tool outputs, prefer summary/preview first.
    - If a result exposes `detailRef`, call `Unity.ReadDetailRef` only when the preview is insufficient.
    - Do not immediately expand every large payload.
@@ -125,14 +126,15 @@ or YAML edits.
 26. For measured HUD/layout assertions such as inside-screen, right-of, below, below-center, or ordered-stack checks, use `scripts/Verify-UnityUiScreenLayout.ps1` or `Unity.UI.VerifyScreenLayout`.
    - Keep strict `right_of`, `left_of`, `above`, and `below` for non-overlap rect semantics.
    - Use `right_of_center`, `left_of_center`, `above_center`, or `below_center` for “visually higher/lower within the same card” cases such as count labels inside HUD slots.
-27. If a `Unity_RunCommand` starts a long WebGL build on Windows, pass `-MonitorBuildMode WebGL` plus any known output/report/artifact paths so the PowerShell helper can fall back to passive log/disk monitoring when MCP stdout becomes unreliable. On macOS/Linux, launch the build with the JS helper, then use the session check build monitor and `Editor.log` while the build is active.
-28. For autoplay or scripted validation, use `scripts/Run-UnityAutoplayPlaytest.ps1`.
-29. For screenshots, use `scripts/Capture-UnityPlaytestArtifacts.js` on macOS/Linux or `scripts/Capture-UnityPlaytestArtifacts.ps1` on Windows. It waits for idle, supports pre-capture state locks, prefers relative project paths, and falls back to desktop capture when Unity-aware capture is flaky.
-30. When a scene looks correct in edit mode but different in play mode, treat runtime ownership drift as the default suspect before retuning values. Read `references/authoring-drift.md` and use a small runtime probe to compare the same fields in edit mode and play mode.
-31. For score, initials, or other first-run gating backed by `PlayerPrefs`, distinguish a missing key from a saved `0` value. Use `HasKey` when deciding whether a flow is truly first-run.
-32. When reading Unity console output, treat known MCP/package chatter as bridge self-noise unless real compiler or gameplay errors are mixed in.
-33. For package/import/Input System failures, activate `project` and run `Unity.Project.PackageCompatibility`, `Unity.InputActions.InspectAsset`, or `Unity.InputSystem.Diagnostics` before editing `ProjectSettings.asset`, grepping `Editor.log`, or writing a custom probe.
-34. For active input backend changes, use the preview/apply ProjectSettings tools and verify readback before restarting Unity.
+27. For repeated smoke/workflow sequences, use `scripts/Invoke-UnityMcpBatch.js` or `scripts/Invoke-UnityMcpBatch.ps1` with an ordered JSON step list. Keep per-step outputs compact and read `detailRef` only when the passing summary is insufficient.
+28. If a `Unity_RunCommand` starts a long WebGL build on Windows, pass `-MonitorBuildMode WebGL` plus any known output/report/artifact paths so the PowerShell helper can fall back to passive log/disk monitoring when MCP stdout becomes unreliable. On macOS/Linux, launch the build with the JS helper, then use the session check build monitor and `Editor.log` while the build is active.
+29. For autoplay or scripted validation, use `scripts/Run-UnityAutoplayPlaytest.ps1`.
+30. For screenshots, use `scripts/Capture-UnityPlaytestArtifacts.js` on macOS/Linux or `scripts/Capture-UnityPlaytestArtifacts.ps1` on Windows. It waits for idle, supports pre-capture state locks, prefers relative project paths, and falls back to desktop capture when Unity-aware capture is flaky.
+31. When a scene looks correct in edit mode but different in play mode, treat runtime ownership drift as the default suspect before retuning values. Read `references/authoring-drift.md` and use a small runtime probe to compare the same fields in edit mode and play mode.
+32. For score, initials, or other first-run gating backed by `PlayerPrefs`, distinguish a missing key from a saved `0` value. Use `HasKey` when deciding whether a flow is truly first-run.
+33. When reading Unity console output, treat known MCP/package chatter as bridge self-noise unless real compiler or gameplay errors are mixed in.
+34. For package/import/Input System failures, activate `project` and run `Unity.Project.PackageCompatibility`, `Unity.InputActions.InspectAsset`, or `Unity.InputSystem.Diagnostics` before editing `ProjectSettings.asset`, grepping `Editor.log`, or writing a custom probe.
+35. For active input backend changes, use the preview/apply ProjectSettings tools and verify readback before restarting Unity.
 
 ## Scene Debugger Pattern
 
@@ -167,6 +169,7 @@ Prefer a scene-owned debugger component when a project needs fast UI or state it
 - Prefer split GameObject TSAM tools before legacy `Unity.ManageGameObject`
 - Prefer Phase 11 `project` tools for package/import/Input System diagnostics and active input handler changes
 - Prefer Phase 12 `ui` and scene-binding tools for persistent HUD authoring, scene reference binding, and screen-layout verification before custom editor-side `Unity_RunCommand`
+- Prefer `Invoke-UnityMcpBatch` for repeated multi-step smoke/workflow checks that span packs
 - Expand packs explicitly, not heuristically
 - Use `Unity.GetLensUsageReport` in `debug` for telemetry baselines, appended smoke rows, and TSAM stage coverage
 - Session and bridge checks are compact by default; use `-IncludeDiagnostics` only for explicit maintenance

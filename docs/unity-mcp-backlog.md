@@ -19,7 +19,7 @@ latest dogfood findings.
 - Project-pack additions must not widen the default `foundation` surface.
 - TSAM tools must emit `normalization`, `service`, `adapter`, and `result_shaping` coverage rows.
 - The helper path now distinguishes direct MCP health from wrapper degradation, and `Invoke-UnityRunCommand` can bypass idle wait in healthy play mode.
-- Phase 13 payload telemetry now records measurable shaping savings for tool snapshots and usage reports; large tool execution/result rows remain a shaping target.
+- Phase 14 payload telemetry records measurable compact-result savings for large TSAM results, and the batch helper reduces repeated smoke/session churn.
 
 ---
 
@@ -199,6 +199,69 @@ Residual churn:
 
 ---
 
+## Latest Phase 14 Compact TSAM And Batch Helper Smoke
+
+Date: 2026-04-26
+
+Result: passed compact-result and batch-helper acceptance targets.
+
+Host project:
+
+- `D:\2DUnityNewGame`
+- Unity `6000.4.3f1`
+
+Pack/export result:
+
+- Metadata audit: pass.
+- Export counts unchanged: `foundation=12`, `foundation+scene=32`, `foundation+ui=22`, `project=21`, `debug=22`.
+
+Telemetry result:
+
+- Focused scope: from fresh marker line `2592`, `98` rows.
+- Payload rows: `51`; TSAM coverage rows: `47`.
+- Payload size: `50,566` raw bytes -> `24,025` shaped bytes.
+- Recorded savings: `26,541` bytes (`52.49%`).
+- `PayloadRowsWithSavings=7`.
+- `NoShapingRecorded=false`.
+- Top savings:
+  - `Unity.Scene.ApplyBindSerializedReferences`: `7,261` raw bytes -> `466` shaped bytes, saving `6,795` bytes (`93.58%`).
+  - `Unity.Scene.PreviewBindSerializedReferences`: `7,261` raw bytes -> `468` shaped bytes, saving `6,793` bytes (`93.55%`).
+  - `Unity.UI.ApplyEnsureHierarchy`: `4,689` raw bytes -> `432` shaped bytes, saving `4,257` bytes (`90.79%`).
+  - `Unity.UI.PreviewEnsureHierarchy`: `4,689` raw bytes -> `434` shaped bytes, saving `4,255` bytes (`90.74%`).
+  - `Unity.UI.VerifyScreenLayout`: `7,394` raw bytes -> `5,085` shaped bytes, saving `2,309` bytes (`31.23%`).
+  - `Unity.InputSystem.Diagnostics`: `4,823` raw bytes -> `2,870` shaped bytes, saving `1,953` bytes (`40.49%`).
+
+Batch/session result:
+
+- `Invoke-UnityMcpBatch` ran `9` ordered project/ui/scene/debug steps in one workflow.
+- Connections: `3`.
+- `get_tool_schema` requests: `6`.
+- Pack transitions: `4`.
+- Tool snapshot rows: `0`.
+- Unmatched requests: `0`.
+- Failure rows: `0`.
+
+TSAM result:
+
+- Full TSAM coverage with zero failure rows for:
+  - `Unity.InputSystem.Diagnostics`
+  - `Unity.UI.PreviewEnsureHierarchy`
+  - `Unity.UI.ApplyEnsureHierarchy`
+  - `Unity.Scene.PreviewBindSerializedReferences`
+  - `Unity.Scene.ApplyBindSerializedReferences`
+  - `Unity.UI.PreviewLayoutProperties`
+  - `Unity.UI.ApplyLayoutProperties`
+  - `Unity.UI.VerifyScreenLayout`
+
+Smoke notes:
+
+- Compact inline outputs were enough to decide pass/fail without reading detail refs.
+- `Unity.ReadDetailRef` successfully read one full compacted scene-binding result detail.
+- UI layout result rows stayed small and did not need artificial shaping.
+- Individual helper scripts still have value for one-off tasks; use the batch helper when a smoke/workflow has multiple known steps.
+
+---
+
 ## P0
 
 ### Bridge And Helper Session Churn
@@ -212,7 +275,7 @@ Observed dogfood signals:
 
 Work:
 
-- Reuse helper-script MCP sessions where possible.
+- Use `Invoke-UnityMcpBatch` for repeated smoke/workflow calls that can share one session.
 - Avoid pack changes when the requested pack set is already active.
 - Avoid repeated schema pulls when the tool snapshot hash has not changed.
 - Make reload/play transition transport closures clear instead of alarming.
@@ -225,13 +288,14 @@ Observed dogfood signals:
 - Latest Phase 11 smoke still reported `NoShapingRecorded=true`.
 - `Unity_ManageEditor` emitted payload rows above `220 KB`.
 - Tool snapshots contributed about `2.50 MB` raw payload across `29` rows.
+- Phase 14 compact-result smoke now reports `NoShapingRecorded=false` and `7` saving rows, including UI hierarchy, scene binding, UI verify, and Input System diagnostics.
 
 Work:
 
-- Verify whether telemetry records shaped payloads or raw payloads.
 - Keep `Unity.ManageEditor WaitForStableEditor` inline output compact.
 - Store full attempts and full editor state behind detail refs.
 - Reduce routine tool snapshot payload cost.
+- Compact log-heavy `Unity.RunCommand` and console outputs next.
 
 ---
 

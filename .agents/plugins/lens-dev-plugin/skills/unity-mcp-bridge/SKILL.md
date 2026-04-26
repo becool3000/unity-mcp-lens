@@ -86,6 +86,7 @@ powershell -ExecutionPolicy Bypass -File $script -ProjectPath "$PWD"
 - At most two additional non-foundation packs should be active at once.
 - When a tool result includes `detailRef`, use `Unity.ReadDetailRef` only when the preview/summary is insufficient. Do not immediately expand every large result.
 - `Unity.RunCommand` and `Unity.ManageEditor WaitForStableEditor` are expected to return compact, stage-aware results. Treat detail refs as the source for full logs or full editor-state attempts when needed.
+- For known multi-step smoke or workflow sequences, prefer `Invoke-UnityMcpBatch` so one Lens session can activate the needed exact pack sets and avoid repeated schema/session churn.
 
 ## Classification Rules
 
@@ -106,6 +107,7 @@ powershell -ExecutionPolicy Bypass -File $script -ProjectPath "$PWD"
 ## Diagnostics
 
 - Compact output is the default operator view. Reach for diagnostics mode only when the maintenance task actually requires raw editor detail.
+- Compact TSAM results may include `rawBytes`, `shapedBytes`, `sha256`, `detailAvailable`, and `detailRef`; use those fields as shaping proof before expanding detail.
 - For package/import/Input System failures, prefer `project` pack tools (`Unity.Project.PackageCompatibility`, `Unity.InputActions.InspectAsset`, `Unity.InputSystem.Diagnostics`, and the active input handler preview/apply tools) before resorting to ad hoc editor probes or raw `Editor.log` grep.
 - Inspect `%USERPROFILE%\.unity\mcp\connections\bridge-status-*.json` for the current bridge status.
 - Inspect `%LOCALAPPDATA%\Unity\Editor\Editor.log` for approval, handshake, disconnect, compile, and auth signals.

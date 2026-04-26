@@ -42,6 +42,7 @@ node .agents/plugins/lens-dev-plugin/skills/unity-dev-assistant/scripts/Check-Un
 - Treat `Check-UnityDevSession` as a split signal: `ProceedWithLensHelpers` means the helper path is healthy, while `ProceedWithDirectLensTools` means direct MCP is healthy and only the wrapper path is degraded.
 - Prefer the Phase 11 `project` tools for package/import/Input System and active input handler work before custom `Unity_RunCommand` probes, raw `Editor.log` grep, or YAML edits.
 - Prefer the Phase 12 `ui` and split `scene` binding tools for persistent HUD hierarchy, serialized scene references, and screen-layout verification before custom `Unity_RunCommand` editor scripts.
+- Prefer `Invoke-UnityMcpBatch` for repeated smoke/workflow checks that span project, ui, scene, and debug packs, so one Lens session can cover the ordered steps.
 - Prefer helper-driven `Invoke-UnityRunCommand` for runtime probes now that it can bypass idle-wait gating in healthy play mode and preserve structured `ReturnResult(...)` payloads.
 - Keep `foundation` at `12` exported tools, `foundation + scene` at `32`, and `foundation + ui` at `22` unless a deliberate pack-surface change updates the metadata audit.
 
@@ -58,8 +59,8 @@ node .agents/plugins/lens-dev-plugin/skills/unity-dev-assistant/scripts/Check-Un
 
 ## Current Dogfood Priorities
 
-- Reduce helper-script session/setup churn and repeated schema requests.
-- Continue payload shaping for large tool execution/result rows now that tool snapshots and usage reports show measurable savings.
+- Use the batch helper for repeated smoke/workflow calls instead of separate helper processes when the steps are known up front.
+- Continue payload shaping for log-heavy `Unity.RunCommand`, console, and remaining editor-state edge cases now that the large Phase 14 TSAM target results show measurable savings.
 - Reduce noisy repeated package/editor-log signals so healthy compatibility reads stay high signal.
 - Keep `Unity.ProjectSettings.PreviewActiveInputHandler` and `Unity.ProjectSettings.SetActiveInputHandler` as the editor-authored backend change path.
 - Keep `Unity.Project.PackageCompatibility` and `Unity.InputActions.InspectAsset` as the preferred package/import read surface before raw `Editor.log` grep.
@@ -104,11 +105,21 @@ Latest Phase 13 payload-shaping smoke on 2026-04-26:
 - Helper-driven UI hierarchy, scene binding, and layout no-op apply paths still return `willModify=false` and `applied=false`.
 - `Unity.UI.VerifyScreenLayout` passed in edit mode with `inside_screen`, `ordered_stack`, and `below_center`.
 
+Latest Phase 14 compact-result and batch-helper smoke on 2026-04-26:
+
+- Metadata audit passed with unchanged baselines: `foundation=12`, `foundation+scene=32`, `foundation+ui=22`, `project=21`, and `debug=22`.
+- The batch helper ran `9` ordered project/ui/scene/debug steps in one workflow and completed successfully.
+- Focused scope from fresh marker line `2592` contained `98` rows with `51` payload rows and `47` TSAM coverage rows.
+- Payload telemetry reported `NoShapingRecorded=false`, with `50,566` raw bytes shaped to `24,025` bytes and `26,541` bytes saved (`52.49%`).
+- `PayloadRowsWithSavings=7`; savings now include Input System diagnostics, UI hierarchy preview/apply, scene binding preview/apply, UI verify, and usage-report results.
+- Batch control-plane churn was `3` connections, `6` schema requests, `4` pack transitions, `0` tool snapshot rows, `0` unmatched requests, and `0` failure rows.
+- `Unity.ReadDetailRef` successfully read a full compacted scene-binding result detail, confirming the compact inline result did not discard audit data.
+
 Remaining follow-ups:
 
-- Payload shaping remains incomplete for large tool execution/result rows such as UI verify, scene binding, Input System diagnostics, and `Unity.ManageEditor`.
-- Helper/session churn is lower than earlier runs but still nontrivial: the Phase 13 focused scope had `12` connections, `25` schema requests, and `12` pack transitions because separate helper processes still open separate Lens sessions.
-- The only unmatched request in the Phase 13 scope was a `Unity_ManageEditor` domain-reload transport close during the expected forced script-refresh window.
+- Continue compact shaping for log-heavy `Unity.RunCommand`, console reads, and remaining `Unity.ManageEditor` edge cases.
+- Individual helper scripts still open separate sessions; prefer `Invoke-UnityMcpBatch` when a smoke/workflow has multiple known steps.
+- Some lower-level `tool_execution` rows still report `rawBytes == shapedBytes` because they record already-compacted responses; use `tool_result` savings rows for compact-result proof.
 
 ## Maintenance
 
