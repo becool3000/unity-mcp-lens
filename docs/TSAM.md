@@ -146,8 +146,10 @@ TSAM tools should emit coverage rows for these stages:
 payload size, shaping metadata, bridge churn, pack transitions, tool snapshots,
 detail refs, and TSAM stage coverage.
 
-Known current gap: focused smoke reports still show `NoShapingRecorded=true`,
-so payload shaping is underway and should not be described as complete.
+Current state: Phase 13 smoke now records `NoShapingRecorded=false` and shows
+measurable savings for tool snapshots and usage reports. Payload shaping is not
+complete; large tool execution/result rows still need compact inline forms and
+detail refs for bulky readback data.
 
 ---
 
@@ -163,4 +165,3 @@ Current TSAM-covered surfaces include:
 - Usage reporting for payload, bridge, pack transition, tool snapshot, detail-ref, and TSAM stage coverage analysis.
 
 Broad legacy tools remain available where split coverage is incomplete.
-

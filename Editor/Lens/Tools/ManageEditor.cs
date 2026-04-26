@@ -673,7 +673,7 @@ Returns:
 
                         BridgeStatusTracker.MarkReady();
                         var inlineAttempts = CreateInlineStabilityAttempts(attempts);
-                        return Response.Success("Editor reached a stable idle state.", new EditorStabilityResultData
+                        var resultData = new EditorStabilityResultData
                         {
                             IsStable = true,
                             TimedOut = false,
@@ -687,7 +687,9 @@ Returns:
                             AttemptsDetailRef = CreateStabilityAttemptsDetailRef(attemptDetails),
                             EditorState = editorState,
                             FullStateDetailRef = editorState?.FullStateDetailRef,
-                        });
+                        };
+                        RecordStabilityWaitPayload(attemptDetails, resultData, success: true, errorKind: null);
+                        return Response.Success("Editor reached a stable idle state.", resultData);
                     }
                 }
                 else
@@ -701,7 +703,7 @@ Returns:
             var finalBlockingReasons = EditorStabilityUtility.GetBlockingReasons();
             editorState = BuildCompactEditorStateData(out fullEditorState);
             var timeoutInlineAttempts = CreateInlineStabilityAttempts(attempts);
-            return Response.Error("EDITOR_NOT_STABLE", new EditorStabilityResultData
+            var timeoutResultData = new EditorStabilityResultData
             {
                 IsStable = false,
                 TimedOut = true,
@@ -715,7 +717,9 @@ Returns:
                 AttemptsDetailRef = CreateStabilityAttemptsDetailRef(attemptDetails),
                 EditorState = editorState,
                 FullStateDetailRef = editorState?.FullStateDetailRef,
-            });
+            };
+            RecordStabilityWaitPayload(attemptDetails, timeoutResultData, success: false, errorKind: "EDITOR_NOT_STABLE");
+            return Response.Error("EDITOR_NOT_STABLE", timeoutResultData);
         }
 
         static List<EditorStabilityAttemptData> CreateInlineStabilityAttempts(List<EditorStabilityAttemptData> attempts)
@@ -749,6 +753,50 @@ Returns:
                     kind = "editor_stability_attempts",
                     count = attempts.Count
                 });
+        }
+
+        static void RecordStabilityWaitPayload(
+            List<EditorStabilityAttemptDetailData> attemptDetails,
+            EditorStabilityResultData resultData,
+            bool success,
+            string errorKind)
+        {
+            try
+            {
+                attemptDetails ??= new List<EditorStabilityAttemptDetailData>();
+                var rawPayload = new
+                {
+                    count = attemptDetails.Count,
+                    attempts = attemptDetails
+                };
+                var rawJson = JsonConvert.SerializeObject(rawPayload, Formatting.None);
+                var shapedJson = JsonConvert.SerializeObject(resultData, Formatting.None);
+
+                PayloadStats.RecordText(
+                    "tool_result",
+                    "Unity.ManageEditor.WaitForStableEditor",
+                    rawJson,
+                    shapedJson,
+                    meta: new
+                    {
+                        attemptCount = resultData?.AttemptCount ?? attemptDetails.Count,
+                        inlineAttemptCount = resultData?.InlineAttemptCount ?? 0,
+                        timedOut = resultData?.TimedOut ?? false
+                    },
+                    options: new PayloadStatOptions
+                    {
+                        EventKind = "tool_result",
+                        RepresentationKind = "compact",
+                        PayloadClass = "editor_stability_wait",
+                        Success = success,
+                        ErrorKind = errorKind,
+                        DetailAvailable = resultData?.AttemptsDetailRef != null
+                    });
+            }
+            catch
+            {
+                // Best-effort telemetry only.
+            }
         }
 
         static PlayModeRuntimeProbeData BuildRuntimeProbeData()

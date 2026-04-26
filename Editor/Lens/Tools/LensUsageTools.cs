@@ -78,9 +78,11 @@ namespace Becool.UnityMcpLens.Editor.Tools
                         });
                 }
 
+                var compactData = PayloadStatsReportFormatter.CreateCompactData(report, detailRef);
+                RecordUsageReportPayload(report, compactData, detailRef != null);
                 return Response.Success(
                     $"Retrieved Lens usage report for {report.EntryCount} row(s).",
-                    PayloadStatsReportFormatter.CreateCompactData(report, detailRef));
+                    compactData);
             }
             catch (PayloadStatsException ex)
             {
@@ -89,6 +91,40 @@ namespace Becool.UnityMcpLens.Editor.Tools
             catch (Exception ex)
             {
                 return Error($"Failed to build Lens usage report: {ex.Message}", ex.GetType().Name);
+            }
+        }
+
+        static void RecordUsageReportPayload(PayloadStatsReport report, object compactData, bool detailAvailable)
+        {
+            try
+            {
+                var rawJson = JsonConvert.SerializeObject(report, Formatting.None);
+                var shapedJson = JsonConvert.SerializeObject(compactData, Formatting.None);
+                PayloadStats.RecordText(
+                    "tool_result",
+                    ToolName,
+                    rawJson,
+                    shapedJson,
+                    meta: new
+                    {
+                        report.Scope,
+                        report.EntryCount,
+                        report.PayloadEntryCount,
+                        report.CoverageEntryCount,
+                        report.NextLine
+                    },
+                    options: new PayloadStatOptions
+                    {
+                        EventKind = "tool_result",
+                        RepresentationKind = "compact",
+                        PayloadClass = "usage_report",
+                        Success = true,
+                        DetailAvailable = detailAvailable
+                    });
+            }
+            catch
+            {
+                // Best-effort telemetry only.
             }
         }
 

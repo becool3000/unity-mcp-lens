@@ -165,7 +165,8 @@ recorded signals include:
 
 - Phase 11 focused smoke on Unity `6000.4.3f1`: metadata audit passed; compact rerun span was `44` rows; bridge churn was `1` connection, `0` setup cycles, and `0` unmatched requests; TSAM coverage was complete for package compatibility, input-actions inspection, diagnostics, preview, and set.
 - Phase 12 helper-driven smoke on Unity `6000.4.3f1`: metadata audit passed with `foundation=12`, `foundation+scene=32`, `foundation+ui=22`, `project=21`, and `debug=22`; rerun scope was `358` rows; bridge churn was `25` connections, `0` setup cycles, and `0` unmatched requests; TSAM coverage was complete for UI hierarchy, scene binding, layout, and verify.
-- Payload shaping is still underway. The recorded smoke reports still showed `NoShapingRecorded=true`, so current docs should not claim measurable shaping savings yet.
+- Phase 13 payload-shaping smoke on Unity `6000.4.3f1`: rerun scope was `244` rows; payload size was `210,510` raw bytes -> `120,867` shaped bytes; recorded savings were `89,643` bytes (`42.58%`); `NoShapingRecorded=false`; the largest measured win was tool snapshot shaping at `100,016` raw bytes -> `9,481` shaped bytes.
+- Payload shaping is still underway. Phase 13 proves measurable savings for tool snapshots and usage reports, but large tool execution/result rows still need compact shaping and detail refs.
 
 Future benchmark reports should include:
 

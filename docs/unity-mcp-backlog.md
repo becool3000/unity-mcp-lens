@@ -19,6 +19,7 @@ latest dogfood findings.
 - Project-pack additions must not widen the default `foundation` surface.
 - TSAM tools must emit `normalization`, `service`, `adapter`, and `result_shaping` coverage rows.
 - The helper path now distinguishes direct MCP health from wrapper degradation, and `Invoke-UnityRunCommand` can bypass idle wait in healthy play mode.
+- Phase 13 payload telemetry now records measurable shaping savings for tool snapshots and usage reports; large tool execution/result rows remain a shaping target.
 
 ---
 
@@ -141,6 +142,60 @@ Smoke notes:
 - The new center-based verify relation fixed the HUD count-label case without weakening strict `below`.
 - `Invoke-UnityRunCommand` preflight now keys off direct `Unity.GetLensHealth` plus compact editor state, not stale reconnect-classification state.
 - Payload report still shows `NoShapingRecorded=true`.
+
+---
+
+## Latest Phase 13 Payload Shaping Smoke
+
+Date: 2026-04-26
+
+Result: passed the primary shaping target, with residual helper/session churn.
+
+Host project:
+
+- `D:\2DUnityNewGame`
+- Unity `6000.4.3f1`
+
+Telemetry result:
+
+- Focused scope: lines `2201..2446`, `244` rows.
+- Payload rows: `68`; TSAM coverage rows: `176`.
+- Payload size: `210,510` raw bytes -> `120,867` shaped bytes.
+- Recorded savings: `89,643` bytes (`42.58%`).
+- `PayloadRowsWithSavings=2`.
+- `NoShapingRecorded=false`.
+- Top savings:
+  - `Bridge.RefreshToolsSnapshotIfNeeded`: `100,016` raw bytes -> `9,481` shaped bytes, saving `90,535` bytes (`90.52%`).
+  - `Unity.GetLensUsageReport`: `1,394` raw bytes -> `1,215` shaped bytes, saving `179` bytes (`12.84%`).
+
+Workflow result:
+
+- `Check-UnityDevSession.ps1` returned `ProceedWithLensHelpers` and `DirectMcpHealthy=true` after the reload window settled.
+- `Sync-UnityScriptChanges.ps1` completed a forced refresh and recovered via direct Lens health.
+- `Ensure-UnityUiHierarchy.ps1`, `Bind-UnitySceneSerializedReferences.ps1`, and `Set-UnityUiLayout.ps1` preview/apply paths no-op cleanly with `willModify=false` and `applied=false`.
+- `Unity.UI.VerifyScreenLayout` passed in edit mode with `inside_screen`, `ordered_stack`, and `below_center`.
+
+TSAM result:
+
+- Full TSAM coverage with zero failure rows for:
+  - `Unity.InputSystem.Diagnostics`
+  - `Unity.UI.PreviewEnsureHierarchy`
+  - `Unity.UI.ApplyEnsureHierarchy`
+  - `Unity.Scene.PreviewBindSerializedReferences`
+  - `Unity.Scene.ApplyBindSerializedReferences`
+  - `Unity.UI.PreviewLayoutProperties`
+  - `Unity.UI.ApplyLayoutProperties`
+  - `Unity.UI.VerifyScreenLayout`
+
+Residual churn:
+
+- Bridge requests/responses: `88` / `88`.
+- Connections: `12`.
+- Setup cycles: `0`.
+- `get_tool_schema` requests: `25`.
+- Pack transitions: `12`.
+- Unmatched requests: `1`, a `Unity_ManageEditor` domain-reload transport close during the expected forced script-refresh window.
+- Large tool execution/result rows still need compact shaping and detail refs.
 
 ---
 

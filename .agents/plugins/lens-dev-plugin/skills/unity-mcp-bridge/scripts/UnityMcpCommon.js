@@ -2112,6 +2112,72 @@ async function getUnityLensHealth(projectPath, timeoutSeconds = 8) {
   return getToolObject(response);
 }
 
+function getUnityLensHealthReadinessSnapshot(lensHealth) {
+  const lensData = valueOf(lensHealth, "data", "Data") || {};
+  const bridgeStatus = valueOf(valueOf(lensData, "bridgeStatus", "BridgeStatus") || {}, "status", "Status") || null;
+  const toolDiscoveryMode = valueOf(valueOf(lensData, "bridgeStatus", "BridgeStatus") || {}, "toolDiscoveryMode", "ToolDiscoveryMode") || null;
+  const toolCount = Number(valueOf(lensData, "internalRegistryToolCount", "InternalRegistryToolCount") || 0);
+  const editorStability = valueOf(lensData, "editorStability", "EditorStability") || {};
+  const expectedRecovery = valueOf(lensData, "expectedRecovery", "ExpectedRecovery") || {};
+  const success = valueOf(lensHealth, "success", "Success") === true;
+  const isCompiling = valueOf(editorStability, "isCompiling", "IsCompiling") === true;
+  const isUpdating = valueOf(editorStability, "isUpdating", "IsUpdating") === true;
+  const isPlayingOrWillChangePlaymode = valueOf(editorStability, "isPlayingOrWillChangePlaymode", "IsPlayingOrWillChangePlaymode") === true;
+  const isBuildingPlayer = valueOf(editorStability, "isBuildingPlayer", "IsBuildingPlayer") === true;
+  const editorStable = valueOf(editorStability, "isStable", "IsStable") === true;
+  const expectedRecoveryActive = valueOf(expectedRecovery, "isActive", "IsActive") === true;
+
+  return {
+    Timestamp: nowIso(),
+    Success: success,
+    IsCompiling: isCompiling,
+    IsUpdating: isUpdating,
+    IsPlaying: false,
+    IsPlayingOrWillChangePlaymode: isPlayingOrWillChangePlaymode,
+    IsBuildingPlayer: isBuildingPlayer,
+    RuntimeProbeAvailable: false,
+    RuntimeProbeHasAdvancedFrames: false,
+    RuntimeProbeUpdateCount: 0,
+    RuntimeProbeFixedUpdateCount: 0,
+    RuntimeProbeUnscaledTime: 0,
+    IdleReady: success && bridgeStatus === "ready" && editorStable && !isCompiling && !isUpdating && !isPlayingOrWillChangePlaymode && !isBuildingPlayer && !expectedRecoveryActive,
+    PlayReadyByCount: false,
+    RuntimeProbe: null,
+    LensHealthSuccess: success,
+    LensBridgeStatus: bridgeStatus,
+    LensEditorStable: editorStable,
+    LensExpectedRecoveryActive: expectedRecoveryActive,
+    BridgeStatus: bridgeStatus,
+    ToolDiscoveryMode: toolDiscoveryMode,
+    ToolCount: toolCount,
+  };
+}
+
+function getUnityCompactStateFromLensHealth(lensHealth) {
+  const snapshot = getUnityLensHealthReadinessSnapshot(lensHealth);
+  return {
+    success: snapshot.Success,
+    message: "Derived compact editor readiness from Unity.GetLensHealth.",
+    data: {
+      IsPlaying: snapshot.IsPlaying,
+      IsPaused: false,
+      IsCompiling: snapshot.IsCompiling,
+      IsUpdating: snapshot.IsUpdating,
+      IsPlayingOrWillChangePlaymode: snapshot.IsPlayingOrWillChangePlaymode,
+      IsBuildingPlayer: snapshot.IsBuildingPlayer,
+      IsEditorIdle: snapshot.IdleReady,
+      RuntimeAdvanced: false,
+      RuntimeProbe: null,
+      ActiveSceneName: null,
+      BridgeStatus: snapshot.BridgeStatus,
+      BridgeReason: null,
+      BridgeExpectedRecovery: snapshot.LensExpectedRecoveryActive,
+      ToolDiscoveryMode: snapshot.ToolDiscoveryMode,
+      ToolCount: snapshot.ToolCount,
+    },
+  };
+}
+
 function getCompactEditorStateSummary(editorState) {
   if (!editorState || valueOf(editorState, "success", "Success") !== true) {
     return null;
@@ -2146,37 +2212,19 @@ async function testUnityDirectEditorHealthy(projectPath, options = {}) {
   while (Date.now() < deadline) {
     try {
       const lensHealth = await getUnityLensHealth(projectPath, Math.max(8, Math.ceil(pollIntervalSeconds * 4)));
-      const state = await getUnityCompactEditorState(projectPath, 15);
       lastLensHealth = lensHealth;
-      lastState = state;
+      lastState = getUnityCompactStateFromLensHealth(lensHealth);
 
-      const snapshot = getUnityReadinessSnapshot(state);
-      const lensData = valueOf(lensHealth, "data", "Data") || {};
-      const bridgeStatus = valueOf(valueOf(lensData, "bridgeStatus", "BridgeStatus") || {}, "status", "Status") || null;
-      const editorStable = valueOf(valueOf(lensData, "editorStability", "EditorStability") || {}, "isStable", "IsStable") === true;
-      const expectedRecoveryActive = valueOf(valueOf(lensData, "expectedRecovery", "ExpectedRecovery") || {}, "isActive", "IsActive") === true;
-      const healthy =
-        valueOf(lensHealth, "success", "Success") === true &&
-        bridgeStatus === "ready" &&
-        editorStable &&
-        !expectedRecoveryActive &&
-        snapshot.Success === true &&
-        snapshot.IdleReady === true;
-
-      attempts.push({
-        ...snapshot,
-        LensHealthSuccess: valueOf(lensHealth, "success", "Success") === true,
-        LensBridgeStatus: bridgeStatus,
-        LensEditorStable: editorStable,
-        LensExpectedRecoveryActive: expectedRecoveryActive,
-      });
+      const snapshot = getUnityLensHealthReadinessSnapshot(lensHealth);
+      const healthy = snapshot.IdleReady === true;
+      attempts.push(snapshot);
 
       if (healthy) {
         consecutiveHealthyObserved += 1;
         if (consecutiveHealthyObserved >= consecutiveHealthyPolls) {
           return {
             success: true,
-            message: "Lens helper recovery probes are healthy and the Unity editor is idle.",
+            message: "Lens health probes are healthy and the Unity editor is idle.",
             timeoutSeconds,
             pollIntervalSeconds,
             consecutiveHealthyPollsRequired: consecutiveHealthyPolls,
@@ -2583,6 +2631,7 @@ module.exports = {
   boolOf,
   getUnityEditorState,
   getUnityCompactEditorState,
+  getUnityLensHealth,
   getUnityConsoleEntries,
   convertToUnityRunCommandScript,
   invokeUnityRunCommandObject,

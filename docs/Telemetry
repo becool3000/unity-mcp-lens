@@ -107,6 +107,56 @@ Smoke notes:
 - The focused usage-report scope still shows `NoShapingRecorded=true`.
 - The only recorded failure class in that focused scope is a `Unity_ManageEditor` disposed-transport response during a reconnect-prone play transition.
 
+## Phase 13 Payload Shaping Smoke Baseline
+
+A focused Phase 13 smoke test on 2026-04-26 passed the primary shaping
+acceptance target:
+
+- Host project: `D:\2DUnityNewGame`.
+- Unity version: `6000.4.3f1`.
+- Scope: lines `2201..2446`, `244` rows.
+- Payload rows: `68`; coverage rows: `176`.
+- Payload size: `210,510` raw bytes -> `120,867` shaped bytes.
+- Recorded savings: `89,643` bytes, `42.58%`.
+- Token estimate: `52,645` raw -> `30,235` shaped, `22,410` saved.
+- Shaping rows with savings: `2`.
+- `NoShapingRecorded=false`.
+
+Top savings in the focused scope:
+
+- `tool_snapshot:Bridge.RefreshToolsSnapshotIfNeeded`: `100,016` raw bytes -> `9,481` shaped bytes, saving `90,535` bytes (`90.52%`).
+- `tool_result:Unity.GetLensUsageReport`: `1,394` raw bytes -> `1,215` shaped bytes, saving `179` bytes (`12.84%`).
+
+Bridge/control-plane result:
+
+- Bridge requests/responses: `88` / `88`.
+- Connections: `12`.
+- Setup cycles: `0`.
+- `get_tool_schema` requests: `25`.
+- Pack transitions: `12`.
+- Tool snapshot rows: `1`.
+- Unmatched requests: `1`, a `Unity_ManageEditor` domain-reload transport close during the expected forced script-refresh window.
+
+TSAM coverage was complete with zero failure rows for:
+
+- `Unity.InputSystem.Diagnostics`
+- `Unity.UI.PreviewEnsureHierarchy`
+- `Unity.UI.ApplyEnsureHierarchy`
+- `Unity.Scene.PreviewBindSerializedReferences`
+- `Unity.Scene.ApplyBindSerializedReferences`
+- `Unity.UI.PreviewLayoutProperties`
+- `Unity.UI.ApplyLayoutProperties`
+- `Unity.UI.VerifyScreenLayout`
+
+Smoke notes:
+
+- `Check-UnityDevSession.ps1` returned `ProceedWithLensHelpers` with `DirectMcpHealthy=true` after the reload window settled.
+- `Sync-UnityScriptChanges.ps1` completed through a forced refresh and recovered via direct Lens health.
+- UI hierarchy, scene binding, and layout helper paths no-op applied with `willModify=false` and `applied=false`.
+- `Unity.UI.VerifyScreenLayout` passed in edit mode using `inside_screen`, `ordered_stack`, and `below_center`.
+- Payload shaping is now measurable for tool snapshots and usage reports, but large tool execution/result rows for UI verify, scene binding, Input System diagnostics, and `Unity.ManageEditor` still need compact result shaping.
+- Helper session churn remains visible because separate helper processes open separate Lens sessions and re-activate packs.
+
 ---
 
 ## Current Findings
@@ -119,16 +169,22 @@ avoid broad setup work when the editor status beacon and existing manifest are
 fresh enough.
 
 The helper path is now better at distinguishing wrapper degradation from direct
-bridge health, but the focused Phase 12 scope still showed `17` connections and
-`26` pack transitions for one end-to-end smoke. That remains a control-plane
-cost problem even though the happy path now succeeds.
+bridge health. The focused Phase 13 scope reduced setup cycles to `0` and kept
+tool snapshot rows to `1`, but it still showed `12` connections, `25`
+`get_tool_schema` requests, and `12` pack transitions because separate helper
+processes establish separate Lens sessions. That remains a control-plane cost
+problem even though the happy path now succeeds.
 
 ### Payload Shaping Gaps
 
-Large `Unity.ManageEditor` and tool-snapshot rows show that compact output is
-not yet consistently reducing recorded payload size. This may mean shaping is
-missing expensive rows, or telemetry is recording the raw side of the operation
-instead of the shaped side.
+Phase 13 fixed the first measurable accounting gap: focused smoke now reports
+`NoShapingRecorded=false`, and tool snapshots record the compact shaped payload
+instead of only the raw source object.
+
+Remaining shaping work is still material. Large tool execution/result rows for
+UI verify, scene binding, Input System diagnostics, and `Unity.ManageEditor`
+still show `rawBytes == shapedBytes` in the focused smoke. Those tools need
+more compact inline results and detail refs for bulky readback data.
 
 ### Diagnostic Surface Gaps
 
