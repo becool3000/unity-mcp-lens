@@ -170,7 +170,8 @@ recorded signals include:
 - Phase 12 helper-driven smoke on Unity `6000.4.3f1`: metadata audit passed with `foundation=12`, `foundation+scene=32`, `foundation+ui=22`, `project=21`, and `debug=22`; rerun scope was `358` rows; bridge churn was `25` connections, `0` setup cycles, and `0` unmatched requests; TSAM coverage was complete for UI hierarchy, scene binding, layout, and verify.
 - Phase 13 payload-shaping smoke on Unity `6000.4.3f1`: rerun scope was `244` rows; payload size was `210,510` raw bytes -> `120,867` shaped bytes; recorded savings were `89,643` bytes (`42.58%`); `NoShapingRecorded=false`; the largest measured win was tool snapshot shaping at `100,016` raw bytes -> `9,481` shaped bytes.
 - Phase 14 compact-result smoke on Unity `6000.4.3f1`: batch rerun scope was `98` rows; payload size was `50,566` raw bytes -> `24,025` shaped bytes; recorded savings were `26,541` bytes (`52.49%`); `7` eligible rows saved bytes; the batch helper reduced churn to `3` connections, `6` schema requests, and `4` pack transitions.
-- Payload shaping is still underway for log-heavy and edge-case surfaces, but the large Phase 14 TSAM target results now default to compact inline data with full data behind `detailRef`.
+- Phase 15 log-compaction smoke on Unity `6000.4.3f1`: focused scope was `27` rows; payload size was `56,370` raw bytes -> `39,650` shaped bytes; recorded savings were `16,720` bytes (`29.66%`); `Unity.RunCommand` saved `11,433` bytes (`65.69%`) and `Unity.ReadConsole` saved `2,219` bytes (`77.00%`) in explicit `tool_result` rows.
+- Payload shaping is still underway for remaining editor-state edge cases, but the high-volume TSAM result path and log-heavy probe path now default to compact inline data with full data behind `detailRef`.
 
 Future benchmark reports should include:
 

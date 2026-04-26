@@ -44,6 +44,7 @@ node .agents/plugins/lens-dev-plugin/skills/unity-dev-assistant/scripts/Check-Un
 - Prefer the Phase 12 `ui` and split `scene` binding tools for persistent HUD hierarchy, serialized scene references, and screen-layout verification before custom `Unity_RunCommand` editor scripts.
 - Prefer `Invoke-UnityMcpBatch` for repeated smoke/workflow checks that span project, ui, scene, and debug packs, so one Lens session can cover the ordered steps.
 - Prefer helper-driven `Invoke-UnityRunCommand` for runtime probes now that it can bypass idle-wait gating in healthy play mode and preserve structured `ReturnResult(...)` payloads.
+- Treat `Unity.RunCommand` and `Unity.ReadConsole` inline logs as compact previews. Use `logSummary` and `Unity.ReadDetailRef` only when full log text or full scanned console entries are needed.
 - Keep `foundation` at `12` exported tools, `foundation + scene` at `32`, and `foundation + ui` at `22` unless a deliberate pack-surface change updates the metadata audit.
 
 ## Current Tool Surface Reality
@@ -60,11 +61,11 @@ node .agents/plugins/lens-dev-plugin/skills/unity-dev-assistant/scripts/Check-Un
 ## Current Dogfood Priorities
 
 - Use the batch helper for repeated smoke/workflow calls instead of separate helper processes when the steps are known up front.
-- Continue payload shaping for log-heavy `Unity.RunCommand`, console, and remaining editor-state edge cases now that the large Phase 14 TSAM target results show measurable savings.
+- Continue payload shaping for remaining editor-state edge cases now that the large TSAM targets and log-heavy probe/console paths show measurable savings.
 - Reduce noisy repeated package/editor-log signals so healthy compatibility reads stay high signal.
 - Keep `Unity.ProjectSettings.PreviewActiveInputHandler` and `Unity.ProjectSettings.SetActiveInputHandler` as the editor-authored backend change path.
 - Keep `Unity.Project.PackageCompatibility` and `Unity.InputActions.InspectAsset` as the preferred package/import read surface before raw `Editor.log` grep.
-- Improve `Unity.RunCommand` failure-stage metadata, detail refs, and structured `ReturnResult(...)` output.
+- Keep `Unity.RunCommand` failure-stage metadata, detail refs, compact `logSummary`, and structured `ReturnResult(...)` output stable.
 - Add reliable restart/reload orchestration with save/dirty handling and bridge reacquire.
 - Dogfood the new Phase 12 UI authoring/binding/verification path on a real host project without custom editor C#.
 
@@ -117,9 +118,20 @@ Latest Phase 14 compact-result and batch-helper smoke on 2026-04-26:
 
 Remaining follow-ups:
 
-- Continue compact shaping for log-heavy `Unity.RunCommand`, console reads, and remaining `Unity.ManageEditor` edge cases.
+- Continue compact shaping for remaining `Unity.ManageEditor` edge cases.
+- Normalize `Unity.ReadDetailRef` handling in the batch helper; direct MCP reads already resolve detail refs correctly, but the batch helper currently treats the unwrapped structured detail payload as a failed step.
 - Individual helper scripts still open separate sessions; prefer `Invoke-UnityMcpBatch` when a smoke/workflow has multiple known steps.
 - Some lower-level `tool_execution` rows still report `rawBytes == shapedBytes` because they record already-compacted responses; use `tool_result` savings rows for compact-result proof.
+
+Latest Phase 15 log-compaction smoke on 2026-04-26:
+
+- Metadata audit stayed unchanged: `foundation=12`, `foundation+scene=32`, `foundation+ui=22`, `project=21`, and `debug=22`.
+- Focused happy-path scope from fresh marker line `262` contained `27` rows with `6` payload rows and `21` coverage rows.
+- Payload telemetry reported `NoShapingRecorded=false`, with `56,370` raw bytes shaped to `39,650` bytes and `16,720` bytes saved (`29.66%`).
+- `Unity.RunCommand` saved `11,433` bytes (`65.69%`) in an explicit `tool_result` row while preserving `80` execution log lines and `40` captured console warning lines behind detail refs.
+- `Unity.ReadConsole` summary saved `2,219` bytes (`77.00%`) with grouped inline rows and full scanned entries behind a detail ref.
+- Direct `Unity.ReadDetailRef` resolved both the RunCommand execution-log detail payload and the ReadConsole full scanned-entry payload.
+- Expected-failure smoke confirmed `failureStage=compilation`, `failureStage=execution`, and `failureStage=result_serialization` with stable `errorKind` values and compact log summaries.
 
 ## Maintenance
 

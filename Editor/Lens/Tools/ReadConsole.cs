@@ -57,7 +57,16 @@ Returns:
                         description = "Console log entries or grouped digests plus a cursor for incremental reads",
                         properties = new
                         {
-                            cursor = new { type = "integer", description = "Cursor to pass back on the next call" }
+                            cursor = new { type = "integer", description = "Cursor to pass back on the next call" },
+                            scannedFrom = new { type = "integer", description = "Console entry index where this read started" },
+                            entryCount = new { type = "integer", description = "Number of scanned entries that matched the filters" },
+                            groupCount = new { type = "integer", description = "Number of grouped summary rows returned" },
+                            typeCounts = new { type = "object", description = "Counts by Unity console log type" },
+                            groups = new { type = "array", description = "Grouped summary rows for Format=Summary" },
+                            detailAvailable = new { type = "boolean", description = "Whether full scanned entries are available by detail ref" },
+                            detailRef = new { type = "object", description = "Detail ref for full scanned entries when available" },
+                            rawBytes = new { type = "integer", description = "UTF-8 byte count of the full scanned entry payload" },
+                            shapedBytes = new { type = "integer", description = "UTF-8 byte count of the compact summary payload" }
                         }
                     }
                 },
@@ -529,38 +538,33 @@ Returns:
                     .Take(count ?? PayloadBudgetPolicy.MaxDiagnosticFindings)
                     .ToList();
 
-                var rawJson = Newtonsoft.Json.JsonConvert.SerializeObject(formattedEntries, Newtonsoft.Json.Formatting.None);
-                var shapedJson = Newtonsoft.Json.JsonConvert.SerializeObject(grouped, Newtonsoft.Json.Formatting.None);
-                int rawBytes = PayloadBudgeting.GetUtf8ByteCount(rawJson);
-                PayloadStats.Record("tool_result", "Unity.ReadConsole.summary", rawBytes, PayloadBudgeting.GetUtf8ByteCount(shapedJson), PayloadBudgeting.EstimateTokensFromBytes(PayloadBudgeting.GetUtf8ByteCount(shapedJson)), PayloadBudgeting.ComputeSha256(rawJson));
-                var detailRef = rawBytes > PayloadBudgetPolicy.MaxToolResultBytes
-                    ? ToolResultCompactor.CreateStoredDetailRef(
+                return Response.Success(
+                    $"Retrieved {formattedEntries.Count} console entries in summary mode.",
+                    ToolResultCompactor.ShapeStructuredPayload(
                         "Unity.ReadConsole",
                         new
                         {
                             cursor = totalEntries,
                             scannedFrom = scanStart,
+                            entryCount = formattedEntries.Count,
                             entries = formattedEntries
                         },
-                        rawBytes,
+                        new
+                        {
+                            cursor = totalEntries,
+                            scannedFrom = scanStart,
+                            entryCount = formattedEntries.Count,
+                            groupCount = grouped.Count,
+                            typeCounts = BuildTypeCounts(formattedEntries),
+                            groups = grouped
+                        },
                         new
                         {
                             format = "summary",
-                            entryCount = formattedEntries.Count
-                        })
-                    : null;
-
-                return Response.Success(
-                    $"Retrieved {formattedEntries.Count} console entries in summary mode.",
-                    new
-                    {
-                        cursor = totalEntries,
-                        scannedFrom = scanStart,
-                        entryCount = formattedEntries.Count,
-                        groups = grouped,
-                        detailAvailable = detailRef != null,
-                        detailRef
-                    }
+                            entryCount = formattedEntries.Count,
+                            groupCount = grouped.Count
+                        },
+                        "read_console_summary")
                 );
             }
 
@@ -581,6 +585,23 @@ Returns:
                         includeStacktrace,
                         entryCount = formattedEntries.Count
                     }));
+        }
+
+        static object BuildTypeCounts(IEnumerable<ConsoleLogEntry> entries)
+        {
+            var counts = entries
+                .GroupBy(entry => string.IsNullOrWhiteSpace(entry.Type) ? "Unknown" : entry.Type)
+                .ToDictionary(group => group.Key, group => group.Count(), StringComparer.OrdinalIgnoreCase);
+
+            return new
+            {
+                error = counts.TryGetValue(nameof(LogType.Error), out var errorCount) ? errorCount : 0,
+                warning = counts.TryGetValue(nameof(LogType.Warning), out var warningCount) ? warningCount : 0,
+                log = counts.TryGetValue(nameof(LogType.Log), out var logCount) ? logCount : 0,
+                exception = counts.TryGetValue(nameof(LogType.Exception), out var exceptionCount) ? exceptionCount : 0,
+                assert = counts.TryGetValue(nameof(LogType.Assert), out var assertCount) ? assertCount : 0,
+                unknown = counts.TryGetValue("Unknown", out var unknownCount) ? unknownCount : 0
+            };
         }
 
         // --- Internal Helpers ---
