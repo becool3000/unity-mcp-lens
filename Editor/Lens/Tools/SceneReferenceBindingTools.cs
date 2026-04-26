@@ -1,5 +1,6 @@
 #nullable disable
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using Newtonsoft.Json;
@@ -118,7 +119,12 @@ Supports single ObjectReference fields and object-reference arrays/lists only.";
             using (timing.Measure("result_shaping"))
             {
                 response = result.success
-                    ? Response.Success(result.message, ToolResultCompactor.ShapeJsonPayload(toolName, result.message, result.data))
+                    ? Response.Success(result.message, ToolResultCompactor.ShapeStructuredPayload(
+                        toolName,
+                        result.data,
+                        BuildCompactData(result.data),
+                        detailRefMeta: new { kind = "scene_reference_binding_full_result" },
+                        payloadClass: "scene_reference_binding"))
                     : Response.Error(result.message, result.errorData ?? new { errorKind = result.errorKind ?? fallbackErrorKind });
 
                 timing.SetResponseBytes(GetUtf8ByteCount(JsonConvert.SerializeObject(response, Formatting.None)));
@@ -126,6 +132,57 @@ Supports single ObjectReference fields and object-reference arrays/lists only.";
 
             timing.Record(result.success, result.success ? null : result.errorKind ?? fallbackErrorKind);
             return response;
+        }
+
+        static object BuildCompactData(object data)
+        {
+            JObject root = JObject.FromObject(data ?? new { });
+            JArray bindings = root["bindings"] as JArray ?? new JArray();
+            var bindingTypeCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            var changedBindings = new JArray();
+            int unchangedCount = 0;
+
+            foreach (JObject binding in bindings.OfType<JObject>())
+            {
+                string bindingType = (string)binding["bindingType"] ?? "unknown";
+                bindingTypeCounts[bindingType] = bindingTypeCounts.TryGetValue(bindingType, out int count) ? count + 1 : 1;
+
+                bool willModify = binding["willModify"]?.Value<bool>() == true;
+                bool applied = binding["applied"]?.Value<bool>() == true;
+                if (!willModify && !applied)
+                {
+                    unchangedCount++;
+                    continue;
+                }
+
+                changedBindings.Add(new JObject
+                {
+                    ["targetPath"] = binding["targetPath"]?.DeepClone(),
+                    ["hierarchyPath"] = binding["hierarchyPath"]?.DeepClone(),
+                    ["componentType"] = binding["componentType"]?.DeepClone(),
+                    ["componentIndex"] = binding["componentIndex"]?.DeepClone(),
+                    ["propertyPath"] = binding["propertyPath"]?.DeepClone(),
+                    ["bindingType"] = binding["bindingType"]?.DeepClone(),
+                    ["willModify"] = binding["willModify"]?.DeepClone(),
+                    ["applied"] = binding["applied"]?.DeepClone(),
+                    ["requestedReference"] = binding["requestedReference"]?.DeepClone(),
+                    ["readbackReference"] = binding["readbackReference"]?.DeepClone(),
+                    ["requestedReferences"] = binding["requestedReferences"]?.DeepClone(),
+                    ["readbackReferences"] = binding["readbackReferences"]?.DeepClone()
+                });
+            }
+
+            return new
+            {
+                target = root["target"],
+                applied = root["applied"],
+                willModify = root["willModify"],
+                bindingCount = bindings.Count,
+                bindingTypeCounts,
+                changedBindingCount = changedBindings.Count,
+                omittedUnchangedBindingCount = unchangedCount,
+                changedBindings
+            };
         }
 
         static string GetString(JObject parameters, params string[] names)

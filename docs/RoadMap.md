@@ -18,7 +18,7 @@ when Unity reloads, recompiles, or changes project/package state.
 - Current Phase 12 surface: split UI hierarchy/layout preview/apply, scene serialized-reference preview/apply binding, UI screen-layout verification, center-based UI verify relations, and structured `Unity.RunCommand` return values.
 - Current Phase 11 surface: project/Input System diagnostics, package compatibility, input-action asset inspection, and active input handler preview/apply.
 - Current validation surface: static package checks plus a metadata audit in the pack-switch helper app.
-- Current telemetry surface: payload stats, bridge request/response rows, tool snapshot rows, pack transition rows, and TSAM stage rows.
+- Current telemetry surface: payload stats, bridge request/response rows, compact `tool_result` savings rows, tool snapshot rows, pack transition rows, detail-ref rows, and TSAM stage rows.
 
 ---
 
@@ -75,13 +75,31 @@ A focused helper-driven Phase 12 hardening smoke then passed with a residual pay
 - `Invoke-UnityRunCommand` returned structured HUD placement data through the helper path with `playModeBypass.applied=true`.
 - The focused usage-report slice still recorded `NoShapingRecorded=true`; its only failure class was a `Unity_ManageEditor` disposed-transport response during a reconnect-prone play transition.
 
+A focused Phase 13 payload-shaping smoke then proved the first measurable
+payload accounting win:
+
+- Scope contained `244` rows with `68` payload rows and `176` TSAM coverage rows.
+- Payload size was `210,510` raw bytes -> `120,867` shaped bytes, saving `89,643` bytes (`42.58%`).
+- `NoShapingRecorded=false`.
+- Tool snapshot shaping reduced `100,016` raw bytes to `9,481` shaped bytes.
+- Residual helper churn remained: `12` connections, `25` schema requests, and `12` pack transitions.
+
+A focused Phase 14 compact-result smoke then reduced both result size and
+control-plane churn:
+
+- Scope contained `98` rows with `51` payload rows and `47` TSAM coverage rows.
+- Payload size was `50,566` raw bytes -> `24,025` shaped bytes, saving `26,541` bytes (`52.49%`).
+- `PayloadRowsWithSavings=7` across Input System diagnostics, UI hierarchy preview/apply, scene binding preview/apply, UI verify, and usage reporting.
+- The new batch helper ran `9` ordered project/ui/scene/debug steps with `3` connections, `6` schema requests, `4` pack transitions, `0` unmatched requests, and `0` failure rows.
+- Detail-ref readback was verified for a compacted full scene-binding result.
+
 ---
 
 ## Near-Term Priorities
 
 ### 1. Bridge And Session Hygiene
 
-- Reuse helper-script MCP sessions more effectively.
+- Use `Invoke-UnityMcpBatch` when a smoke or workflow has multiple known steps that can share one Lens session.
 - Avoid unnecessary pack flips and repeated setup cycles.
 - Reduce schema churn after the manifest is already known.
 - Treat domain reload transport closure as expected only when the editor state explains it.
@@ -89,10 +107,10 @@ A focused helper-driven Phase 12 hardening smoke then passed with a residual pay
 
 ### 2. Payload Shaping Correctness
 
-- Make `Unity.ManageEditor WaitForStableEditor` keep inline output compact.
-- Store full wait attempts and full editor state behind detail refs.
-- Verify payload telemetry records the shaped result, not only the raw result.
-- Keep tool snapshots compact enough that routine pack switching does not dominate context cost.
+- Keep compact TSAM results as the default for high-volume preview/apply and diagnostic tools.
+- Store full wait attempts, editor state, bindings, devices, logs, and measured geometry behind detail refs when inline data is enough for pass/fail decisions.
+- Continue compact shaping for log-heavy `Unity.RunCommand`, console results, and remaining editor-state edge cases.
+- Keep telemetry presentation clear when `tool_execution` rows record already-compacted responses and explicit `tool_result` rows carry the savings proof.
 
 ### 3. Project/Package Diagnostic Follow-Through
 

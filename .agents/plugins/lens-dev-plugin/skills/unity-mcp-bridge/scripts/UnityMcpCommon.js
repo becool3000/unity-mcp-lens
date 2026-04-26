@@ -338,6 +338,18 @@ function normalizeAdditionalPacks(packs = []) {
   return normalized.slice(0, 2);
 }
 
+function stringArraysEqual(left = [], right = []) {
+  if (left.length !== right.length) {
+    return false;
+  }
+  for (let index = 0; index < left.length; index += 1) {
+    if (left[index] !== right[index]) {
+      return false;
+    }
+  }
+  return true;
+}
+
 function inferRequiredPacks(toolName) {
   const normalizedToolName = normalizeToolName(toolName);
   if (!normalizedToolName || foundationToolNames.has(normalizedToolName)) {
@@ -664,6 +676,35 @@ class UnityMcpLensSession {
 
     await this.packSetupPromise;
   }
+
+  async setExactAdditionalPacks(packs, timeoutMs = 30000) {
+    const normalizedPacks = normalizeAdditionalPacks(packs);
+    this.desiredAdditionalPacks = new Set(normalizedPacks);
+
+    const currentPacks = normalizeAdditionalPacks(Array.from(this.currentAdditionalPacks));
+    if (stringArraysEqual(currentPacks, normalizedPacks)) {
+      return {
+        skipped: true,
+        packs: normalizedPacks,
+      };
+    }
+
+    await this.ensureStarted(timeoutMs);
+    const activePacks = normalizeAdditionalPacks(Array.from(this.currentAdditionalPacks));
+    if (stringArraysEqual(activePacks, normalizedPacks)) {
+      return {
+        skipped: true,
+        packs: normalizedPacks,
+      };
+    }
+
+    const response = await this.setAdditionalPacksRaw(normalizedPacks, timeoutMs);
+    return {
+      skipped: false,
+      packs: normalizedPacks,
+      response,
+    };
+  }
 }
 
 const unityMcpSessions = new Map();
@@ -696,6 +737,11 @@ function getUnityMcpSession(projectPath) {
 async function ensureUnityToolPacks(projectPath, packs = [], options = {}) {
   const session = getUnityMcpSession(projectPath);
   await session.ensureAdditionalPacks(packs, Math.max(5000, Number(options.timeoutSeconds || 30) * 1000));
+}
+
+async function setUnityToolPacksExact(projectPath, packs = [], options = {}) {
+  const session = getUnityMcpSession(projectPath);
+  return await session.setExactAdditionalPacks(packs, Math.max(5000, Number(options.timeoutSeconds || 30) * 1000));
 }
 
 async function resetUnityMcpSession(projectPath) {
@@ -732,8 +778,12 @@ async function invokeUnityMcpToolJson(projectPath, toolName, toolArguments = {},
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     const session = getUnityMcpSession(projectRoot);
     try {
-      if (requiredPacks.length > 0 && normalizeToolName(toolName) !== normalizeToolName("Unity.SetToolPacks")) {
-        await session.ensureAdditionalPacks(requiredPacks, Math.max(15000, timeoutSeconds * 1000));
+      if (normalizeToolName(toolName) !== normalizeToolName("Unity.SetToolPacks")) {
+        if (options.exactPacks === true) {
+          await session.setExactAdditionalPacks(requiredPacks, Math.max(15000, timeoutSeconds * 1000));
+        } else if (requiredPacks.length > 0) {
+          await session.ensureAdditionalPacks(requiredPacks, Math.max(15000, timeoutSeconds * 1000));
+        }
       }
 
       return await session.callToolRaw(toolName, toolArguments, Math.max(1000, timeoutSeconds * 1000));
@@ -2623,6 +2673,7 @@ module.exports = {
   getLensBinaryState,
   inferRequiredPacks,
   ensureUnityToolPacks,
+  setUnityToolPacksExact,
   resetUnityMcpSession,
   shutdownUnityMcpSessions,
   invokeUnityMcpToolJson,

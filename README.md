@@ -103,6 +103,13 @@ Run one simple workflow:
 
 This shows the TSAM loop: narrow tool → compact result → optional expansion → telemetry.
 
+For repeated smoke or workflow checks, use the repo-local batch helper so
+multiple project/ui/scene/debug calls share one Lens session:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .agents/plugins/lens-dev-plugin/skills/unity-dev-assistant/scripts/Invoke-UnityMcpBatch.ps1 -ProjectPath C:\Path\To\UnityProject -StepsPath C:\Path\To\steps.json
+```
+
 ---
 
 ## Example Workflow
@@ -162,7 +169,8 @@ recorded signals include:
 - Phase 11 focused smoke on Unity `6000.4.3f1`: metadata audit passed; compact rerun span was `44` rows; bridge churn was `1` connection, `0` setup cycles, and `0` unmatched requests; TSAM coverage was complete for package compatibility, input-actions inspection, diagnostics, preview, and set.
 - Phase 12 helper-driven smoke on Unity `6000.4.3f1`: metadata audit passed with `foundation=12`, `foundation+scene=32`, `foundation+ui=22`, `project=21`, and `debug=22`; rerun scope was `358` rows; bridge churn was `25` connections, `0` setup cycles, and `0` unmatched requests; TSAM coverage was complete for UI hierarchy, scene binding, layout, and verify.
 - Phase 13 payload-shaping smoke on Unity `6000.4.3f1`: rerun scope was `244` rows; payload size was `210,510` raw bytes -> `120,867` shaped bytes; recorded savings were `89,643` bytes (`42.58%`); `NoShapingRecorded=false`; the largest measured win was tool snapshot shaping at `100,016` raw bytes -> `9,481` shaped bytes.
-- Payload shaping is still underway. Phase 13 proves measurable savings for tool snapshots and usage reports, but large tool execution/result rows still need compact shaping and detail refs.
+- Phase 14 compact-result smoke on Unity `6000.4.3f1`: batch rerun scope was `98` rows; payload size was `50,566` raw bytes -> `24,025` shaped bytes; recorded savings were `26,541` bytes (`52.49%`); `7` eligible rows saved bytes; the batch helper reduced churn to `3` connections, `6` schema requests, and `4` pack transitions.
+- Payload shaping is still underway for log-heavy and edge-case surfaces, but the large Phase 14 TSAM target results now default to compact inline data with full data behind `detailRef`.
 
 Future benchmark reports should include:
 

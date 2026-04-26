@@ -672,7 +672,6 @@ Returns:
                         }
 
                         BridgeStatusTracker.MarkReady();
-                        var inlineAttempts = CreateInlineStabilityAttempts(attempts);
                         var resultData = new EditorStabilityResultData
                         {
                             IsStable = true,
@@ -682,8 +681,8 @@ Returns:
                             BlockingReasons = blockingReasons,
                             AttemptCount = attempts.Count,
                             StableAttemptCount = attempts.Count(attempt => attempt.IsStable),
-                            InlineAttemptCount = inlineAttempts.Count,
-                            Attempts = inlineAttempts,
+                            InlineAttemptCount = 0,
+                            Attempts = new List<EditorStabilityAttemptData>(),
                             AttemptsDetailRef = CreateStabilityAttemptsDetailRef(attemptDetails),
                             EditorState = editorState,
                             FullStateDetailRef = editorState?.FullStateDetailRef,
@@ -702,7 +701,6 @@ Returns:
 
             var finalBlockingReasons = EditorStabilityUtility.GetBlockingReasons();
             editorState = BuildCompactEditorStateData(out fullEditorState);
-            var timeoutInlineAttempts = CreateInlineStabilityAttempts(attempts);
             var timeoutResultData = new EditorStabilityResultData
             {
                 IsStable = false,
@@ -712,8 +710,8 @@ Returns:
                 BlockingReasons = finalBlockingReasons,
                 AttemptCount = attempts.Count,
                 StableAttemptCount = attempts.Count(attempt => attempt.IsStable),
-                InlineAttemptCount = timeoutInlineAttempts.Count,
-                Attempts = timeoutInlineAttempts,
+                InlineAttemptCount = 0,
+                Attempts = new List<EditorStabilityAttemptData>(),
                 AttemptsDetailRef = CreateStabilityAttemptsDetailRef(attemptDetails),
                 EditorState = editorState,
                 FullStateDetailRef = editorState?.FullStateDetailRef,

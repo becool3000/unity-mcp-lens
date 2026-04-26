@@ -1,5 +1,6 @@
 #nullable disable
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using Newtonsoft.Json;
@@ -337,7 +338,7 @@ Supports inside-screen, relative-position, axis-alignment, and ordered-stack ass
             using (timing.Measure("result_shaping"))
             {
                 response = result.success
-                    ? Response.Success(result.message, ToolResultCompactor.ShapeJsonPayload(toolName, result.message, result.data))
+                    ? Response.Success(result.message, ShapeSuccessData(toolName, result.data))
                     : Response.Error(result.message, result.errorData ?? new { errorKind = result.errorKind ?? fallbackErrorKind });
 
                 timing.SetResponseBytes(GetUtf8ByteCount(JsonConvert.SerializeObject(response, Formatting.None)));
@@ -345,6 +346,132 @@ Supports inside-screen, relative-position, axis-alignment, and ordered-stack ass
 
             timing.Record(result.success, result.success ? null : result.errorKind ?? fallbackErrorKind);
             return response;
+        }
+
+        static object ShapeSuccessData(string toolName, object data)
+        {
+            if (string.Equals(toolName, PreviewEnsureHierarchyToolName, StringComparison.Ordinal) ||
+                string.Equals(toolName, ApplyEnsureHierarchyToolName, StringComparison.Ordinal))
+            {
+                return ToolResultCompactor.ShapeStructuredPayload(
+                    toolName,
+                    data,
+                    BuildEnsureHierarchyCompactData(data),
+                    detailRefMeta: new { kind = "ui_ensure_hierarchy_full_result" },
+                    payloadClass: "ui_ensure_hierarchy");
+            }
+
+            if (string.Equals(toolName, VerifyScreenLayoutToolName, StringComparison.Ordinal))
+            {
+                return ToolResultCompactor.ShapeStructuredPayload(
+                    toolName,
+                    data,
+                    BuildVerifyScreenLayoutCompactData(data),
+                    detailRefMeta: new { kind = "ui_verify_screen_layout_full_result" },
+                    payloadClass: "ui_verify_screen_layout");
+            }
+
+            return ToolResultCompactor.ShapeJsonPayload(toolName, "UI operation completed.", data);
+        }
+
+        static object BuildEnsureHierarchyCompactData(object data)
+        {
+            JObject root = JObject.FromObject(data ?? new { });
+            JArray nodes = root["nodes"] as JArray ?? new JArray();
+            var actionCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            var changedNodes = new JArray();
+            int preservedCount = 0;
+
+            foreach (JObject node in nodes.OfType<JObject>())
+            {
+                string action = (string)node["action"] ?? "unknown";
+                actionCounts[action] = actionCounts.TryGetValue(action, out int count) ? count + 1 : 1;
+
+                bool hasChanges = node["changes"] is JArray changes && changes.Count > 0;
+                if (string.Equals(action, "preserve", StringComparison.OrdinalIgnoreCase) && !hasChanges)
+                {
+                    preservedCount++;
+                    continue;
+                }
+
+                changedNodes.Add(new JObject
+                {
+                    ["path"] = node["path"]?.DeepClone(),
+                    ["action"] = action,
+                    ["existed"] = node["existed"]?.DeepClone(),
+                    ["componentTypes"] = node["componentTypes"]?.DeepClone(),
+                    ["changes"] = node["changes"]?.DeepClone() ?? new JArray()
+                });
+            }
+
+            return new
+            {
+                target = root["target"],
+                applied = root["applied"],
+                willModify = root["willModify"],
+                nodeCount = nodes.Count,
+                actionCounts,
+                changedNodeCount = changedNodes.Count,
+                omittedPreservedNodeCount = preservedCount,
+                changedNodes
+            };
+        }
+
+        static object BuildVerifyScreenLayoutCompactData(object data)
+        {
+            JObject root = JObject.FromObject(data ?? new { });
+            JArray targets = root["targets"] as JArray ?? new JArray();
+            JArray assertions = root["assertions"] as JArray ?? new JArray();
+            var compactTargets = new JObject();
+            var compactAssertions = new JArray();
+            var failedAssertions = new JArray();
+
+            foreach (JObject target in targets.OfType<JObject>())
+            {
+                string key = (string)target["key"];
+                if (string.IsNullOrWhiteSpace(key))
+                    continue;
+
+                compactTargets[key] = new JObject
+                {
+                    ["path"] = target["path"]?.DeepClone(),
+                    ["canvasPath"] = target["canvasPath"]?.DeepClone(),
+                    ["activeInHierarchy"] = target["activeInHierarchy"]?.DeepClone(),
+                    ["screenRect"] = target["screenRect"]?.DeepClone()
+                };
+            }
+
+            foreach (JObject assertion in assertions.OfType<JObject>())
+            {
+                var compactAssertion = new JObject
+                {
+                    ["type"] = assertion["type"]?.DeepClone(),
+                    ["targetKey"] = assertion["targetKey"]?.DeepClone(),
+                    ["otherTargetKey"] = assertion["otherTargetKey"]?.DeepClone(),
+                    ["relation"] = assertion["relation"]?.DeepClone(),
+                    ["axis"] = assertion["axis"]?.DeepClone(),
+                    ["direction"] = assertion["direction"]?.DeepClone(),
+                    ["targetKeys"] = assertion["targetKeys"]?.DeepClone(),
+                    ["passed"] = assertion["passed"]?.DeepClone(),
+                    ["actual"] = assertion["actual"]?.DeepClone(),
+                    ["message"] = assertion["message"]?.DeepClone()
+                };
+                compactAssertions.Add(compactAssertion);
+                if (assertion["passed"]?.Value<bool>() == false)
+                    failedAssertions.Add(compactAssertion.DeepClone());
+            }
+
+            return new
+            {
+                passed = root["passed"],
+                screen = root["screen"],
+                targetCount = targets.Count,
+                assertionCount = assertions.Count,
+                failedAssertionCount = failedAssertions.Count,
+                targets = compactTargets,
+                assertions = compactAssertions,
+                failedAssertions
+            };
         }
 
         static string GetString(JObject parameters, params string[] names)

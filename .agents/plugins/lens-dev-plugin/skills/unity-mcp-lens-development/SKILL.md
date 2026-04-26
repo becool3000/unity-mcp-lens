@@ -71,12 +71,23 @@ The current Phase 12 authoring surface adds split UI hierarchy/layout preview/ap
 - Prefer `Unity.UI.VerifyScreenLayout` for measured HUD/layout assertions instead of ad hoc screen-rect probes.
 - Keep `Unity.Scene.SetSerializedProperties` as the low-level fallback, not the first authoring path.
 
+## Phase 14 Payload And Batch Helper Truth
+
+Phase 14 keeps the public tool surface stable and makes high-volume TSAM results compact by default.
+
+- Compact default results are expected for `Unity.InputSystem.Diagnostics`, UI hierarchy preview/apply, scene serialized-reference binding preview/apply, and `Unity.UI.VerifyScreenLayout`.
+- Full bulky data should remain available through `detailRef` when the bridge detail store is available.
+- Use `Invoke-UnityMcpBatch` for focused smoke/workflow sequences that need multiple project/ui/scene/debug calls in one Lens session.
+- Pack baselines remain unchanged: `foundation=12`, `foundation+scene=32`, `foundation+ui=22`, `project=21`, and `debug=22`.
+- Current Phase 14 smoke baseline: `NoShapingRecorded=false`, `7` saving rows, `50,566` raw bytes -> `24,025` shaped bytes, `3` connections, `6` schema requests, and `4` pack transitions.
+
 ## Maintenance Rules
 
 - Any pack membership change must update the metadata audit expected counts and required-tool assertions.
 - Any TSAM-covered tool path must emit `normalization`, `service`, `adapter`, and `result_shaping` telemetry rows.
 - `Unity.RunCommand` result metadata must distinguish validation, compilation, execution, result serialization, and transport/unknown failures.
 - `Unity.ManageEditor WaitForStableEditor` should keep inline output compact and store full attempt/state detail behind detail refs.
+- New compact-result work should preserve pass/fail decision data inline and move only bulky evidence/readback arrays behind detail refs.
 - Smoke prompts must cover split tools, the legacy facade, metadata annotations, usage telemetry, and the `MeshFilter.mesh` edit-mode warning regression.
 - Commit package behavior fixes separately from skill/plugin hygiene changes.
 

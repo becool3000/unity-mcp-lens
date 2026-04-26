@@ -1,5 +1,6 @@
 #nullable disable
 using System;
+using System.Linq;
 using System.Text;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -281,7 +282,7 @@ Modes: legacy, inputSystem, both. Usually requires an editor restart or script r
             using (timing.Measure("result_shaping"))
             {
                 response = result.success
-                    ? Response.Success(result.message, compactSuccessData ? ToolResultCompactor.ShapeJsonPayload(toolName, result.message, result.data) : result.data)
+                    ? Response.Success(result.message, compactSuccessData ? ShapeProjectSuccessData(toolName, result.message, result.data) : result.data)
                     : Response.Error(result.message, result.errorData ?? new { errorKind = result.errorKind ?? fallbackErrorKind });
 
                 timing.SetResponseBytes(GetUtf8ByteCount(JsonConvert.SerializeObject(response, Formatting.None)));
@@ -289,6 +290,89 @@ Modes: legacy, inputSystem, both. Usually requires an editor restart or script r
 
             timing.Record(result.success, result.success ? null : result.errorKind ?? fallbackErrorKind);
             return response;
+        }
+
+        static object ShapeProjectSuccessData(string toolName, string summary, object data)
+        {
+            if (string.Equals(toolName, DiagnosticsToolName, StringComparison.Ordinal))
+            {
+                return ToolResultCompactor.ShapeStructuredPayload(
+                    toolName,
+                    data,
+                    BuildInputSystemDiagnosticsCompactData(data),
+                    detailRefMeta: new { kind = "input_system_diagnostics_full_result" },
+                    payloadClass: "input_system_diagnostics");
+            }
+
+            return ToolResultCompactor.ShapeJsonPayload(toolName, summary, data);
+        }
+
+        static object BuildInputSystemDiagnosticsCompactData(object data)
+        {
+            JObject root = JObject.FromObject(data ?? new { });
+            JObject devices = root["devices"] as JObject;
+            JArray deviceRows = devices?["devices"] as JArray ?? new JArray();
+            JObject inputActionAssets = root["inputActionAssets"] as JObject;
+            JArray assets = inputActionAssets?["assets"] as JArray ?? new JArray();
+            JObject editorLogSignals = root["editorLogSignals"] as JObject;
+            JArray logSignals = editorLogSignals?["signals"] as JArray ?? new JArray();
+            JObject defines = root["defines"] as JObject;
+            JArray symbols = defines?["symbols"] as JArray ?? new JArray();
+
+            var compactAssets = new JArray();
+            foreach (JObject asset in assets.OfType<JObject>())
+            {
+                JArray bindings = asset["bindings"] as JArray ?? new JArray();
+                compactAssets.Add(new JObject
+                {
+                    ["path"] = asset["path"]?.DeepClone(),
+                    ["exists"] = asset["exists"]?.DeepClone(),
+                    ["mapCount"] = asset["mapCount"]?.DeepClone(),
+                    ["actionCount"] = asset["actionCount"]?.DeepClone(),
+                    ["bindingCount"] = asset["bindingCount"]?.DeepClone(),
+                    ["controlSchemeCount"] = asset["controlSchemeCount"]?.DeepClone(),
+                    ["bindingReturnedCount"] = bindings.Count,
+                    ["wrapperGeneration"] = asset["wrapperGeneration"]?.DeepClone(),
+                    ["issues"] = asset["issues"]?.DeepClone() ?? new JArray()
+                });
+            }
+
+            return new
+            {
+                activeInputHandler = root["activeInputHandler"],
+                defines = defines == null ? null : new
+                {
+                    selectedBuildTargetGroup = defines["selectedBuildTargetGroup"],
+                    activeBuildTarget = defines["activeBuildTarget"],
+                    containsEnableInputSystem = defines["containsEnableInputSystem"],
+                    containsEnableLegacyInputManager = defines["containsEnableLegacyInputManager"],
+                    symbolCount = symbols.Count
+                },
+                package = root["package"],
+                assembly = root["assembly"],
+                devices = devices == null ? null : new
+                {
+                    available = devices["available"],
+                    count = devices["count"],
+                    returned = devices["returned"],
+                    sample = new JArray(deviceRows.Take(3).Select(row => row.DeepClone()))
+                },
+                inputActionAssets = inputActionAssets == null ? null : new
+                {
+                    count = inputActionAssets["count"],
+                    returned = inputActionAssets["returned"],
+                    assets = compactAssets
+                },
+                editorLogSignals = editorLogSignals == null ? null : new
+                {
+                    path = editorLogSignals["path"],
+                    exists = editorLogSignals["exists"],
+                    count = editorLogSignals["count"],
+                    returned = logSignals.Count,
+                    sample = new JArray(logSignals.Take(3).Select(row => row.DeepClone()))
+                },
+                compatibilitySignals = root["compatibilitySignals"]
+            };
         }
 
         static object HandleProjectDiagnosticsTool<TRequest>(

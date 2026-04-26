@@ -1,3 +1,5 @@
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using Becool.UnityMcpLens.Editor.ToolRegistry;
 using Becool.UnityMcpLens.Editor.Utils;
 
@@ -58,6 +60,62 @@ namespace Becool.UnityMcpLens.Editor.Lens
                 PayloadBudgeting.EstimateTokensFromBytes(previewBytes),
                 budgeted.Sha256);
             return budgeted;
+        }
+
+        public static object ShapeStructuredPayload(
+            string toolName,
+            object rawData,
+            object compactData,
+            object detailRefMeta = null,
+            string payloadClass = "structured_tool_result")
+        {
+            var rawJson = JsonConvert.SerializeObject(rawData, Formatting.None);
+            var rawBytes = PayloadBudgeting.GetUtf8ByteCount(rawJson);
+            var detailRef = CreateStoredDetailRef(toolName, rawData, rawBytes, detailRefMeta);
+            var shaped = ToObject(compactData);
+            shaped["detailAvailable"] = detailRef != null;
+            if (detailRef != null)
+                shaped["detailRef"] = JToken.FromObject(detailRef);
+            shaped["rawBytes"] = rawBytes;
+            shaped["sha256"] = PayloadBudgeting.ComputeSha256(rawJson);
+
+            string shapedJson = null;
+            int shapedBytes = 0;
+            for (int i = 0; i < 3; i++)
+            {
+                shaped["shapedBytes"] = shapedBytes;
+                shapedJson = shaped.ToString(Formatting.None);
+                int nextBytes = PayloadBudgeting.GetUtf8ByteCount(shapedJson);
+                if (nextBytes == shapedBytes)
+                    break;
+                shapedBytes = nextBytes;
+            }
+
+            shaped["shapedBytes"] = shapedBytes;
+            shapedJson = shaped.ToString(Formatting.None);
+            shapedBytes = PayloadBudgeting.GetUtf8ByteCount(shapedJson);
+
+            PayloadStats.RecordText(
+                "tool_result",
+                toolName,
+                rawJson,
+                shapedJson,
+                meta: new
+                {
+                    rawBytes,
+                    shapedBytes,
+                    compacted = shapedBytes < rawBytes
+                },
+                options: new PayloadStatOptions
+                {
+                    EventKind = "tool_result",
+                    RepresentationKind = "compact",
+                    PayloadClass = payloadClass,
+                    Success = true,
+                    DetailAvailable = detailRef != null
+                });
+
+            return shaped;
         }
 
         public static object ShapeJsonPayload(
@@ -134,6 +192,18 @@ namespace Becool.UnityMcpLens.Editor.Lens
                 tool = toolName,
                 bytes = rawBytes
             };
+        }
+
+        static JObject ToObject(object data)
+        {
+            if (data == null)
+                return new JObject();
+
+            JToken token = data is JToken jToken
+                ? jToken.DeepClone()
+                : JToken.FromObject(data);
+
+            return token as JObject ?? new JObject { ["value"] = token };
         }
     }
 }
