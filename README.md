@@ -172,24 +172,6 @@ recorded signals include:
 - Phase 14 compact-result smoke on Unity `6000.4.3f1`: batch rerun scope was `98` rows; payload size was `50,566` raw bytes -> `24,025` shaped bytes; recorded savings were `26,541` bytes (`52.49%`); `7` eligible rows saved bytes; the batch helper reduced churn to `3` connections, `6` schema requests, and `4` pack transitions.
 - Payload shaping is still underway for log-heavy and edge-case surfaces, but the large Phase 14 TSAM target results now default to compact inline data with full data behind `detailRef`.
 
-Future benchmark reports should include:
-
-```text
-Scope:
-Unity version:
-Host project:
-Tool packs:
-Payload size:
-Result shaping savings:
-Tool calls:
-Bridge/session churn:
-Pack transitions:
-Error/recovery events:
-TSAM stage coverage:
-Known caveats:
-```
----
-
 ## Status
 
 Active refactor.
