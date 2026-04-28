@@ -153,17 +153,22 @@ TSAM tools should emit coverage rows for these stages:
 payload size, shaping metadata, bridge churn, pack transitions, tool snapshots,
 detail refs, and TSAM stage coverage.
 
-Current state: Phase 15 smoke records `NoShapingRecorded=false` and shows
+Current state: Phase 16 smoke records `NoShapingRecorded=false` and shows
 measurable savings for tool snapshots, usage reports, large TSAM tool results,
-and log-heavy probe/console results. The focused Phase 15 log smoke shaped
-`56,370` raw bytes to `39,650` bytes, saving `16,720` bytes (`29.66%`).
-`Unity.RunCommand` saved `11,433` bytes (`65.69%`) and `Unity.ReadConsole`
-saved `2,219` bytes (`77.00%`) in explicit `tool_result` rows.
+log-heavy probe/console results, and editor-stability waits. The focused Phase
+16 smoke on `D:\TintPaint` shaped `60,520` raw bytes to `48,101` bytes, saving
+`12,419` bytes (`20.52%`). `Unity.RunCommand` saved `5,969` bytes (`50.93%`)
+and `Unity.ManageEditor.WaitForStableEditor` saved `2,498` bytes (`62.69%`) in
+explicit `tool_result` rows.
 
 Use `Invoke-UnityMcpBatch` for repeated smoke/workflow calls that span packs.
 The Phase 14 batch smoke ran `9` ordered project/ui/scene/debug steps with `3`
 connections, `6` schema requests, `4` pack transitions, and no unmatched
 requests or failure rows.
+
+The batch helper now handles unwrapped `Unity.ReadDetailRef` structured payloads
+as successful steps and summarizes large detail payloads instead of inlining
+them in passing smoke output.
 
 ---
 

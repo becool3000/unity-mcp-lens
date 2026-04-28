@@ -21,6 +21,7 @@ latest dogfood findings.
 - The helper path now distinguishes direct MCP health from wrapper degradation, and `Invoke-UnityRunCommand` can bypass idle wait in healthy play mode.
 - Phase 14 payload telemetry records measurable compact-result savings for large TSAM results, and the batch helper reduces repeated smoke/session churn.
 - Phase 15 payload telemetry records measurable compact-log savings for `Unity.RunCommand` and `Unity.ReadConsole` summary results.
+- Phase 16 moves the active long-running smoke host to `D:\TintPaint`, normalizes batch-helper `Unity.ReadDetailRef` results, and records measurable `Unity.ManageEditor.WaitForStableEditor` savings.
 
 ---
 
@@ -302,7 +303,47 @@ Smoke notes:
 - `Unity.ReadConsole` summary returns counts and grouped rows inline while full scanned entries move behind `detailRef`.
 - Direct `Unity.ReadDetailRef` resolved both RunCommand and ReadConsole detail payloads.
 - Separate expected-failure smoke confirmed stable `failureStage`/`errorKind` values for compilation, execution, and result serialization.
-- Follow-up: the batch helper currently marks `Unity.ReadDetailRef` as failed because the detail tool returns an unwrapped structured payload; direct MCP detail reads are healthy.
+- Follow-up from this smoke was batch-helper normalization for unwrapped `Unity.ReadDetailRef` payloads; Phase 16 resolved that path.
+
+---
+
+## Latest Phase 16 Batch DetailRef And Editor Stability Smoke
+
+Date: 2026-04-28
+
+Result: passed on the new long-running smoke host.
+
+Host project:
+
+- `D:\TintPaint`
+- Unity host was idle after an initial recoverable play-transition window.
+
+Pack/export result:
+
+- Metadata audit: pass.
+- Export counts unchanged: `foundation=12`, `foundation+scene=32`, `foundation+ui=22`, `project=21`, `debug=22`.
+
+Telemetry result:
+
+- Focused happy-path scope: from fresh marker line `394`, `35` rows.
+- Payload size: `60,520` raw bytes -> `48,101` shaped bytes.
+- Recorded savings: `12,419` bytes (`20.52%`).
+- `NoShapingRecorded=false`.
+- Unmatched requests: `0`.
+- Failure rows: `0`.
+- Top savings:
+  - `Unity.RunCommand`: `11,720` raw bytes -> `5,751` shaped bytes, saving `5,969` bytes (`50.93%`).
+  - `Unity.GetLensUsageReport`: `16,843` raw bytes -> `12,562` shaped bytes, saving `4,281` bytes (`25.42%`).
+  - `Unity.ManageEditor.WaitForStableEditor`: `3,985` raw bytes -> `1,487` shaped bytes, saving `2,498` bytes (`62.69%`).
+
+Smoke notes:
+
+- `Check-UnityDevSession.ps1` settled to `ProceedWithLensHelpers` with direct MCP, manual wrapper, and helper health all true.
+- `Unity.RunCommand` returned structured data inline while compacting execution logs behind detail refs.
+- `Unity.ManageEditor.WaitForStableEditor` now returns compact stability state with `attemptsDetailRef` and `fullStateDetailRef`.
+- The batch helper now treats unwrapped `Unity.ReadDetailRef` structured payloads as successful steps.
+- Large detail payloads are summarized in batch output instead of inlined; small detail payloads can still be included.
+- `Unity.ReadConsole` had no entries in this clean TintPaint scope, so console detail-ref normalization was validated but no console savings row was produced.
 
 ---
 
@@ -334,13 +375,14 @@ Observed dogfood signals:
 - Tool snapshots contributed about `2.50 MB` raw payload across `29` rows.
 - Phase 14 compact-result smoke now reports `NoShapingRecorded=false` and `7` saving rows, including UI hierarchy, scene binding, UI verify, and Input System diagnostics.
 - Phase 15 compact-log smoke now reports `Unity.RunCommand` and `Unity.ReadConsole` `tool_result` savings.
+- Phase 16 compact editor-stability smoke now reports `Unity.ManageEditor.WaitForStableEditor` savings and successful batch detail-ref reads.
 
 Work:
 
 - Keep `Unity.ManageEditor WaitForStableEditor` inline output compact.
 - Store full attempts and full editor state behind detail refs.
 - Reduce routine tool snapshot payload cost.
-- Normalize batch-helper handling for `Unity.ReadDetailRef` responses.
+- Keep batch-helper detail-ref summaries compact so passing smokes do not inline large payloads.
 
 ---
 
@@ -360,7 +402,7 @@ Current tools:
 
 Work:
 
-- Dogfood the full Phase 12 HUD authoring flow in `D:\2DUnityNewGame` without custom editor C#.
+- Dogfood the full Phase 12 HUD authoring flow in `D:\TintPaint` without custom editor C# when that project has durable UI/HUD targets.
 - Keep no-op apply responses truly clean: `applied=false`, no unnecessary dirty/save.
 - Make `Unity.RunCommand` structured `ReturnResult(...)` the preferred probe return path over console-warning abuse.
 - Keep helper-driven runtime probes play-aware so healthy play mode does not get blocked by idle-wait wrappers.

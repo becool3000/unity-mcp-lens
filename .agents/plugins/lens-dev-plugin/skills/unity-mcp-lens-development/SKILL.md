@@ -90,7 +90,19 @@ Phase 15 keeps the public tool surface stable and makes log-heavy probe results 
 - `Unity.ReadConsole` summary results should keep grouped rows inline and store full scanned entries behind `detailRef`.
 - `IncludeLocalFixedCode=false` must omit rewritten code inline in both `execute` and `validate` modes while preserving `localFixedCodeDetailRef`.
 - Current Phase 15 smoke baseline: `NoShapingRecorded=false`, `16,720` bytes saved, `Unity.RunCommand` saved `11,433` bytes (`65.69%`), and `Unity.ReadConsole` saved `2,219` bytes (`77.00%`).
-- Direct `Unity.ReadDetailRef` resolves RunCommand and ReadConsole details; the batch helper still needs normalization for unwrapped detail-ref responses.
+- Direct `Unity.ReadDetailRef` resolves RunCommand and ReadConsole details.
+
+## Phase 16 Smoke Host And DetailRef Truth
+
+Phase 16 moves the active long-running smoke host to `D:\TintPaint`.
+
+- Use `D:\TintPaint` for new focused smoke tests unless a task explicitly needs the older `D:\2DUnityNewGame` fixtures.
+- Metadata audit on TintPaint passed with unchanged baselines: `foundation=12`, `foundation+scene=32`, `foundation+ui=22`, `project=21`, and `debug=22`.
+- `Check-UnityDevSession.ps1` should settle to `ProceedWithLensHelpers` after recoverable play/reload windows.
+- The batch helper now treats unwrapped `Unity.ReadDetailRef` structured payloads as successful steps.
+- Large detail-ref payloads should be summarized in batch output, not inlined by default.
+- `Unity.ManageEditor.WaitForStableEditor` should keep final stability state compact inline and store attempts/full editor state behind detail refs.
+- Current Phase 16 smoke baseline: `NoShapingRecorded=false`, `12,419` bytes saved, `Unity.RunCommand` saved `5,969` bytes (`50.93%`), and `Unity.ManageEditor.WaitForStableEditor` saved `2,498` bytes (`62.69%`).
 
 ## Maintenance Rules
 

@@ -62,6 +62,7 @@ node .agents/plugins/lens-dev-plugin/skills/unity-dev-assistant/scripts/Check-Un
 
 - Use the batch helper for repeated smoke/workflow calls instead of separate helper processes when the steps are known up front.
 - Continue payload shaping for remaining editor-state edge cases now that the large TSAM targets and log-heavy probe/console paths show measurable savings.
+- Use `D:\TintPaint` as the active long-running Unity smoke host.
 - Reduce noisy repeated package/editor-log signals so healthy compatibility reads stay high signal.
 - Keep `Unity.ProjectSettings.PreviewActiveInputHandler` and `Unity.ProjectSettings.SetActiveInputHandler` as the editor-authored backend change path.
 - Keep `Unity.Project.PackageCompatibility` and `Unity.InputActions.InspectAsset` as the preferred package/import read surface before raw `Editor.log` grep.
@@ -119,7 +120,7 @@ Latest Phase 14 compact-result and batch-helper smoke on 2026-04-26:
 Remaining follow-ups:
 
 - Continue compact shaping for remaining `Unity.ManageEditor` edge cases.
-- Normalize `Unity.ReadDetailRef` handling in the batch helper; direct MCP reads already resolve detail refs correctly, but the batch helper currently treats the unwrapped structured detail payload as a failed step.
+- Keep batch-helper detail-ref summaries compact so large detail payloads are not inlined in passing smokes.
 - Individual helper scripts still open separate sessions; prefer `Invoke-UnityMcpBatch` when a smoke/workflow has multiple known steps.
 - Some lower-level `tool_execution` rows still report `rawBytes == shapedBytes` because they record already-compacted responses; use `tool_result` savings rows for compact-result proof.
 
@@ -132,6 +133,17 @@ Latest Phase 15 log-compaction smoke on 2026-04-26:
 - `Unity.ReadConsole` summary saved `2,219` bytes (`77.00%`) with grouped inline rows and full scanned entries behind a detail ref.
 - Direct `Unity.ReadDetailRef` resolved both the RunCommand execution-log detail payload and the ReadConsole full scanned-entry payload.
 - Expected-failure smoke confirmed `failureStage=compilation`, `failureStage=execution`, and `failureStage=result_serialization` with stable `errorKind` values and compact log summaries.
+
+Latest Phase 16 batch detail-ref and editor-stability smoke on 2026-04-28:
+
+- Active smoke host moved to `D:\TintPaint`; metadata audit passed with unchanged baselines: `foundation=12`, `foundation+scene=32`, `foundation+ui=22`, `project=21`, and `debug=22`.
+- `Check-UnityDevSession.ps1` initially saw a recoverable play-transition window, then settled to `ProceedWithLensHelpers` with direct MCP, manual wrapper, and helper health all true.
+- Focused scope from fresh marker line `394` contained `35` rows.
+- Payload telemetry reported `NoShapingRecorded=false`, with `60,520` raw bytes shaped to `48,101` bytes and `12,419` bytes saved (`20.52%`).
+- `Unity.RunCommand` saved `5,969` bytes (`50.93%`) while preserving structured `returnedData` and execution-log detail refs.
+- `Unity.ManageEditor.WaitForStableEditor` saved `2,498` bytes (`62.69%`) with compact inline stability state plus `attemptsDetailRef` and `fullStateDetailRef`.
+- `Invoke-UnityMcpBatch` now treats unwrapped `Unity.ReadDetailRef` structured payloads as successful steps and summarizes large detail payloads instead of inlining them.
+- `Unity.ReadConsole` returned no entries in this clean TintPaint scope, so it did not produce a console savings row in this smoke.
 
 ## Maintenance
 

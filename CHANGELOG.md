@@ -42,11 +42,13 @@ All notable Unity MCP Lens package changes are documented here.
 - Improved `Unity.RunCommand` log-heavy responses so compilation, execution, and captured console logs are short previews by default with full logs behind detail refs.
 - Improved `Unity.ReadConsole` summary output so grouped rows stay inline while full scanned entries are available behind `Unity.ReadDetailRef`.
 - Improved `Unity.RunCommand` validate mode so `IncludeLocalFixedCode=false` omits rewritten code inline and preserves it behind `localFixedCodeDetailRef`.
+- Improved `Unity.ManageEditor.WaitForStableEditor` result shaping so final stability state stays compact inline while attempts and full editor state move behind detail refs.
+- Improved `Invoke-UnityMcpBatch` detail-ref handling so unwrapped `Unity.ReadDetailRef` structured payloads are treated as successful steps and large details are summarized instead of inlined.
 
 ### Known Follow-Up
 
 - Use the batch helper for repeated smoke/workflow paths while keeping individual helper scripts stable for one-off tasks.
-- Continue payload shaping for remaining `Unity.ManageEditor` edge cases and normalize `Unity.ReadDetailRef` handling in the batch helper.
+- Continue payload shaping for residual editor-state edge cases and keep batch detail-ref summaries compact.
 - Decide whether default package assembly filtering should exclude doc/sample/test-support asmdefs from compact compatibility reads.
 - Reduce reconnect-prone `Unity_ManageEditor` transport-noise during play transitions.
 - Add reliable editor restart/reload orchestration and prefab/serialized-reference authoring workflows.
@@ -58,6 +60,7 @@ All notable Unity MCP Lens package changes are documented here.
 - Phase 13 payload-shaping smoke passed the primary shaping target on Unity `6000.4.3f1` in `D:\2DUnityNewGame`: `NoShapingRecorded=false`, `89,643` bytes saved (`42.58%`) in the focused scope, and tool snapshot shaping reduced `100,016` raw bytes to `9,481` shaped bytes.
 - Phase 14 compact-result and batch-helper smoke passed on Unity `6000.4.3f1` in `D:\2DUnityNewGame`: `NoShapingRecorded=false`, `26,541` bytes saved (`52.49%`) in the focused scope, `7` saving rows, and batch churn reduced to `3` connections, `6` schema requests, and `4` pack transitions.
 - Phase 15 log-compaction smoke passed on Unity `6000.4.3f1` in `D:\2DUnityNewGame`: `NoShapingRecorded=false`, `16,720` bytes saved (`29.66%`) in the focused scope, `Unity.RunCommand` saved `11,433` bytes (`65.69%`), `Unity.ReadConsole` saved `2,219` bytes (`77.00%`), with `0` unmatched requests and `0` happy-path failure rows.
+- Phase 16 batch detail-ref and editor-stability smoke passed in `D:\TintPaint`: metadata audit passed with unchanged baselines, `NoShapingRecorded=false`, `12,419` bytes saved (`20.52%`) in the focused scope, `Unity.ManageEditor.WaitForStableEditor` saved `2,498` bytes (`62.69%`), with `0` unmatched requests and `0` happy-path failure rows.
 - Metadata audit passed with `foundation=12`, `foundation+scene=32`, `foundation+ui=22`, `project=21`, and `debug=22`.
 - Phase 11 package compatibility, input-actions inspection, diagnostics, preview, and set calls emitted complete TSAM stage coverage with no failure classes.
 - Phase 12 UI hierarchy, scene binding, layout, and verify calls emitted complete TSAM stage coverage with no tool failure rows in the focused helper-driven scope.

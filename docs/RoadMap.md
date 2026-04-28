@@ -102,6 +102,16 @@ A focused Phase 15 compact-log smoke then covered the log-heavy probe path:
 - Direct `Unity.ReadDetailRef` read back both RunCommand and ReadConsole detail payloads.
 - Expected-failure smoke confirmed stable compilation, execution, and result-serialization failure stages and error kinds.
 
+A focused Phase 16 smoke then moved the active long-running smoke host to
+`D:\TintPaint` and covered batch detail-ref normalization plus editor-stability
+shaping:
+
+- Metadata audit passed with unchanged baselines: `foundation=12`, `foundation+scene=32`, `foundation+ui=22`, `project=21`, and `debug=22`.
+- `Check-UnityDevSession` settled to `ProceedWithLensHelpers` after an initial recoverable play-transition window.
+- Payload size was `60,520` raw bytes -> `48,101` shaped bytes, saving `12,419` bytes (`20.52%`).
+- `Unity.ManageEditor.WaitForStableEditor` saved `2,498` bytes (`62.69%`) with compact inline stability state and detail refs for attempts/full state.
+- `Invoke-UnityMcpBatch` now handles unwrapped `Unity.ReadDetailRef` structured payloads as successful steps and summarizes large detail payloads instead of inlining them.
+
 ---
 
 ## Near-Term Priorities
@@ -120,7 +130,7 @@ A focused Phase 15 compact-log smoke then covered the log-heavy probe path:
 - Store full wait attempts, editor state, bindings, devices, logs, and measured geometry behind detail refs when inline data is enough for pass/fail decisions.
 - Continue compact shaping for remaining editor-state edge cases.
 - Keep telemetry presentation clear when `tool_execution` rows record already-compacted responses and explicit `tool_result` rows carry the savings proof.
-- Normalize batch-helper handling for `Unity.ReadDetailRef`, whose direct MCP response is healthy but currently unwrapped for the batch result normalizer.
+- Keep batch-helper detail-ref summaries compact so passing smokes do not inline large payloads.
 
 ### 3. Project/Package Diagnostic Follow-Through
 

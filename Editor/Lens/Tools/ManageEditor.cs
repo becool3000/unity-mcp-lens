@@ -4,6 +4,7 @@ using System.Linq;
 using System.IO;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using Becool.UnityMcpLens.Editor.Lens;
 using UnityEditor;
 using UnityEditor.SceneManagement; // Required for PrefabStage
@@ -91,6 +92,13 @@ Returns:
                             blockingReasons = new { type = "array", items = new { type = "string" }, description = "Blocking reasons for an unstable editor" },
                             editorState = new { type = "object", description = "Nested editor state snapshot for wait or transition responses" },
                             attempts = new { type = "array", description = "Attempt history for wait-based operations" },
+                            attemptsDetailRef = new { type = "object", description = "Detail ref for full wait attempt history when available" },
+                            fullStateDetailRef = new { type = "object", description = "Detail ref for full final editor state when available" },
+                            detailAvailable = new { type = "boolean", description = "Whether a full structured result detail ref is available" },
+                            detailRef = new { type = "object", description = "Detail ref for the full unshaped result payload when available" },
+                            rawBytes = new { type = "integer", description = "UTF-8 byte count of the full unshaped result payload" },
+                            shapedBytes = new { type = "integer", description = "UTF-8 byte count of the compact inline result payload" },
+                            errorKind = new { type = "string", description = "Stable error kind for wait failures when available" },
                             runtimeProbe = new
                             {
                                 type = "object",
@@ -687,8 +695,9 @@ Returns:
                             EditorState = editorState,
                             FullStateDetailRef = editorState?.FullStateDetailRef,
                         };
-                        RecordStabilityWaitPayload(attemptDetails, resultData, success: true, errorKind: null);
-                        return Response.Success("Editor reached a stable idle state.", resultData);
+                        return Response.Success(
+                            "Editor reached a stable idle state.",
+                            ShapeStabilityWaitResult(attemptDetails, resultData, errorKind: null));
                     }
                 }
                 else
@@ -716,8 +725,9 @@ Returns:
                 EditorState = editorState,
                 FullStateDetailRef = editorState?.FullStateDetailRef,
             };
-            RecordStabilityWaitPayload(attemptDetails, timeoutResultData, success: false, errorKind: "EDITOR_NOT_STABLE");
-            return Response.Error("EDITOR_NOT_STABLE", timeoutResultData);
+            return Response.Error(
+                "EDITOR_NOT_STABLE",
+                ShapeStabilityWaitResult(attemptDetails, timeoutResultData, errorKind: "EDITOR_NOT_STABLE"));
         }
 
         static List<EditorStabilityAttemptData> CreateInlineStabilityAttempts(List<EditorStabilityAttemptData> attempts)
@@ -753,48 +763,37 @@ Returns:
                 });
         }
 
-        static void RecordStabilityWaitPayload(
+        static object ShapeStabilityWaitResult(
             List<EditorStabilityAttemptDetailData> attemptDetails,
             EditorStabilityResultData resultData,
-            bool success,
             string errorKind)
         {
-            try
+            attemptDetails ??= new List<EditorStabilityAttemptDetailData>();
+
+            var compactData = JObject.FromObject(resultData ?? new EditorStabilityResultData());
+            if (!string.IsNullOrWhiteSpace(errorKind))
             {
-                attemptDetails ??= new List<EditorStabilityAttemptDetailData>();
-                var rawPayload = new
+                compactData["errorKind"] = errorKind;
+            }
+
+            return ToolResultCompactor.ShapeStructuredPayload(
+                "Unity.ManageEditor.WaitForStableEditor",
+                new
                 {
                     count = attemptDetails.Count,
-                    attempts = attemptDetails
-                };
-                var rawJson = JsonConvert.SerializeObject(rawPayload, Formatting.None);
-                var shapedJson = JsonConvert.SerializeObject(resultData, Formatting.None);
-
-                PayloadStats.RecordText(
-                    "tool_result",
-                    "Unity.ManageEditor.WaitForStableEditor",
-                    rawJson,
-                    shapedJson,
-                    meta: new
-                    {
-                        attemptCount = resultData?.AttemptCount ?? attemptDetails.Count,
-                        inlineAttemptCount = resultData?.InlineAttemptCount ?? 0,
-                        timedOut = resultData?.TimedOut ?? false
-                    },
-                    options: new PayloadStatOptions
-                    {
-                        EventKind = "tool_result",
-                        RepresentationKind = "compact",
-                        PayloadClass = "editor_stability_wait",
-                        Success = success,
-                        ErrorKind = errorKind,
-                        DetailAvailable = resultData?.AttemptsDetailRef != null
-                    });
-            }
-            catch
-            {
-                // Best-effort telemetry only.
-            }
+                    attempts = attemptDetails,
+                    finalResult = resultData
+                },
+                compactData,
+                new
+                {
+                    kind = "editor_stability_wait",
+                    attemptCount = resultData?.AttemptCount ?? attemptDetails.Count,
+                    inlineAttemptCount = resultData?.InlineAttemptCount ?? 0,
+                    timedOut = resultData?.TimedOut ?? false,
+                    errorKind
+                },
+                "editor_stability_wait");
         }
 
         static PlayModeRuntimeProbeData BuildRuntimeProbeData()
