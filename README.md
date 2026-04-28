@@ -173,23 +173,32 @@ recorded signals include:
 - Phase 15 log-compaction smoke on Unity `6000.4.3f1`: focused scope was `27` rows; payload size was `56,370` raw bytes -> `39,650` shaped bytes; recorded savings were `16,720` bytes (`29.66%`); `Unity.RunCommand` saved `11,433` bytes (`65.69%`) and `Unity.ReadConsole` saved `2,219` bytes (`77.00%`) in explicit `tool_result` rows.
 - Payload shaping is still underway for remaining editor-state edge cases, but the high-volume TSAM result path and log-heavy probe path now default to compact inline data with full data behind `detailRef`.
 
-Future benchmark reports should include:
+- ## Telemetry & Privacy
 
-```text
-Scope:
-Unity version:
-Host project:
-Tool packs:
-Payload size:
-Result shaping savings:
-Tool calls:
-Bridge/session churn:
-Pack transitions:
-Error/recovery events:
-TSAM stage coverage:
-Known caveats:
-```
----
+Unity MCP Lens includes telemetry for **local system behavior only**.
+
+Telemetry is used to measure:
+- payload size
+- tool usage
+- bridge/session churn
+- TSAM stage coverage
+- error and recovery events
+
+This telemetry is:
+- **local to your machine**
+- **not transmitted anywhere**
+- **not tied to users or identities**
+- available so you can inspect your own Lens usage and debugging data
+
+Unity MCP Lens does **not** collect:
+- project files or assets
+- source code
+- personal data
+- usage analytics or tracking information
+
+Telemetry exists to help you track how Lens is behaving, improve agent workflows, reduce token usage, and make Unity MCP interactions more reliable and debuggable.
+
+If you want help debugging or comparing results, you can copy and share telemetry output manually. Sharing is optional and fully under your control.
 
 ## Status
 
