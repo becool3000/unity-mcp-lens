@@ -259,7 +259,78 @@ Expected-failure smoke details:
 Residual notes:
 
 - Small failure payloads can be larger after adding summary/detail metadata; this is expected and not counted as a saving row.
-- `Unity.ReadDetailRef` resolves correctly through direct MCP. The Phase 14 batch helper currently treats its unwrapped structured payload as a failed step in the batch summary, so detail-ref smoke reads used direct MCP.
+
+## Phase 16 Batch DetailRef And Editor Stability Smoke Baseline
+
+A focused Phase 16 smoke test on 2026-04-28 moved the active long-running
+smoke host to `D:\TintPaint` and passed the batch detail-ref normalization and
+editor-stability shaping targets:
+
+- Host project: `D:\TintPaint`.
+- Metadata audit: pass with `foundation=12`, `foundation+scene=32`, `foundation+ui=22`, `project=21`, and `debug=22`.
+- `Check-UnityDevSession.ps1` initially saw a recoverable play-transition window, then settled to `ProceedWithLensHelpers` with `DirectMcpHealthy=true`, `ManualWrapperHealthy=true`, `LensHelperHealthy=true`, and `HelperDegraded=false`.
+- Focused scope: from fresh marker line `394`, `35` rows.
+- Payload size: `60,520` raw bytes -> `48,101` shaped bytes.
+- Recorded savings: `12,419` bytes, `20.52%`.
+- `NoShapingRecorded=false`.
+- Unmatched requests: `0`.
+- Failure rows: `0`.
+
+Top savings in the focused scope:
+
+- `tool_result:Unity.RunCommand`: `11,720` raw bytes -> `5,751` shaped bytes, saving `5,969` bytes (`50.93%`).
+- `tool_result:Unity.GetLensUsageReport`: `16,843` raw bytes -> `12,562` shaped bytes, saving `4,281` bytes (`25.42%`).
+- `tool_result:Unity.ManageEditor.WaitForStableEditor`: `3,985` raw bytes -> `1,487` shaped bytes, saving `2,498` bytes (`62.69%`).
+
+Smoke details:
+
+- `Unity.RunCommand` emitted `60` `result.Log(...)` execution lines, `20` `Debug.LogWarning(...)` console lines, and inline structured `returnedData`.
+- `Unity.ManageEditor.WaitForStableEditor` returned compact stability data inline with `attemptsDetailRef`, `fullStateDetailRef`, `detailAvailable=true`, and shaped telemetry.
+- The batch helper read a RunCommand execution-log detail ref and summarized the large detail payload without inlining it (`payloadIncluded=false`, `payloadBytes=6,638`).
+- The batch helper read a ReadConsole detail ref successfully and inlined the small detail payload (`payloadIncluded=true`, `payloadBytes=103`).
+- `Unity.ReadConsole` returned no entries in this clean TintPaint scope, so it validated detail-ref normalization but did not produce a console savings row in this smoke.
+
+## TintPaint Dogfood Session 2026-04-28
+
+A longer real-work dogfood session in `D:\TintPaint` produced substantially
+larger measured savings and exposed the next workflow gaps:
+
+- Host project: `D:\TintPaint`.
+- Report time: `2026-04-28T13:57:37-06:00`; usage detail created `2026-04-28T19:57:37Z`.
+- Scope: `lastRows=2000`, excluding request `c35f449cd32f41708ffb082238f66598`.
+- Rows: `1999`; payload rows: `216`; coverage rows: `1783`.
+- Payload size: `3,012,895` raw bytes -> `650,430` shaped bytes.
+- Recorded savings: `2,362,465` bytes, `78.41%`.
+- `NoShapingRecorded=false`.
+- Connections: `42`.
+- Setup cycles: `89`.
+- Bridge requests/responses: `889` / `894`.
+- `get_tool_schema` requests: `293`.
+- Pack transitions: `147`.
+- Unmatched requests: `2`, both `domain_reload_transport_close`.
+- Failure classes: `Unity_ManageEditor disposed_transport=6`; `get_tool_schema transport_closed_before_response=1`.
+- `tsamCoverage=[]` despite `1783` coverage rows, which is a usage-report presentation gap.
+
+Top savings:
+
+- `tool_snapshot:Bridge.RefreshToolsSnapshotIfNeeded`: `1,800,288` raw bytes -> `170,658` shaped bytes, saving `1,629,630` bytes (`90.52%`).
+- `tool_result:Unity.ManageEditor.WaitForStableEditor`: `753,846` raw bytes -> `26,277` shaped bytes, saving `727,569` bytes (`96.51%`).
+- `tool_result:Unity.RunCommand`: `11,720` raw bytes -> `5,751` shaped bytes, saving `5,969` bytes (`50.93%`).
+- `tool_result:Unity.GetLensUsageReport`: `24,845` raw bytes -> `20,011` shaped bytes, saving `4,834` bytes (`19.46%`).
+
+Detail-ref result:
+
+- Usage report detail ref `detail_b3337f7c7824459a902302ee8403e62c` resolved successfully through the batch helper.
+- Detail payload was `55,942` bytes and was summarized rather than inlined.
+
+Workflow findings:
+
+- `Check-UnityDevSession.ps1`, `Sync-UnityScriptChanges.ps1`, `Enter-UnityPlayMode.ps1`, `Invoke-UnityRunCommand.ps1`, `Get-UnityConsole.ps1`, and `Invoke-UnityMcpBatch.ps1` were all useful.
+- `Get-UnityConsole.ps1` / `Unity_ReadConsole` avoided raw `Editor.log` grep and confirmed `0` console entries after validation.
+- Real UI/prefab work still fell back to `Unity.RunCommand` for prefab creation, scene wiring, validation probes, and runtime checks.
+- Pointer-driven Input System simulation did not drive the application's `Mouse.current` path reliably; validation fell back to calling the shared paint method directly.
+- `Unity.RunCommand` play-state restoration can make "stop play mode" attempts misleading; direct `Unity_ManageEditor Action=Stop` remains the reliable stop path.
+- Compact usage reporting still inlined a large `packSetTransitions` list in the terminal output; this should be summarized by default with full rows behind `detailRef`.
 
 ---
 
@@ -291,9 +362,10 @@ System diagnostics now have compact inline data plus full detail refs. Phase 15
 extended compact defaults to log-heavy `Unity.RunCommand` and `Unity.ReadConsole`
 summary results.
 
-Remaining shaping work should focus on residual `Unity.ManageEditor` edge cases,
-batch-helper detail-ref normalization, and making telemetry presentation clearer
-when `tool_execution` rows record already-compacted responses.
+Remaining shaping work should focus on residual editor-state edge cases, console
+detail coverage in projects with sparse logs, compacting large usage-report pack
+transition lists, and making telemetry presentation clearer when
+`tool_execution` rows record already-compacted responses.
 
 ### Diagnostic Surface Gaps
 

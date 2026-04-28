@@ -6,6 +6,8 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using Newtonsoft.Json.Linq;
+using Becool.UnityMcpLens.Editor.Lens;
+using Becool.UnityMcpLens.Editor.Utils;
 using UnityEngine;
 
 namespace Becool.UnityMcpLens.Editor.Lens.Usage
@@ -152,7 +154,7 @@ namespace Becool.UnityMcpLens.Editor.Lens.Usage
                         LineNumber = totalLineCount,
                         TimestampUtc = ParseDate(entry["timestampUtc"]),
                         EventKind = ReadString(entry["eventKind"]),
-                        Stage = ReadString(entry["stage"]),
+                        Stage = ReadString(entry.SelectToken("meta.stage"), ReadString(entry["stage"])),
                         Name = ReadString(entry["name"]),
                         RawBytes = ReadLong(entry["rawBytes"]),
                         ShapedBytes = ReadLong(entry["shapedBytes"]),
@@ -172,8 +174,8 @@ namespace Becool.UnityMcpLens.Editor.Lens.Usage
                         RepresentationKind = ReadString(entry["representationKind"]),
                         PayloadClass = ReadString(entry["payloadClass"]),
                         CacheReuseClass = ReadString(entry["cacheReuseClass"]),
-                        ToolName = ReadString(entry["toolName"]),
-                        Action = ReadString(entry["action"]),
+                        ToolName = ReadString(entry["toolName"], ReadString(entry.SelectToken("meta.toolName"))),
+                        Action = ReadString(entry["action"], ReadString(entry.SelectToken("meta.action"))),
                         DiscoveryMode = ReadString(entry["discoveryMode"], ReadString(entry["toolDiscoveryMode"])),
                         SnapshotReason = ReadString(entry["snapshotReason"], ReadString(entry["toolDiscoveryReason"])),
                         SnapshotHashMinimal = ReadString(entry["snapshotHashMinimal"]),
@@ -529,6 +531,8 @@ namespace Becool.UnityMcpLens.Editor.Lens.Usage
                 row.ResultShapingRows != row.OperationCount);
             if (incompleteTsam != null)
                 findings.Add(new UsageFindingRow("tsam_stage_gap", "warning", $"{incompleteTsam.ToolName}/{incompleteTsam.Action} has incomplete TSAM stage coverage."));
+            else if ((report.CoverageEntryCount > 0) && ((report.TsamCoverage?.Count ?? 0) == 0))
+                findings.Add(new UsageFindingRow("tsam_stage_absent", "info", "Coverage rows were recorded, but no TSAM stage rows were found in this scope."));
 
             var largest = report.LargestEntries?.FirstOrDefault();
             if (largest != null && largest.RawBytes >= 20000)
@@ -880,7 +884,7 @@ namespace Becool.UnityMcpLens.Editor.Lens.Usage
                     requestBytes = report.BridgeRequestBytes,
                     responseBytes = report.BridgeResponseBytes,
                     topCommands = report.BridgeTopCommands,
-                    packSetTransitions = report.PackSetTransitions,
+                    packSetTransitions = CreatePackSetTransitionsCompact(report),
                     unmatchedRequests = report.UnmatchedRequests
                 },
                 toolSnapshotChurn = new
@@ -890,6 +894,7 @@ namespace Becool.UnityMcpLens.Editor.Lens.Usage
                     fullHashTransitions = report.FullHashTransitions,
                     falseStableMinimalTransitions = report.FalseStableMinimalTransitions
                 },
+                tsamCoverageSummary = CreateTsamCoverageSummary(report),
                 tsamCoverage = report.TsamCoverage,
                 failureClasses = report.FailureClasses,
                 latency = report.Latency,
@@ -899,6 +904,74 @@ namespace Becool.UnityMcpLens.Editor.Lens.Usage
                 topSavings = report.TopSavings,
                 findings = report.Findings,
                 detailRef
+            };
+        }
+
+        static object CreatePackSetTransitionsCompact(PayloadStatsReport report)
+        {
+            var rows = report?.PackSetTransitions ?? new List<PackSetTransitionRow>();
+            object detailRef = null;
+            if (rows.Count > k_TopCount)
+            {
+                var rawBytes = PayloadBudgeting.GetUtf8ByteCount(Newtonsoft.Json.JsonConvert.SerializeObject(rows, Newtonsoft.Json.Formatting.None));
+                detailRef = ToolResultCompactor.CreateStoredDetailRef(
+                    "Unity.GetLensUsageReport",
+                    rows,
+                    rawBytes,
+                    new
+                    {
+                        kind = "pack_set_transitions",
+                        count = rows.Count,
+                        report?.Scope,
+                        report?.NextLine
+                    });
+            }
+
+            return new
+            {
+                count = rows.Count,
+                shown = Math.Min(rows.Count, k_TopCount),
+                omitted = Math.Max(0, rows.Count - k_TopCount),
+                changedCount = rows.Count(row => !row.Unchanged),
+                unchangedCount = rows.Count(row => row.Unchanged),
+                totalResponseBytes = rows.Sum(row => row.ResponseBytes),
+                byConnection = rows
+                    .GroupBy(row => string.IsNullOrWhiteSpace(row.ConnectionId) ? "(none)" : row.ConnectionId)
+                    .OrderByDescending(group => group.Count())
+                    .Take(k_TopCount)
+                    .Select(group => new
+                    {
+                        connectionId = group.Key,
+                        count = group.Count(),
+                        changedCount = group.Count(row => !row.Unchanged),
+                        unchangedCount = group.Count(row => row.Unchanged),
+                        responseBytes = group.Sum(row => row.ResponseBytes)
+                    })
+                    .ToArray(),
+                topTransitions = rows.Take(k_TopCount).ToArray(),
+                detailAvailable = detailRef != null,
+                detailRef
+            };
+        }
+
+        static object CreateTsamCoverageSummary(PayloadStatsReport report)
+        {
+            var rows = report?.TsamCoverage ?? new List<TsamCoverageRow>();
+            var stageRows = rows.Sum(row => row.RowCount);
+            return new
+            {
+                coverageRows = report?.CoverageEntryCount ?? 0,
+                tsamStageRows = stageRows,
+                toolCount = rows.Count,
+                completeToolCount = rows.Count(row =>
+                    row.NormalizationRows == row.OperationCount &&
+                    row.ServiceRows == row.OperationCount &&
+                    row.AdapterRows == row.OperationCount &&
+                    row.ResultShapingRows == row.OperationCount),
+                failedRows = rows.Sum(row => row.FailedRows),
+                note = rows.Count == 0 && (report?.CoverageEntryCount ?? 0) > 0
+                    ? "Coverage rows include bridge/control-plane rows; no TSAM stage rows were found in this scope."
+                    : null
             };
         }
 
@@ -1020,11 +1093,14 @@ namespace Becool.UnityMcpLens.Editor.Lens.Usage
                 return;
 
             builder.AppendLine();
-            builder.AppendLine("Pack-set transitions:");
+            builder.AppendLine($"Pack-set transitions (showing {Math.Min(rows.Count, k_TopCount)} of {rows.Count}):");
             foreach (var row in rows.Take(k_TopCount))
             {
                 builder.AppendLine($"- {row.ConnectionId}: {row.ActiveToolPacks} -> {row.ManifestKind}, unchanged {row.Unchanged}, response {FormatBytes(row.ResponseBytes)}");
             }
+
+            if (rows.Count > k_TopCount)
+                builder.AppendLine($"- ... omitted {rows.Count - k_TopCount} transition row(s); use structured detail refs for the full list when available.");
         }
 
         static void AppendUnmatchedRequests(StringBuilder builder, IReadOnlyList<UnmatchedRequestRow> rows)

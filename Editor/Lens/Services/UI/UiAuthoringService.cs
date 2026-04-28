@@ -61,6 +61,61 @@ namespace Becool.UnityMcpLens.Editor.Services.UI
             return UiOperationResult.Ok("Verified UI screen layout.", data);
         }
 
+        public UiOperationResult PreviewCreateCanvasPrefab(UiCanvasPrefabRequest request, ToolOperationTiming timing)
+        {
+            return RunCreateCanvasPrefab(request, previewOnly: true, timing);
+        }
+
+        public UiOperationResult ApplyCreateCanvasPrefab(UiCanvasPrefabRequest request, ToolOperationTiming timing)
+        {
+            return RunCreateCanvasPrefab(request, previewOnly: false, timing);
+        }
+
+        public UiOperationResult VerifyRaycastAndLayout(UiVerifyRaycastAndLayoutRequest request, ToolOperationTiming timing)
+        {
+            object data;
+            string error;
+            using (timing.Measure("adapter"))
+            {
+                if (!m_Adapter.TryVerifyRaycastAndLayout(request, out data, out error))
+                {
+                    return UiOperationResult.Error(
+                        $"Failed to verify UI raycast/layout: {error}",
+                        "verify_raycast_layout_failed",
+                        new { errorKind = "verify_raycast_layout_failed", error });
+                }
+            }
+
+            return UiOperationResult.Ok("Verified UI raycast/layout.", data);
+        }
+
+        UiOperationResult RunCreateCanvasPrefab(UiCanvasPrefabRequest request, bool previewOnly, ToolOperationTiming timing)
+        {
+            if (string.IsNullOrWhiteSpace(request?.PrefabPath))
+            {
+                return UiOperationResult.Error("prefabPath is required.", "prefab_path_required");
+            }
+
+            using (timing.Measure("adapter"))
+            {
+                if (!m_Adapter.TryCreateCanvasPrefab(request, previewOnly, out var data, out var applied, out var error))
+                {
+                    return UiOperationResult.Error(
+                        $"Failed to {(previewOnly ? "preview" : "apply")} canvas prefab authoring: {error}",
+                        "canvas_prefab_failed",
+                        new { errorKind = "canvas_prefab_failed", error });
+                }
+
+                return UiOperationResult.Ok(
+                    previewOnly
+                        ? $"Previewed canvas prefab '{request.PrefabPath}'."
+                        : applied
+                            ? $"Applied canvas prefab '{request.PrefabPath}'."
+                            : $"No canvas prefab changes were required for '{request.PrefabPath}'.",
+                    data);
+            }
+        }
+
         bool TryRunEnsureHierarchy(UiEnsureHierarchyRequest request, bool previewOnly, ToolOperationTiming timing, out UiOperationResult result)
         {
             result = null;

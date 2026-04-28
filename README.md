@@ -171,9 +171,12 @@ recorded signals include:
 - Phase 13 payload-shaping smoke on Unity `6000.4.3f1`: rerun scope was `244` rows; payload size was `210,510` raw bytes -> `120,867` shaped bytes; recorded savings were `89,643` bytes (`42.58%`); `NoShapingRecorded=false`; the largest measured win was tool snapshot shaping at `100,016` raw bytes -> `9,481` shaped bytes.
 - Phase 14 compact-result smoke on Unity `6000.4.3f1`: batch rerun scope was `98` rows; payload size was `50,566` raw bytes -> `24,025` shaped bytes; recorded savings were `26,541` bytes (`52.49%`); `7` eligible rows saved bytes; the batch helper reduced churn to `3` connections, `6` schema requests, and `4` pack transitions.
 - Phase 15 log-compaction smoke on Unity `6000.4.3f1`: focused scope was `27` rows; payload size was `56,370` raw bytes -> `39,650` shaped bytes; recorded savings were `16,720` bytes (`29.66%`); `Unity.RunCommand` saved `11,433` bytes (`65.69%`) and `Unity.ReadConsole` saved `2,219` bytes (`77.00%`) in explicit `tool_result` rows.
-- Payload shaping is still underway for remaining editor-state edge cases, but the high-volume TSAM result path and log-heavy probe path now default to compact inline data with full data behind `detailRef`.
+- Phase 16 smoke on `D:\TintPaint`: metadata audit passed with unchanged pack baselines; focused scope was `35` rows; payload size was `60,520` raw bytes -> `48,101` shaped bytes; recorded savings were `12,419` bytes (`20.52%`); `Unity.ManageEditor.WaitForStableEditor` saved `2,498` bytes (`62.69%`) and batch `Unity.ReadDetailRef` reads now summarize unwrapped detail payloads correctly.
+- TintPaint dogfood session on 2026-04-28: longer real-work scope was `1999` rows; payload size was `3,012,895` raw bytes -> `650,430` shaped bytes; recorded savings were `2,362,465` bytes (`78.41%`); next gaps are compacting large pack-transition summaries, clearer TSAM coverage presentation, uGUI prefab authoring, UI raycast verification, and pointer-input smoke tooling.
+- Phase 17 adds the first pass at those gaps: compact pack-transition summaries, clearer TSAM coverage summary data, uGUI canvas prefab preview/apply, scene prefab instantiate/bind preview/apply, UI raycast/layout verification, and play-mode pointer-input smoke verification.
+- Payload shaping is still underway for residual editor-state edge cases, but the high-volume TSAM result path, log-heavy probe path, and editor-stability wait path now default to compact inline data with full data behind `detailRef`.
 
-- ## Telemetry & Privacy
+## Telemetry & Privacy
 
 Unity MCP Lens includes telemetry for **local system behavior only**.
 

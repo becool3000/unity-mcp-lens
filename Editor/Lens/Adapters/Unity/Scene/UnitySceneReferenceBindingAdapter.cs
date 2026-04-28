@@ -11,6 +11,7 @@ using Becool.UnityMcpLens.Editor.Models.Scene;
 using Becool.UnityMcpLens.Editor.Tools;
 using UnityEditor;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 namespace Becool.UnityMcpLens.Editor.Adapters.Unity.Scene
 {
@@ -62,6 +63,265 @@ namespace Becool.UnityMcpLens.Editor.Adapters.Unity.Scene
             }
 
             return true;
+        }
+
+        public bool TryInstantiatePrefabAndBind(
+            ScenePrefabInstantiateAndBindRequest request,
+            bool previewOnly,
+            out GameObject instanceRoot,
+            out object data,
+            out bool applied,
+            out string error)
+        {
+            instanceRoot = null;
+            data = null;
+            applied = false;
+            error = null;
+
+            string prefabPath = NormalizeAssetPath(request?.PrefabPath);
+            GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
+            if (prefab == null)
+            {
+                error = $"Prefab '{prefabPath}' could not be loaded.";
+                return false;
+            }
+
+            Transform parent = null;
+            if (request?.Parent != null && request.Parent.Type != JTokenType.Null)
+            {
+                JObject findParams = new()
+                {
+                    ["search_inactive"] = request.IncludeInactive
+                };
+                GameObject parentGo = ObjectsHelper.FindObject(request.Parent, request.ParentSearchMethod, findParams);
+                if (parentGo == null)
+                {
+                    error = "Parent target could not be resolved.";
+                    return false;
+                }
+
+                parent = parentGo.transform;
+            }
+
+            string instanceName = string.IsNullOrWhiteSpace(request?.InstanceName) ? prefab.name : request.InstanceName.Trim();
+            instanceRoot = FindExistingInstance(parent, instanceName, request?.IncludeInactive ?? true);
+            bool exists = instanceRoot != null;
+            var instanceChanges = new List<object>();
+            var bindingRows = new List<object>();
+
+            if (!exists)
+            {
+                applied = true;
+                instanceChanges.Add(new { property = "instance", previousValue = (string)null, newValue = instanceName });
+                if (!previewOnly)
+                {
+                    UnityEngine.Object createdObject = parent != null
+                        ? PrefabUtility.InstantiatePrefab(prefab, parent)
+                        : PrefabUtility.InstantiatePrefab(prefab);
+                    instanceRoot = createdObject as GameObject;
+                    if (instanceRoot == null)
+                    {
+                        error = $"Failed to instantiate prefab '{prefabPath}'.";
+                        return false;
+                    }
+
+                    if (!string.Equals(instanceRoot.name, instanceName, StringComparison.Ordinal))
+                        instanceRoot.name = instanceName;
+                }
+            }
+
+            if (instanceRoot != null)
+            {
+                if (!TryApplyTransform(instanceRoot.transform, request, previewOnly, instanceChanges, out bool transformChanged, out error))
+                    return false;
+
+                applied |= transformChanged;
+            }
+
+            if (instanceRoot != null)
+            {
+                foreach (SceneReferenceBindingEntry binding in request?.Bindings ?? Array.Empty<SceneReferenceBindingEntry>())
+                {
+                    if (!TryBindEntry(instanceRoot, binding, previewOnly, out object row, out bool bindingApplied, out error))
+                        return false;
+
+                    applied |= bindingApplied;
+                    bindingRows.Add(row);
+                }
+            }
+            else
+            {
+                foreach (SceneReferenceBindingEntry binding in request?.Bindings ?? Array.Empty<SceneReferenceBindingEntry>())
+                {
+                    bindingRows.Add(new
+                    {
+                        targetPath = binding?.targetPath ?? ".",
+                        componentType = binding?.componentType,
+                        propertyPath = binding?.propertyPath,
+                        bindingType = "pending_instance_create",
+                        willModify = true,
+                        applied = false
+                    });
+                }
+            }
+
+            data = new
+            {
+                prefabPath,
+                instanceName,
+                parentPath = parent != null ? UiDiagnosticsHelper.GetHierarchyPath(parent) : string.Empty,
+                instancePath = instanceRoot != null ? UiDiagnosticsHelper.GetHierarchyPath(instanceRoot.transform) : instanceName,
+                exists,
+                applied = !previewOnly && applied,
+                willModify = applied,
+                instanceChanges = instanceChanges.ToArray(),
+                bindings = bindingRows.ToArray()
+            };
+            return true;
+        }
+
+        static GameObject FindExistingInstance(Transform parent, string instanceName, bool includeInactive)
+        {
+            if (string.IsNullOrWhiteSpace(instanceName))
+                return null;
+
+            if (parent != null)
+            {
+                for (int i = 0; i < parent.childCount; i++)
+                {
+                    Transform child = parent.GetChild(i);
+                    if (child != null &&
+                        (includeInactive || child.gameObject.activeInHierarchy) &&
+                        string.Equals(child.name, instanceName, StringComparison.Ordinal))
+                    {
+                        return child.gameObject;
+                    }
+                }
+
+                return null;
+            }
+
+            UnityEngine.SceneManagement.Scene activeScene = UnityEngine.SceneManagement.SceneManager.GetActiveScene();
+            if (activeScene.IsValid())
+            {
+                foreach (GameObject root in activeScene.GetRootGameObjects())
+                {
+                    if (root != null &&
+                        (includeInactive || root.activeInHierarchy) &&
+                        string.Equals(root.name, instanceName, StringComparison.Ordinal))
+                    {
+                        return root;
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        static bool TryApplyTransform(
+            Transform transform,
+            ScenePrefabInstantiateAndBindRequest request,
+            bool previewOnly,
+            List<object> changes,
+            out bool changed,
+            out string error)
+        {
+            bool hasChanges = false;
+            changed = false;
+            error = null;
+            if (transform == null)
+                return true;
+
+            void RecordChange(string property, object previousValue, object newValue)
+            {
+                if (Equals(previousValue, newValue))
+                    return;
+
+                hasChanges = true;
+                changes.Add(new
+                {
+                    property,
+                    previousValue = NormalizeValue(previousValue),
+                    newValue = NormalizeValue(newValue)
+                });
+            }
+
+            if (request?.Position != null && request.Position.Type != JTokenType.Null)
+            {
+                if (!TryParseVector3(request.Position, out Vector3 position))
+                {
+                    error = "position must be {x,y,z} or [x,y,z].";
+                    return false;
+                }
+
+                RecordChange("localPosition", transform.localPosition, position);
+                if (!previewOnly)
+                    transform.localPosition = position;
+            }
+
+            if (request?.Rotation != null && request.Rotation.Type != JTokenType.Null)
+            {
+                if (!TryParseVector3(request.Rotation, out Vector3 rotation))
+                {
+                    error = "rotation must be {x,y,z} or [x,y,z].";
+                    return false;
+                }
+
+                RecordChange("localEulerAngles", transform.localEulerAngles, rotation);
+                if (!previewOnly)
+                    transform.localEulerAngles = rotation;
+            }
+
+            if (request?.Scale != null && request.Scale.Type != JTokenType.Null)
+            {
+                if (!TryParseVector3(request.Scale, out Vector3 scale))
+                {
+                    error = "scale must be {x,y,z} or [x,y,z].";
+                    return false;
+                }
+
+                RecordChange("localScale", transform.localScale, scale);
+                if (!previewOnly)
+                    transform.localScale = scale;
+            }
+
+            changed = hasChanges;
+            if (!previewOnly && hasChanges)
+                EditorUtility.SetDirty(transform);
+
+            return true;
+        }
+
+        static bool TryParseVector3(JToken token, out Vector3 value)
+        {
+            value = default;
+            if (token is JArray array && array.Count >= 3)
+            {
+                value = new Vector3(array[0].Value<float>(), array[1].Value<float>(), array[2].Value<float>());
+                return true;
+            }
+
+            if (token is JObject obj)
+            {
+                value = new Vector3(obj["x"]?.Value<float>() ?? 0f, obj["y"]?.Value<float>() ?? 0f, obj["z"]?.Value<float>() ?? 0f);
+                return true;
+            }
+
+            return false;
+        }
+
+        static object NormalizeValue(object value)
+        {
+            return value switch
+            {
+                Vector3 vector => new { x = vector.x, y = vector.y, z = vector.z },
+                _ => value
+            };
+        }
+
+        static string NormalizeAssetPath(string value)
+        {
+            return string.IsNullOrWhiteSpace(value) ? string.Empty : value.Trim().Replace('\\', '/');
         }
 
         static bool TryBindEntry(GameObject targetRoot, SceneReferenceBindingEntry entry, bool previewOnly, out object bindingRow, out bool applied, out string error)

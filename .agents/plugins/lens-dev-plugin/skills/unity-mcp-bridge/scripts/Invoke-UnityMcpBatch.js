@@ -36,14 +36,107 @@ function compactToolResult(toolResult) {
     return { success: false, error: "Tool returned no structured result." };
   }
 
+  const success = common.valueOf(toolResult, "success", "Success");
+  if (success !== true && success !== false && isUnwrappedDetailRefResult(toolResult)) {
+    const refId = common.valueOf(toolResult, "refId", "RefId");
+    const contentType = common.valueOf(toolResult, "contentType", "ContentType") || null;
+    const createdUtc = common.valueOf(toolResult, "createdUtc", "CreatedUtc") || null;
+    const meta = common.valueOf(toolResult, "meta", "Meta") || null;
+    const payload = common.valueOf(toolResult, "payload", "Payload");
+    const isError = common.valueOf(toolResult, "isError", "IsError") === true;
+    const payloadSummary = compactDetailPayload(payload);
+
+    return {
+      success: !isError,
+      message: isError ? `Detail ref '${refId}' resolved with an error payload.` : `Resolved detail ref '${refId}'.`,
+      code: null,
+      error: isError ? common.valueOf(toolResult, "error", "Error") || "Detail ref payload reported isError=true." : null,
+      refId,
+      contentType,
+      data: {
+        refId,
+        contentType,
+        createdUtc,
+        meta,
+        ...payloadSummary,
+      },
+    };
+  }
+
   const data = common.valueOf(toolResult, "data", "Data");
   return {
-    success: common.valueOf(toolResult, "success", "Success") === true,
+    success: success === true,
     message: common.valueOf(toolResult, "message", "Message") || null,
     code: common.valueOf(toolResult, "code", "Code") || null,
     error: common.valueOf(toolResult, "error", "Error") || null,
     data,
   };
+}
+
+function isUnwrappedDetailRefResult(toolResult) {
+  const refId = common.valueOf(toolResult, "refId", "RefId");
+  if (!refId || typeof refId !== "string") {
+    return false;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(toolResult, "payload") ||
+      Object.prototype.hasOwnProperty.call(toolResult, "Payload")) {
+    return true;
+  }
+
+  return common.valueOf(toolResult, "isError", "IsError") === false;
+}
+
+function compactDetailPayload(payload) {
+  const payloadBytes = estimateJsonBytes(payload);
+  if (payloadBytes <= 4096) {
+    return {
+      payloadIncluded: true,
+      payloadBytes,
+      payload,
+    };
+  }
+
+  return {
+    payloadIncluded: false,
+    payloadBytes,
+    payloadSummary: summarizeDetailPayload(payload),
+  };
+}
+
+function estimateJsonBytes(value) {
+  try {
+    return Buffer.byteLength(JSON.stringify(value ?? null), "utf8");
+  } catch (_error) {
+    return 0;
+  }
+}
+
+function summarizeDetailPayload(payload) {
+  if (!payload || typeof payload !== "object") {
+    return {
+      type: payload === null ? "null" : typeof payload,
+    };
+  }
+
+  const data = common.valueOf(payload, "data", "Data");
+  const summary = {
+    type: Array.isArray(payload) ? "array" : "object",
+    keys: Object.keys(payload).slice(0, 12),
+    tool: common.valueOf(payload, "tool", "Tool") || null,
+    bytes: common.valueOf(payload, "bytes", "Bytes") || null,
+    dataType: data === null ? "null" : typeof data,
+    hasData: data !== undefined && data !== null,
+  };
+
+  if (typeof data === "string") {
+    summary.dataPreview = data.length <= 512 ? data : data.slice(0, 512);
+    summary.dataPreviewTruncated = data.length > 512;
+  } else if (data && typeof data === "object") {
+    summary.dataKeys = Object.keys(data).slice(0, 12);
+  }
+
+  return summary;
 }
 
 function packsKey(packs) {

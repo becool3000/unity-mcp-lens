@@ -50,6 +50,38 @@ namespace Becool.UnityMcpLens.Editor.Models.UI
         public UiVerifyAssertionRequest[] Assertions { get; set; } = new UiVerifyAssertionRequest[0];
     }
 
+    sealed class UiCanvasPrefabRequest
+    {
+        public string PrefabPath { get; set; }
+        public string RootName { get; set; }
+        public string RenderMode { get; set; } = "screen_space_overlay";
+        public int? SortingOrder { get; set; }
+        public bool? PixelPerfect { get; set; }
+        public JToken ReferenceResolution { get; set; }
+        public string ScaleMode { get; set; } = "scale_with_screen_size";
+        public UiNamedHierarchyNodeSpec[] Nodes { get; set; } = new UiNamedHierarchyNodeSpec[0];
+    }
+
+    sealed class UiRaycastPointRequest
+    {
+        public string key { get; set; }
+        public float screenX { get; set; }
+        public float screenY { get; set; }
+        public string target { get; set; }
+        public string searchMethod { get; set; } = "by_name";
+        public bool includeInactive { get; set; }
+        public int maxResults { get; set; } = 10;
+        public string expectTopPathContains { get; set; }
+        public bool? expectBlocked { get; set; }
+    }
+
+    sealed class UiVerifyRaycastAndLayoutRequest
+    {
+        public UiRaycastPointRequest[] Points { get; set; } = new UiRaycastPointRequest[0];
+        public UiVerifyTargetRequest[] Targets { get; set; } = new UiVerifyTargetRequest[0];
+        public UiVerifyAssertionRequest[] Assertions { get; set; } = new UiVerifyAssertionRequest[0];
+    }
+
     sealed class UiOperationResult
     {
         public bool success { get; set; }

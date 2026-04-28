@@ -12,10 +12,12 @@ when Unity reloads, recompiles, or changes project/package state.
 - Preferred MCP transport: the owned `unity-mcp-lens` stdio server.
 - Default model-facing tool surface: `foundation`.
 - Current `foundation` baseline: `12` exported tools.
-- Current `foundation + scene` baseline: `32` exported tools.
-- Current `foundation + ui` baseline: `22` exported tools.
+- Current `foundation + scene` baseline: `34` exported tools.
+- Current `foundation + ui` baseline: `25` exported tools.
+- Current `foundation + runtime` baseline: `14` exported tools.
 - Current Phase 8 surface: split GameObject TSAM tools for inspect, component reads, preview/apply mutation, create, and delete.
 - Current Phase 12 surface: split UI hierarchy/layout preview/apply, scene serialized-reference preview/apply binding, UI screen-layout verification, center-based UI verify relations, and structured `Unity.RunCommand` return values.
+- Current Phase 17 surface: UI canvas prefab preview/apply, scene prefab instantiate/bind preview/apply, UI raycast/layout verification, play-mode pointer-input smoke verification, and compact usage-report pack-transition summaries.
 - Current Phase 11 surface: project/Input System diagnostics, package compatibility, input-action asset inspection, and active input handler preview/apply.
 - Current validation surface: static package checks plus a metadata audit in the pack-switch helper app.
 - Current telemetry surface: payload stats, bridge request/response rows, compact `tool_result` savings rows, tool snapshot rows, pack transition rows, detail-ref rows, and TSAM stage rows.
@@ -102,6 +104,24 @@ A focused Phase 15 compact-log smoke then covered the log-heavy probe path:
 - Direct `Unity.ReadDetailRef` read back both RunCommand and ReadConsole detail payloads.
 - Expected-failure smoke confirmed stable compilation, execution, and result-serialization failure stages and error kinds.
 
+A focused Phase 16 smoke then moved the active long-running smoke host to
+`D:\TintPaint` and covered batch detail-ref normalization plus editor-stability
+shaping:
+
+- Metadata audit passed with unchanged baselines: `foundation=12`, `foundation+scene=32`, `foundation+ui=22`, `project=21`, and `debug=22`.
+- `Check-UnityDevSession` settled to `ProceedWithLensHelpers` after an initial recoverable play-transition window.
+- Payload size was `60,520` raw bytes -> `48,101` shaped bytes, saving `12,419` bytes (`20.52%`).
+- `Unity.ManageEditor.WaitForStableEditor` saved `2,498` bytes (`62.69%`) with compact inline stability state and detail refs for attempts/full state.
+- `Invoke-UnityMcpBatch` now handles unwrapped `Unity.ReadDetailRef` structured payloads as successful steps and summarizes large detail payloads instead of inlining them.
+
+The first longer TintPaint dogfood session then showed the savings are material
+at real workflow scale:
+
+- Scope contained `1999` rows with `216` payload rows and `1783` coverage rows.
+- Payload size was `3,012,895` raw bytes -> `650,430` shaped bytes, saving `2,362,465` bytes (`78.41%`).
+- `Unity.ManageEditor.WaitForStableEditor` alone saved `727,569` bytes (`96.51%`) across repeated waits.
+- The main workflow gaps were durable uGUI prefab creation, scene prefab instantiation/binding, UI raycast verification, pointer-input smoke verification, and usage-report presentation for large pack-transition lists and TSAM coverage summaries.
+
 ---
 
 ## Near-Term Priorities
@@ -113,6 +133,7 @@ A focused Phase 15 compact-log smoke then covered the log-heavy probe path:
 - Reduce schema churn after the manifest is already known.
 - Treat domain reload transport closure as expected only when the editor state explains it.
 - Keep helper-path degradation distinct from direct bridge health so wrappers stop escalating recoverable play/reload states into false failures.
+- Keep installed helper cache guidance clear so agents use the repo-local helper path when cache copies lag behind the branch.
 
 ### 2. Payload Shaping Correctness
 
@@ -120,7 +141,9 @@ A focused Phase 15 compact-log smoke then covered the log-heavy probe path:
 - Store full wait attempts, editor state, bindings, devices, logs, and measured geometry behind detail refs when inline data is enough for pass/fail decisions.
 - Continue compact shaping for remaining editor-state edge cases.
 - Keep telemetry presentation clear when `tool_execution` rows record already-compacted responses and explicit `tool_result` rows carry the savings proof.
-- Normalize batch-helper handling for `Unity.ReadDetailRef`, whose direct MCP response is healthy but currently unwrapped for the batch result normalizer.
+- Keep batch-helper detail-ref summaries compact so passing smokes do not inline large payloads.
+- Summarize large `packSetTransitions` arrays inline and expose full transition rows behind detail refs.
+- Fix usage-report TSAM coverage presentation when coverage rows exist but `tsamCoverage` is empty.
 
 ### 3. Project/Package Diagnostic Follow-Through
 
@@ -140,10 +163,18 @@ A focused Phase 15 compact-log smoke then covered the log-heavy probe path:
 ### 5. UI Authoring Dogfood And Recovery
 
 - Replace custom editor-C# HUD authoring flows with the new Phase 12 UI and scene binding tools.
+- Turn recurring custom `Unity.RunCommand` UI authoring scripts into TSAM preview/apply tools, starting with durable uGUI prefab creation and scene prefab instantiation/binding.
+- Add read-only UI raycast/layout verification for hit-test stacks, UI blocking, and overlap checks.
 - Keep `ui`-pack preview/apply flows deterministic and compact.
 - Keep helper-driven verification stable for `Unity.UI.VerifyScreenLayout`, including center-based relations for in-card labels and similar HUD layouts.
 
-### 6. Restart And Reload Orchestration
+### 6. Runtime Input Verification
+
+- Add play-mode pointer-input smoke tooling for Input System mouse/touch paths.
+- Report observed input state, UI hit, world hit, and sampled gameplay result in compact verify output.
+- Keep direct gameplay-method calls as a fallback only when synthetic input cannot prove the actual input path.
+
+### 7. Restart And Reload Orchestration
 
 - Add a reliable save/quit/relaunch/reacquire workflow around the helper scripts.
 - Keep any in-editor quit tool explicit about dirty state and expected transport loss.
@@ -153,19 +184,19 @@ A focused Phase 15 compact-log smoke then covered the log-heavy probe path:
 
 ## Mid-Term Priorities
 
-### 7. Prefab And Serialized Reference Authoring
+### 8. Prefab And Serialized Reference Authoring
 
 - Add prefab-aware inspect/preview/apply workflows for durable prefab edits.
 - Add first-class serialized reference inspect/bind/verify tools.
 - Support common authoring workflows such as child rig setup, animation hook validation, and saved reference verification without custom project editor utilities.
 
-### 8. Project Diagnostics Beyond Input
+### 9. Project Diagnostics Beyond Input
 
 - Expand the `project` pack in the same TSAM style for missing scripts, reference validation, and import side effects now that package compatibility and input-action inspection are covered.
 - Keep these diagnostics read-first and compact by default.
 - Avoid growing the default `foundation` surface.
 
-### 9. Scene Tool Dogfooding
+### 10. Scene Tool Dogfooding
 
 - Exercise the split GameObject TSAM tools on real scene work before expanding them further.
 - Keep `Unity.ManageGameObject` as a compatibility fallback until split coverage has been proven on practical authoring tasks.

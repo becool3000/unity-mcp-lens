@@ -23,6 +23,7 @@ try
             Console.WriteLine($"Foundation: {auditReport.FoundationToolCount} tools");
             Console.WriteLine($"Scene:      {auditReport.SceneToolCount} tools");
             Console.WriteLine($"UI:         {auditReport.UiToolCount} tools");
+            Console.WriteLine($"Runtime:    {auditReport.RuntimeToolCount} tools");
             Console.WriteLine($"Project:    {auditReport.ProjectToolCount} tools");
             Console.WriteLine($"Debug:      {auditReport.DebugToolCount} tools");
             Console.WriteLine($"Result:     {(auditReport.Success ? "PASS" : "FAIL")}");
@@ -168,8 +169,9 @@ sealed class BenchmarkOptions
 sealed class MetadataAudit(BenchmarkOptions options)
 {
     const int ExpectedFoundationToolCount = 12;
-    const int ExpectedSceneToolCount = 32;
-    const int ExpectedUiToolCount = 22;
+    const int ExpectedSceneToolCount = 34;
+    const int ExpectedUiToolCount = 25;
+    const int ExpectedRuntimeToolCount = 14;
     const int ExpectedProjectToolCount = 21;
 
     static readonly string[] k_RequiredFoundationTools =
@@ -206,6 +208,8 @@ sealed class MetadataAudit(BenchmarkOptions options)
         "Unity_Scene_SetSerializedProperties",
         "Unity_Scene_PreviewBindSerializedReferences",
         "Unity_Scene_ApplyBindSerializedReferences",
+        "Unity_Scene_PreviewInstantiatePrefabAndBind",
+        "Unity_Scene_ApplyInstantiatePrefabAndBind",
         "Unity_Scene_CaptureView",
         "Unity_Tilemap_Setup",
         "Unity_Tilemap_Paint",
@@ -219,6 +223,9 @@ sealed class MetadataAudit(BenchmarkOptions options)
         "Unity_UI_PreviewLayoutProperties",
         "Unity_UI_ApplyLayoutProperties",
         "Unity_UI_VerifyScreenLayout",
+        "Unity_UI_PreviewCreateCanvasPrefab",
+        "Unity_UI_ApplyCreateCanvasPrefab",
+        "Unity_UI_VerifyRaycastAndLayout",
         "Unity_UI_GetLayoutSnapshot",
         "Unity_UI_Raycast",
         "Unity_UI_GetInteractiveRegions",
@@ -229,6 +236,12 @@ sealed class MetadataAudit(BenchmarkOptions options)
     static readonly string[] k_RequiredDebugTools =
     [
         "Unity_GetLensUsageReport"
+    ];
+
+    static readonly string[] k_RequiredRuntimeTools =
+    [
+        "Unity_Runtime_GetVisualBoundsSnapshot",
+        "Unity_PlayMode_PointerInputSmoke"
     ];
 
     static readonly string[] k_RequiredProjectTools =
@@ -273,6 +286,8 @@ sealed class MetadataAudit(BenchmarkOptions options)
             0,
             0,
             0,
+            0,
+            [],
             [],
             [],
             [],
@@ -291,6 +306,8 @@ sealed class MetadataAudit(BenchmarkOptions options)
         var sceneTools = await session.GetToolsAsync();
         _ = await session.SetToolPacksAsync(["ui"]);
         var uiTools = await session.GetToolsAsync();
+        _ = await session.SetToolPacksAsync(["runtime"]);
+        var runtimeTools = await session.GetToolsAsync();
         _ = await session.SetToolPacksAsync(["project"]);
         var projectTools = await session.GetToolsAsync();
         _ = await session.SetToolPacksAsync(["debug"]);
@@ -300,6 +317,7 @@ sealed class MetadataAudit(BenchmarkOptions options)
         ValidateToolSet("foundation", foundationTools, ExpectedFoundationToolCount, k_RequiredFoundationTools, failures);
         ValidateToolSet("foundation+scene", sceneTools, ExpectedSceneToolCount, k_RequiredSceneTools, failures);
         ValidateToolSet("foundation+ui", uiTools, ExpectedUiToolCount, k_RequiredUiTools, failures);
+        ValidateToolSet("foundation+runtime", runtimeTools, ExpectedRuntimeToolCount, k_RequiredRuntimeTools, failures);
         ValidateToolSet("foundation+project", projectTools, ExpectedProjectToolCount, k_RequiredProjectTools, failures);
         ValidateToolSet("foundation+debug", debugTools, null, k_RequiredDebugTools, failures);
         ValidateReadOnlyHint(sceneTools, "Unity_GameObject_Inspect", expected: true, failures);
@@ -321,6 +339,12 @@ sealed class MetadataAudit(BenchmarkOptions options)
         ValidateReadOnlyHint(uiTools, "Unity_UI_PreviewLayoutProperties", expected: true, failures);
         ValidateReadOnlyHint(uiTools, "Unity_UI_ApplyLayoutProperties", expected: false, failures);
         ValidateReadOnlyHint(uiTools, "Unity_UI_VerifyScreenLayout", expected: true, failures);
+        ValidateReadOnlyHint(uiTools, "Unity_UI_PreviewCreateCanvasPrefab", expected: true, failures);
+        ValidateReadOnlyHint(uiTools, "Unity_UI_ApplyCreateCanvasPrefab", expected: false, failures);
+        ValidateReadOnlyHint(uiTools, "Unity_UI_VerifyRaycastAndLayout", expected: true, failures);
+        ValidateReadOnlyHint(sceneTools, "Unity_Scene_PreviewInstantiatePrefabAndBind", expected: true, failures);
+        ValidateReadOnlyHint(sceneTools, "Unity_Scene_ApplyInstantiatePrefabAndBind", expected: false, failures);
+        ValidateReadOnlyHint(runtimeTools, "Unity_PlayMode_PointerInputSmoke", expected: false, failures);
         ValidateReadOnlyHint(projectTools, "Unity_InputSystem_Diagnostics", expected: true, failures);
         ValidateReadOnlyHint(projectTools, "Unity_Project_PackageCompatibility", expected: true, failures);
         ValidateReadOnlyHint(projectTools, "Unity_InputActions_InspectAsset", expected: true, failures);
@@ -330,6 +354,7 @@ sealed class MetadataAudit(BenchmarkOptions options)
         ValidateGameObjectSchemas(sceneTools, failures);
         ValidateUiToolSchemas(uiTools, failures);
         ValidateSceneBindingSchemas(sceneTools, failures);
+        ValidateRuntimeToolSchemas(runtimeTools, failures);
         ValidateProjectToolSchemas(projectTools, failures);
         ValidateLensUsageSchema(debugTools, failures);
 
@@ -341,11 +366,13 @@ sealed class MetadataAudit(BenchmarkOptions options)
             foundationTools.Count,
             sceneTools.Count,
             uiTools.Count,
+            runtimeTools.Count,
             projectTools.Count,
             debugTools.Count,
             foundationTools.Select(tool => tool.Name).OrderBy(name => name, StringComparer.Ordinal).ToArray(),
             sceneTools.Select(tool => tool.Name).OrderBy(name => name, StringComparer.Ordinal).ToArray(),
             uiTools.Select(tool => tool.Name).OrderBy(name => name, StringComparer.Ordinal).ToArray(),
+            runtimeTools.Select(tool => tool.Name).OrderBy(name => name, StringComparer.Ordinal).ToArray(),
             projectTools.Select(tool => tool.Name).OrderBy(name => name, StringComparer.Ordinal).ToArray(),
             debugTools.Select(tool => tool.Name).OrderBy(name => name, StringComparer.Ordinal).ToArray(),
             failures);
@@ -570,6 +597,24 @@ sealed class MetadataAudit(BenchmarkOptions options)
             ["targets", "assertions"],
             ["targets", "assertions"],
             failures);
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_UI_PreviewCreateCanvasPrefab",
+            ["prefabPath", "rootName", "renderMode", "sortingOrder", "pixelPerfect", "referenceResolution", "scaleMode", "nodes"],
+            ["prefabPath"],
+            failures);
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_UI_ApplyCreateCanvasPrefab",
+            ["prefabPath", "rootName", "renderMode", "sortingOrder", "pixelPerfect", "referenceResolution", "scaleMode", "nodes"],
+            ["prefabPath"],
+            failures);
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_UI_VerifyRaycastAndLayout",
+            ["points", "targets", "assertions"],
+            ["points"],
+            failures);
 
         if (FindTool(tools, "Unity_UI_EnsureNamedHierarchy") != null)
             failures.Add("foundation+ui should not expose legacy tool 'Unity_UI_EnsureNamedHierarchy'.");
@@ -590,6 +635,28 @@ sealed class MetadataAudit(BenchmarkOptions options)
             "Unity_Scene_ApplyBindSerializedReferences",
             ["target", "searchMethod", "includeInactive", "bindings"],
             ["target", "bindings"],
+            failures);
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_Scene_PreviewInstantiatePrefabAndBind",
+            ["prefabPath", "instanceName", "parent", "parentSearchMethod", "includeInactive", "position", "rotation", "scale", "bindings"],
+            ["prefabPath"],
+            failures);
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_Scene_ApplyInstantiatePrefabAndBind",
+            ["prefabPath", "instanceName", "parent", "parentSearchMethod", "includeInactive", "position", "rotation", "scale", "bindings"],
+            ["prefabPath"],
+            failures);
+    }
+
+    static void ValidateRuntimeToolSchemas(IReadOnlyList<ToolDescriptor> tools, List<string> failures)
+    {
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_PlayMode_PointerInputSmoke",
+            ["screenX", "screenY", "button", "queueInput", "stepFrames", "settleMs", "uiTarget", "uiSearchMethod", "includeInactive", "cameraTarget", "cameraSearchMethod", "layerMask"],
+            [],
             failures);
     }
 
@@ -844,11 +911,13 @@ sealed record MetadataAuditReport(
     int FoundationToolCount,
     int SceneToolCount,
     int UiToolCount,
+    int RuntimeToolCount,
     int ProjectToolCount,
     int DebugToolCount,
     IReadOnlyList<string> FoundationTools,
     IReadOnlyList<string> SceneTools,
     IReadOnlyList<string> UiTools,
+    IReadOnlyList<string> RuntimeTools,
     IReadOnlyList<string> ProjectTools,
     IReadOnlyList<string> DebugTools,
     IReadOnlyList<string> Failures);

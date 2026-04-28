@@ -296,7 +296,8 @@ const exactPackMap = new Map(
     Unity_ProjectSettings_SetActiveInputHandler: ["project"],
     Unity_Object_ValidateReferences: ["project"],
     Unity_Project_ScanMissingScripts: ["project"],
-    Unity_Runtime_GetVisualBoundsSnapshot: ["scene"],
+    Unity_Runtime_GetVisualBoundsSnapshot: ["runtime"],
+    Unity_PlayMode_PointerInputSmoke: ["runtime"],
     Unity_GetLensUsageReport: ["debug"],
   })
 );
@@ -304,6 +305,8 @@ const exactPackMap = new Map(
 const prefixPackMap = [
   { prefix: "Unity_UI_", packs: ["ui"] },
   { prefix: "Unity_Scene_", packs: ["scene"] },
+  { prefix: "Unity_Runtime_", packs: ["runtime"] },
+  { prefix: "Unity_PlayMode_", packs: ["runtime"] },
   { prefix: "Unity_ManageGameObject", packs: ["scene"] },
   { prefix: "Unity_ManageScene", packs: ["scene"] },
   { prefix: "Unity_Tilemap_", packs: ["scene"] },

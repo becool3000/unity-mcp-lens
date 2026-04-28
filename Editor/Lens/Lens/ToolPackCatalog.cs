@@ -59,6 +59,7 @@ namespace Becool.UnityMcpLens.Editor.Lens
         public const string ProjectPackId = "project";
         public const string ScenePackId = "scene";
         public const string UiPackId = "ui";
+        public const string RuntimePackId = "runtime";
         public const string ScriptingPackId = "scripting";
         public const string AssetsPackId = "assets";
         public const string DebugPackId = "debug";
@@ -114,14 +115,21 @@ namespace Becool.UnityMcpLens.Editor.Lens
                 ScenePackId,
                 "Scene Editing",
                 "Scene hierarchy, runtime snapshots, and GameObject operations.",
-                includeGroups: new[] { "scene", "runtime" },
-                recommendedNextPacks: new[] { UiPackId, DebugPackId }),
+                includeGroups: new[] { "scene" },
+                includeTools: new[] { NormalizeToolName("Unity.Runtime.GetVisualBoundsSnapshot") },
+                recommendedNextPacks: new[] { UiPackId, RuntimePackId, DebugPackId }),
             [UiPackId] = new(
                 UiPackId,
                 "UI Authoring",
                 "UI hierarchy authoring, layout verification, raycasts, regions, and capture tools.",
                 includeGroups: new[] { "ui" },
-                recommendedNextPacks: new[] { ScenePackId, DebugPackId }),
+                recommendedNextPacks: new[] { ScenePackId, RuntimePackId, DebugPackId }),
+            [RuntimePackId] = new(
+                RuntimePackId,
+                "Runtime Verification",
+                "Play-mode runtime probes, visual bounds snapshots, and input smoke checks.",
+                includeGroups: new[] { "runtime" },
+                recommendedNextPacks: new[] { ScenePackId, UiPackId, DebugPackId }),
             [ScriptingPackId] = new(
                 ScriptingPackId,
                 "Scripting",
