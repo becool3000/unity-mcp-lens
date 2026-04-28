@@ -22,6 +22,9 @@ namespace Becool.UnityMcpLens.Editor.Tools
         const string PreviewLayoutPropertiesToolName = "Unity.UI.PreviewLayoutProperties";
         const string ApplyLayoutPropertiesToolName = "Unity.UI.ApplyLayoutProperties";
         const string VerifyScreenLayoutToolName = "Unity.UI.VerifyScreenLayout";
+        const string PreviewCreateCanvasPrefabToolName = "Unity.UI.PreviewCreateCanvasPrefab";
+        const string ApplyCreateCanvasPrefabToolName = "Unity.UI.ApplyCreateCanvasPrefab";
+        const string VerifyRaycastAndLayoutToolName = "Unity.UI.VerifyRaycastAndLayout";
 
         const string PreviewEnsureHierarchyDescription = @"Previews persistent UI hierarchy authoring without mutating or saving scenes.
 
@@ -38,6 +41,18 @@ Uses the same target/search semantics as the earlier ensure hierarchy tool, with
         const string VerifyScreenLayoutDescription = @"Verifies measured screen-space UI layout assertions without mutation.
 
 Supports inside-screen, relative-position, axis-alignment, and ordered-stack assertions over keyed UI targets. Relative-position keeps strict rect relations (`right_of`, `left_of`, `above`, `below`) and also supports center-based comparisons (`right_of_center`, `left_of_center`, `above_center`, `below_center`).";
+
+        const string PreviewCreateCanvasPrefabDescription = @"Previews durable uGUI Canvas prefab authoring without saving assets.
+
+Creates or updates a root Canvas prefab with common uGUI components and an authored hierarchy spec.";
+
+        const string ApplyCreateCanvasPrefabDescription = @"Applies durable uGUI Canvas prefab authoring and saves the prefab asset when changes are required.
+
+Creates or updates a root Canvas prefab with common uGUI components and an authored hierarchy spec.";
+
+        const string VerifyRaycastAndLayoutDescription = @"Verifies UI raycast stacks and optional layout assertions without mutation.
+
+Use this to prove UI points are blocked by the expected element and to combine hit-test evidence with measured screen-layout assertions.";
 
         static readonly UnityUiAuthoringAdapter Adapter = new UnityUiAuthoringAdapter();
         static readonly UiAuthoringService Service = new UiAuthoringService(Adapter);
@@ -120,6 +135,24 @@ Supports inside-screen, relative-position, axis-alignment, and ordered-stack ass
             };
         }
 
+        [McpSchema(PreviewCreateCanvasPrefabToolName)]
+        public static object GetPreviewCreateCanvasPrefabSchema()
+        {
+            return BuildCreateCanvasPrefabSchema();
+        }
+
+        [McpSchema(ApplyCreateCanvasPrefabToolName)]
+        public static object GetApplyCreateCanvasPrefabSchema()
+        {
+            return BuildCreateCanvasPrefabSchema();
+        }
+
+        [McpSchema(VerifyRaycastAndLayoutToolName)]
+        public static object GetVerifyRaycastAndLayoutSchema()
+        {
+            return BuildVerifyRaycastAndLayoutSchema();
+        }
+
         [McpTool(PreviewEnsureHierarchyToolName, PreviewEnsureHierarchyDescription, "Preview Ensure UI Hierarchy", Groups = new[] { "ui" }, EnabledByDefault = true)]
         public static object PreviewEnsureHierarchy(JObject @params)
         {
@@ -172,6 +205,48 @@ Supports inside-screen, relative-position, axis-alignment, and ordered-stack ass
             }
 
             return ShapeResponse(VerifyScreenLayoutToolName, result, timing, errorKind);
+        }
+
+        [McpTool(PreviewCreateCanvasPrefabToolName, PreviewCreateCanvasPrefabDescription, "Preview Create Canvas Prefab", Groups = new[] { "ui" }, EnabledByDefault = true)]
+        public static object PreviewCreateCanvasPrefab(JObject @params)
+        {
+            return HandleCreateCanvasPrefabTool(PreviewCreateCanvasPrefabToolName, "preview_create_canvas_prefab", @params, apply: false);
+        }
+
+        [McpTool(ApplyCreateCanvasPrefabToolName, ApplyCreateCanvasPrefabDescription, "Apply Create Canvas Prefab", Groups = new[] { "ui" }, EnabledByDefault = true)]
+        public static object ApplyCreateCanvasPrefab(JObject @params)
+        {
+            return HandleCreateCanvasPrefabTool(ApplyCreateCanvasPrefabToolName, "apply_create_canvas_prefab", @params, apply: true);
+        }
+
+        [McpTool(VerifyRaycastAndLayoutToolName, VerifyRaycastAndLayoutDescription, "Verify UI Raycast And Layout", Groups = new[] { "ui" }, EnabledByDefault = true)]
+        public static object VerifyRaycastAndLayout(JObject @params)
+        {
+            @params ??= new JObject();
+            var timing = new ToolOperationTiming(VerifyRaycastAndLayoutToolName, "verify_raycast_and_layout", GetUtf8ByteCount(@params.ToString(Formatting.None)));
+            UiOperationResult result;
+            string errorKind = null;
+
+            try
+            {
+                UiVerifyRaycastAndLayoutRequest request;
+                using (timing.Measure("normalization"))
+                {
+                    request = NormalizeVerifyRaycastAndLayoutRequest(@params);
+                }
+
+                using (timing.Measure("service"))
+                {
+                    result = Service.VerifyRaycastAndLayout(request, timing);
+                }
+            }
+            catch (Exception ex)
+            {
+                errorKind = ex.GetType().Name;
+                result = UiOperationResult.Error($"Internal error verifying UI raycast/layout: {ex.Message}", errorKind);
+            }
+
+            return ShapeResponse(VerifyRaycastAndLayoutToolName, result, timing, errorKind);
         }
 
         static object HandleEnsureHierarchyTool(string toolName, string action, JObject @params, bool apply)
@@ -236,6 +311,37 @@ Supports inside-screen, relative-position, axis-alignment, and ordered-stack ass
             return ShapeResponse(toolName, result, timing, errorKind);
         }
 
+        static object HandleCreateCanvasPrefabTool(string toolName, string action, JObject @params, bool apply)
+        {
+            @params ??= new JObject();
+            var timing = new ToolOperationTiming(toolName, action, GetUtf8ByteCount(@params.ToString(Formatting.None)));
+            UiOperationResult result;
+            string errorKind = null;
+
+            try
+            {
+                UiCanvasPrefabRequest request;
+                using (timing.Measure("normalization"))
+                {
+                    request = NormalizeCreateCanvasPrefabRequest(@params);
+                }
+
+                using (timing.Measure("service"))
+                {
+                    result = apply
+                        ? Service.ApplyCreateCanvasPrefab(request, timing)
+                        : Service.PreviewCreateCanvasPrefab(request, timing);
+                }
+            }
+            catch (Exception ex)
+            {
+                errorKind = ex.GetType().Name;
+                result = UiOperationResult.Error($"Internal error processing canvas prefab request: {ex.Message}", errorKind);
+            }
+
+            return ShapeResponse(toolName, result, timing, errorKind);
+        }
+
         static object BuildEnsureHierarchySchema()
         {
             return new
@@ -280,6 +386,62 @@ Supports inside-screen, relative-position, axis-alignment, and ordered-stack ass
                     buttonInteractable = new { type = "boolean", description = "Button interactable flag." }
                 },
                 required = new[] { "target" }
+            };
+        }
+
+        static object BuildCreateCanvasPrefabSchema()
+        {
+            return new
+            {
+                type = "object",
+                properties = new
+                {
+                    prefabPath = new { type = "string", description = "Prefab asset path under Assets, ending in .prefab." },
+                    rootName = new { type = "string", description = "Optional root GameObject name. Defaults to prefab file name." },
+                    renderMode = new { type = "string", description = "Canvas render mode: screen_space_overlay, screen_space_camera, or world_space." },
+                    sortingOrder = new { type = "integer", description = "Optional Canvas sortingOrder." },
+                    pixelPerfect = new { type = "boolean", description = "Optional Canvas pixelPerfect value." },
+                    referenceResolution = new { description = "Optional CanvasScaler referenceResolution as {x,y} or [x,y]." },
+                    scaleMode = new { type = "string", description = "CanvasScaler scale mode: scale_with_screen_size, constant_pixel_size, or constant_physical_size." },
+                    nodes = new { type = "array", description = "Named UI node specs to create/update under the prefab root." }
+                },
+                required = new[] { "prefabPath" }
+            };
+        }
+
+        static object BuildVerifyRaycastAndLayoutSchema()
+        {
+            return new
+            {
+                type = "object",
+                properties = new
+                {
+                    points = new
+                    {
+                        type = "array",
+                        description = "Screen-space points to raycast and verify.",
+                        items = new
+                        {
+                            type = "object",
+                            properties = new
+                            {
+                                key = new { type = "string", description = "Stable point key." },
+                                screenX = new { type = "number", description = "Screen-space X coordinate." },
+                                screenY = new { type = "number", description = "Screen-space Y coordinate." },
+                                target = new { type = "string", description = "Optional UI root scope." },
+                                searchMethod = new { type = "string", description = "How to resolve the optional UI root." },
+                                includeInactive = new { type = "boolean", description = "Include inactive UI elements." },
+                                maxResults = new { type = "integer", description = "Maximum hits to return for this point." },
+                                expectTopPathContains = new { type = "string", description = "Pass only when the top blocking hit path contains this text." },
+                                expectBlocked = new { type = "boolean", description = "Pass only when the point has or does not have a blocking UI hit." }
+                            },
+                            required = new[] { "key", "screenX", "screenY" }
+                        }
+                    },
+                    targets = new { type = "array", description = "Optional keyed UI layout targets, same shape as Unity.UI.VerifyScreenLayout." },
+                    assertions = new { type = "array", description = "Optional layout assertions, same shape as Unity.UI.VerifyScreenLayout." }
+                },
+                required = new[] { "points" }
             };
         }
 
@@ -332,6 +494,31 @@ Supports inside-screen, relative-position, axis-alignment, and ordered-stack ass
             };
         }
 
+        static UiCanvasPrefabRequest NormalizeCreateCanvasPrefabRequest(JObject parameters)
+        {
+            return new UiCanvasPrefabRequest
+            {
+                PrefabPath = GetString(parameters, "prefabPath", "PrefabPath"),
+                RootName = GetString(parameters, "rootName", "RootName"),
+                RenderMode = GetString(parameters, "renderMode", "RenderMode") ?? "screen_space_overlay",
+                SortingOrder = GetNullableInt(parameters, "sortingOrder", "SortingOrder"),
+                PixelPerfect = GetNullableBool(parameters, "pixelPerfect", "PixelPerfect"),
+                ReferenceResolution = GetToken(parameters, "referenceResolution", "ReferenceResolution"),
+                ScaleMode = GetString(parameters, "scaleMode", "ScaleMode") ?? "scale_with_screen_size",
+                Nodes = UiAuthoringTools.ParseRootNodeSpecs(GetToken(parameters, "nodes", "Nodes")).ToArray()
+            };
+        }
+
+        static UiVerifyRaycastAndLayoutRequest NormalizeVerifyRaycastAndLayoutRequest(JObject parameters)
+        {
+            return new UiVerifyRaycastAndLayoutRequest
+            {
+                Points = GetToken(parameters, "points", "Points")?.ToObject<UiRaycastPointRequest[]>() ?? Array.Empty<UiRaycastPointRequest>(),
+                Targets = GetToken(parameters, "targets", "Targets")?.ToObject<UiVerifyTargetRequest[]>() ?? Array.Empty<UiVerifyTargetRequest>(),
+                Assertions = GetToken(parameters, "assertions", "Assertions")?.ToObject<UiVerifyAssertionRequest[]>() ?? Array.Empty<UiVerifyAssertionRequest>()
+            };
+        }
+
         static object ShapeResponse(string toolName, UiOperationResult result, ToolOperationTiming timing, string fallbackErrorKind)
         {
             object response;
@@ -361,6 +548,17 @@ Supports inside-screen, relative-position, axis-alignment, and ordered-stack ass
                     payloadClass: "ui_ensure_hierarchy");
             }
 
+            if (string.Equals(toolName, PreviewCreateCanvasPrefabToolName, StringComparison.Ordinal) ||
+                string.Equals(toolName, ApplyCreateCanvasPrefabToolName, StringComparison.Ordinal))
+            {
+                return ToolResultCompactor.ShapeStructuredPayload(
+                    toolName,
+                    data,
+                    BuildCanvasPrefabCompactData(data),
+                    detailRefMeta: new { kind = "ui_canvas_prefab_full_result" },
+                    payloadClass: "ui_canvas_prefab");
+            }
+
             if (string.Equals(toolName, VerifyScreenLayoutToolName, StringComparison.Ordinal))
             {
                 return ToolResultCompactor.ShapeStructuredPayload(
@@ -369,6 +567,16 @@ Supports inside-screen, relative-position, axis-alignment, and ordered-stack ass
                     BuildVerifyScreenLayoutCompactData(data),
                     detailRefMeta: new { kind = "ui_verify_screen_layout_full_result" },
                     payloadClass: "ui_verify_screen_layout");
+            }
+
+            if (string.Equals(toolName, VerifyRaycastAndLayoutToolName, StringComparison.Ordinal))
+            {
+                return ToolResultCompactor.ShapeStructuredPayload(
+                    toolName,
+                    data,
+                    BuildVerifyRaycastAndLayoutCompactData(data),
+                    detailRefMeta: new { kind = "ui_verify_raycast_layout_full_result" },
+                    payloadClass: "ui_verify_raycast_layout");
             }
 
             return ToolResultCompactor.ShapeJsonPayload(toolName, "UI operation completed.", data);
@@ -411,6 +619,47 @@ Supports inside-screen, relative-position, axis-alignment, and ordered-stack ass
                 willModify = root["willModify"],
                 nodeCount = nodes.Count,
                 actionCounts,
+                changedNodeCount = changedNodes.Count,
+                omittedPreservedNodeCount = preservedCount,
+                changedNodes
+            };
+        }
+
+        static object BuildCanvasPrefabCompactData(object data)
+        {
+            JObject root = JObject.FromObject(data ?? new { });
+            JArray nodes = root["nodes"] as JArray ?? new JArray();
+            JArray changedNodes = new JArray();
+            int preservedCount = 0;
+            foreach (JObject node in nodes.OfType<JObject>())
+            {
+                string action = (string)node["action"] ?? "unknown";
+                bool hasChanges = node["changes"] is JArray changes && changes.Count > 0;
+                if (string.Equals(action, "preserve", StringComparison.OrdinalIgnoreCase) && !hasChanges)
+                {
+                    preservedCount++;
+                    continue;
+                }
+
+                changedNodes.Add(new JObject
+                {
+                    ["path"] = node["path"]?.DeepClone(),
+                    ["action"] = action,
+                    ["existed"] = node["existed"]?.DeepClone(),
+                    ["changes"] = node["changes"]?.DeepClone() ?? new JArray()
+                });
+            }
+
+            return new
+            {
+                prefabPath = root["prefabPath"],
+                exists = root["exists"],
+                rootName = root["rootName"],
+                applied = root["applied"],
+                willModify = root["willModify"],
+                rootChangeCount = (root["rootChanges"] as JArray)?.Count ?? 0,
+                rootChanges = root["rootChanges"],
+                nodeCount = nodes.Count,
                 changedNodeCount = changedNodes.Count,
                 omittedPreservedNodeCount = preservedCount,
                 changedNodes
@@ -471,6 +720,43 @@ Supports inside-screen, relative-position, axis-alignment, and ordered-stack ass
                 targets = compactTargets,
                 assertions = compactAssertions,
                 failedAssertions
+            };
+        }
+
+        static object BuildVerifyRaycastAndLayoutCompactData(object data)
+        {
+            JObject root = JObject.FromObject(data ?? new { });
+            JArray points = root["points"] as JArray ?? new JArray();
+            var compactPoints = new JArray();
+            var failedPoints = new JArray();
+            foreach (JObject point in points.OfType<JObject>())
+            {
+                var compactPoint = new JObject
+                {
+                    ["key"] = point["key"]?.DeepClone(),
+                    ["point"] = point["point"]?.DeepClone(),
+                    ["passed"] = point["passed"]?.DeepClone(),
+                    ["hitCount"] = point["hitCount"]?.DeepClone(),
+                    ["blocked"] = point["blocked"]?.DeepClone(),
+                    ["topHit"] = point["topHit"]?.DeepClone(),
+                    ["assertions"] = point["assertions"]?.DeepClone() ?? new JArray()
+                };
+                compactPoints.Add(compactPoint);
+                if (point["passed"]?.Value<bool>() == false)
+                    failedPoints.Add(compactPoint.DeepClone());
+            }
+
+            JObject layout = root["layout"] as JObject;
+            return new
+            {
+                passed = root["passed"],
+                screen = root["screen"],
+                pointCount = root["pointCount"],
+                failedPointCount = failedPoints.Count,
+                points = compactPoints,
+                failedPoints,
+                layoutPassed = layout?["passed"],
+                layoutAssertionCount = (layout?["assertions"] as JArray)?.Count ?? 0
             };
         }
 

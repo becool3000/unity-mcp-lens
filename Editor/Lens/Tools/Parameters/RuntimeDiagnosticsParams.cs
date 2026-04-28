@@ -37,4 +37,43 @@ namespace Becool.UnityMcpLens.Editor.Tools.Parameters
         [McpDescription("Delay between time-sample captures in milliseconds when SampleOverTime is true.", Required = false)]
         public int SampleIntervalMs { get; set; } = 50;
     }
+
+    public record PointerInputSmokeParams
+    {
+        [McpDescription("Screen-space X coordinate in pixels.", Required = true)]
+        public float ScreenX { get; set; }
+
+        [McpDescription("Screen-space Y coordinate in pixels.", Required = true)]
+        public float ScreenY { get; set; }
+
+        [McpDescription("Mouse button name to press while queueing input: left, right, middle, or none.", Required = false)]
+        public string Button { get; set; } = "left";
+
+        [McpDescription("Queue a synthetic Input System mouse state before sampling. Uses reflection and reports unsupported state when Input System APIs are unavailable.", Required = false)]
+        public bool QueueInput { get; set; } = true;
+
+        [McpDescription("Advance this many editor frames after queueing input when play mode is paused.", Required = false)]
+        public int StepFrames { get; set; } = 1;
+
+        [McpDescription("Delay after queueing input before reading observed state.", Required = false)]
+        public int SettleMs { get; set; } = 100;
+
+        [McpDescription("Optional UI root scope for raycast evidence.", Required = false)]
+        public string UiTarget { get; set; }
+
+        [McpDescription("How to find the optional UI root ('by_name', 'by_id', 'by_path').", Required = false)]
+        public string UiSearchMethod { get; set; } = "by_name";
+
+        [McpDescription("Include inactive UI elements while evaluating raycast evidence.", Required = false)]
+        public bool IncludeInactive { get; set; } = false;
+
+        [McpDescription("Optional camera target used for world raycast evidence. Defaults to Camera.main or first enabled camera.", Required = false)]
+        public string CameraTarget { get; set; }
+
+        [McpDescription("How to find the optional camera target ('by_name', 'by_id', 'by_path').", Required = false)]
+        public string CameraSearchMethod { get; set; } = "by_name";
+
+        [McpDescription("Layer mask for optional physics raycast evidence. Defaults to all layers.", Required = false)]
+        public int LayerMask { get; set; } = -1;
+    }
 }

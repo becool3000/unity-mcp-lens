@@ -1,12 +1,16 @@
 #nullable disable
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using Becool.UnityMcpLens.Editor.Helpers;
 using Becool.UnityMcpLens.Editor.Models.UI;
 using Becool.UnityMcpLens.Editor.Tools;
 using Becool.UnityMcpLens.Editor.Tools.Parameters;
+using Newtonsoft.Json.Linq;
+using UnityEditor;
 using UnityEngine;
+using UnityEngine.UI;
 
 namespace Becool.UnityMcpLens.Editor.Adapters.Unity.UI
 {
@@ -163,6 +167,255 @@ namespace Becool.UnityMcpLens.Editor.Adapters.Unity.UI
                     worldCorners = target.WorldCorners.Select(ToVector3Object).ToArray()
                 }).ToArray(),
                 assertions = assertionRows.ToArray()
+            };
+            return true;
+        }
+
+        public bool TryCreateCanvasPrefab(UiCanvasPrefabRequest request, bool previewOnly, out object data, out bool applied, out string error)
+        {
+            data = null;
+            applied = false;
+            error = null;
+
+            string prefabPath = NormalizeAssetPath(request?.PrefabPath);
+            if (string.IsNullOrWhiteSpace(prefabPath) || !prefabPath.StartsWith("Assets/", StringComparison.OrdinalIgnoreCase) || !prefabPath.EndsWith(".prefab", StringComparison.OrdinalIgnoreCase))
+            {
+                error = "prefabPath must be a .prefab path under Assets.";
+                return false;
+            }
+
+            string rootName = string.IsNullOrWhiteSpace(request.RootName)
+                ? Path.GetFileNameWithoutExtension(prefabPath)
+                : request.RootName.Trim();
+            GameObject existingAsset = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
+            bool exists = existingAsset != null;
+            var rootChanges = new List<object>();
+            var nodeRows = new List<object>();
+
+            if (previewOnly)
+            {
+                bool rootWouldModify = !exists;
+                if (exists)
+                {
+                    GameObject contents = null;
+                    try
+                    {
+                        contents = PrefabUtility.LoadPrefabContents(prefabPath);
+                        if (contents == null)
+                        {
+                            error = $"Prefab '{prefabPath}' could not be loaded.";
+                            return false;
+                        }
+
+                        if (!TryConfigureCanvasRoot(contents, request, previewOnly: true, rootName, out rootChanges, out rootWouldModify, out error))
+                            return false;
+
+                        if (!UiAuthoringTools.TryEnsureNamedHierarchy(contents, request.Nodes ?? Array.Empty<UiNamedHierarchyNodeSpec>(), previewOnly: true, out nodeRows, out bool nodesWouldModify, out error))
+                            return false;
+
+                        rootWouldModify |= nodesWouldModify;
+                    }
+                    finally
+                    {
+                        if (contents != null)
+                            PrefabUtility.UnloadPrefabContents(contents);
+                    }
+                }
+                else
+                {
+                    rootChanges.Add(new { property = "prefab", previousValue = (string)null, newValue = prefabPath });
+                    rootChanges.Add(new { property = "root.name", previousValue = (string)null, newValue = rootName });
+                    AppendCreateRows(rootName, request.Nodes ?? Array.Empty<UiNamedHierarchyNodeSpec>(), nodeRows);
+                }
+
+                data = new
+                {
+                    prefabPath,
+                    exists,
+                    rootName,
+                    applied = false,
+                    willModify = rootWouldModify,
+                    rootChanges = rootChanges.ToArray(),
+                    nodes = nodeRows.ToArray()
+                };
+                return true;
+            }
+
+            GameObject root = null;
+            bool loadedPrefabContents = false;
+            try
+            {
+                if (exists)
+                {
+                    root = PrefabUtility.LoadPrefabContents(prefabPath);
+                    loadedPrefabContents = true;
+                    if (root == null)
+                    {
+                        error = $"Prefab '{prefabPath}' could not be loaded.";
+                        return false;
+                    }
+                }
+                else
+                {
+                    string directory = Path.GetDirectoryName(prefabPath)?.Replace('\\', '/');
+                    if (!string.IsNullOrWhiteSpace(directory))
+                        Directory.CreateDirectory(directory);
+                    root = new GameObject(rootName, typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
+                }
+
+                if (!TryConfigureCanvasRoot(root, request, previewOnly: false, rootName, out rootChanges, out bool rootChanged, out error))
+                    return false;
+
+                if (!UiAuthoringTools.TryEnsureNamedHierarchy(root, request.Nodes ?? Array.Empty<UiNamedHierarchyNodeSpec>(), previewOnly: false, out nodeRows, out bool nodesChanged, out error))
+                    return false;
+
+                applied = !exists || rootChanged || nodesChanged;
+                if (applied)
+                {
+                    PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
+                    AssetDatabase.SaveAssets();
+                    AssetDatabase.Refresh();
+                }
+
+                data = new
+                {
+                    prefabPath,
+                    exists,
+                    rootName = root.name,
+                    applied,
+                    willModify = applied,
+                    rootChanges = rootChanges.ToArray(),
+                    nodes = nodeRows.ToArray()
+                };
+                return true;
+            }
+            finally
+            {
+                if (root != null)
+                {
+                    if (loadedPrefabContents)
+                        PrefabUtility.UnloadPrefabContents(root);
+                    else
+                        UnityEngine.Object.DestroyImmediate(root);
+                }
+            }
+        }
+
+        public bool TryVerifyRaycastAndLayout(UiVerifyRaycastAndLayoutRequest request, out object data, out string error)
+        {
+            error = null;
+            data = null;
+            var pointRows = new List<object>();
+            bool passed = true;
+
+            foreach (UiRaycastPointRequest point in request?.Points ?? Array.Empty<UiRaycastPointRequest>())
+            {
+                if (point == null || string.IsNullOrWhiteSpace(point.key))
+                {
+                    error = "Each raycast point requires a key.";
+                    return false;
+                }
+
+                var roots = UiDiagnosticsHelper.ResolveUiRoots(point.target, point.searchMethod, point.includeInactive).ToList();
+                if (roots.Count == 0)
+                {
+                    error = $"No UI roots resolved for point '{point.key}'.";
+                    return false;
+                }
+
+                Vector2 screenPoint = new(point.screenX, point.screenY);
+                var hits = new List<UiDiagnosticsHelper.UiElementHitInfo>();
+                foreach (GameObject root in roots)
+                {
+                    hits.AddRange(UiDiagnosticsHelper.EnumerateGraphics(root, true, point.includeInactive)
+                        .Where(info => info.ScreenRect.Contains(screenPoint)));
+                }
+
+                var ordered = hits
+                    .OrderByDescending(info => info.Active)
+                    .ThenByDescending(info => info.BlocksRaycasts)
+                    .ThenByDescending(info => info.RaycastTarget)
+                    .ThenByDescending(info => info.SortingOrder)
+                    .ThenByDescending(info => info.Depth)
+                    .Take(Math.Max(1, point.maxResults <= 0 ? 10 : point.maxResults))
+                    .ToList();
+                var topBlocker = ordered.FirstOrDefault(info => info.Active && info.BlocksRaycasts);
+                bool blocked = topBlocker != null;
+                bool pointPassed = true;
+                var assertionRows = new List<object>();
+
+                if (point.expectBlocked.HasValue)
+                {
+                    bool assertionPassed = blocked == point.expectBlocked.Value;
+                    pointPassed &= assertionPassed;
+                    assertionRows.Add(new
+                    {
+                        type = "expect_blocked",
+                        expected = point.expectBlocked.Value,
+                        actual = blocked,
+                        passed = assertionPassed
+                    });
+                }
+
+                if (!string.IsNullOrWhiteSpace(point.expectTopPathContains))
+                {
+                    string topPath = topBlocker?.Path ?? string.Empty;
+                    bool assertionPassed = topPath.IndexOf(point.expectTopPathContains, StringComparison.OrdinalIgnoreCase) >= 0;
+                    pointPassed &= assertionPassed;
+                    assertionRows.Add(new
+                    {
+                        type = "expect_top_path_contains",
+                        expected = point.expectTopPathContains,
+                        actual = topPath,
+                        passed = assertionPassed
+                    });
+                }
+
+                passed &= pointPassed;
+                pointRows.Add(new
+                {
+                    key = point.key,
+                    point = ToVector2Object(screenPoint),
+                    passed = pointPassed,
+                    rootCount = roots.Count,
+                    hitCount = ordered.Count,
+                    blocked,
+                    topHit = topBlocker == null ? null : BuildHitRow(topBlocker),
+                    hits = ordered.Select(BuildHitRow).ToArray(),
+                    assertions = assertionRows.ToArray()
+                });
+            }
+
+            object layoutData = null;
+            if ((request?.Targets?.Length ?? 0) > 0 || (request?.Assertions?.Length ?? 0) > 0)
+            {
+                if (!TryVerifyScreenLayout(
+                        new UiVerifyScreenLayoutRequest
+                        {
+                            Targets = request.Targets ?? Array.Empty<UiVerifyTargetRequest>(),
+                            Assertions = request.Assertions ?? Array.Empty<UiVerifyAssertionRequest>()
+                        },
+                        out layoutData,
+                        out error))
+                {
+                    return false;
+                }
+
+                if (layoutData != null)
+                {
+                    JToken token = JToken.FromObject(layoutData);
+                    if (token["passed"]?.Value<bool>() == false)
+                        passed = false;
+                }
+            }
+
+            data = new
+            {
+                passed,
+                screen = new { width = Screen.width, height = Screen.height },
+                pointCount = pointRows.Count,
+                points = pointRows.ToArray(),
+                layout = layoutData
             };
             return true;
         }
@@ -380,6 +633,216 @@ namespace Becool.UnityMcpLens.Editor.Adapters.Unity.UI
 
             target = null;
             error = $"Verify target '{key}' was not found.";
+            return false;
+        }
+
+        static bool TryConfigureCanvasRoot(
+            GameObject root,
+            UiCanvasPrefabRequest request,
+            bool previewOnly,
+            string rootName,
+            out List<object> changes,
+            out bool changed,
+            out string error)
+        {
+            var recordedChanges = new List<object>();
+            var hasChanges = false;
+            changes = recordedChanges;
+            changed = false;
+            error = null;
+            if (root == null)
+            {
+                error = "Canvas prefab root is null.";
+                return false;
+            }
+
+            if (root.transform is not RectTransform)
+            {
+                error = $"Canvas prefab root '{root.name}' must use RectTransform.";
+                return false;
+            }
+
+            void RecordChange(string property, object previousValue, object newValue)
+            {
+                if (Equals(previousValue, newValue))
+                    return;
+
+                hasChanges = true;
+                recordedChanges.Add(new
+                {
+                    property,
+                    previousValue,
+                    newValue
+                });
+            }
+
+            if (!string.IsNullOrWhiteSpace(rootName) && !string.Equals(root.name, rootName, StringComparison.Ordinal))
+            {
+                RecordChange("root.name", root.name, rootName);
+                if (!previewOnly)
+                    root.name = rootName;
+            }
+
+            Canvas canvas = root.GetComponent<Canvas>();
+            if (canvas == null)
+            {
+                RecordChange("component", null, typeof(Canvas).FullName);
+                if (!previewOnly)
+                    canvas = root.AddComponent<Canvas>();
+            }
+
+            CanvasScaler scaler = root.GetComponent<CanvasScaler>();
+            if (scaler == null)
+            {
+                RecordChange("component", null, typeof(CanvasScaler).FullName);
+                if (!previewOnly)
+                    scaler = root.AddComponent<CanvasScaler>();
+            }
+
+            GraphicRaycaster raycaster = root.GetComponent<GraphicRaycaster>();
+            if (raycaster == null)
+            {
+                RecordChange("component", null, typeof(GraphicRaycaster).FullName);
+                if (!previewOnly)
+                    root.AddComponent<GraphicRaycaster>();
+            }
+
+            RenderMode renderMode = ParseRenderMode(request?.RenderMode);
+            if (canvas != null)
+            {
+                RecordChange("canvas.renderMode", canvas.renderMode.ToString(), renderMode.ToString());
+                if (!previewOnly)
+                    canvas.renderMode = renderMode;
+
+                if (request?.SortingOrder.HasValue == true)
+                {
+                    RecordChange("canvas.sortingOrder", canvas.sortingOrder, request.SortingOrder.Value);
+                    if (!previewOnly)
+                        canvas.sortingOrder = request.SortingOrder.Value;
+                }
+
+                if (request?.PixelPerfect.HasValue == true)
+                {
+                    RecordChange("canvas.pixelPerfect", canvas.pixelPerfect, request.PixelPerfect.Value);
+                    if (!previewOnly)
+                        canvas.pixelPerfect = request.PixelPerfect.Value;
+                }
+            }
+
+            if (scaler != null)
+            {
+                CanvasScaler.ScaleMode scaleMode = ParseScaleMode(request?.ScaleMode);
+                RecordChange("canvasScaler.uiScaleMode", scaler.uiScaleMode.ToString(), scaleMode.ToString());
+                if (!previewOnly)
+                    scaler.uiScaleMode = scaleMode;
+
+                if (request?.ReferenceResolution != null && request.ReferenceResolution.Type != JTokenType.Null)
+                {
+                    if (!TryParseVector2(request.ReferenceResolution, out Vector2 resolution))
+                    {
+                        error = "referenceResolution must be {x,y} or [x,y].";
+                        return false;
+                    }
+
+                    RecordChange("canvasScaler.referenceResolution", scaler.referenceResolution, resolution);
+                    if (!previewOnly)
+                        scaler.referenceResolution = resolution;
+                }
+            }
+
+            changed = hasChanges;
+            if (!previewOnly && hasChanges)
+                EditorUtility.SetDirty(root);
+
+            return true;
+        }
+
+        static void AppendCreateRows(string parentPath, IReadOnlyList<UiNamedHierarchyNodeSpec> nodes, List<object> rows)
+        {
+            foreach (UiNamedHierarchyNodeSpec node in nodes ?? Array.Empty<UiNamedHierarchyNodeSpec>())
+            {
+                if (node == null)
+                    continue;
+
+                string path = $"{parentPath}/{node.Name}";
+                rows.Add(new
+                {
+                    path,
+                    action = "create",
+                    existed = false,
+                    requestedComponents = (node.ComponentTypes ?? Array.Empty<string>()).ToArray(),
+                    requestedLayout = node.Layout != null
+                });
+
+                if (node.Children is JArray children)
+                {
+                    AppendCreateRows(
+                        path,
+                        children.Select(child => child?.ToObject<UiNamedHierarchyNodeSpec>()).Where(child => child != null).ToArray(),
+                        rows);
+                }
+            }
+        }
+
+        static RenderMode ParseRenderMode(string value)
+        {
+            string normalized = (value ?? string.Empty).Trim().Replace("-", "_").ToLowerInvariant();
+            return normalized switch
+            {
+                "world_space" or "worldspace" => RenderMode.WorldSpace,
+                "screen_space_camera" or "screenspacecamera" => RenderMode.ScreenSpaceCamera,
+                _ => RenderMode.ScreenSpaceOverlay
+            };
+        }
+
+        static CanvasScaler.ScaleMode ParseScaleMode(string value)
+        {
+            string normalized = (value ?? string.Empty).Trim().Replace("-", "_").ToLowerInvariant();
+            return normalized switch
+            {
+                "constant_pixel_size" or "constantpixelsize" => CanvasScaler.ScaleMode.ConstantPixelSize,
+                "constant_physical_size" or "constantphysicalsize" => CanvasScaler.ScaleMode.ConstantPhysicalSize,
+                _ => CanvasScaler.ScaleMode.ScaleWithScreenSize
+            };
+        }
+
+        static string NormalizeAssetPath(string value)
+        {
+            return string.IsNullOrWhiteSpace(value) ? string.Empty : value.Trim().Replace('\\', '/');
+        }
+
+        static object BuildHitRow(UiDiagnosticsHelper.UiElementHitInfo info)
+        {
+            return new
+            {
+                path = info.Path,
+                label = info.RectTransform != null ? info.RectTransform.name : info.Path,
+                canvasPath = info.CanvasPath,
+                screenRect = ToRectObject(info.ScreenRect),
+                sortingOrder = info.SortingOrder,
+                depth = info.Depth,
+                active = info.Active,
+                raycastTarget = info.RaycastTarget,
+                blocksRaycasts = info.BlocksRaycasts,
+                graphicType = info.Graphic != null ? info.Graphic.GetType().FullName : string.Empty
+            };
+        }
+
+        static bool TryParseVector2(JToken token, out Vector2 value)
+        {
+            value = default;
+            if (token is JArray array && array.Count >= 2)
+            {
+                value = new Vector2(array[0].Value<float>(), array[1].Value<float>());
+                return true;
+            }
+
+            if (token is JObject obj)
+            {
+                value = new Vector2(obj["x"]?.Value<float>() ?? 0f, obj["y"]?.Value<float>() ?? 0f);
+                return true;
+            }
+
             return false;
         }
 

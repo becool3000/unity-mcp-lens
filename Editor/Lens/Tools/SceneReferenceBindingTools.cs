@@ -19,6 +19,8 @@ namespace Becool.UnityMcpLens.Editor.Tools
     {
         const string PreviewToolName = "Unity.Scene.PreviewBindSerializedReferences";
         const string ApplyToolName = "Unity.Scene.ApplyBindSerializedReferences";
+        const string PreviewInstantiatePrefabToolName = "Unity.Scene.PreviewInstantiatePrefabAndBind";
+        const string ApplyInstantiatePrefabToolName = "Unity.Scene.ApplyInstantiatePrefabAndBind";
 
         const string PreviewDescription = @"Previews serialized object-reference bindings on scene components without mutation.
 
@@ -27,6 +29,14 @@ Supports single ObjectReference fields and object-reference arrays/lists only.";
         const string ApplyDescription = @"Applies serialized object-reference bindings on scene components and saves open scenes when changes are required.
 
 Supports single ObjectReference fields and object-reference arrays/lists only.";
+
+        const string PreviewInstantiatePrefabDescription = @"Previews scene prefab instantiation plus serialized reference binding without mutation.
+
+Use this when a durable scene instance should exist and have component object-reference fields bound.";
+
+        const string ApplyInstantiatePrefabDescription = @"Applies scene prefab instantiation plus serialized reference binding and saves open scenes when changes are required.
+
+Use this when a durable scene instance should exist and have component object-reference fields bound.";
 
         static readonly UnitySceneReferenceBindingAdapter Adapter = new UnitySceneReferenceBindingAdapter();
         static readonly SceneReferenceBindingService Service = new SceneReferenceBindingService(Adapter);
@@ -43,6 +53,18 @@ Supports single ObjectReference fields and object-reference arrays/lists only.";
             return BuildSchema();
         }
 
+        [McpSchema(PreviewInstantiatePrefabToolName)]
+        public static object GetPreviewInstantiatePrefabSchema()
+        {
+            return BuildInstantiatePrefabSchema();
+        }
+
+        [McpSchema(ApplyInstantiatePrefabToolName)]
+        public static object GetApplyInstantiatePrefabSchema()
+        {
+            return BuildInstantiatePrefabSchema();
+        }
+
         [McpTool(PreviewToolName, PreviewDescription, "Preview Bind Serialized References", Groups = new[] { "scene" }, EnabledByDefault = true)]
         public static object Preview(JObject @params)
         {
@@ -53,6 +75,18 @@ Supports single ObjectReference fields and object-reference arrays/lists only.";
         public static object Apply(JObject @params)
         {
             return HandleTool(ApplyToolName, "apply_bind_serialized_references", @params, apply: true);
+        }
+
+        [McpTool(PreviewInstantiatePrefabToolName, PreviewInstantiatePrefabDescription, "Preview Instantiate Prefab And Bind", Groups = new[] { "scene" }, EnabledByDefault = true)]
+        public static object PreviewInstantiatePrefabAndBind(JObject @params)
+        {
+            return HandleInstantiatePrefabTool(PreviewInstantiatePrefabToolName, "preview_instantiate_prefab_and_bind", @params, apply: false);
+        }
+
+        [McpTool(ApplyInstantiatePrefabToolName, ApplyInstantiatePrefabDescription, "Apply Instantiate Prefab And Bind", Groups = new[] { "scene" }, EnabledByDefault = true)]
+        public static object ApplyInstantiatePrefabAndBind(JObject @params)
+        {
+            return HandleInstantiatePrefabTool(ApplyInstantiatePrefabToolName, "apply_instantiate_prefab_and_bind", @params, apply: true);
         }
 
         static object HandleTool(string toolName, string action, JObject @params, bool apply)
@@ -86,6 +120,37 @@ Supports single ObjectReference fields and object-reference arrays/lists only.";
             return ShapeResponse(toolName, result, timing, errorKind);
         }
 
+        static object HandleInstantiatePrefabTool(string toolName, string action, JObject @params, bool apply)
+        {
+            @params ??= new JObject();
+            var timing = new ToolOperationTiming(toolName, action, GetUtf8ByteCount(@params.ToString(Formatting.None)));
+            SceneReferenceBindingOperationResult result;
+            string errorKind = null;
+
+            try
+            {
+                ScenePrefabInstantiateAndBindRequest request;
+                using (timing.Measure("normalization"))
+                {
+                    request = NormalizeInstantiatePrefabRequest(@params);
+                }
+
+                using (timing.Measure("service"))
+                {
+                    result = apply
+                        ? Service.ApplyInstantiatePrefabAndBind(request, timing)
+                        : Service.PreviewInstantiatePrefabAndBind(request, timing);
+                }
+            }
+            catch (Exception ex)
+            {
+                errorKind = ex.GetType().Name;
+                result = SceneReferenceBindingOperationResult.Error($"Internal error processing prefab instantiate/bind: {ex.Message}", errorKind);
+            }
+
+            return ShapeResponse(toolName, result, timing, errorKind);
+        }
+
         static object BuildSchema()
         {
             return new
@@ -102,6 +167,27 @@ Supports single ObjectReference fields and object-reference arrays/lists only.";
             };
         }
 
+        static object BuildInstantiatePrefabSchema()
+        {
+            return new
+            {
+                type = "object",
+                properties = new
+                {
+                    prefabPath = new { type = "string", description = "Prefab asset path under Assets." },
+                    instanceName = new { type = "string", description = "Scene instance name. Defaults to prefab name." },
+                    parent = new { description = "Optional parent GameObject, path, or instance id." },
+                    parentSearchMethod = new { type = "string", description = "How to resolve parent ('by_name', 'by_id', 'by_path')." },
+                    includeInactive = new { type = "boolean", description = "Include inactive objects while resolving parent/existing instance." },
+                    position = new { description = "Optional local position as {x,y,z} or [x,y,z]." },
+                    rotation = new { description = "Optional local Euler rotation as {x,y,z} or [x,y,z]." },
+                    scale = new { description = "Optional local scale as {x,y,z} or [x,y,z]." },
+                    bindings = new { type = "array", description = "Serialized reference bindings to preview/apply after the instance exists." }
+                },
+                required = new[] { "prefabPath" }
+            };
+        }
+
         static SceneReferenceBindingRequest NormalizeRequest(JObject parameters)
         {
             return new SceneReferenceBindingRequest
@@ -109,6 +195,22 @@ Supports single ObjectReference fields and object-reference arrays/lists only.";
                 Target = GetToken(parameters, "target", "Target"),
                 SearchMethod = GetString(parameters, "searchMethod", "SearchMethod") ?? "by_name",
                 IncludeInactive = GetBool(parameters, true, "includeInactive", "IncludeInactive"),
+                Bindings = GetToken(parameters, "bindings", "Bindings")?.ToObject<SceneReferenceBindingEntry[]>() ?? Array.Empty<SceneReferenceBindingEntry>()
+            };
+        }
+
+        static ScenePrefabInstantiateAndBindRequest NormalizeInstantiatePrefabRequest(JObject parameters)
+        {
+            return new ScenePrefabInstantiateAndBindRequest
+            {
+                PrefabPath = GetString(parameters, "prefabPath", "PrefabPath"),
+                InstanceName = GetString(parameters, "instanceName", "InstanceName"),
+                Parent = GetToken(parameters, "parent", "Parent"),
+                ParentSearchMethod = GetString(parameters, "parentSearchMethod", "ParentSearchMethod") ?? "by_name",
+                IncludeInactive = GetBool(parameters, true, "includeInactive", "IncludeInactive"),
+                Position = GetToken(parameters, "position", "Position"),
+                Rotation = GetToken(parameters, "rotation", "Rotation"),
+                Scale = GetToken(parameters, "scale", "Scale"),
                 Bindings = GetToken(parameters, "bindings", "Bindings")?.ToObject<SceneReferenceBindingEntry[]>() ?? Array.Empty<SceneReferenceBindingEntry>()
             };
         }
@@ -122,9 +224,21 @@ Supports single ObjectReference fields and object-reference arrays/lists only.";
                     ? Response.Success(result.message, ToolResultCompactor.ShapeStructuredPayload(
                         toolName,
                         result.data,
-                        BuildCompactData(result.data),
-                        detailRefMeta: new { kind = "scene_reference_binding_full_result" },
-                        payloadClass: "scene_reference_binding"))
+                        string.Equals(toolName, PreviewInstantiatePrefabToolName, StringComparison.Ordinal) ||
+                        string.Equals(toolName, ApplyInstantiatePrefabToolName, StringComparison.Ordinal)
+                            ? BuildInstantiatePrefabCompactData(result.data)
+                            : BuildCompactData(result.data),
+                        detailRefMeta: new
+                        {
+                            kind = string.Equals(toolName, PreviewInstantiatePrefabToolName, StringComparison.Ordinal) ||
+                                   string.Equals(toolName, ApplyInstantiatePrefabToolName, StringComparison.Ordinal)
+                                ? "scene_prefab_instantiate_bind_full_result"
+                                : "scene_reference_binding_full_result"
+                        },
+                        payloadClass: string.Equals(toolName, PreviewInstantiatePrefabToolName, StringComparison.Ordinal) ||
+                                      string.Equals(toolName, ApplyInstantiatePrefabToolName, StringComparison.Ordinal)
+                            ? "scene_prefab_instantiate_bind"
+                            : "scene_reference_binding"))
                     : Response.Error(result.message, result.errorData ?? new { errorKind = result.errorKind ?? fallbackErrorKind });
 
                 timing.SetResponseBytes(GetUtf8ByteCount(JsonConvert.SerializeObject(response, Formatting.None)));
@@ -179,6 +293,52 @@ Supports single ObjectReference fields and object-reference arrays/lists only.";
                 willModify = root["willModify"],
                 bindingCount = bindings.Count,
                 bindingTypeCounts,
+                changedBindingCount = changedBindings.Count,
+                omittedUnchangedBindingCount = unchangedCount,
+                changedBindings
+            };
+        }
+
+        static object BuildInstantiatePrefabCompactData(object data)
+        {
+            JObject root = JObject.FromObject(data ?? new { });
+            JArray bindings = root["bindings"] as JArray ?? new JArray();
+            JArray changedBindings = new JArray();
+            int unchangedCount = 0;
+            foreach (JObject binding in bindings.OfType<JObject>())
+            {
+                bool willModify = binding["willModify"]?.Value<bool>() == true;
+                bool applied = binding["applied"]?.Value<bool>() == true;
+                if (!willModify && !applied)
+                {
+                    unchangedCount++;
+                    continue;
+                }
+
+                changedBindings.Add(new JObject
+                {
+                    ["targetPath"] = binding["targetPath"]?.DeepClone(),
+                    ["hierarchyPath"] = binding["hierarchyPath"]?.DeepClone(),
+                    ["componentType"] = binding["componentType"]?.DeepClone(),
+                    ["propertyPath"] = binding["propertyPath"]?.DeepClone(),
+                    ["bindingType"] = binding["bindingType"]?.DeepClone(),
+                    ["willModify"] = binding["willModify"]?.DeepClone(),
+                    ["applied"] = binding["applied"]?.DeepClone()
+                });
+            }
+
+            return new
+            {
+                prefabPath = root["prefabPath"],
+                instanceName = root["instanceName"],
+                parentPath = root["parentPath"],
+                instancePath = root["instancePath"],
+                exists = root["exists"],
+                applied = root["applied"],
+                willModify = root["willModify"],
+                instanceChangeCount = (root["instanceChanges"] as JArray)?.Count ?? 0,
+                instanceChanges = root["instanceChanges"],
+                bindingCount = bindings.Count,
                 changedBindingCount = changedBindings.Count,
                 omittedUnchangedBindingCount = unchangedCount,
                 changedBindings

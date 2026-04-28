@@ -45,7 +45,7 @@ node .agents/plugins/lens-dev-plugin/skills/unity-dev-assistant/scripts/Check-Un
 - Prefer `Invoke-UnityMcpBatch` for repeated smoke/workflow checks that span project, ui, scene, and debug packs, so one Lens session can cover the ordered steps.
 - Prefer helper-driven `Invoke-UnityRunCommand` for runtime probes now that it can bypass idle-wait gating in healthy play mode and preserve structured `ReturnResult(...)` payloads.
 - Treat `Unity.RunCommand` and `Unity.ReadConsole` inline logs as compact previews. Use `logSummary` and `Unity.ReadDetailRef` only when full log text or full scanned console entries are needed.
-- Keep `foundation` at `12` exported tools, `foundation + scene` at `32`, and `foundation + ui` at `22` unless a deliberate pack-surface change updates the metadata audit.
+- Keep `foundation` at `12` exported tools, `foundation + scene` at `34`, `foundation + ui` at `25`, and `foundation + runtime` at `14` unless a deliberate pack-surface change updates the metadata audit.
 
 ## Current Tool Surface Reality
 
@@ -68,7 +68,7 @@ node .agents/plugins/lens-dev-plugin/skills/unity-dev-assistant/scripts/Check-Un
 - Keep `Unity.Project.PackageCompatibility` and `Unity.InputActions.InspectAsset` as the preferred package/import read surface before raw `Editor.log` grep.
 - Keep `Unity.RunCommand` failure-stage metadata, detail refs, compact `logSummary`, and structured `ReturnResult(...)` output stable.
 - Add reliable restart/reload orchestration with save/dirty handling and bridge reacquire.
-- Dogfood the new Phase 12 UI authoring/binding/verification path on a real host project without custom editor C#.
+- Dogfood durable uGUI prefab creation, scene prefab instantiation/binding, UI raycast verification, and runtime pointer-input verification on TintPaint without custom editor C#.
 
 ## Latest Completed Smoke
 
@@ -144,6 +144,23 @@ Latest Phase 16 batch detail-ref and editor-stability smoke on 2026-04-28:
 - `Unity.ManageEditor.WaitForStableEditor` saved `2,498` bytes (`62.69%`) with compact inline stability state plus `attemptsDetailRef` and `fullStateDetailRef`.
 - `Invoke-UnityMcpBatch` now treats unwrapped `Unity.ReadDetailRef` structured payloads as successful steps and summarizes large detail payloads instead of inlining them.
 - `Unity.ReadConsole` returned no entries in this clean TintPaint scope, so it did not produce a console savings row in this smoke.
+
+Latest TintPaint dogfood report on 2026-04-28:
+
+- Longer real-work scope contained `1999` rows with `216` payload rows and `1783` coverage rows.
+- Payload telemetry reported `NoShapingRecorded=false`, with `3,012,895` raw bytes shaped to `650,430` bytes and `2,362,465` bytes saved (`78.41%`).
+- Top savings were tool snapshots (`1,629,630` bytes saved) and `Unity.ManageEditor.WaitForStableEditor` (`727,569` bytes saved, `96.51%`).
+- Churn is still material in long sessions: `42` connections, `89` setup cycles, `293` schema requests, and `147` pack transitions.
+- Usage report compacting still needs work: a large `packSetTransitions` list was noisy inline, and `tsamCoverage=[]` was reported despite `1783` coverage rows.
+- Practical missing tools: durable uGUI prefab creation, scene prefab instantiate-and-bind, UI raycast/layout verification, pointer-input smoke verification, and a dedicated exit-play-mode path not affected by `RunCommand` play-state restoration.
+
+Phase 17 implementation status:
+
+- Added `Unity.UI.PreviewCreateCanvasPrefab` and `Unity.UI.ApplyCreateCanvasPrefab` for durable uGUI canvas prefab authoring.
+- Added `Unity.Scene.PreviewInstantiatePrefabAndBind` and `Unity.Scene.ApplyInstantiatePrefabAndBind` for scene prefab instantiation plus serialized reference binding.
+- Added `Unity.UI.VerifyRaycastAndLayout` for read-only UI raycast/layout assertions.
+- Added `Unity.PlayMode.PointerInputSmoke` in the new `runtime` pack for play-mode pointer/input smoke evidence.
+- Updated usage-report compact output so pack transitions are summarized inline and full transition rows can live behind detail refs.
 
 ## Maintenance
 

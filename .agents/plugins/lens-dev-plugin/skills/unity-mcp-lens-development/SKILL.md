@@ -59,7 +59,7 @@ The current Phase 11 project surface includes package/import/Input System diagno
 - Prefer `Unity.InputSystem.Diagnostics` for one-call Input System package, assembly, device, `.inputactions`, define, compatibility, and editor-log signals.
 - Prefer `Unity.ProjectSettings.PreviewActiveInputHandler` before changing the active input backend.
 - Use `Unity.ProjectSettings.SetActiveInputHandler` for editor-authored active input backend changes; do not hand-edit `ProjectSettings.asset` as the first path.
-- `foundation` remains `12` tools, `foundation + scene` now targets `32` tools, `foundation + ui` now targets `22`, and the current `project` smoke baseline remains `21` tools.
+- `foundation` remains `12` tools, `foundation + scene` now targets `34` tools, `foundation + ui` now targets `25`, `foundation + runtime` targets `14`, and the current `project` smoke baseline remains `21` tools.
 
 ## Phase 12 UI And Scene Binding Truth
 
@@ -78,7 +78,7 @@ Phase 14 keeps the public tool surface stable and makes high-volume TSAM results
 - Compact default results are expected for `Unity.InputSystem.Diagnostics`, UI hierarchy preview/apply, scene serialized-reference binding preview/apply, and `Unity.UI.VerifyScreenLayout`.
 - Full bulky data should remain available through `detailRef` when the bridge detail store is available.
 - Use `Invoke-UnityMcpBatch` for focused smoke/workflow sequences that need multiple project/ui/scene/debug calls in one Lens session.
-- Pack baselines remain unchanged: `foundation=12`, `foundation+scene=32`, `foundation+ui=22`, `project=21`, and `debug=22`.
+- Pack baselines after Phase 17: `foundation=12`, `foundation+scene=34`, `foundation+ui=25`, `foundation+runtime=14`, `project=21`, and `debug=22`.
 - Current Phase 14 smoke baseline: `NoShapingRecorded=false`, `7` saving rows, `50,566` raw bytes -> `24,025` shaped bytes, `3` connections, `6` schema requests, and `4` pack transitions.
 
 ## Phase 15 RunCommand And Console Truth
@@ -97,12 +97,25 @@ Phase 15 keeps the public tool surface stable and makes log-heavy probe results 
 Phase 16 moves the active long-running smoke host to `D:\TintPaint`.
 
 - Use `D:\TintPaint` for new focused smoke tests unless a task explicitly needs the older `D:\2DUnityNewGame` fixtures.
-- Metadata audit on TintPaint passed with unchanged baselines: `foundation=12`, `foundation+scene=32`, `foundation+ui=22`, `project=21`, and `debug=22`.
+- Metadata audit on TintPaint before Phase 17 passed with `foundation=12`, `foundation+scene=32`, `foundation+ui=22`, `project=21`, and `debug=22`; Phase 17 intentionally raises scene/ui and adds runtime.
 - `Check-UnityDevSession.ps1` should settle to `ProceedWithLensHelpers` after recoverable play/reload windows.
 - The batch helper now treats unwrapped `Unity.ReadDetailRef` structured payloads as successful steps.
 - Large detail-ref payloads should be summarized in batch output, not inlined by default.
 - `Unity.ManageEditor.WaitForStableEditor` should keep final stability state compact inline and store attempts/full editor state behind detail refs.
 - Current Phase 16 smoke baseline: `NoShapingRecorded=false`, `12,419` bytes saved, `Unity.RunCommand` saved `5,969` bytes (`50.93%`), and `Unity.ManageEditor.WaitForStableEditor` saved `2,498` bytes (`62.69%`).
+- Longer TintPaint dogfood baseline: `NoShapingRecorded=false`, `2,362,465` bytes saved (`78.41%`) across `1999` rows; top savings were tool snapshots and `Unity.ManageEditor.WaitForStableEditor`.
+- Watch for usage-report presentation gaps: large inline `packSetTransitions` arrays and `tsamCoverage=[]` despite coverage rows.
+- Current missing-tool pressure is durable uGUI prefab creation, scene prefab instantiate-and-bind, UI raycast/layout verification, pointer-input smoke verification, and explicit exit-play-mode orchestration.
+
+## Phase 17 UI/Scene/Runtime Truth
+
+Phase 17 addresses the highest TintPaint dogfood pain without widening `foundation`.
+
+- Prefer `Unity.UI.PreviewCreateCanvasPrefab` and `Unity.UI.ApplyCreateCanvasPrefab` before custom `Unity.RunCommand` prefab-authoring scripts.
+- Prefer `Unity.Scene.PreviewInstantiatePrefabAndBind` and `Unity.Scene.ApplyInstantiatePrefabAndBind` before custom scene instantiation/binding scripts.
+- Prefer `Unity.UI.VerifyRaycastAndLayout` for UI blocking and hit-test assertions before ad hoc hierarchy probes.
+- Prefer `Unity.PlayMode.PointerInputSmoke` for pointer-path evidence in play mode; it reports observed Input System state plus UI/world hit evidence.
+- `Unity.GetLensUsageReport` compact output should summarize large pack-transition lists and report TSAM coverage summary data.
 
 ## Maintenance Rules
 

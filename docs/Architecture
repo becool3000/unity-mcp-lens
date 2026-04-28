@@ -42,12 +42,14 @@ Current TSAM-covered surfaces include:
 - Phase 11 project/package/import tools: package compatibility, input-action asset inspection, Input System diagnostics, active input handler preview, and active input handler apply.
 - Phase 12 UI tools: preview/apply hierarchy authoring, preview/apply layout authoring, and read-only screen-layout verification.
 - Phase 12 scene binding tools: preview/apply serialized object-reference binding for scene components.
+- Phase 17 UI/scene/runtime tools: canvas prefab preview/apply, scene prefab instantiate/bind preview/apply, UI raycast/layout verification, and play-mode pointer-input smoke verification.
 
 Current baselines:
 
 - `foundation`: `12` exported tools.
-- `foundation + scene`: `32` exported tools.
-- `foundation + ui`: `22` exported tools.
+- `foundation + scene`: `34` exported tools.
+- `foundation + ui`: `25` exported tools.
+- `foundation + runtime`: `14` exported tools.
 - `project`: `21` exported tools.
 - `debug`: `22` exported tools.
 
@@ -103,8 +105,9 @@ Important packs:
 
 - `console`: console reads, editor health, and lightweight troubleshooting.
 - `project`: project/package/import metadata, validation, missing script/reference checks, Input System diagnostics/settings, package compatibility, and input-action inspection.
-- `scene`: scene hierarchy, runtime snapshots, GameObject operations, and serialized-reference binding.
-- `ui`: UI Toolkit reads, uGUI hierarchy/layout authoring, and screen-layout verification.
+- `scene`: scene hierarchy, GameObject operations, serialized-reference binding, and prefab instantiate/bind workflows.
+- `ui`: UI Toolkit reads, uGUI hierarchy/layout authoring, canvas prefab authoring, raycast/layout verification, and screen-layout verification.
+- `runtime`: play-mode runtime probes, visual bounds snapshots, and pointer-input smoke verification.
 - `scripting`: script/resource reads, edits, validation, and `Unity.RunCommand`.
 - `assets`: asset, prefab, import, and generation operations.
 - `debug`: profiler, usage reports, and deeper diagnostics.

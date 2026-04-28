@@ -29,7 +29,10 @@ namespace Becool.UnityMcpLens.Editor.Lens
             NormalizeToolName("Unity.UI.PreviewEnsureHierarchy"),
             NormalizeToolName("Unity.UI.PreviewLayoutProperties"),
             NormalizeToolName("Unity.UI.VerifyScreenLayout"),
+            NormalizeToolName("Unity.UI.PreviewCreateCanvasPrefab"),
+            NormalizeToolName("Unity.UI.VerifyRaycastAndLayout"),
             NormalizeToolName("Unity.Scene.PreviewBindSerializedReferences"),
+            NormalizeToolName("Unity.Scene.PreviewInstantiatePrefabAndBind"),
             NormalizeToolName("Unity.GetLensHealth"),
             NormalizeToolName("Unity.ListToolPacks"),
             NormalizeToolName("Unity.ReadDetailRef"),
@@ -76,11 +79,14 @@ namespace Becool.UnityMcpLens.Editor.Lens
             NormalizeToolName("Unity.Prefab.SetSerializedProperties"),
             NormalizeToolName("Unity.Scene.SetSerializedProperties"),
             NormalizeToolName("Unity.Scene.ApplyBindSerializedReferences"),
+            NormalizeToolName("Unity.Scene.ApplyInstantiatePrefabAndBind"),
             NormalizeToolName("Unity.Tile.BuildSet"),
             NormalizeToolName("Unity.Tilemap.Setup"),
             NormalizeToolName("Unity.Tilemap.Paint"),
             NormalizeToolName("Unity.UI.ApplyEnsureHierarchy"),
             NormalizeToolName("Unity.UI.ApplyLayoutProperties"),
+            NormalizeToolName("Unity.UI.ApplyCreateCanvasPrefab"),
+            NormalizeToolName("Unity.PlayMode.PointerInputSmoke"),
             NormalizeToolName("Unity.UI.Toolkit")
         };
 

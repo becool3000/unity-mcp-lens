@@ -1,9 +1,13 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using System.Threading.Tasks;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Becool.UnityMcpLens.Editor.Helpers;
+using Becool.UnityMcpLens.Editor.Lens;
+using Becool.UnityMcpLens.Editor.Services;
 using Becool.UnityMcpLens.Editor.ToolRegistry;
 using Becool.UnityMcpLens.Editor.Tools.Parameters;
 using UnityEditor;
@@ -50,6 +54,10 @@ Args:
 
 Returns:
     Dictionary with success/message/data. Data contains transform scale, sprite bounds, renderer bounds, collider radius or bounds, screen-space pixel footprint, optional ownership data, and optional time-sampled presentation changes.";
+
+        public const string PointerInputSmokeDescription = @"Runs a play-mode pointer input smoke check with UI and world hit evidence.
+
+The tool is intended for verification, not authoring. It can attempt to queue a synthetic Input System mouse state through reflection, then samples observed mouse state, UI raycast hits, and optional world raycast evidence.";
 
         [McpTool("Unity.Runtime.GetVisualBoundsSnapshot", GetVisualBoundsSnapshotDescription, Groups = new[] { "runtime", "diagnostics" }, EnabledByDefault = true)]
         public static async Task<object> GetVisualBoundsSnapshot(VisualBoundsSnapshotParams parameters)
@@ -139,6 +147,321 @@ Returns:
                 ownership,
                 timeSample
             });
+        }
+
+        [McpTool("Unity.PlayMode.PointerInputSmoke", PointerInputSmokeDescription, Groups = new[] { "runtime", "diagnostics" }, EnabledByDefault = true)]
+        public static async Task<object> PointerInputSmoke(PointerInputSmokeParams parameters)
+        {
+            parameters ??= new PointerInputSmokeParams();
+            var timing = new ToolOperationTiming("Unity.PlayMode.PointerInputSmoke", "pointer_input_smoke", 0);
+            object data;
+            string errorKind = null;
+            bool success = true;
+
+            try
+            {
+                using (timing.Measure("normalization"))
+                {
+                    parameters.StepFrames = Math.Max(0, parameters.StepFrames);
+                    parameters.SettleMs = Math.Max(0, parameters.SettleMs);
+                }
+
+                using (timing.Measure("service"))
+                {
+                    if (!EditorApplication.isPlaying)
+                    {
+                        success = false;
+                        errorKind = "not_in_play_mode";
+                    }
+                }
+
+                using (timing.Measure("adapter"))
+                {
+                    data = await BuildPointerInputSmokeData(parameters);
+                }
+            }
+            catch (Exception ex)
+            {
+                success = false;
+                errorKind = ex.GetType().Name;
+                data = new { errorKind, error = ex.Message };
+            }
+
+            object response;
+            using (timing.Measure("result_shaping"))
+            {
+                response = success
+                    ? Response.Success("Completed pointer input smoke.", ToolResultCompactor.ShapeStructuredPayload(
+                        "Unity.PlayMode.PointerInputSmoke",
+                        data,
+                        BuildPointerInputSmokeCompactData(data),
+                        new { kind = "playmode_pointer_input_smoke_full_result" },
+                        "playmode_pointer_input_smoke"))
+                    : Response.Error("Pointer input smoke failed.", data);
+                timing.SetResponseBytes(GetUtf8ByteCount(JsonConvert.SerializeObject(response, Formatting.None)));
+            }
+
+            timing.Record(success, errorKind);
+            return response;
+        }
+
+        static async Task<object> BuildPointerInputSmokeData(PointerInputSmokeParams parameters)
+        {
+            Vector2 point = new(parameters.ScreenX, parameters.ScreenY);
+            var queue = TryQueueMouseState(point, parameters.Button, parameters.QueueInput, out string queueError);
+
+            for (int i = 0; i < parameters.StepFrames && EditorApplication.isPlaying && EditorApplication.isPaused; i++)
+            {
+                EditorApplication.Step();
+                await Task.Delay(50);
+            }
+
+            if (parameters.SettleMs > 0)
+                await Task.Delay(parameters.SettleMs);
+
+            var observed = ReadObservedMouseState();
+            var ui = BuildUiPointerEvidence(parameters, point);
+            var world = BuildWorldPointerEvidence(parameters, point);
+            bool passed = EditorApplication.isPlaying && (!parameters.QueueInput || queue.succeeded || !queue.available);
+
+            return new
+            {
+                passed,
+                editor = new
+                {
+                    isPlaying = EditorApplication.isPlaying,
+                    isPaused = EditorApplication.isPaused,
+                    stepFrames = parameters.StepFrames,
+                    settleMs = parameters.SettleMs
+                },
+                requested = new
+                {
+                    point = ToVector2Object(point),
+                    button = parameters.Button,
+                    queueInput = parameters.QueueInput
+                },
+                inputSystem = new
+                {
+                    queue.available,
+                    queue.attempted,
+                    queue.succeeded,
+                    error = queueError
+                },
+                observed,
+                ui,
+                world
+            };
+        }
+
+        static (bool available, bool attempted, bool succeeded) TryQueueMouseState(Vector2 point, string button, bool queueInput, out string error)
+        {
+            error = null;
+            Type inputSystemType = Type.GetType("UnityEngine.InputSystem.InputSystem,Unity.InputSystem");
+            Type mouseType = Type.GetType("UnityEngine.InputSystem.Mouse,Unity.InputSystem");
+            Type mouseStateType = Type.GetType("UnityEngine.InputSystem.LowLevel.MouseState,Unity.InputSystem");
+            if (inputSystemType == null || mouseType == null || mouseStateType == null)
+            {
+                error = "Input System types are not loaded.";
+                return (false, false, false);
+            }
+
+            if (!queueInput)
+                return (true, false, false);
+
+            object mouse = mouseType.GetProperty("current", BindingFlags.Public | BindingFlags.Static)?.GetValue(null);
+            if (mouse == null)
+            {
+                error = "Mouse.current is null.";
+                return (true, true, false);
+            }
+
+            try
+            {
+                object state = Activator.CreateInstance(mouseStateType);
+                SetFieldOrProperty(state, mouseStateType, "position", point);
+                SetFieldOrProperty(state, mouseStateType, "delta", Vector2.zero);
+
+                MethodInfo withButton = mouseStateType.GetMethods(BindingFlags.Public | BindingFlags.Instance)
+                    .FirstOrDefault(method => method.Name == "WithButton" && method.GetParameters().Length >= 1);
+                Type mouseButtonType = Type.GetType("UnityEngine.InputSystem.LowLevel.MouseButton,Unity.InputSystem");
+                if (withButton != null && mouseButtonType != null && !string.Equals(button, "none", StringComparison.OrdinalIgnoreCase))
+                {
+                    object buttonValue = Enum.Parse(mouseButtonType, NormalizeMouseButton(button), ignoreCase: true);
+                    state = withButton.GetParameters().Length == 1
+                        ? withButton.Invoke(state, new[] { buttonValue })
+                        : withButton.Invoke(state, new[] { buttonValue, true });
+                }
+
+                MethodInfo queueStateEvent = inputSystemType.GetMethods(BindingFlags.Public | BindingFlags.Static)
+                    .FirstOrDefault(method => method.Name == "QueueStateEvent" && method.IsGenericMethodDefinition && method.GetParameters().Length >= 2);
+                if (queueStateEvent == null)
+                {
+                    error = "InputSystem.QueueStateEvent<TState> could not be resolved.";
+                    return (true, true, false);
+                }
+
+                MethodInfo generic = queueStateEvent.MakeGenericMethod(mouseStateType);
+                var parameters = generic.GetParameters();
+                object[] args = parameters.Length >= 3 ? new[] { mouse, state, (object)(-1d) } : new[] { mouse, state };
+                generic.Invoke(null, args);
+                inputSystemType.GetMethods(BindingFlags.Public | BindingFlags.Static)
+                    .FirstOrDefault(method => method.Name == "Update" && method.GetParameters().Length == 0)
+                    ?.Invoke(null, Array.Empty<object>());
+                return (true, true, true);
+            }
+            catch (Exception ex)
+            {
+                error = ex.InnerException?.Message ?? ex.Message;
+                return (true, true, false);
+            }
+        }
+
+        static void SetFieldOrProperty(object target, Type type, string name, object value)
+        {
+            FieldInfo field = type.GetField(name, BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
+            if (field != null)
+            {
+                field.SetValue(target, value);
+                return;
+            }
+
+            PropertyInfo property = type.GetProperty(name, BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
+            if (property != null && property.CanWrite)
+                property.SetValue(target, value);
+        }
+
+        static string NormalizeMouseButton(string button)
+        {
+            return (button ?? string.Empty).Trim().ToLowerInvariant() switch
+            {
+                "right" => "Right",
+                "middle" => "Middle",
+                _ => "Left"
+            };
+        }
+
+        static object ReadObservedMouseState()
+        {
+            Type mouseType = Type.GetType("UnityEngine.InputSystem.Mouse,Unity.InputSystem");
+            object mouse = mouseType?.GetProperty("current", BindingFlags.Public | BindingFlags.Static)?.GetValue(null);
+            if (mouse == null)
+                return new { available = mouseType != null, present = false };
+
+            return new
+            {
+                available = true,
+                present = true,
+                position = ReadControlValue(mouseType.GetProperty("position")?.GetValue(mouse)),
+                leftButton = ReadControlValue(mouseType.GetProperty("leftButton")?.GetValue(mouse)),
+                rightButton = ReadControlValue(mouseType.GetProperty("rightButton")?.GetValue(mouse)),
+                middleButton = ReadControlValue(mouseType.GetProperty("middleButton")?.GetValue(mouse))
+            };
+        }
+
+        static object ReadControlValue(object control)
+        {
+            if (control == null)
+                return null;
+
+            try
+            {
+                object value = control.GetType().GetMethod("ReadValue", BindingFlags.Public | BindingFlags.Instance, null, Type.EmptyTypes, null)?.Invoke(control, Array.Empty<object>());
+                return value switch
+                {
+                    Vector2 vector => ToVector2Object(vector),
+                    float number => number,
+                    bool flag => flag,
+                    _ => value?.ToString()
+                };
+            }
+            catch (Exception ex)
+            {
+                return new { error = ex.Message };
+            }
+        }
+
+        static object BuildUiPointerEvidence(PointerInputSmokeParams parameters, Vector2 point)
+        {
+            var roots = UiDiagnosticsHelper.ResolveUiRoots(parameters.UiTarget, parameters.UiSearchMethod, parameters.IncludeInactive).ToList();
+            var hits = new List<UiDiagnosticsHelper.UiElementHitInfo>();
+            foreach (GameObject root in roots)
+            {
+                hits.AddRange(UiDiagnosticsHelper.EnumerateGraphics(root, true, parameters.IncludeInactive)
+                    .Where(info => info.ScreenRect.Contains(point)));
+            }
+
+            var ordered = hits
+                .OrderByDescending(info => info.Active)
+                .ThenByDescending(info => info.BlocksRaycasts)
+                .ThenByDescending(info => info.RaycastTarget)
+                .ThenByDescending(info => info.SortingOrder)
+                .ThenByDescending(info => info.Depth)
+                .Take(10)
+                .ToArray();
+            var topBlocker = ordered.FirstOrDefault(info => info.Active && info.BlocksRaycasts);
+            return new
+            {
+                rootCount = roots.Count,
+                hitCount = ordered.Length,
+                blocked = topBlocker != null,
+                topHit = topBlocker == null ? null : BuildUiHit(topBlocker),
+                hits = ordered.Select(BuildUiHit).ToArray()
+            };
+        }
+
+        static object BuildWorldPointerEvidence(PointerInputSmokeParams parameters, Vector2 point)
+        {
+            Camera camera = ResolveCamera(parameters.CameraTarget, parameters.CameraSearchMethod, parameters.IncludeInactive, out string cameraLabel);
+            if (camera == null)
+                return new { camera = (string)null, hit = false };
+
+            Ray ray = camera.ScreenPointToRay(point);
+            bool hit3d = Physics.Raycast(ray, out RaycastHit hit, float.PositiveInfinity, parameters.LayerMask);
+            RaycastHit2D hit2d = Physics2D.GetRayIntersection(ray, float.PositiveInfinity, parameters.LayerMask);
+            return new
+            {
+                camera = cameraLabel,
+                ray = new { origin = ToVector3Object(ray.origin), direction = ToVector3Object(ray.direction) },
+                hit3d = hit3d ? new { path = UiDiagnosticsHelper.GetHierarchyPath(hit.collider.transform), point = ToVector3Object(hit.point), distance = hit.distance } : null,
+                hit2d = hit2d.collider != null ? new { path = UiDiagnosticsHelper.GetHierarchyPath(hit2d.collider.transform), point = ToVector2Object(hit2d.point), distance = hit2d.distance } : null
+            };
+        }
+
+        static object BuildUiHit(UiDiagnosticsHelper.UiElementHitInfo info)
+        {
+            return new
+            {
+                path = info.Path,
+                canvasPath = info.CanvasPath,
+                screenRect = ToRectObject(info.ScreenRect),
+                sortingOrder = info.SortingOrder,
+                depth = info.Depth,
+                active = info.Active,
+                raycastTarget = info.RaycastTarget,
+                blocksRaycasts = info.BlocksRaycasts,
+                graphicType = info.Graphic != null ? info.Graphic.GetType().FullName : string.Empty
+            };
+        }
+
+        static object BuildPointerInputSmokeCompactData(object data)
+        {
+            JObject root = JObject.FromObject(data ?? new { });
+            return new
+            {
+                passed = root["passed"],
+                editor = root["editor"],
+                requested = root["requested"],
+                inputSystem = root["inputSystem"],
+                observed = root["observed"],
+                ui = new
+                {
+                    rootCount = root["ui"]?["rootCount"],
+                    hitCount = root["ui"]?["hitCount"],
+                    blocked = root["ui"]?["blocked"],
+                    topHit = root["ui"]?["topHit"]
+                },
+                world = root["world"]
+            };
         }
 
         static MeasurementSnapshot CaptureMeasurement(GameObject targetGo, Renderer renderer, SpriteRenderer spriteRenderer, Collider2D collider2D, Collider collider3D, Camera camera)
@@ -868,6 +1191,11 @@ Returns:
             return new { x = vector.x, y = vector.y, z = vector.z };
         }
 
+        static object ToVector2Object(Vector2 vector)
+        {
+            return new { x = vector.x, y = vector.y };
+        }
+
         static object ToColorObject(Color color)
         {
             return new { r = color.r, g = color.g, b = color.b, a = color.a };
@@ -899,5 +1227,7 @@ Returns:
                 yMax = rect.yMax
             };
         }
+
+        static int GetUtf8ByteCount(string value) => System.Text.Encoding.UTF8.GetByteCount(value ?? string.Empty);
     }
 }

@@ -8,8 +8,9 @@ Common packs:
 
 - `console` for compact console inspection.
 - `project` for project/package/import metadata, validation, missing script/reference checks, Input System diagnostics, package compatibility, input-action inspection, and active input handler preview/apply.
-- `scene` for scene and GameObject inspection/editing, including the Phase 8 split GameObject TSAM surface and Phase 12 serialized-reference binding tools.
-- `ui` for UI Toolkit reads, uGUI hierarchy/layout preview/apply authoring, and read-only screen-layout verification.
+- `scene` for scene and GameObject inspection/editing, including the Phase 8 split GameObject TSAM surface, Phase 12 serialized-reference binding tools, and prefab instantiate/bind workflows.
+- `ui` for UI Toolkit reads, uGUI hierarchy/layout preview/apply authoring, canvas prefab authoring, raycast/layout verification, and read-only screen-layout verification.
+- `runtime` for play-mode runtime probes, visual bounds snapshots, and pointer-input smoke verification.
 - `scripting` for scripts, edits, command execution, and structured `Unity.RunCommand` return payloads.
 - `assets` for asset/resource workflows.
 - `debug` for diagnostics and profiling.
@@ -20,8 +21,9 @@ Use `Unity.ListToolPacks` to inspect available packs and `Unity.SetToolPacks` to
 Current live metadata baselines:
 
 - `foundation`: `12` exported tools.
-- `foundation + scene`: `32` exported tools.
-- `foundation + ui`: `22` exported tools.
+- `foundation + scene`: `34` exported tools.
+- `foundation + ui`: `25` exported tools.
+- `foundation + runtime`: `14` exported tools.
 - `project`: `21` exported tools.
 - `debug`: `22` exported tools.
 

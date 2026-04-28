@@ -102,16 +102,18 @@ agent should inspect first instead of running custom editor code.
 
 Pack-specific TSAM work is used to keep the MCP surface small:
 
-- `scene`: split GameObject tools and scene serialized-reference binding.
+- `scene`: split GameObject tools, scene serialized-reference binding, and prefab instantiate/bind workflows.
 - `project`: package/import diagnostics, Input System diagnostics, input-action asset inspection, and active input handler tools.
-- `ui`: uGUI hierarchy/layout preview/apply authoring and screen-layout verification.
+- `ui`: uGUI hierarchy/layout preview/apply authoring, canvas prefab authoring, raycast/layout verification, and screen-layout verification.
+- `runtime`: play-mode runtime probes, visual bounds snapshots, and pointer-input smoke verification.
 - `debug`: usage reports, payload analysis, and TSAM stage coverage inspection.
 
 Current metadata baselines are:
 
 - `foundation`: `12` exported tools.
-- `foundation + scene`: `32` exported tools.
-- `foundation + ui`: `22` exported tools.
+- `foundation + scene`: `34` exported tools.
+- `foundation + ui`: `25` exported tools.
+- `foundation + runtime`: `14` exported tools.
 - `project`: `21` exported tools.
 - `debug`: `22` exported tools.
 
@@ -170,6 +172,12 @@ The batch helper now handles unwrapped `Unity.ReadDetailRef` structured payloads
 as successful steps and summarizes large detail payloads instead of inlining
 them in passing smoke output.
 
+A longer TintPaint dogfood session later shaped `3,012,895` raw bytes to
+`650,430` bytes, saving `2,362,465` bytes (`78.41%`). That session also showed
+that compact usage reports still need better default summaries for large pack
+transition lists and clearer TSAM coverage presentation when coverage rows
+exist.
+
 ---
 
 ## Implemented Surfaces
@@ -180,7 +188,10 @@ Current TSAM-covered surfaces include:
 - Project/Input System tools for diagnostics and active input handler preview/apply.
 - Package compatibility and input-action asset inspection.
 - UI hierarchy/layout preview/apply tools and screen-layout verification.
+- UI canvas prefab preview/apply tools and raycast/layout verification.
 - Scene serialized-reference preview/apply binding.
+- Scene prefab instantiate/bind preview/apply tools.
+- Play-mode pointer-input smoke verification.
 - Compact `Unity.RunCommand` log summaries and `Unity.ReadConsole` summary reads.
 - Usage reporting for payload, bridge, pack transition, tool snapshot, detail-ref, and TSAM stage coverage analysis.
 

@@ -27,6 +27,16 @@ namespace Becool.UnityMcpLens.Editor.Services.Scene
             return Run(request, previewOnly: false, timing);
         }
 
+        public SceneReferenceBindingOperationResult PreviewInstantiatePrefabAndBind(ScenePrefabInstantiateAndBindRequest request, ToolOperationTiming timing)
+        {
+            return RunInstantiatePrefabAndBind(request, previewOnly: true, timing);
+        }
+
+        public SceneReferenceBindingOperationResult ApplyInstantiatePrefabAndBind(ScenePrefabInstantiateAndBindRequest request, ToolOperationTiming timing)
+        {
+            return RunInstantiatePrefabAndBind(request, previewOnly: false, timing);
+        }
+
         SceneReferenceBindingOperationResult Run(SceneReferenceBindingRequest request, bool previewOnly, ToolOperationTiming timing)
         {
             if (request?.Target == null)
@@ -68,6 +78,39 @@ namespace Becool.UnityMcpLens.Editor.Services.Scene
                         willModify = applied,
                         bindings = bindings.ToArray()
                     });
+            }
+        }
+
+        SceneReferenceBindingOperationResult RunInstantiatePrefabAndBind(ScenePrefabInstantiateAndBindRequest request, bool previewOnly, ToolOperationTiming timing)
+        {
+            if (string.IsNullOrWhiteSpace(request?.PrefabPath))
+            {
+                return SceneReferenceBindingOperationResult.Error("prefabPath is required.", "prefab_path_required");
+            }
+
+            using (timing.Measure("adapter"))
+            {
+                if (!m_Adapter.TryInstantiatePrefabAndBind(request, previewOnly, out var instanceRoot, out var data, out var applied, out var error))
+                {
+                    return SceneReferenceBindingOperationResult.Error(
+                        $"Failed to {(previewOnly ? "preview" : "apply")} prefab instantiate/bind: {error}",
+                        "prefab_instantiate_bind_failed",
+                        new { errorKind = "prefab_instantiate_bind_failed", error });
+                }
+
+                if (!previewOnly && applied && instanceRoot != null)
+                {
+                    EditorSceneManager.MarkSceneDirty(instanceRoot.scene);
+                    EditorSceneManager.SaveOpenScenes();
+                }
+
+                return SceneReferenceBindingOperationResult.Ok(
+                    previewOnly
+                        ? $"Previewed prefab instantiate/bind for '{request.PrefabPath}'."
+                        : applied
+                            ? $"Applied prefab instantiate/bind for '{request.PrefabPath}'."
+                            : $"No prefab instantiate/bind changes were required for '{request.PrefabPath}'.",
+                    data);
             }
         }
     }

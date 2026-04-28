@@ -290,6 +290,48 @@ Smoke details:
 - The batch helper read a ReadConsole detail ref successfully and inlined the small detail payload (`payloadIncluded=true`, `payloadBytes=103`).
 - `Unity.ReadConsole` returned no entries in this clean TintPaint scope, so it validated detail-ref normalization but did not produce a console savings row in this smoke.
 
+## TintPaint Dogfood Session 2026-04-28
+
+A longer real-work dogfood session in `D:\TintPaint` produced substantially
+larger measured savings and exposed the next workflow gaps:
+
+- Host project: `D:\TintPaint`.
+- Report time: `2026-04-28T13:57:37-06:00`; usage detail created `2026-04-28T19:57:37Z`.
+- Scope: `lastRows=2000`, excluding request `c35f449cd32f41708ffb082238f66598`.
+- Rows: `1999`; payload rows: `216`; coverage rows: `1783`.
+- Payload size: `3,012,895` raw bytes -> `650,430` shaped bytes.
+- Recorded savings: `2,362,465` bytes, `78.41%`.
+- `NoShapingRecorded=false`.
+- Connections: `42`.
+- Setup cycles: `89`.
+- Bridge requests/responses: `889` / `894`.
+- `get_tool_schema` requests: `293`.
+- Pack transitions: `147`.
+- Unmatched requests: `2`, both `domain_reload_transport_close`.
+- Failure classes: `Unity_ManageEditor disposed_transport=6`; `get_tool_schema transport_closed_before_response=1`.
+- `tsamCoverage=[]` despite `1783` coverage rows, which is a usage-report presentation gap.
+
+Top savings:
+
+- `tool_snapshot:Bridge.RefreshToolsSnapshotIfNeeded`: `1,800,288` raw bytes -> `170,658` shaped bytes, saving `1,629,630` bytes (`90.52%`).
+- `tool_result:Unity.ManageEditor.WaitForStableEditor`: `753,846` raw bytes -> `26,277` shaped bytes, saving `727,569` bytes (`96.51%`).
+- `tool_result:Unity.RunCommand`: `11,720` raw bytes -> `5,751` shaped bytes, saving `5,969` bytes (`50.93%`).
+- `tool_result:Unity.GetLensUsageReport`: `24,845` raw bytes -> `20,011` shaped bytes, saving `4,834` bytes (`19.46%`).
+
+Detail-ref result:
+
+- Usage report detail ref `detail_b3337f7c7824459a902302ee8403e62c` resolved successfully through the batch helper.
+- Detail payload was `55,942` bytes and was summarized rather than inlined.
+
+Workflow findings:
+
+- `Check-UnityDevSession.ps1`, `Sync-UnityScriptChanges.ps1`, `Enter-UnityPlayMode.ps1`, `Invoke-UnityRunCommand.ps1`, `Get-UnityConsole.ps1`, and `Invoke-UnityMcpBatch.ps1` were all useful.
+- `Get-UnityConsole.ps1` / `Unity_ReadConsole` avoided raw `Editor.log` grep and confirmed `0` console entries after validation.
+- Real UI/prefab work still fell back to `Unity.RunCommand` for prefab creation, scene wiring, validation probes, and runtime checks.
+- Pointer-driven Input System simulation did not drive the application's `Mouse.current` path reliably; validation fell back to calling the shared paint method directly.
+- `Unity.RunCommand` play-state restoration can make "stop play mode" attempts misleading; direct `Unity_ManageEditor Action=Stop` remains the reliable stop path.
+- Compact usage reporting still inlined a large `packSetTransitions` list in the terminal output; this should be summarized by default with full rows behind `detailRef`.
+
 ---
 
 ## Current Findings
@@ -321,8 +363,9 @@ extended compact defaults to log-heavy `Unity.RunCommand` and `Unity.ReadConsole
 summary results.
 
 Remaining shaping work should focus on residual editor-state edge cases, console
-detail coverage in projects with sparse logs, and making telemetry presentation
-clearer when `tool_execution` rows record already-compacted responses.
+detail coverage in projects with sparse logs, compacting large usage-report pack
+transition lists, and making telemetry presentation clearer when
+`tool_execution` rows record already-compacted responses.
 
 ### Diagnostic Surface Gaps
 

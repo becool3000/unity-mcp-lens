@@ -9,8 +9,9 @@ latest dogfood findings.
 ## Current Baselines
 
 - `foundation` exports `12` tools.
-- `foundation + scene` now targets `32` tools.
-- `foundation + ui` now targets `22` tools.
+- `foundation + scene` now targets `34` tools.
+- `foundation + ui` now targets `25` tools.
+- `foundation + runtime` now targets `14` tools.
 - Latest completed metadata audit passed with `project=21` and `debug=22`; Phase 12 raises the expected `scene` and `ui` counts.
 - Phase 8 split GameObject tools are in the `scene` pack.
 - Phase 12 scene serialized-reference preview/apply binding tools are in the `scene` pack.
@@ -22,6 +23,7 @@ latest dogfood findings.
 - Phase 14 payload telemetry records measurable compact-result savings for large TSAM results, and the batch helper reduces repeated smoke/session churn.
 - Phase 15 payload telemetry records measurable compact-log savings for `Unity.RunCommand` and `Unity.ReadConsole` summary results.
 - Phase 16 moves the active long-running smoke host to `D:\TintPaint`, normalizes batch-helper `Unity.ReadDetailRef` results, and records measurable `Unity.ManageEditor.WaitForStableEditor` savings.
+- Phase 17 addresses the highest TintPaint dogfood pain with compact usage-report pack transition summaries, clearer TSAM coverage presentation, durable uGUI canvas prefab authoring, scene prefab instantiate/bind, UI raycast/layout verification, and play-mode pointer-input smoke verification.
 
 ---
 
@@ -347,6 +349,60 @@ Smoke notes:
 
 ---
 
+## Latest TintPaint Dogfood Session
+
+Date: 2026-04-28
+
+Result: Lens is stable enough for continued real Unity work, with UI/prefab and
+runtime pointer-input gaps.
+
+Host project:
+
+- `D:\TintPaint`
+- Report time: `2026-04-28T13:57:37-06:00`
+
+Telemetry result:
+
+- Scope: `lastRows=2000`, excluding request `c35f449cd32f41708ffb082238f66598`.
+- Rows: `1999`; payload rows: `216`; coverage rows: `1783`.
+- Payload size: `3,012,895` raw bytes -> `650,430` shaped bytes.
+- Recorded savings: `2,362,465` bytes (`78.41%`).
+- `NoShapingRecorded=false`.
+- Connections: `42`.
+- Setup cycles: `89`.
+- `get_tool_schema` requests: `293`.
+- Pack transitions: `147`.
+- Unmatched requests: `2`, both `domain_reload_transport_close`.
+- Failure classes: `Unity_ManageEditor disposed_transport=6`; `get_tool_schema transport_closed_before_response=1`.
+- `tsamCoverage=[]` despite `1783` coverage rows, which is a telemetry presentation bug.
+
+Top savings:
+
+- `Bridge.RefreshToolsSnapshotIfNeeded`: `1,800,288` raw bytes -> `170,658` shaped bytes, saving `1,629,630` bytes (`90.52%`).
+- `Unity.ManageEditor.WaitForStableEditor`: `753,846` raw bytes -> `26,277` shaped bytes, saving `727,569` bytes (`96.51%`).
+- `Unity.RunCommand`: `11,720` raw bytes -> `5,751` shaped bytes, saving `5,969` bytes (`50.93%`).
+- `Unity.GetLensUsageReport`: `24,845` raw bytes -> `20,011` shaped bytes, saving `4,834` bytes (`19.46%`).
+
+Dogfood findings:
+
+- `Unity.GetLensUsageReport` was useful and compact enough for totals, savings, top rows, failures, and churn.
+- `Unity.ReadDetailRef` worked through `Invoke-UnityMcpBatch`; the usage-report detail ref resolved and was summarized instead of inlined.
+- `Get-UnityConsole.ps1` / `Unity_ReadConsole` avoided raw `Editor.log` grep.
+- Scene and prefab authoring still required custom `Unity.RunCommand` editor code for durable uGUI prefab creation, scene wiring, and reference checks.
+- Runtime pointer verification is weak: synthetic `MouseState` did not drive the app's `Mouse.current` path reliably.
+- `Unity.RunCommand` play-state restoration can make stop-play attempts misleading; `Unity_ManageEditor Action=Stop` remains the reliable exit path.
+- Compact usage reports should summarize `packSetTransitions` by default and put the full list behind `detailRef`.
+
+Implemented Phase 17 tool responses to this dogfood:
+
+- `Unity.UI.PreviewCreateCanvasPrefab` / `Unity.UI.ApplyCreateCanvasPrefab` in `ui`: preview/apply durable uGUI canvas prefab authoring with node hierarchy specs and common Canvas/CanvasScaler/GraphicRaycaster setup.
+- `Unity.Scene.PreviewInstantiatePrefabAndBind` / `Unity.Scene.ApplyInstantiatePrefabAndBind` in `scene`: preview/apply scene prefab instantiation plus ordered serialized reference binding.
+- `Unity.UI.VerifyRaycastAndLayout` in `ui`: read-only raycast stack, top hit, blocking result, and optional layout assertions for screen points or UI object names.
+- `Unity.PlayMode.PointerInputSmoke` in `runtime`: play-mode pointer smoke with observed Input System state, UI hit evidence, and world raycast evidence.
+- `Unity.Editor.ExitPlayMode` helper or foundation tool: explicit stop/pause/unpause semantics with final editor state, not subject to `Unity.RunCommand` play-state restoration.
+
+---
+
 ## P0
 
 ### Bridge And Helper Session Churn
@@ -364,6 +420,8 @@ Work:
 - Avoid pack changes when the requested pack set is already active.
 - Avoid repeated schema pulls when the tool snapshot hash has not changed.
 - Make reload/play transition transport closures clear instead of alarming.
+- Keep usage-report compact mode from inlining very large `packSetTransitions` lists.
+- Fix `tsamCoverage=[]` presentation when coverage rows exist.
 
 ### Payload Shaping
 
@@ -402,6 +460,8 @@ Current tools:
 
 Work:
 
+- Add first-class durable uGUI prefab authoring and scene prefab instantiation/binding paths.
+- Add read-only UI raycast/layout verification so UI blocking and hit-test behavior do not require custom hierarchy probes.
 - Dogfood the full Phase 12 HUD authoring flow in `D:\TintPaint` without custom editor C# when that project has durable UI/HUD targets.
 - Keep no-op apply responses truly clean: `applied=false`, no unnecessary dirty/save.
 - Make `Unity.RunCommand` structured `ReturnResult(...)` the preferred probe return path over console-warning abuse.
@@ -433,6 +493,14 @@ Work:
 - Keep compilation, execution, and console logs compact by default with full logs behind detail refs.
 - Add or improve structured recent-console reads so package/import errors do not require raw `Editor.log` grep.
 - Keep the play-mode helper bypass keyed to direct Lens health and compact editor state, even when `IsPlayingOrWillChangePlaymode` keeps the editor-stability label at `play_transition`.
+- Do not use `Unity.RunCommand` as the primary way to exit play mode; prefer a dedicated helper/tool path that cannot be undone by play-state restoration.
+
+### Runtime Input And Raycast Verification
+
+Work:
+
+- Add pointer-input smoke tooling that verifies observed Input System state, UI blocking, world hit, and sampled gameplay result.
+- Keep this read-only/verify-oriented where possible, with explicit play-mode preconditions and compact result summaries.
 
 ### Restart And Reload Orchestration
 
