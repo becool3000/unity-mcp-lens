@@ -33,7 +33,21 @@ async function main() {
   });
 
   if (!idleWait.success) {
-    console.log(JSON.stringify({ success: false, message: "Unity editor did not become idle before play.", idleWait }, null, 2));
+    let nativeModal = null;
+    try {
+      nativeModal = await common.detectUnityNativeModals(projectPath, { timeoutSeconds: 6, maxItems: 8 });
+    } catch (_error) {
+    }
+    const modalBlocking = nativeModal?.found === true;
+    console.log(JSON.stringify({
+      success: false,
+      message: modalBlocking
+        ? "Unity play-mode entry is blocked by an OS-native Unity modal dialog. Resolve the modal before retrying."
+        : "Unity editor did not become idle before play.",
+      classification: modalBlocking ? "EditorModalBlocking" : null,
+      idleWait,
+      nativeModal,
+    }, null, 2));
     await common.shutdownUnityMcpSessions();
     process.exit(1);
     return;
@@ -98,6 +112,18 @@ async function main() {
     playReady,
     degradedFallback,
   };
+
+  if (!result.success) {
+    try {
+      const nativeModal = await common.detectUnityNativeModals(projectPath, { timeoutSeconds: 6, maxItems: 8 });
+      result.nativeModal = nativeModal;
+      if (nativeModal?.found === true) {
+        result.classification = "EditorModalBlocking";
+        result.message = "Unity play-mode entry is blocked by an OS-native Unity modal dialog. Resolve the modal before retrying.";
+      }
+    } catch (_error) {
+    }
+  }
 
   console.log(JSON.stringify(result, null, 2));
   await common.shutdownUnityMcpSessions();

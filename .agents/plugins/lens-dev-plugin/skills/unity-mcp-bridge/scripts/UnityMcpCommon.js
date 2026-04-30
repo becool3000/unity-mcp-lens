@@ -264,6 +264,9 @@ const foundationToolNames = new Set(
     "Unity.ListToolPacks",
     "Unity.SetToolPacks",
     "Unity.ReadDetailRef",
+    "Unity.Batch.ExecuteWorkflow",
+    "Unity.Editor.DetectNativeModals",
+    "Unity.Editor.ResolveSceneReloadPrompt",
     "Unity.GetLensHealth",
     "Unity.ReadConsole",
     "Unity.ListResources",
@@ -294,6 +297,8 @@ const exactPackMap = new Map(
     Unity_InputActions_InspectAsset: ["project"],
     Unity_ProjectSettings_PreviewActiveInputHandler: ["project"],
     Unity_ProjectSettings_SetActiveInputHandler: ["project"],
+    Unity_Font_PreviewImportAndBindUiFont: ["ui"],
+    Unity_Font_ApplyImportAndBindUiFont: ["ui"],
     Unity_Object_ValidateReferences: ["project"],
     Unity_Project_ScanMissingScripts: ["project"],
     Unity_Runtime_GetVisualBoundsSnapshot: ["runtime"],
@@ -2165,6 +2170,43 @@ async function getUnityLensHealth(projectPath, timeoutSeconds = 8) {
   return getToolObject(response);
 }
 
+async function detectUnityNativeModals(projectPath, options = {}) {
+  const payload = {
+    projectPath: resolveProjectPath(projectPath),
+    includeButtons: options.includeButtons !== false,
+    maxItems: options.maxItems ?? 8,
+  };
+  if (options.processId) {
+    payload.processId = Number(options.processId);
+  }
+  if (Array.isArray(options.knownPatterns) && options.knownPatterns.length > 0) {
+    payload.knownPatterns = options.knownPatterns;
+  }
+
+  const response = await invokeUnityMcpToolJson(projectPath, "Unity.Editor.DetectNativeModals", payload, {
+    timeoutSeconds: options.timeoutSeconds || 8,
+  });
+  return getToolObject(response);
+}
+
+async function resolveUnitySceneReloadPrompt(projectPath, options = {}) {
+  const payload = {
+    projectPath: resolveProjectPath(projectPath),
+    action: options.action || "DetectOnly",
+    expectedChangedPaths: options.expectedChangedPaths || [],
+    timeoutSeconds: options.timeoutSeconds ?? 10,
+    waitForBridgeReady: options.waitForBridgeReady !== false,
+  };
+  if (options.processId) {
+    payload.processId = Number(options.processId);
+  }
+
+  const response = await invokeUnityMcpToolJson(projectPath, "Unity.Editor.ResolveSceneReloadPrompt", payload, {
+    timeoutSeconds: Math.max(5, Number(options.timeoutSeconds || 10) + 15),
+  });
+  return getToolObject(response);
+}
+
 function getUnityLensHealthReadinessSnapshot(lensHealth) {
   const lensData = valueOf(lensHealth, "data", "Data") || {};
   const bridgeStatus = valueOf(valueOf(lensData, "bridgeStatus", "BridgeStatus") || {}, "status", "Status") || null;
@@ -2342,6 +2384,18 @@ async function checkUnityMcp(projectPath, options = {}) {
   const editorLogPath = getUnityEditorLogPath();
   const editorLogTailLines = tailFile(editorLogPath, options.editorLogTail ?? 400);
   const webGlBuildState = getWebGlBuildProgressState(editorLogTailLines);
+  let nativeModalState = null;
+  let nativeModalError = null;
+  if (unityRunning) {
+    try {
+      nativeModalState = await detectUnityNativeModals(projectRoot, { timeoutSeconds: 6, maxItems: 8 });
+    } catch (error) {
+      nativeModalError = error.message;
+    }
+  }
+  const editorModalBlocking = nativeModalState?.found === true &&
+    Array.isArray(nativeModalState.modals) &&
+    nativeModalState.modals.some((modal) => modal?.blockingBridgeLikely === true || modal?.isSceneReloadPrompt === true);
 
   const signals = {
     ApprovalPending: ["Awaiting user approval", "approval_pending", "Validation: Pending"],
@@ -2430,6 +2484,11 @@ async function checkUnityMcp(projectPath, options = {}) {
     summary = "Codex is configured to launch the raw Unity relay directly instead of unity-mcp-lens.";
     recommendedAction = "Switch Codex MCP config to the unity-mcp-lens binary or the plugin launcher, then restart Codex.";
     exitCode = 13;
+  } else if (editorModalBlocking) {
+    classification = "EditorModalBlocking";
+    summary = "Unity has an OS-native modal dialog open that can block bridge calls.";
+    recommendedAction = "Run Resolve-UnitySceneReloadPrompt.ps1 with DetectOnly first, then Reload or Ignore explicitly when safe.";
+    exitCode = 16;
   } else if (approvalSignal) {
     classification = "ApprovalPending";
     summary = "Unity MCP is waiting for user approval in the Unity Editor.";
@@ -2522,6 +2581,8 @@ async function checkUnityMcp(projectPath, options = {}) {
     DegradedAuthorityProbeError: degradedAuthorityProbeError,
     LensHealthOverridesBeacon: lensHealthOverridesBeacon,
     ExpectedReloadState: expectedReloadState,
+    NativeModalState: nativeModalState,
+    NativeModalError: nativeModalError,
     DetectedSignals: detectedSignals,
     WebGLBuildState: webGlBuildState,
     EditorLogPath: pathExists(editorLogPath) ? editorLogPath : null,
@@ -2580,6 +2641,16 @@ async function checkUnityMcp(projectPath, options = {}) {
         }
       : lensHealthError
         ? { Success: false, Error: lensHealthError, OverridesBeacon: false }
+        : null,
+    NativeModalState: nativeModalState
+      ? {
+          Supported: nativeModalState.supported,
+          Found: nativeModalState.found,
+          ModalCount: nativeModalState.modalCount,
+          Modals: nativeModalState.modals,
+        }
+      : nativeModalError
+        ? { Supported: false, Found: false, Error: nativeModalError }
         : null,
     ExpectedReloadState: expectedReloadState
       ? {
@@ -2686,6 +2757,8 @@ module.exports = {
   getUnityEditorState,
   getUnityCompactEditorState,
   getUnityLensHealth,
+  detectUnityNativeModals,
+  resolveUnitySceneReloadPrompt,
   getUnityConsoleEntries,
   convertToUnityRunCommandScript,
   invokeUnityRunCommandObject,

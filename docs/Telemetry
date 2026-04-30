@@ -334,6 +334,86 @@ Workflow findings:
 
 ---
 
+## Phase 18 Public Batch Smoke 2026-04-30
+
+Phase 18 added the public `Unity.Batch.ExecuteWorkflow` foundation tool and
+retargeted the repo-local batch helper to call it through the normal MCP tool
+surface.
+
+Clean smoke host:
+
+- Host project: `D:\TintPaint`.
+- Fresh marker: `nextLine=5519`.
+- Health check: bridge ready, editor idle, direct MCP healthy, helper path healthy.
+- Console check: `0` entries.
+- Batch helper implementation: public tool `Unity_Batch_ExecuteWorkflow`.
+- Batch steps: `Unity.GetLensHealth`, `Unity.GetLensUsageReport`, `Unity.ReadConsole`.
+- Batch result: `3/3` steps completed, `0` failed.
+- Batch pack transitions: `3` within the workflow, restored final packs to `foundation`.
+- Helper inference confirmed `Unity_GetLensUsageReport` requires `debug`.
+
+Fresh usage scope from the marker:
+
+- Scope: `sinceLine=5519`.
+- Rows: `27`; payload rows: `8`; coverage rows: `19`.
+- Payload size: `16,458` raw bytes -> `16,929` shaped bytes.
+- Recorded aggregate savings: `0` bytes because this was a very small control-plane-only scope and compact metadata overhead exceeded the tiny saved row.
+- Shaping signal: `NoShapingRecorded=false`; `1` eligible payload row recorded shaped savings.
+- Top savings: `tool_result:Unity.GetLensUsageReport` saved `73` bytes (`1.97%`).
+- Connections: `3`.
+- Setup cycles: `0`.
+- Schema requests: `3`.
+- Pack transitions: `1` in the final usage-report scope.
+- Unmatched requests: `0` expected transition, `0` unexpected.
+- Failure classes: none.
+- Expected transition failure classes: none.
+- TSAM presentation: `tsamCoverageSummary.status=no_tsam_tools_exercised`, `tsamStageRows=0`, `potentialTsamToolRows=0`.
+- Usage detail ref `detail_4dbd03396cf1453a9817f4761800ca69` resolved successfully with `contentType=application/json` and a `6,472` byte payload.
+
+Interpretation:
+
+- The same-session public batch path works and restores packs after completion.
+- The helper no longer needs to open separate sessions for simple multi-step telemetry/console workflows.
+- The clarified TSAM summary now distinguishes a clean control-plane scope from a TSAM telemetry failure.
+- Payload savings are expected to be low in this smoke because it intentionally avoided large snapshots, editor-state waits, log-heavy probes, and TSAM tool results.
+
+---
+
+## Phase 19 Modal And Font/Text Smoke 2026-04-30
+
+Phase 19 added native modal recovery outside the Unity bridge and focused
+legacy uGUI font/text tools.
+
+Smoke host:
+
+- Host project: `D:\TintPaint`.
+- Metadata audit: passed with `foundation=15`, `foundation+scene=37`, `foundation+ui=31`, `foundation+runtime=17`, `project=24`, and `debug=26`.
+- Native modal detect: `supported=true`, `found=false`, `modalCount=0`.
+- Scene reload detect-only: `found=false`, `applied=false`, `reason=prompt_not_found`.
+- `Check-UnityDevSession.ps1`: reported `ProceedWithLensHelpers`; native modal state was included and clear.
+- `Unity.UI.VisualTextAudit` on `Assets/MaterialLab/UI/MixLabCanvas.prefab`: `12` legacy Text rows, `13` compact issues, `detailRef` available.
+- Font preview with `Assets/Fonts/Noto_Sans/static/NotoSans_Condensed-Regular.ttf`: detected `12` proposed bindings without mutating.
+- No-op font preview/apply with `Assets/Fonts/Noto_Sans/static/NotoSans-Regular.ttf`: `bindingCount=12`, `willModify=false`, `applied=false`, `issues=[]`.
+
+Follow-up usage scope:
+
+- Scope: `lastRows:120`.
+- `tsamCoverageSummary.status=present`.
+- `tsamStageRows=8`.
+- `toolCount=2`.
+- `completeToolCount=2`.
+- `failedRows=0`.
+- Failure classes: none.
+- Unmatched requests: `0` unexpected; `1` expected transition request from the preceding compile/reload sync was grouped separately.
+
+Interpretation:
+
+- Modal recovery can now be tested without a healthy Unity bridge and no longer requires a raw Win32 workaround for detection.
+- UI/font checks have compact pass/fail decision data inline while full row data stays behind `detailRef`.
+- The Phase 19 smoke did not trigger a real Unity scene reload modal, so `Reload`/`Ignore` button-click behavior still needs validation during the next dogfood prompt that naturally produces the external scene reload dialog.
+
+---
+
 ## Current Findings
 
 ### Session And Schema Churn

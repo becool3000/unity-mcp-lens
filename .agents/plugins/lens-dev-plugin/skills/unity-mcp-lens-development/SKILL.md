@@ -77,8 +77,8 @@ Phase 14 keeps the public tool surface stable and makes high-volume TSAM results
 
 - Compact default results are expected for `Unity.InputSystem.Diagnostics`, UI hierarchy preview/apply, scene serialized-reference binding preview/apply, and `Unity.UI.VerifyScreenLayout`.
 - Full bulky data should remain available through `detailRef` when the bridge detail store is available.
-- Use `Invoke-UnityMcpBatch` for focused smoke/workflow sequences that need multiple project/ui/scene/debug calls in one Lens session.
-- Pack baselines after Phase 17: `foundation=12`, `foundation+scene=34`, `foundation+ui=25`, `foundation+runtime=14`, `project=21`, and `debug=22`.
+- Use `Invoke-UnityMcpBatch` for focused smoke/workflow sequences that need multiple project/ui/scene/runtime/debug calls in one Lens session. It should route through public `Unity.Batch.ExecuteWorkflow`, not ad hoc same-connection scripts.
+- Pack baselines after Phase 18: `foundation=13`, `foundation+scene=35`, `foundation+ui=26`, `foundation+runtime=15`, `project=22`, and `debug=24`.
 - Current Phase 14 smoke baseline: `NoShapingRecorded=false`, `7` saving rows, `50,566` raw bytes -> `24,025` shaped bytes, `3` connections, `6` schema requests, and `4` pack transitions.
 
 ## Phase 15 RunCommand And Console Truth
@@ -116,6 +116,27 @@ Phase 17 addresses the highest TintPaint dogfood pain without widening `foundati
 - Prefer `Unity.UI.VerifyRaycastAndLayout` for UI blocking and hit-test assertions before ad hoc hierarchy probes.
 - Prefer `Unity.PlayMode.PointerInputSmoke` for pointer-path evidence in play mode; it reports observed Input System state plus UI/world hit evidence.
 - `Unity.GetLensUsageReport` compact output should summarize large pack-transition lists and report TSAM coverage summary data.
+
+## Phase 18 Public Batch And Reliability Truth
+
+Phase 18 is reliability-first and does not add ScriptableObject or prefab-instance authoring.
+
+- Prefer public `Unity.Batch.ExecuteWorkflow` for same-session workflows. It executes contained tools through `McpToolRegistry`, validates pack availability through the manifest broker, rejects recursive/pack-control contained steps, and restores original active packs.
+- `Invoke-UnityMcpBatch` remains the stable helper wrapper and should call `Unity.Batch.ExecuteWorkflow`.
+- `Unity_GetLensUsageReport` must infer `debug`; helper ownership tests cover this.
+- Usage-report compact output should keep `packSetTransitions` summarized inline, separate expected reload/play transport loss from true failure classes, and report TSAM coverage status clearly.
+- Deferred post-Phase 19 candidates are `Unity.Asset.CreateOrUpdateScriptableObject`, prefab-instance UI patch/bind, generic runtime component assertions, and explicit exit-play-mode orchestration.
+
+## Phase 19 Modal Recovery And UI Font/Text Truth
+
+Phase 19 prioritizes native Unity modal recovery and focused legacy uGUI font/text verification.
+
+- `Unity.Editor.DetectNativeModals` and `Unity.Editor.ResolveSceneReloadPrompt` are standalone Lens-server local tools. They must be listed and callable before Unity bridge bootstrap.
+- `ResolveSceneReloadPrompt Auto` is safety-first: it reloads only when expected changed paths or an active expected-reload marker are present.
+- Helper classifications should surface native dialog blockers as `EditorModalBlocking` and session checks should recommend `ResolveEditorModal`.
+- Prefer `Unity.UI.VisualTextAudit` for legacy `UnityEngine.UI.Text` visibility/font/alpha/rect checks before custom probes.
+- Prefer `Unity.Font.PreviewImportAndBindUiFont` before `Unity.Font.ApplyImportAndBindUiFont` for legacy Font binding; TextMeshPro is unsupported in v1 and must be reported as such.
+- Pack baselines after Phase 19: `foundation=15`, `foundation+scene=37`, `foundation+ui=31`, `foundation+runtime=17`, `project=24`, and `debug=26`.
 
 ## Maintenance Rules
 

@@ -103,8 +103,10 @@ Run one simple workflow:
 
 This shows the TSAM loop: narrow tool → compact result → optional expansion → telemetry.
 
-For repeated smoke or workflow checks, use the repo-local batch helper so
-multiple project/ui/scene/debug calls share one Lens session:
+For repeated smoke or workflow checks, use the repo-local batch helper. It calls
+the public foundation tool `Unity.Batch.ExecuteWorkflow` so multiple project,
+ui, scene, runtime, and debug calls share one Lens connection and restore pack
+state afterward:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .agents/plugins/lens-dev-plugin/skills/unity-dev-assistant/scripts/Invoke-UnityMcpBatch.ps1 -ProjectPath C:\Path\To\UnityProject -StepsPath C:\Path\To\steps.json
@@ -174,6 +176,8 @@ recorded signals include:
 - Phase 16 smoke on `D:\TintPaint`: metadata audit passed with unchanged pack baselines; focused scope was `35` rows; payload size was `60,520` raw bytes -> `48,101` shaped bytes; recorded savings were `12,419` bytes (`20.52%`); `Unity.ManageEditor.WaitForStableEditor` saved `2,498` bytes (`62.69%`) and batch `Unity.ReadDetailRef` reads now summarize unwrapped detail payloads correctly.
 - TintPaint dogfood session on 2026-04-28: longer real-work scope was `1999` rows; payload size was `3,012,895` raw bytes -> `650,430` shaped bytes; recorded savings were `2,362,465` bytes (`78.41%`); next gaps are compacting large pack-transition summaries, clearer TSAM coverage presentation, uGUI prefab authoring, UI raycast verification, and pointer-input smoke tooling.
 - Phase 17 adds the first pass at those gaps: compact pack-transition summaries, clearer TSAM coverage summary data, uGUI canvas prefab preview/apply, scene prefab instantiate/bind preview/apply, UI raycast/layout verification, and play-mode pointer-input smoke verification.
+- Phase 18 adds public same-session workflow execution through `Unity.Batch.ExecuteWorkflow`, retargets the batch helper to that tool, and separates expected reload/play transition transport loss from true usage-report failure classes.
+- Phase 19 adds native Unity modal recovery before bridge bootstrap plus focused legacy uGUI font/text verification. A `D:\TintPaint` smoke passed metadata audit at `foundation=15`, `foundation+scene=37`, `foundation+ui=31`, `foundation+runtime=17`, `project=24`, and `debug=26`; modal detect/resolve detect-only returned a clean no-prompt result; `Unity.UI.VisualTextAudit` reported `12` legacy Text rows with compact issues/detailRef; and no-op font preview/apply returned `willModify=false` / `applied=false` for the current Noto font.
 - Payload shaping is still underway for residual editor-state edge cases, but the high-volume TSAM result path, log-heavy probe path, and editor-stability wait path now default to compact inline data with full data behind `detailRef`.
 
 ## Telemetry & Privacy
@@ -208,6 +212,9 @@ If you want help debugging or comparing results, you can copy and share telemetr
 Active refactor.
 
 Stable foundation. Expanding TSAM coverage and payload shaping.
+
+Current metadata audit targets are `foundation=15`, `foundation+scene=37`,
+`foundation+ui=31`, `foundation+runtime=17`, `project=24`, and `debug=26`.
 
 ---
 

@@ -8,11 +8,12 @@ latest dogfood findings.
 
 ## Current Baselines
 
-- `foundation` exports `12` tools.
-- `foundation + scene` now targets `34` tools.
-- `foundation + ui` now targets `25` tools.
-- `foundation + runtime` now targets `14` tools.
-- Latest completed metadata audit passed with `project=21` and `debug=22`; Phase 12 raises the expected `scene` and `ui` counts.
+- `foundation` exports `13` tools.
+- `foundation + scene` now targets `35` tools.
+- `foundation + ui` now targets `26` tools.
+- `foundation + runtime` now targets `15` tools.
+- `project` now targets `22` tools.
+- `debug` now targets `24` tools.
 - Phase 8 split GameObject tools are in the `scene` pack.
 - Phase 12 scene serialized-reference preview/apply binding tools are in the `scene` pack.
 - Phase 12 UI hierarchy/layout preview/apply tools and `Unity.UI.VerifyScreenLayout` are in the `ui` pack.
@@ -24,6 +25,7 @@ latest dogfood findings.
 - Phase 15 payload telemetry records measurable compact-log savings for `Unity.RunCommand` and `Unity.ReadConsole` summary results.
 - Phase 16 moves the active long-running smoke host to `D:\TintPaint`, normalizes batch-helper `Unity.ReadDetailRef` results, and records measurable `Unity.ManageEditor.WaitForStableEditor` savings.
 - Phase 17 addresses the highest TintPaint dogfood pain with compact usage-report pack transition summaries, clearer TSAM coverage presentation, durable uGUI canvas prefab authoring, scene prefab instantiate/bind, UI raycast/layout verification, and play-mode pointer-input smoke verification.
+- Phase 18 adds public `Unity.Batch.ExecuteWorkflow`, retargets the batch helper to that public tool, and separates expected reload/play transport loss from true usage-report failures.
 
 ---
 
@@ -400,6 +402,39 @@ Implemented Phase 17 tool responses to this dogfood:
 - `Unity.UI.VerifyRaycastAndLayout` in `ui`: read-only raycast stack, top hit, blocking result, and optional layout assertions for screen points or UI object names.
 - `Unity.PlayMode.PointerInputSmoke` in `runtime`: play-mode pointer smoke with observed Input System state, UI hit evidence, and world raycast evidence.
 - `Unity.Editor.ExitPlayMode` helper or foundation tool: explicit stop/pause/unpause semantics with final editor state, not subject to `Unity.RunCommand` play-state restoration.
+
+---
+
+## Phase 18 Public Batch Workflow And Reliability Hygiene
+
+Phase 18 adds public `Unity.Batch.ExecuteWorkflow` in `foundation` so ordered
+workflow steps can run under one Lens connection without recursive MCP transport.
+The tool validates or infers packs per contained step, rejects recursive batch and
+contained `Unity.SetToolPacks`, honors `readOnlyExpected`, and restores the
+original active pack set after completion.
+
+Current metadata audit targets after this phase:
+
+- `foundation=13`
+- `foundation+scene=35`
+- `foundation+ui=26`
+- `foundation+runtime=15`
+- `project=22`
+- `debug=24`
+
+Reliability work:
+
+- `Invoke-UnityMcpBatch` now routes through `Unity.Batch.ExecuteWorkflow` instead of a client-side loop of one-shot tool calls.
+- Helper pack inference for `Unity_GetLensUsageReport` is regression-checked so telemetry calls infer `debug`.
+- Usage reports separate expected reload/play transport loss from true failure classes.
+- TSAM coverage summaries distinguish "no TSAM tools exercised" from "TSAM-like tool rows exist but stage rows are missing."
+
+Phase 19 candidates deferred from this phase:
+
+- `Unity.Asset.CreateOrUpdateScriptableObject`
+- Prefab-instance UI patch/bind tooling
+- Generic runtime component assertions
+- Explicit play-mode exit orchestration
 
 ---
 

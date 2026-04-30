@@ -42,10 +42,10 @@ node .agents/plugins/lens-dev-plugin/skills/unity-dev-assistant/scripts/Check-Un
 - Treat `Check-UnityDevSession` as a split signal: `ProceedWithLensHelpers` means the helper path is healthy, while `ProceedWithDirectLensTools` means direct MCP is healthy and only the wrapper path is degraded.
 - Prefer the Phase 11 `project` tools for package/import/Input System and active input handler work before custom `Unity_RunCommand` probes, raw `Editor.log` grep, or YAML edits.
 - Prefer the Phase 12 `ui` and split `scene` binding tools for persistent HUD hierarchy, serialized scene references, and screen-layout verification before custom `Unity_RunCommand` editor scripts.
-- Prefer `Invoke-UnityMcpBatch` for repeated smoke/workflow checks that span project, ui, scene, and debug packs, so one Lens session can cover the ordered steps.
+- Prefer `Invoke-UnityMcpBatch` for repeated smoke/workflow checks that span project, ui, scene, runtime, and debug packs. It now routes through public `Unity.Batch.ExecuteWorkflow`, so Lens executes contained tools in the current connection, validates packs per step, and restores pack state.
 - Prefer helper-driven `Invoke-UnityRunCommand` for runtime probes now that it can bypass idle-wait gating in healthy play mode and preserve structured `ReturnResult(...)` payloads.
 - Treat `Unity.RunCommand` and `Unity.ReadConsole` inline logs as compact previews. Use `logSummary` and `Unity.ReadDetailRef` only when full log text or full scanned console entries are needed.
-- Keep `foundation` at `12` exported tools, `foundation + scene` at `34`, `foundation + ui` at `25`, and `foundation + runtime` at `14` unless a deliberate pack-surface change updates the metadata audit.
+- Keep current metadata baselines at `foundation=13`, `foundation+scene=35`, `foundation+ui=26`, `foundation+runtime=15`, `project=22`, and `debug=24` unless a deliberate pack-surface change updates the metadata audit.
 
 ## Current Tool Surface Reality
 
@@ -61,6 +61,7 @@ node .agents/plugins/lens-dev-plugin/skills/unity-dev-assistant/scripts/Check-Un
 ## Current Dogfood Priorities
 
 - Use the batch helper for repeated smoke/workflow calls instead of separate helper processes when the steps are known up front.
+- Treat `Unity.Batch.ExecuteWorkflow` as the preferred same-session workflow primitive; do not fall back to ad hoc same-connection Node scripts for usage-report/detail-ref reads unless the installed Lens server is stale.
 - Continue payload shaping for remaining editor-state edge cases now that the large TSAM targets and log-heavy probe/console paths show measurable savings.
 - Use `D:\TintPaint` as the active long-running Unity smoke host.
 - Reduce noisy repeated package/editor-log signals so healthy compatibility reads stay high signal.
@@ -68,7 +69,7 @@ node .agents/plugins/lens-dev-plugin/skills/unity-dev-assistant/scripts/Check-Un
 - Keep `Unity.Project.PackageCompatibility` and `Unity.InputActions.InspectAsset` as the preferred package/import read surface before raw `Editor.log` grep.
 - Keep `Unity.RunCommand` failure-stage metadata, detail refs, compact `logSummary`, and structured `ReturnResult(...)` output stable.
 - Add reliable restart/reload orchestration with save/dirty handling and bridge reacquire.
-- Dogfood durable uGUI prefab creation, scene prefab instantiation/binding, UI raycast verification, and runtime pointer-input verification on TintPaint without custom editor C#.
+- Phase 19 candidates: ScriptableObject asset creation, prefab-instance UI patch/bind, generic runtime component assertions, and explicit exit-play-mode orchestration.
 
 ## Latest Completed Smoke
 

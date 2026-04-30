@@ -34,6 +34,7 @@ async function main() {
     expectedReloadState: null,
     fallbackClassification: null,
     directHealthFallback: null,
+    nativeModal: null,
   };
 
   const startedAt = Date.now();
@@ -132,23 +133,35 @@ async function main() {
 
     if (!result.success) {
       try {
-        const directHealth = await common.testUnityDirectEditorHealthy(projectPath, {
-          timeoutSeconds: 20,
-          consecutiveHealthyPolls: 2,
-          pollIntervalSeconds: common.getArgNumber(args, ["PollIntervalSeconds"], 0.5),
-        });
-        result.directHealthFallback = directHealth;
-
-        if (directHealth.success) {
-          result.success = true;
-          result.fallbackClassification = "LensHelpersRecovered";
-          result.message = "Lens helper sync recovered: direct Lens health and compact editor-state probes are healthy and idle.";
-          if (!result.editorIdle) {
-            result.editorIdle = directHealth;
-          }
-          common.clearUnityExpectedReloadState(projectPath);
+        const nativeModal = await common.detectUnityNativeModals(projectPath, { timeoutSeconds: 6, maxItems: 8 });
+        result.nativeModal = nativeModal;
+        if (nativeModal?.found === true) {
+          result.fallbackClassification = "EditorModalBlocking";
+          result.message = "Unity sync is blocked by an OS-native Unity modal dialog. Resolve the modal before retrying.";
         }
       } catch (_error) {
+      }
+
+      if (result.fallbackClassification !== "EditorModalBlocking") {
+        try {
+          const directHealth = await common.testUnityDirectEditorHealthy(projectPath, {
+            timeoutSeconds: 20,
+            consecutiveHealthyPolls: 2,
+            pollIntervalSeconds: common.getArgNumber(args, ["PollIntervalSeconds"], 0.5),
+          });
+          result.directHealthFallback = directHealth;
+
+          if (directHealth.success) {
+            result.success = true;
+            result.fallbackClassification = "LensHelpersRecovered";
+            result.message = "Lens helper sync recovered: direct Lens health and compact editor-state probes are healthy and idle.";
+            if (!result.editorIdle) {
+              result.editorIdle = directHealth;
+            }
+            common.clearUnityExpectedReloadState(projectPath);
+          }
+        } catch (_error) {
+        }
       }
     }
   }

@@ -129,6 +129,7 @@ at real workflow scale:
 ### 1. Bridge And Session Hygiene
 
 - Use `Invoke-UnityMcpBatch` when a smoke or workflow has multiple known steps that can share one Lens session.
+- Prefer public `Unity.Batch.ExecuteWorkflow` through the batch helper for same-session workflows; it must validate contained-tool packs, reject recursive/pack-control steps, and restore the original active packs.
 - Avoid unnecessary pack flips and repeated setup cycles.
 - Reduce schema churn after the manifest is already known.
 - Treat domain reload transport closure as expected only when the editor state explains it.
@@ -142,8 +143,8 @@ at real workflow scale:
 - Continue compact shaping for remaining editor-state edge cases.
 - Keep telemetry presentation clear when `tool_execution` rows record already-compacted responses and explicit `tool_result` rows carry the savings proof.
 - Keep batch-helper detail-ref summaries compact so passing smokes do not inline large payloads.
-- Summarize large `packSetTransitions` arrays inline and expose full transition rows behind detail refs.
-- Fix usage-report TSAM coverage presentation when coverage rows exist but `tsamCoverage` is empty.
+- Keep large `packSetTransitions` arrays summarized inline with full transition rows behind detail refs.
+- Keep usage-report TSAM coverage presentation explicit: no TSAM tools exercised vs TSAM-like calls without stage rows.
 
 ### 3. Project/Package Diagnostic Follow-Through
 

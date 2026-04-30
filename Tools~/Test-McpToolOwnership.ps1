@@ -78,6 +78,16 @@ $allMcpSource = (Get-ChildItem -Path $mcpRoot -Recurse -Filter "*.cs" | ForEach-
     Get-Content -Path $_.FullName -Raw
 }) -join "`n"
 
+$unityMcpCommonPath = Join-Path $PackageRoot ".agents/plugins/lens-dev-plugin/skills/unity-mcp-bridge/scripts/UnityMcpCommon.js"
+if (-not (Test-Path $unityMcpCommonPath)) {
+    $failures.Add("Unity MCP helper common script not found: $unityMcpCommonPath")
+} else {
+    $unityMcpCommonText = Get-Content -Path $unityMcpCommonPath -Raw
+    if ($unityMcpCommonText -notmatch 'Unity_GetLensUsageReport\s*:\s*\[\s*"debug"\s*\]') {
+        $failures.Add("Helper pack inference regression: Unity_GetLensUsageReport must map to the debug pack in UnityMcpCommon.js.")
+    }
+}
+
 foreach ($toolName in $requiredEnabledTools) {
     $pattern = '\[McpTool\([^\r\n]*' + [regex]::Escape($toolName) + '[^\r\n]*EnabledByDefault\s*=\s*true'
     if ($allMcpSource -notmatch $pattern) {

@@ -37,6 +37,8 @@ async function main() {
 
   if (bridgeCheck.result.Classification === "BuildInProgress") {
     wrapperError = "Skipped Lens editor-state probe because Check-UnityMcp classified the session as BuildInProgress.";
+  } else if (bridgeCheck.result.Classification === "EditorModalBlocking") {
+    wrapperError = "Skipped Lens editor-state probe because Check-UnityMcp detected a blocking Unity native modal dialog.";
   } else if (bridgeCheck.result.Classification === "EditorReloadingExpected") {
     wrapperError = `Skipped Lens editor-state probe because Check-UnityMcp classified the session as EditorReloadingExpected.`;
   } else if (bridgeCheck.result.EditorStatusBeacon?.Fresh && bridgeCheck.result.EditorStatusBeacon?.Classification === "BeaconTransitioning") {
@@ -129,6 +131,8 @@ async function main() {
     recommendedPath = "FixBuildSceneList";
   } else if (bridgeCheck.result.Classification === "BuildInProgress") {
     recommendedPath = "MonitorActiveBuild";
+  } else if (bridgeCheck.result.Classification === "EditorModalBlocking") {
+    recommendedPath = "ResolveEditorModal";
   } else if (bridgeCheck.result.Classification === "EditorReloadingExpected") {
     recommendedPath = "WaitForExpectedReload";
   } else if (bridgeCheck.result.Classification !== "Ready") {
@@ -151,6 +155,13 @@ async function main() {
       Summary: bridgeCheck.result.Summary,
       RecommendedAction: bridgeCheck.result.RecommendedAction,
       UserActionRequired: bridgeCheck.result.UserActionRequired,
+      NativeModal: bridgeCheck.result.NativeModalState
+        ? {
+            Found: bridgeCheck.result.NativeModalState.found,
+            ModalCount: bridgeCheck.result.NativeModalState.modalCount,
+            Modals: bridgeCheck.result.NativeModalState.modals,
+          }
+        : null,
     },
     Editor: {
       DirectMcpHealthy: directMcpHealthy,
@@ -203,6 +214,8 @@ async function main() {
     LensHelperError: wrapperError,
     EditorState: editorState,
     ExpectedReloadState: bridgeCheck.result.ExpectedReloadState,
+    NativeModalState: bridgeCheck.result.NativeModalState,
+    NativeModalError: bridgeCheck.result.NativeModalError,
     BuildScenePreflight: buildScenePreflight,
     BuildMonitor: buildMonitor,
     EditorIdleSnapshot: editorIdleSnapshot,

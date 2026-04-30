@@ -21,6 +21,9 @@ All notable Unity MCP Lens package changes are documented here.
 - Added Phase 17 scene prefab instantiate/bind tools: `Unity.Scene.PreviewInstantiatePrefabAndBind` and `Unity.Scene.ApplyInstantiatePrefabAndBind`.
 - Added Phase 17 `Unity.UI.VerifyRaycastAndLayout` for read-only UI hit-test and layout verification.
 - Added Phase 17 `Unity.PlayMode.PointerInputSmoke` in the new `runtime` pack.
+- Added Phase 18 public foundation tool `Unity.Batch.ExecuteWorkflow` for same-session ordered workflows that execute registered Lens tools without recursive MCP transport calls, switch/verify packs per step, and restore the original active packs.
+- Added Phase 19 standalone foundation-visible modal recovery tools: `Unity.Editor.DetectNativeModals` and `Unity.Editor.ResolveSceneReloadPrompt`.
+- Added Phase 19 legacy uGUI font/text tools: `Unity.UI.VisualTextAudit`, `Unity.Font.PreviewImportAndBindUiFont`, and `Unity.Font.ApplyImportAndBindUiFont`.
 
 ### Changed
 
@@ -51,6 +54,11 @@ All notable Unity MCP Lens package changes are documented here.
 - Improved `Invoke-UnityMcpBatch` detail-ref handling so unwrapped `Unity.ReadDetailRef` structured payloads are treated as successful steps and large details are summarized instead of inlined.
 - Documented the first longer `D:\TintPaint` dogfood report, including measured `78.41%` payload savings and the next UI/prefab/input/usage-report gaps.
 - Improved `Unity.GetLensUsageReport` compact output so large `packSetTransitions` lists are summarized inline and TSAM coverage summary data explains coverage-vs-TSAM row counts.
+- Retargeted the repo-local `Invoke-UnityMcpBatch` helper to the public `Unity.Batch.ExecuteWorkflow` tool while keeping the wrapper name and JSON step input stable.
+- Improved usage-report failure presentation so expected reload/play transport loss is grouped separately from true failure classes and unmatched-request findings distinguish expected transition churn from unexpected bridge gaps.
+- Raised Phase 18 metadata audit baselines to `foundation=13`, `foundation+scene=35`, `foundation+ui=26`, `foundation+runtime=15`, `project=22`, and `debug=24`.
+- Improved helper recovery classification so visible native Unity reload prompts can surface as `EditorModalBlocking` / `ResolveEditorModal` instead of generic reconnect noise.
+- Raised current metadata audit baselines to `foundation=15`, `foundation+scene=37`, `foundation+ui=31`, `foundation+runtime=17`, `project=24`, and `debug=26`.
 
 ### Known Follow-Up
 
@@ -59,6 +67,7 @@ All notable Unity MCP Lens package changes are documented here.
 - Decide whether default package assembly filtering should exclude doc/sample/test-support asmdefs from compact compatibility reads.
 - Reduce reconnect-prone `Unity_ManageEditor` transport-noise during play transitions.
 - Add reliable editor restart/reload orchestration and prefab/serialized-reference authoring workflows.
+- Deferred candidates: ScriptableObject asset preview/apply authoring, prefab-instance UI patch/bind workflows, generic runtime component assertions, and explicit play-mode exit orchestration.
 
 ### Validation
 
@@ -74,6 +83,7 @@ All notable Unity MCP Lens package changes are documented here.
 - Phase 12 UI hierarchy, scene binding, layout, and verify calls emitted complete TSAM stage coverage with no tool failure rows in the focused helper-driven scope.
 - Phase 13 focused smoke emitted complete TSAM stage coverage with no failure rows for Input System diagnostics, UI hierarchy preview/apply, scene binding preview/apply, UI layout preview/apply, and UI verify.
 - Phase 14 focused batch smoke emitted complete TSAM stage coverage with no failure rows for Input System diagnostics, UI hierarchy preview/apply, scene binding preview/apply, UI layout preview/apply, and UI verify.
+- Phase 19 focused smoke on `D:\TintPaint` passed the updated metadata audit; native modal detect and scene-reload detect-only returned a clean no-prompt result; visual text audit and no-op font preview/apply succeeded; and a follow-up usage scope reported `tsamCoverageSummary.status=present`, `tsamStageRows=8`, `2` complete TSAM tool rows, and no true failure classes.
 
 ## [0.1.0-alpha.1] - 2026-04-20
 

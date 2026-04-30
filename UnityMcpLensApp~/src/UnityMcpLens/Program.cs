@@ -7,6 +7,7 @@ sealed class UnityMcpLensHost
 {
     static readonly HashSet<string> s_ReadOnlyTools = new(StringComparer.OrdinalIgnoreCase)
     {
+        "Unity_Editor_DetectNativeModals",
         "Unity_GameObject_Inspect",
         "Unity_GameObject_PreviewChanges",
         "Unity_GetLensHealth",
@@ -18,9 +19,11 @@ sealed class UnityMcpLensHost
         "Unity_FindInFile",
         "Unity_GetSha",
         "Unity_ValidateScript",
+        "Unity_Font_PreviewImportAndBindUiFont",
         "Unity_UI_PreviewEnsureHierarchy",
         "Unity_UI_PreviewLayoutProperties",
         "Unity_UI_VerifyScreenLayout",
+        "Unity_UI_VisualTextAudit",
         "Unity_Scene_PreviewBindSerializedReferences",
         "Unity_UI_Raycast",
         "Unity_Asset_Search",
@@ -34,6 +37,7 @@ sealed class UnityMcpLensHost
 
     static readonly HashSet<string> s_MutatingTools = new(StringComparer.OrdinalIgnoreCase)
     {
+        "Unity_Editor_ResolveSceneReloadPrompt",
         "Unity_GameObject_ApplyChanges",
         "Unity_ManageGameObject",
         "Unity_ManageScene",
@@ -48,6 +52,7 @@ sealed class UnityMcpLensHost
         "Unity_CreateScript",
         "Unity_DeleteScript",
         "Unity_RunCommand",
+        "Unity_Font_ApplyImportAndBindUiFont",
         "Unity_Resource_Write",
         "Unity_Resource_Delete",
         "Unity_Project_ManagePackages",
@@ -216,7 +221,8 @@ sealed class UnityMcpLensHost
             Console.Error.WriteLine($"[unity-mcp-lens] tools/list bridge bootstrap failed: {ex.Message}");
         }
 
-        var tools = m_ToolCache.Values
+        var tools = LocalEditorModalTools.Tools
+            .Concat(m_ToolCache.Values.Where(tool => !LocalEditorModalTools.IsLocalTool(tool.Name)))
             .OrderBy(tool => tool.Name, StringComparer.Ordinal)
             .Select(tool => new
             {
@@ -264,6 +270,18 @@ sealed class UnityMcpLensHost
 
         try
         {
+            if (LocalEditorModalTools.IsLocalTool(toolName))
+            {
+                var localResult = LocalEditorModalTools.Execute(toolName, argumentsElement);
+                await WriteRpcAsync(new
+                {
+                    jsonrpc = "2.0",
+                    id = idElement.GetValueOrDefault(),
+                    result = BuildToolCallResult(localResult, IsToolLevelError(localResult))
+                }, cancellationToken).ConfigureAwait(false);
+                return;
+            }
+
             await EnsureBridgeReadyAsync(cancellationToken).ConfigureAwait(false);
 
             object result;

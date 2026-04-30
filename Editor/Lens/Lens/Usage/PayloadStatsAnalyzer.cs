@@ -324,6 +324,8 @@ namespace Becool.UnityMcpLens.Editor.Lens.Usage
             }
 
             var latencyRows = scopedRows.Where(row => row.DurationMs > 0d).ToList();
+            var expectedTransitionFailureRows = scopedRows.Where(IsExpectedTransitionFailureRow).ToList();
+            var trueFailureRows = scopedRows.Where(row => !IsExpectedTransitionFailureRow(row)).ToList();
             var report = new PayloadStatsReport
             {
                 StatsPath = statsPath,
@@ -405,7 +407,9 @@ namespace Becool.UnityMcpLens.Editor.Lens.Usage
                         .ToList()
                 },
                 TsamCoverage = CreateTsamCoverage(scopedRows, maxItems),
-                FailureClasses = CreateFailureClasses(scopedRows, maxItems),
+                PotentialTsamToolRowCount = scopedRows.Count(IsTsamToolLikeRow),
+                FailureClasses = CreateFailureClasses(trueFailureRows, maxItems),
+                ExpectedTransitionFailureClasses = CreateFailureClasses(expectedTransitionFailureRows, maxItems),
                 LargestEntries = payloadRows
                     .OrderByDescending(row => row.RawBytes)
                     .Take(maxItems)
@@ -496,6 +500,82 @@ namespace Becool.UnityMcpLens.Editor.Lens.Usage
                 .ToList();
         }
 
+        static bool IsExpectedTransitionFailureRow(PayloadRow row)
+        {
+            if (row == null || (row.Success != false && string.IsNullOrWhiteSpace(row.ErrorKind)))
+                return false;
+
+            var text = string.Join(" ", new[]
+            {
+                row.Stage,
+                row.Name,
+                row.ToolName,
+                row.CommandType,
+                row.ErrorKind,
+                row.ErrorMessageShort,
+                row.ResponseStatus,
+                row.SnapshotReason,
+                row.ManifestReason
+            }.Where(value => !string.IsNullOrWhiteSpace(value)));
+
+            if (text.IndexOf("domain_reload_transport_close", StringComparison.OrdinalIgnoreCase) >= 0)
+                return true;
+
+            bool hasTransitionHint =
+                text.IndexOf("reload", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                text.IndexOf("domain", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                text.IndexOf("compile", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                text.IndexOf("play", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                text.IndexOf("expected_recovery", StringComparison.OrdinalIgnoreCase) >= 0;
+
+            bool isKnownTransportLoss =
+                text.IndexOf("disposed_transport", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                text.IndexOf("transport_closed_before_response", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                text.IndexOf("closed before response", StringComparison.OrdinalIgnoreCase) >= 0;
+
+            bool isTransitionTool =
+                string.Equals(row.CommandType, "Unity_ManageEditor", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(row.Name, "Unity_ManageEditor", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(row.ToolName, "Unity_ManageEditor", StringComparison.OrdinalIgnoreCase);
+
+            return isKnownTransportLoss && (hasTransitionHint || isTransitionTool);
+        }
+
+        static bool IsTsamToolLikeRow(PayloadRow row)
+        {
+            if (row == null)
+                return false;
+
+            var candidates = new[] { row.ToolName, row.Name, row.CommandType }
+                .Where(value => !string.IsNullOrWhiteSpace(value))
+                .Select(NormalizeToolLabelForMatch);
+
+            foreach (var candidate in candidates)
+            {
+                if (candidate.StartsWith("Unity_GameObject_", StringComparison.OrdinalIgnoreCase) ||
+                    candidate.StartsWith("Unity_UI_", StringComparison.OrdinalIgnoreCase) ||
+                    candidate.StartsWith("Unity_Scene_Preview", StringComparison.OrdinalIgnoreCase) ||
+                    candidate.StartsWith("Unity_Scene_Apply", StringComparison.OrdinalIgnoreCase) ||
+                    candidate.StartsWith("Unity_InputSystem_", StringComparison.OrdinalIgnoreCase) ||
+                    candidate.StartsWith("Unity_InputActions_", StringComparison.OrdinalIgnoreCase) ||
+                    candidate.StartsWith("Unity_ProjectSettings_", StringComparison.OrdinalIgnoreCase) ||
+                    candidate.StartsWith("Unity_Project_PackageCompatibility", StringComparison.OrdinalIgnoreCase) ||
+                    candidate.StartsWith("Unity_PlayMode_", StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        static string NormalizeToolLabelForMatch(string value)
+        {
+            return string.IsNullOrWhiteSpace(value)
+                ? string.Empty
+                : value.Replace('.', '_').Trim();
+        }
+
         static List<UsageFindingRow> CreateFindings(PayloadStatsReport report)
         {
             var findings = new List<UsageFindingRow>();
@@ -515,14 +595,21 @@ namespace Becool.UnityMcpLens.Editor.Lens.Usage
             if ((report.PackSetTransitions?.Count ?? 0) > 2)
                 findings.Add(new UsageFindingRow("pack_churn", "info", $"Scope contains {report.PackSetTransitions.Count} pack-set transitions."));
 
-            if ((report.UnmatchedRequests?.Count ?? 0) > 0)
-                findings.Add(new UsageFindingRow("unmatched_requests", "warning", $"Scope contains {report.UnmatchedRequests.Count} unmatched bridge request(s)."));
+            var expectedUnmatched = report.UnmatchedRequests?.Count(IsExpectedTransitionUnmatchedRequest) ?? 0;
+            var unexpectedUnmatched = (report.UnmatchedRequests?.Count ?? 0) - expectedUnmatched;
+            if (unexpectedUnmatched > 0)
+                findings.Add(new UsageFindingRow("unmatched_requests", "warning", $"Scope contains {unexpectedUnmatched} unexpected unmatched bridge request(s); {expectedUnmatched} expected transition request(s) were grouped separately."));
+            else if (expectedUnmatched > 0)
+                findings.Add(new UsageFindingRow("expected_transition_unmatched_requests", "info", $"Scope contains {expectedUnmatched} unmatched bridge request(s) classified as expected reload/play transport loss."));
 
             if (report.FalseStableMinimalTransitions > 0)
                 findings.Add(new UsageFindingRow("tool_snapshot_noise", "warning", $"Tool snapshot minimal hash stayed stable while full hash changed {report.FalseStableMinimalTransitions} time(s)."));
 
             if ((report.FailureClasses?.Count ?? 0) > 0)
                 findings.Add(new UsageFindingRow("failures_recorded", "info", $"Scope includes {report.FailureClasses.Sum(row => row.Count)} failed or error-classified row(s)."));
+
+            if ((report.ExpectedTransitionFailureClasses?.Count ?? 0) > 0)
+                findings.Add(new UsageFindingRow("expected_transition_failures", "info", $"Scope includes {report.ExpectedTransitionFailureClasses.Sum(row => row.Count)} expected reload/play transition transport row(s)."));
 
             var incompleteTsam = report.TsamCoverage?.FirstOrDefault(row =>
                 row.NormalizationRows != row.OperationCount ||
@@ -532,7 +619,12 @@ namespace Becool.UnityMcpLens.Editor.Lens.Usage
             if (incompleteTsam != null)
                 findings.Add(new UsageFindingRow("tsam_stage_gap", "warning", $"{incompleteTsam.ToolName}/{incompleteTsam.Action} has incomplete TSAM stage coverage."));
             else if ((report.CoverageEntryCount > 0) && ((report.TsamCoverage?.Count ?? 0) == 0))
-                findings.Add(new UsageFindingRow("tsam_stage_absent", "info", "Coverage rows were recorded, but no TSAM stage rows were found in this scope."));
+            {
+                var message = report.PotentialTsamToolRowCount > 0
+                    ? "TSAM-like tool rows were recorded, but no TSAM stage rows were found in this scope."
+                    : "No TSAM tools were exercised in this scope; coverage rows are bridge/control-plane rows.";
+                findings.Add(new UsageFindingRow("tsam_stage_absent", "info", message));
+            }
 
             var largest = report.LargestEntries?.FirstOrDefault();
             if (largest != null && largest.RawBytes >= 20000)
@@ -694,6 +786,17 @@ namespace Becool.UnityMcpLens.Editor.Lens.Usage
             return "unmatched_request";
         }
 
+        static bool IsExpectedTransitionUnmatchedRequest(UnmatchedRequestRow row)
+        {
+            if (row == null || string.IsNullOrWhiteSpace(row.Classification))
+                return false;
+
+            return row.Classification.IndexOf("domain_reload_transport_close", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                row.Classification.IndexOf("reload", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                row.Classification.IndexOf("play", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                row.Classification.IndexOf("expected", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
         static int CountSetupCycles(IReadOnlyList<PayloadRow> bridgeRequestRows)
         {
             var count = 0;
@@ -841,6 +944,17 @@ namespace Becool.UnityMcpLens.Editor.Lens.Usage
     {
         const int k_TopCount = 8;
 
+        static bool IsExpectedTransitionUnmatchedRequest(UnmatchedRequestRow row)
+        {
+            if (row == null || string.IsNullOrWhiteSpace(row.Classification))
+                return false;
+
+            return row.Classification.IndexOf("domain_reload_transport_close", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                row.Classification.IndexOf("reload", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                row.Classification.IndexOf("play", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                row.Classification.IndexOf("expected", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
         public static object CreateCompactData(PayloadStatsReport report, object detailRef)
         {
             return new
@@ -885,7 +999,9 @@ namespace Becool.UnityMcpLens.Editor.Lens.Usage
                     responseBytes = report.BridgeResponseBytes,
                     topCommands = report.BridgeTopCommands,
                     packSetTransitions = CreatePackSetTransitionsCompact(report),
-                    unmatchedRequests = report.UnmatchedRequests
+                    unmatchedRequests = report.UnmatchedRequests,
+                    expectedTransitionUnmatchedRequests = report.UnmatchedRequests?.Count(IsExpectedTransitionUnmatchedRequest) ?? 0,
+                    unexpectedUnmatchedRequests = (report.UnmatchedRequests?.Count ?? 0) - (report.UnmatchedRequests?.Count(IsExpectedTransitionUnmatchedRequest) ?? 0)
                 },
                 toolSnapshotChurn = new
                 {
@@ -897,6 +1013,7 @@ namespace Becool.UnityMcpLens.Editor.Lens.Usage
                 tsamCoverageSummary = CreateTsamCoverageSummary(report),
                 tsamCoverage = report.TsamCoverage,
                 failureClasses = report.FailureClasses,
+                expectedTransitionFailureClasses = report.ExpectedTransitionFailureClasses,
                 latency = report.Latency,
                 largePayloads = report.LargestEntries,
                 topStages = report.TopStages,
@@ -958,10 +1075,26 @@ namespace Becool.UnityMcpLens.Editor.Lens.Usage
         {
             var rows = report?.TsamCoverage ?? new List<TsamCoverageRow>();
             var stageRows = rows.Sum(row => row.RowCount);
+            var potentialTsamRows = report?.PotentialTsamToolRowCount ?? 0;
+            string status = rows.Count > 0
+                ? "present"
+                : potentialTsamRows > 0
+                    ? "tsam_stage_rows_missing"
+                    : "no_tsam_tools_exercised";
+            string note = null;
+            if (rows.Count == 0 && (report?.CoverageEntryCount ?? 0) > 0)
+            {
+                note = potentialTsamRows > 0
+                    ? "TSAM-like tool rows were recorded, but no TSAM stage rows were found in this scope."
+                    : "No TSAM tools were exercised in this scope; coverage rows are bridge/control-plane rows.";
+            }
+
             return new
             {
                 coverageRows = report?.CoverageEntryCount ?? 0,
                 tsamStageRows = stageRows,
+                potentialTsamToolRows = potentialTsamRows,
+                status,
                 toolCount = rows.Count,
                 completeToolCount = rows.Count(row =>
                     row.NormalizationRows == row.OperationCount &&
@@ -969,9 +1102,7 @@ namespace Becool.UnityMcpLens.Editor.Lens.Usage
                     row.AdapterRows == row.OperationCount &&
                     row.ResultShapingRows == row.OperationCount),
                 failedRows = rows.Sum(row => row.FailedRows),
-                note = rows.Count == 0 && (report?.CoverageEntryCount ?? 0) > 0
-                    ? "Coverage rows include bridge/control-plane rows; no TSAM stage rows were found in this scope."
-                    : null
+                note
             };
         }
 
@@ -994,11 +1125,14 @@ namespace Becool.UnityMcpLens.Editor.Lens.Usage
             builder.AppendLine($"Shaping applicability: {report.ShapingApplicability?.Summary ?? "Payload rows are shaping eligible; coverage rows are shaping n/a."}");
             builder.AppendLine($"Repeated context estimate: exact {report.ExactRepeatedRawPct:F2}% raw, normalized {report.NormalizedRepeatedRawPct:F2}% raw.");
             builder.AppendLine($"Bridge requests seen: {FormatNumber(report.BridgeRequestCount)}. Bridge responses seen: {FormatNumber(report.BridgeResponseCount)}.");
-            builder.AppendLine($"Session churn: {FormatNumber(report.BridgeConnectionCount)} connections, {FormatNumber(report.SetupCycleCount)} setup cycles, {FormatNumber(report.PackSetTransitions?.Count ?? 0)} pack-set transitions, {FormatNumber(report.UnmatchedRequests?.Count ?? 0)} unmatched requests.");
+            var expectedUnmatched = report.UnmatchedRequests?.Count(IsExpectedTransitionUnmatchedRequest) ?? 0;
+            var unexpectedUnmatched = (report.UnmatchedRequests?.Count ?? 0) - expectedUnmatched;
+            builder.AppendLine($"Session churn: {FormatNumber(report.BridgeConnectionCount)} connections, {FormatNumber(report.SetupCycleCount)} setup cycles, {FormatNumber(report.PackSetTransitions?.Count ?? 0)} pack-set transitions, {FormatNumber(report.UnmatchedRequests?.Count ?? 0)} unmatched requests ({FormatNumber(expectedUnmatched)} expected transition, {FormatNumber(unexpectedUnmatched)} unexpected).");
             builder.AppendLine($"Tool snapshot churn: {FormatNumber(report.ToolSnapshotCount)} rows, {FormatNumber(report.MinimalHashTransitions)} minimal transitions, {FormatNumber(report.FullHashTransitions)} full transitions, {FormatNumber(report.FalseStableMinimalTransitions)} false-stable minimal transitions.");
 
             AppendTsamCoverage(builder, report.TsamCoverage);
             AppendFailures(builder, report.FailureClasses);
+            AppendFailures(builder, report.ExpectedTransitionFailureClasses, "Expected transition failure classes");
             AppendFindings(builder, report.Findings);
             AppendBridgeCommands(builder, report.BridgeTopCommands);
             AppendConnectionSummaries(builder, report.ConnectionSummaries);
@@ -1026,13 +1160,13 @@ namespace Becool.UnityMcpLens.Editor.Lens.Usage
             }
         }
 
-        static void AppendFailures(StringBuilder builder, IReadOnlyList<FailureClassRow> rows)
+        static void AppendFailures(StringBuilder builder, IReadOnlyList<FailureClassRow> rows, string heading = "Failure classes")
         {
             if (rows == null || rows.Count == 0)
                 return;
 
             builder.AppendLine();
-            builder.AppendLine("Failure classes:");
+            builder.AppendLine($"{heading}:");
             foreach (var row in rows.Take(k_TopCount))
                 builder.AppendLine($"- {row.Name}: {row.ErrorKind}, count {row.Count}");
         }
@@ -1219,7 +1353,9 @@ namespace Becool.UnityMcpLens.Editor.Lens.Usage
         public List<RunSummaryRow> RunSummaries { get; set; }
         public LatencyReport Latency { get; set; }
         public List<TsamCoverageRow> TsamCoverage { get; set; }
+        public int PotentialTsamToolRowCount { get; set; }
         public List<FailureClassRow> FailureClasses { get; set; }
+        public List<FailureClassRow> ExpectedTransitionFailureClasses { get; set; }
         public List<PayloadEntrySummaryRow> LargestEntries { get; set; }
         public List<UsageFindingRow> Findings { get; set; }
     }

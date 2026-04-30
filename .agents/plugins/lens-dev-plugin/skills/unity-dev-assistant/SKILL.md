@@ -53,6 +53,7 @@ or YAML edits.
    - Only confirm MCP authority after the session check reports `BeaconIdle`, `BeaconStale`, or `BeaconMissing`.
    - Treat MCP as the authority for editor mutations and tool execution once the editor is idle enough to act.
    - Treat `ProceedWithDirectLensTools` as “direct MCP is healthy, but the helper wrapper path is degraded.”
+   - Treat `ResolveEditorModal` as “Unity is blocked by a native dialog outside the bridge.” Run `Get-UnityNativeModal` or `Resolve-UnitySceneReloadPrompt -Action DetectOnly` before retrying MCP.
    - Default output is compact and operator-focused. Use `-IncludeDiagnostics` only for explicit maintenance.
 3. If the bridge is unhealthy, follow [$unity-mcp-bridge](../unity-mcp-bridge/SKILL.md) recovery and stop editor-facing work.
 4. Before real Unity work, keep the exported tool surface narrow:
@@ -80,7 +81,7 @@ or YAML edits.
 8. Prefer direct MCP tools through the Lens path by default.
    - Use helper scripts for orchestration-heavy flows such as long builds, autoplay, or deterministic screenshot capture.
    - Those helper scripts must also stay on the Lens path; do not bounce into legacy relay or stale fallback behavior.
-   - When a known workflow needs multiple project/ui/scene/debug calls, prefer `scripts/Invoke-UnityMcpBatch.js` on macOS/Linux or `scripts/Invoke-UnityMcpBatch.ps1` on Windows so the steps share one Lens session.
+   - When a known workflow needs multiple project/ui/scene/runtime/debug calls, prefer `scripts/Invoke-UnityMcpBatch.js` on macOS/Linux or `scripts/Invoke-UnityMcpBatch.ps1` on Windows. The helper should route through public `Unity.Batch.ExecuteWorkflow` so the steps share one Lens connection and pack state is restored.
 9. For large tool outputs, prefer summary/preview first.
    - If a result exposes `detailRef`, call `Unity.ReadDetailRef` only when the preview is insufficient.
    - Do not immediately expand every large payload.
@@ -137,6 +138,8 @@ or YAML edits.
 33. When reading Unity console output, treat known MCP/package chatter as bridge self-noise unless real compiler or gameplay errors are mixed in.
 34. For package/import/Input System failures, activate `project` and run `Unity.Project.PackageCompatibility`, `Unity.InputActions.InspectAsset`, or `Unity.InputSystem.Diagnostics` before editing `ProjectSettings.asset`, grepping `Editor.log`, or writing a custom probe.
 35. For active input backend changes, use the preview/apply ProjectSettings tools and verify readback before restarting Unity.
+36. For native scene reload prompts after external `.unity` or `.prefab` edits, use `scripts/Get-UnityNativeModal.ps1` and `scripts/Resolve-UnitySceneReloadPrompt.ps1`. Use `DetectOnly` first; `Auto` should only reload when expected changed paths or an active expected-reload marker are present.
+37. For legacy uGUI text/font checks, use `Unity.UI.VisualTextAudit` before writing custom visibility probes. Use `Unity.Font.PreviewImportAndBindUiFont` before `Unity.Font.ApplyImportAndBindUiFont`; Phase 19 intentionally reports TextMeshPro as unsupported instead of silently mutating it.
 
 ## Scene Debugger Pattern
 
@@ -171,7 +174,7 @@ Prefer a scene-owned debugger component when a project needs fast UI or state it
 - Prefer split GameObject TSAM tools before legacy `Unity.ManageGameObject`
 - Prefer Phase 11 `project` tools for package/import/Input System diagnostics and active input handler changes
 - Prefer Phase 12 `ui` and scene-binding tools for persistent HUD authoring, scene reference binding, and screen-layout verification before custom editor-side `Unity_RunCommand`
-- Prefer `Invoke-UnityMcpBatch` for repeated multi-step smoke/workflow checks that span packs
+- Prefer `Invoke-UnityMcpBatch` for repeated multi-step smoke/workflow checks that span packs; it should use `Unity.Batch.ExecuteWorkflow` rather than custom same-connection scripts
 - Expand packs explicitly, not heuristically
 - Use `Unity.GetLensUsageReport` in `debug` for telemetry baselines, appended smoke rows, and TSAM stage coverage
 - Session and bridge checks are compact by default; use `-IncludeDiagnostics` only for explicit maintenance

@@ -21,126 +21,50 @@ function normalizeStep(step, index, defaultTimeoutSeconds) {
     throw new Error(`Batch step ${index + 1} requires a string 'tool'.`);
   }
 
+  const requiredPacks = common.valueOf(step, "requiredPacks", "RequiredPacks");
   return {
     name: common.valueOf(step, "name", "Name") || `step_${index + 1}`,
     tool,
     arguments: common.valueOf(step, "arguments", "Arguments") || {},
-    timeoutSeconds: Math.max(1, Number(common.valueOf(step, "timeoutSeconds", "TimeoutSeconds") || defaultTimeoutSeconds)),
-    expectReload: common.toBool(common.valueOf(step, "expectReload", "ExpectReload"), false),
+    requiredPacks: Array.isArray(requiredPacks) ? requiredPacks : undefined,
     continueOnError: common.toBool(common.valueOf(step, "continueOnError", "ContinueOnError"), false),
+    expectReload: common.toBool(common.valueOf(step, "expectReload", "ExpectReload"), false),
+    readOnlyExpected: common.toBool(common.valueOf(step, "readOnlyExpected", "ReadOnlyExpected"), false),
+    timeoutSeconds: Math.max(1, Number(common.valueOf(step, "timeoutSeconds", "TimeoutSeconds") || defaultTimeoutSeconds)),
   };
 }
 
-function compactToolResult(toolResult) {
-  if (!toolResult || typeof toolResult !== "object") {
-    return { success: false, error: "Tool returned no structured result." };
+function toPublicWorkflowStep(step) {
+  const publicStep = {
+    name: step.name,
+    tool: step.tool,
+    arguments: step.arguments,
+    continueOnError: step.continueOnError,
+    expectReload: step.expectReload,
+    readOnlyExpected: step.readOnlyExpected,
+  };
+  if (step.requiredPacks && step.requiredPacks.length > 0) {
+    publicStep.requiredPacks = step.requiredPacks;
   }
+  return publicStep;
+}
 
-  const success = common.valueOf(toolResult, "success", "Success");
-  if (success !== true && success !== false && isUnwrappedDetailRefResult(toolResult)) {
-    const refId = common.valueOf(toolResult, "refId", "RefId");
-    const contentType = common.valueOf(toolResult, "contentType", "ContentType") || null;
-    const createdUtc = common.valueOf(toolResult, "createdUtc", "CreatedUtc") || null;
-    const meta = common.valueOf(toolResult, "meta", "Meta") || null;
-    const payload = common.valueOf(toolResult, "payload", "Payload");
-    const isError = common.valueOf(toolResult, "isError", "IsError") === true;
-    const payloadSummary = compactDetailPayload(payload);
-
-    return {
-      success: !isError,
-      message: isError ? `Detail ref '${refId}' resolved with an error payload.` : `Resolved detail ref '${refId}'.`,
-      code: null,
-      error: isError ? common.valueOf(toolResult, "error", "Error") || "Detail ref payload reported isError=true." : null,
-      refId,
-      contentType,
-      data: {
-        refId,
-        contentType,
-        createdUtc,
-        meta,
-        ...payloadSummary,
-      },
-    };
-  }
-
-  const data = common.valueOf(toolResult, "data", "Data");
+function buildHelperDiagnostics(steps) {
+  const usageReportPacks = common.inferRequiredPacks("Unity_GetLensUsageReport");
   return {
-    success: success === true,
-    message: common.valueOf(toolResult, "message", "Message") || null,
-    code: common.valueOf(toolResult, "code", "Code") || null,
-    error: common.valueOf(toolResult, "error", "Error") || null,
-    data,
+    implementation: "public_tool",
+    publicTool: "Unity_Batch_ExecuteWorkflow",
+    usageReportPackInference: {
+      inferredPacks: usageReportPacks,
+      hasDebug: usageReportPacks.includes("debug"),
+    },
+    stepPackInference: steps.map((step) => ({
+      name: step.name,
+      tool: step.tool,
+      inferredPacks: common.inferRequiredPacks(step.tool),
+      requiredPacks: step.requiredPacks || null,
+    })),
   };
-}
-
-function isUnwrappedDetailRefResult(toolResult) {
-  const refId = common.valueOf(toolResult, "refId", "RefId");
-  if (!refId || typeof refId !== "string") {
-    return false;
-  }
-
-  if (Object.prototype.hasOwnProperty.call(toolResult, "payload") ||
-      Object.prototype.hasOwnProperty.call(toolResult, "Payload")) {
-    return true;
-  }
-
-  return common.valueOf(toolResult, "isError", "IsError") === false;
-}
-
-function compactDetailPayload(payload) {
-  const payloadBytes = estimateJsonBytes(payload);
-  if (payloadBytes <= 4096) {
-    return {
-      payloadIncluded: true,
-      payloadBytes,
-      payload,
-    };
-  }
-
-  return {
-    payloadIncluded: false,
-    payloadBytes,
-    payloadSummary: summarizeDetailPayload(payload),
-  };
-}
-
-function estimateJsonBytes(value) {
-  try {
-    return Buffer.byteLength(JSON.stringify(value ?? null), "utf8");
-  } catch (_error) {
-    return 0;
-  }
-}
-
-function summarizeDetailPayload(payload) {
-  if (!payload || typeof payload !== "object") {
-    return {
-      type: payload === null ? "null" : typeof payload,
-    };
-  }
-
-  const data = common.valueOf(payload, "data", "Data");
-  const summary = {
-    type: Array.isArray(payload) ? "array" : "object",
-    keys: Object.keys(payload).slice(0, 12),
-    tool: common.valueOf(payload, "tool", "Tool") || null,
-    bytes: common.valueOf(payload, "bytes", "Bytes") || null,
-    dataType: data === null ? "null" : typeof data,
-    hasData: data !== undefined && data !== null,
-  };
-
-  if (typeof data === "string") {
-    summary.dataPreview = data.length <= 512 ? data : data.slice(0, 512);
-    summary.dataPreviewTruncated = data.length > 512;
-  } else if (data && typeof data === "object") {
-    summary.dataKeys = Object.keys(data).slice(0, 12);
-  }
-
-  return summary;
-}
-
-function packsKey(packs) {
-  return JSON.stringify(common.inferRequiredPacks("").concat(packs || []));
 }
 
 async function main() {
@@ -153,79 +77,63 @@ async function main() {
   }
 
   const steps = rawSteps.map((step, index) => normalizeStep(step, index, defaultTimeoutSeconds));
+  const workflowTimeoutSeconds = Math.max(
+    defaultTimeoutSeconds,
+    steps.reduce((sum, step) => sum + step.timeoutSeconds, 0) + 5
+  );
+  const helperDiagnostics = buildHelperDiagnostics(steps);
   const startedAt = Date.now();
-  const results = [];
-  let previousRequiredPacksKey = packsKey([]);
-  let predictedPackTransitions = 0;
-  let success = true;
 
-  for (let index = 0; index < steps.length; index += 1) {
-    const step = steps[index];
-    const requiredPacks = common.inferRequiredPacks(step.tool);
-    const requiredPacksKey = packsKey(requiredPacks);
-    const packTransitionPredicted = requiredPacksKey !== previousRequiredPacksKey;
-    if (packTransitionPredicted) {
-      predictedPackTransitions += 1;
-      previousRequiredPacksKey = requiredPacksKey;
-    }
+  try {
+    const response = await common.invokeUnityMcpToolJson(projectPath, "Unity_Batch_ExecuteWorkflow", {
+      steps: steps.map(toPublicWorkflowStep),
+    }, {
+      timeoutSeconds: workflowTimeoutSeconds,
+      exactPacks: true,
+    });
 
-    const stepStartedAt = Date.now();
+    const toolResult = common.getToolObject(response) || {
+      success: false,
+      error: "Unity_Batch_ExecuteWorkflow returned no structured payload.",
+    };
+    const success = common.valueOf(toolResult, "success", "Success") === true;
+    const output = {
+      projectPath,
+      durationSeconds: Math.round(((Date.now() - startedAt) / 1000) * 1000) / 1000,
+      helperDiagnostics,
+      ...toolResult,
+    };
+
+    process.stdout.write(`${JSON.stringify(output, null, 2)}\n`);
+    await common.shutdownUnityMcpSessions();
+    process.exit(success ? 0 : 1);
+  } catch (error) {
+    const message = String(error?.message || error);
+    let nativeModal = null;
     try {
-      const response = await common.invokeUnityMcpToolJson(projectPath, step.tool, step.arguments, {
-        timeoutSeconds: step.timeoutSeconds,
-        allowReconnect: step.expectReload,
-        exactPacks: true,
-      });
-      const toolResult = compactToolResult(common.getToolObject(response));
-      results.push({
-        index,
-        name: step.name,
-        tool: step.tool,
-        requiredPacks,
-        packTransitionPredicted,
-        durationMs: Date.now() - stepStartedAt,
-        result: toolResult,
-      });
-
-      if (!toolResult.success) {
-        success = false;
-        if (!step.continueOnError) {
-          break;
-        }
-      }
-    } catch (error) {
-      success = false;
-      results.push({
-        index,
-        name: step.name,
-        tool: step.tool,
-        requiredPacks,
-        packTransitionPredicted,
-        durationMs: Date.now() - stepStartedAt,
-        result: {
-          success: false,
-          error: error.message,
-        },
-      });
-      if (!step.continueOnError) {
-        break;
-      }
+      nativeModal = await common.detectUnityNativeModals(projectPath, { timeoutSeconds: 6, maxItems: 8 });
+    } catch (_modalError) {
     }
+    const modalBlocking = nativeModal?.found === true;
+    const publicToolHint = message.includes("Unity_Batch_ExecuteWorkflow") || message.includes("Batch_ExecuteWorkflow")
+      ? "The active Lens server may be older than this repo-local helper. In Unity, run Tools > Unity MCP Lens > Install/Refresh Lens Server, then retry."
+      : null;
+    const output = {
+      success: false,
+      projectPath,
+      durationSeconds: Math.round(((Date.now() - startedAt) / 1000) * 1000) / 1000,
+      error: message,
+      classification: modalBlocking ? "EditorModalBlocking" : null,
+      nativeModal,
+      helperDiagnostics: {
+        ...helperDiagnostics,
+        installedCacheOrServerDriftHint: publicToolHint,
+      },
+    };
+    process.stdout.write(`${JSON.stringify(output, null, 2)}\n`);
+    await common.shutdownUnityMcpSessions();
+    process.exit(1);
   }
-
-  const output = {
-    success,
-    projectPath,
-    stepCount: steps.length,
-    completedStepCount: results.length,
-    durationSeconds: Math.round(((Date.now() - startedAt) / 1000) * 1000) / 1000,
-    predictedPackTransitions,
-    results,
-  };
-
-  process.stdout.write(`${JSON.stringify(output, null, 2)}\n`);
-  await common.shutdownUnityMcpSessions();
-  process.exit(success ? 0 : 1);
 }
 
 main().catch((error) => {

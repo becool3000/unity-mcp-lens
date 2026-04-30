@@ -168,18 +168,22 @@ sealed class BenchmarkOptions
 
 sealed class MetadataAudit(BenchmarkOptions options)
 {
-    const int ExpectedFoundationToolCount = 12;
-    const int ExpectedSceneToolCount = 34;
-    const int ExpectedUiToolCount = 25;
-    const int ExpectedRuntimeToolCount = 14;
-    const int ExpectedProjectToolCount = 21;
+    const int ExpectedFoundationToolCount = 15;
+    const int ExpectedSceneToolCount = 37;
+    const int ExpectedUiToolCount = 31;
+    const int ExpectedRuntimeToolCount = 17;
+    const int ExpectedProjectToolCount = 24;
+    const int ExpectedDebugToolCount = 26;
 
     static readonly string[] k_RequiredFoundationTools =
     [
         "Unity_GetLensHealth",
+        "Unity_Editor_DetectNativeModals",
+        "Unity_Editor_ResolveSceneReloadPrompt",
         "Unity_ListToolPacks",
         "Unity_SetToolPacks",
         "Unity_ReadDetailRef",
+        "Unity_Batch_ExecuteWorkflow",
         "Unity_ReadConsole",
         "Unity_ListResources",
         "Unity_ReadResource",
@@ -226,6 +230,9 @@ sealed class MetadataAudit(BenchmarkOptions options)
         "Unity_UI_PreviewCreateCanvasPrefab",
         "Unity_UI_ApplyCreateCanvasPrefab",
         "Unity_UI_VerifyRaycastAndLayout",
+        "Unity_UI_VisualTextAudit",
+        "Unity_Font_PreviewImportAndBindUiFont",
+        "Unity_Font_ApplyImportAndBindUiFont",
         "Unity_UI_GetLayoutSnapshot",
         "Unity_UI_Raycast",
         "Unity_UI_GetInteractiveRegions",
@@ -319,7 +326,10 @@ sealed class MetadataAudit(BenchmarkOptions options)
         ValidateToolSet("foundation+ui", uiTools, ExpectedUiToolCount, k_RequiredUiTools, failures);
         ValidateToolSet("foundation+runtime", runtimeTools, ExpectedRuntimeToolCount, k_RequiredRuntimeTools, failures);
         ValidateToolSet("foundation+project", projectTools, ExpectedProjectToolCount, k_RequiredProjectTools, failures);
-        ValidateToolSet("foundation+debug", debugTools, null, k_RequiredDebugTools, failures);
+        ValidateToolSet("foundation+debug", debugTools, ExpectedDebugToolCount, k_RequiredDebugTools, failures);
+        ValidateReadOnlyHint(foundationTools, "Unity_Editor_DetectNativeModals", expected: true, failures);
+        ValidateReadOnlyHint(foundationTools, "Unity_Editor_ResolveSceneReloadPrompt", expected: false, failures);
+        ValidateReadOnlyHint(foundationTools, "Unity_Batch_ExecuteWorkflow", expected: false, failures);
         ValidateReadOnlyHint(sceneTools, "Unity_GameObject_Inspect", expected: true, failures);
         ValidateReadOnlyHint(sceneTools, "Unity_GameObject_ListComponents", expected: true, failures);
         ValidateReadOnlyHint(sceneTools, "Unity_GameObject_GetComponent", expected: true, failures);
@@ -342,6 +352,9 @@ sealed class MetadataAudit(BenchmarkOptions options)
         ValidateReadOnlyHint(uiTools, "Unity_UI_PreviewCreateCanvasPrefab", expected: true, failures);
         ValidateReadOnlyHint(uiTools, "Unity_UI_ApplyCreateCanvasPrefab", expected: false, failures);
         ValidateReadOnlyHint(uiTools, "Unity_UI_VerifyRaycastAndLayout", expected: true, failures);
+        ValidateReadOnlyHint(uiTools, "Unity_UI_VisualTextAudit", expected: true, failures);
+        ValidateReadOnlyHint(uiTools, "Unity_Font_PreviewImportAndBindUiFont", expected: true, failures);
+        ValidateReadOnlyHint(uiTools, "Unity_Font_ApplyImportAndBindUiFont", expected: false, failures);
         ValidateReadOnlyHint(sceneTools, "Unity_Scene_PreviewInstantiatePrefabAndBind", expected: true, failures);
         ValidateReadOnlyHint(sceneTools, "Unity_Scene_ApplyInstantiatePrefabAndBind", expected: false, failures);
         ValidateReadOnlyHint(runtimeTools, "Unity_PlayMode_PointerInputSmoke", expected: false, failures);
@@ -356,6 +369,8 @@ sealed class MetadataAudit(BenchmarkOptions options)
         ValidateSceneBindingSchemas(sceneTools, failures);
         ValidateRuntimeToolSchemas(runtimeTools, failures);
         ValidateProjectToolSchemas(projectTools, failures);
+        ValidateBatchWorkflowSchema(foundationTools, failures);
+        ValidateEditorModalSchemas(foundationTools, failures);
         ValidateLensUsageSchema(debugTools, failures);
 
         return new MetadataAuditReport(
@@ -615,6 +630,24 @@ sealed class MetadataAudit(BenchmarkOptions options)
             ["points", "targets", "assertions"],
             ["points"],
             failures);
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_UI_VisualTextAudit",
+            ["prefabPath", "target", "searchMethod", "includeInactive", "maxItems", "includeDetails"],
+            [],
+            failures);
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_Font_PreviewImportAndBindUiFont",
+            ["fontAssetPath", "targets", "includeInactive"],
+            ["fontAssetPath"],
+            failures);
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_Font_ApplyImportAndBindUiFont",
+            ["fontAssetPath", "targets", "includeInactive"],
+            ["fontAssetPath"],
+            failures);
 
         if (FindTool(tools, "Unity_UI_EnsureNamedHierarchy") != null)
             failures.Add("foundation+ui should not expose legacy tool 'Unity_UI_EnsureNamedHierarchy'.");
@@ -650,6 +683,32 @@ sealed class MetadataAudit(BenchmarkOptions options)
             failures);
     }
 
+    static void ValidateBatchWorkflowSchema(IReadOnlyList<ToolDescriptor> tools, List<string> failures)
+    {
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_Batch_ExecuteWorkflow",
+            ["steps"],
+            ["steps"],
+            failures);
+    }
+
+    static void ValidateEditorModalSchemas(IReadOnlyList<ToolDescriptor> tools, List<string> failures)
+    {
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_Editor_DetectNativeModals",
+            ["projectPath", "processId", "includeButtons", "maxItems", "knownPatterns"],
+            [],
+            failures);
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_Editor_ResolveSceneReloadPrompt",
+            ["projectPath", "processId", "action", "expectedChangedPaths", "timeoutSeconds", "waitForBridgeReady"],
+            ["action"],
+            failures);
+    }
+
     static void ValidateRuntimeToolSchemas(IReadOnlyList<ToolDescriptor> tools, List<string> failures)
     {
         ValidateSplitGameObjectSchema(
@@ -672,7 +731,7 @@ sealed class MetadataAudit(BenchmarkOptions options)
         var propertyNames = tool.GetInputPropertyNames();
         foreach (var propertyName in expectedProperties)
         {
-            if (!propertyNames.Contains(propertyName, StringComparer.Ordinal))
+            if (!propertyNames.Contains(propertyName, StringComparer.OrdinalIgnoreCase))
                 failures.Add($"{toolName} schema is missing property '{propertyName}'.");
         }
 
@@ -947,7 +1006,7 @@ sealed class ToolDescriptor
         if (InputSchema.ValueKind != JsonValueKind.Object)
             return false;
 
-        return InputSchema.TryGetProperty("type", out var typeElement) &&
+        return TryGetObjectProperty(InputSchema, "type", out var typeElement) &&
             typeElement.ValueKind == JsonValueKind.String &&
             string.Equals(typeElement.GetString(), "object", StringComparison.OrdinalIgnoreCase);
     }
@@ -968,14 +1027,13 @@ sealed class ToolDescriptor
 
     public bool HasInputProperty(string propertyName)
     {
-        return TryGetInputProperties(out var properties) &&
-            properties.TryGetProperty(propertyName, out _);
+        return TryGetInputProperty(propertyName, out _);
     }
 
     public bool HasRequiredProperty(string propertyName)
     {
         if (InputSchema.ValueKind != JsonValueKind.Object ||
-            !InputSchema.TryGetProperty("required", out var requiredElement) ||
+            !TryGetObjectProperty(InputSchema, "required", out var requiredElement) ||
             requiredElement.ValueKind != JsonValueKind.Array)
         {
             return false;
@@ -983,7 +1041,7 @@ sealed class ToolDescriptor
 
         return requiredElement.EnumerateArray().Any(item =>
             item.ValueKind == JsonValueKind.String &&
-            string.Equals(item.GetString(), propertyName, StringComparison.Ordinal));
+            string.Equals(item.GetString(), propertyName, StringComparison.OrdinalIgnoreCase));
     }
 
     public string[] GetInputPropertyNames()
@@ -998,10 +1056,9 @@ sealed class ToolDescriptor
 
     public string[] GetInputPropertyEnum(string propertyName)
     {
-        if (!TryGetInputProperties(out var properties) ||
-            !properties.TryGetProperty(propertyName, out var property) ||
+        if (!TryGetInputProperty(propertyName, out var property) ||
             property.ValueKind != JsonValueKind.Object ||
-            !property.TryGetProperty("enum", out var enumElement) ||
+            !TryGetObjectProperty(property, "enum", out var enumElement) ||
             enumElement.ValueKind != JsonValueKind.Array)
         {
             return [];
@@ -1018,14 +1075,49 @@ sealed class ToolDescriptor
     {
         properties = default;
         return InputSchema.ValueKind == JsonValueKind.Object &&
-            InputSchema.TryGetProperty("properties", out properties) &&
+            TryGetObjectProperty(InputSchema, "properties", out properties) &&
             properties.ValueKind == JsonValueKind.Object;
+    }
+
+    bool TryGetInputProperty(string propertyName, out JsonElement property)
+    {
+        property = default;
+        if (!TryGetInputProperties(out var properties))
+            return false;
+
+        foreach (var candidate in properties.EnumerateObject())
+        {
+            if (string.Equals(candidate.Name, propertyName, StringComparison.OrdinalIgnoreCase))
+            {
+                property = candidate.Value;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    static bool TryGetObjectProperty(JsonElement element, string propertyName, out JsonElement property)
+    {
+        property = default;
+        if (element.ValueKind != JsonValueKind.Object)
+            return false;
+
+        foreach (var candidate in element.EnumerateObject())
+        {
+            if (string.Equals(candidate.Name, propertyName, StringComparison.OrdinalIgnoreCase))
+            {
+                property = candidate.Value;
+                return true;
+            }
+        }
+
+        return false;
     }
 
     static JsonElement CloneProperty(JsonElement element, string propertyName)
     {
-        if (element.ValueKind == JsonValueKind.Object &&
-            element.TryGetProperty(propertyName, out var property))
+        if (TryGetObjectProperty(element, propertyName, out var property))
         {
             return property.Clone();
         }

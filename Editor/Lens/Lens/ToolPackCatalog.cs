@@ -70,6 +70,7 @@ namespace Becool.UnityMcpLens.Editor.Lens
         public const string ListToolPacksToolName = "Unity.ListToolPacks";
         public const string SetToolPacksToolName = "Unity.SetToolPacks";
         public const string ReadDetailRefToolName = "Unity.ReadDetailRef";
+        public const string BatchExecuteWorkflowToolName = "Unity.Batch.ExecuteWorkflow";
 
         static string NormalizeToolName(string toolName) => McpToolRegistry.NormalizeToolName(toolName) ?? string.Empty;
 
@@ -79,6 +80,7 @@ namespace Becool.UnityMcpLens.Editor.Lens
             NormalizeToolName(ListToolPacksToolName),
             NormalizeToolName(SetToolPacksToolName),
             NormalizeToolName(ReadDetailRefToolName),
+            NormalizeToolName(BatchExecuteWorkflowToolName),
             NormalizeToolName("Unity.ReadConsole"),
             NormalizeToolName("Unity.ListResources"),
             NormalizeToolName("Unity.ReadResource"),

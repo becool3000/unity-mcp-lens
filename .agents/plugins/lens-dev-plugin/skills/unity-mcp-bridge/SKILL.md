@@ -86,13 +86,15 @@ powershell -ExecutionPolicy Bypass -File $script -ProjectPath "$PWD"
 - At most two additional non-foundation packs should be active at once.
 - When a tool result includes `detailRef`, use `Unity.ReadDetailRef` only when the preview/summary is insufficient. Do not immediately expand every large result.
 - `Unity.RunCommand`, `Unity.ReadConsole`, and `Unity.ManageEditor WaitForStableEditor` are expected to return compact, stage-aware results. Treat detail refs as the source for full logs, full scanned console entries, or full editor-state attempts when needed.
-- For known multi-step smoke or workflow sequences, prefer `Invoke-UnityMcpBatch` so one Lens session can activate the needed exact pack sets and avoid repeated schema/session churn.
+- For known multi-step smoke or workflow sequences, prefer `Invoke-UnityMcpBatch`. It routes through public `Unity.Batch.ExecuteWorkflow`, so one Lens connection executes ordered steps, validates packs per contained tool, and restores the original active packs.
+- If a native Unity dialog is suspected, use `Unity.Editor.DetectNativeModals` or the `Get-UnityNativeModal` helper before treating bridge transport loss as a reconnect problem. Modal detection runs in the standalone Lens server before Unity bridge bootstrap.
 
 ## Classification Rules
 
 - Treat `ApprovalPending` as user action required in Unity.
 - Treat `BuildInProgress` as non-user-actionable when `Editor.log` still shows active WebGL Bee/wasm work and no later terminal build marker. Do not notify the user or keep retrying bridge recovery during that window.
 - Treat `EditorReloadingExpected` as a transient state; wait for Unity compile/domain reload settle instead of notifying the user.
+- Treat `EditorModalBlocking` as a real blocker outside the bridge. Do not keep retrying MCP; run `Resolve-UnitySceneReloadPrompt` with `DetectOnly` first, then use explicit `Reload`/`Ignore` or safe `Auto` with expected changed paths.
 - Treat `ReconnectRequired` as user action required even if the bridge status file says `ready`.
 - Treat `UnityNotRunning` or `BridgeNotReady` as unavailable; do not guess your way through scene or prefab work.
 - Only treat the bridge as healthy when MCP succeeds or the check script reports `Ready` with no hard failure signals.

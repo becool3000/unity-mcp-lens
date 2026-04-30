@@ -98,24 +98,30 @@ agent should inspect first instead of running custom editor code.
 
 ## Tool Packs
 
-`foundation` is the narrow default surface and is always active.
+`foundation` is the narrow default surface and is always active. Phase 18 adds
+`Unity.Batch.ExecuteWorkflow` to foundation so agents can run an ordered
+workflow in one MCP connection while Lens switches/validates packs internally
+and restores the original pack state afterward. Phase 19 also exposes
+`Unity.Editor.DetectNativeModals` and `Unity.Editor.ResolveSceneReloadPrompt`
+as standalone Lens-server local tools so a native Unity reload dialog can be
+detected or resolved before the Unity bridge is healthy enough to answer.
 
 Pack-specific TSAM work is used to keep the MCP surface small:
 
 - `scene`: split GameObject tools, scene serialized-reference binding, and prefab instantiate/bind workflows.
 - `project`: package/import diagnostics, Input System diagnostics, input-action asset inspection, and active input handler tools.
-- `ui`: uGUI hierarchy/layout preview/apply authoring, canvas prefab authoring, raycast/layout verification, and screen-layout verification.
+- `ui`: uGUI hierarchy/layout preview/apply authoring, canvas prefab authoring, raycast/layout verification, screen-layout verification, legacy Text visual audits, and legacy Font import/bind preview/apply.
 - `runtime`: play-mode runtime probes, visual bounds snapshots, and pointer-input smoke verification.
 - `debug`: usage reports, payload analysis, and TSAM stage coverage inspection.
 
 Current metadata baselines are:
 
-- `foundation`: `12` exported tools.
-- `foundation + scene`: `34` exported tools.
-- `foundation + ui`: `25` exported tools.
-- `foundation + runtime`: `14` exported tools.
-- `project`: `21` exported tools.
-- `debug`: `22` exported tools.
+- `foundation`: `15` exported tools.
+- `foundation + scene`: `37` exported tools.
+- `foundation + ui`: `31` exported tools.
+- `foundation + runtime`: `17` exported tools.
+- `project`: `24` exported tools.
+- `debug`: `26` exported tools.
 
 Pack membership changes should update metadata audit expectations and workflow
 docs in the same change.
@@ -164,9 +170,11 @@ and `Unity.ManageEditor.WaitForStableEditor` saved `2,498` bytes (`62.69%`) in
 explicit `tool_result` rows.
 
 Use `Invoke-UnityMcpBatch` for repeated smoke/workflow calls that span packs.
-The Phase 14 batch smoke ran `9` ordered project/ui/scene/debug steps with `3`
-connections, `6` schema requests, `4` pack transitions, and no unmatched
-requests or failure rows.
+The helper now targets public `Unity.Batch.ExecuteWorkflow` instead of
+client-side one-shot loops, so the Unity side owns contained-tool pack
+validation and pack restoration. The earlier Phase 14 batch smoke ran `9`
+ordered project/ui/scene/debug steps with `3` connections, `6` schema requests,
+`4` pack transitions, and no unmatched requests or failure rows.
 
 The batch helper now handles unwrapped `Unity.ReadDetailRef` structured payloads
 as successful steps and summarizes large detail payloads instead of inlining
@@ -177,6 +185,13 @@ A longer TintPaint dogfood session later shaped `3,012,895` raw bytes to
 that compact usage reports still need better default summaries for large pack
 transition lists and clearer TSAM coverage presentation when coverage rows
 exist.
+
+Phase 19 smoke on `D:\TintPaint` passed the updated metadata audit, verified
+native modal detect/detect-only behavior with no active prompt, exercised
+`Unity.UI.VisualTextAudit`, and exercised legacy Font preview/apply with a
+no-op apply returning `willModify=false` and `applied=false`. A follow-up usage
+scope showed `tsamCoverageSummary.status=present`, `tsamStageRows=8`, `2`
+complete TSAM tool rows, and no true failure classes.
 
 ---
 
@@ -192,6 +207,9 @@ Current TSAM-covered surfaces include:
 - Scene serialized-reference preview/apply binding.
 - Scene prefab instantiate/bind preview/apply tools.
 - Play-mode pointer-input smoke verification.
+- Public batch workflow execution through `Unity.Batch.ExecuteWorkflow`.
+- Standalone native modal detection/resolution through `Unity.Editor.DetectNativeModals` and `Unity.Editor.ResolveSceneReloadPrompt`.
+- Legacy uGUI text/font verification through `Unity.UI.VisualTextAudit`, `Unity.Font.PreviewImportAndBindUiFont`, and `Unity.Font.ApplyImportAndBindUiFont`.
 - Compact `Unity.RunCommand` log summaries and `Unity.ReadConsole` summary reads.
 - Usage reporting for payload, bridge, pack transition, tool snapshot, detail-ref, and TSAM stage coverage analysis.
 
