@@ -414,6 +414,53 @@ Interpretation:
 
 ---
 
+## Phase 20 Frozen Editor Recovery Smoke 2026-04-30
+
+Phase 20 added explicit-only recovery for the freeze mode where `Unity.exe` is
+non-responsive, no native modal is visible, bridge status can remain `ready`,
+and new MCP clients can time out during `register_client`.
+
+Smoke host:
+
+- Host project: `D:\TintPaint`.
+- Metadata audit against the freshly built Lens app: passed with `foundation=17`, `foundation+scene=39`, `foundation+ui=33`, `foundation+runtime=19`, `project=26`, and `debug=28`.
+- `Get-UnityFrozenEditor.ps1` with the freshly built Lens app: `supported=true`, `found=false`, `frozenCount=0`; the current Unity process reported `responding=true`.
+- `Recover-UnityFrozenEditor.ps1 -Action DetectOnly` with the freshly built Lens app: `found=false`, `applied=false`, and no editor mutation.
+- `Check-UnityDevSession.ps1` now includes a compact `FrozenEditor` block. In the healthy smoke it reported the current Unity process as responsive.
+
+Interpretation:
+
+- Healthy Unity sessions now produce explicit no-frozen-editor evidence instead of relying only on bridge status.
+- Recovery remains explicit-only: helpers can recommend `RecoverFrozenEditor`, but they do not kill or reopen Unity automatically.
+- The installed Lens cache was older during the first helper probe, and the helper fell back to pure Windows process detection. Refresh the installed Lens server before a full dogfood recovery smoke that exercises the public local tool through the default binary.
+- A real freeze recovery still needs manual validation: reproduce `Responding=false`, run detect-only first, then explicitly run `KillAndReopen` with `StartupPromptAction=UseDisk` if the backup prompt appears.
+
+---
+
+## Phase 21 Smoke: Recovery Hygiene, Authoring Tools, Runtime Verification
+
+Host project: `D:\TintPaint`
+Unity version: `6000.4.3f1`
+
+Measured results:
+
+- Metadata audit passed at `foundation=17`, `foundation+scene=43`, `foundation+ui=35`, `foundation+runtime=20`, `project=26`, `foundation+assets=29`, and `debug=28`.
+- `Check-UnityDevSession.ps1` reported `Ready`, no native modal, no frozen editor, and `ProceedWithLensHelpers` after the expected reload marker expired.
+- The installed standalone Lens server was refreshed from the repo build so app-local recovery tools were visible in `foundation`.
+- Authoring smoke passed through `Invoke-UnityMcpBatch.ps1` with `10` hybrid workflow steps, `0` failed steps, `4` pack transitions, and restored packs.
+- The authoring smoke exercised local modal detection, ScriptableObject preview/apply on `Assets/MaterialLab/Data/Substrates/Oak.asset`, uGUI Clear Board button preview/apply, UnityEvent preview/apply, and scene save/readback.
+- Runtime smoke entered play mode and `Unity.PlayMode.VerifyPaintSurfaceInteraction` passed a layer-count delta assertion through a public `MixLabController.PaintCurrentBucketAtScreenPosition` call.
+- Console check after compile and smoke returned `0` entries.
+- A broad `lastRows=1000` usage report showed TSAM coverage present with `47` TSAM stage rows and `20` payload rows recording shaped savings, but it also included earlier failed smoke attempts, so it is not a clean acceptance telemetry window.
+
+Observed follow-ups:
+
+- `Unity.UI.ApplyEnsureButton` correctly created a missing legacy `Text` child under `ClearBoardButton`; this was a real scene mutation and was saved with `Unity.Scene.ApplySaveAndReadback`.
+- `Unity.PlayMode.VerifyPaintSurfaceInteraction` surfaced a useful failed `world_hit_target` assertion for a guessed screen point while the paint method still updated layer state. Richer pointer/raycast calibration remains a follow-up.
+- Native modal detection initially treated Unity's transient `Reloading Domain` progress dialog as blocking; Phase 21 now filters that expected transient modal from recovery classification.
+
+---
+
 ## Current Findings
 
 ### Session And Schema Churn

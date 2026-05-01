@@ -5,17 +5,19 @@ active. The Unity bridge contributes `13` core tools for health, pack control,
 detail refs, same-session batch workflows, console/resource reads, script
 validation, and compact project information. Phase 19 adds two
 foundation-visible local recovery tools in the standalone Lens server, so the
-current live foundation surface is `15` tools.
+current live foundation surface is `15` tools. Phase 20 adds two more
+foundation-visible local recovery tools for explicit frozen-editor detection
+and recovery, raising the live foundation surface to `17` tools.
 
 Common packs:
 
 - `console` for compact console inspection.
 - `project` for project/package/import metadata, validation, missing script/reference checks, Input System diagnostics, package compatibility, input-action inspection, and active input handler preview/apply.
-- `scene` for scene and GameObject inspection/editing, including the Phase 8 split GameObject TSAM surface, Phase 12 serialized-reference binding tools, and prefab instantiate/bind workflows.
-- `ui` for UI Toolkit reads, uGUI hierarchy/layout preview/apply authoring, canvas prefab authoring, raycast/layout verification, read-only screen-layout verification, legacy Text visual audits, and legacy Font import/bind preview/apply.
-- `runtime` for play-mode runtime probes, visual bounds snapshots, and pointer-input smoke verification.
+- `scene` for scene and GameObject inspection/editing, including the Phase 8 split GameObject TSAM surface, Phase 12 serialized-reference binding tools, prefab instantiate/bind workflows, UnityEvent binding, and save/readback.
+- `ui` for UI Toolkit reads, uGUI hierarchy/layout preview/apply authoring, button authoring, canvas prefab authoring, raycast/layout verification, read-only screen-layout verification, legacy Text visual audits, and legacy Font import/bind preview/apply.
+- `runtime` for play-mode runtime probes, visual bounds snapshots, pointer-input smoke verification, and paint-surface interaction verification.
 - `scripting` for scripts, edits, command execution, and structured `Unity.RunCommand` return payloads.
-- `assets` for asset/resource workflows.
+- `assets` for asset/resource workflows, including ScriptableObject preview/apply creation and update.
 - `debug` for diagnostics and profiling.
 - `full` for admin/debug operations that should not be default.
 
@@ -27,18 +29,24 @@ bridge before normal tool execution can start. These tools are implemented in
 the standalone Lens server and are intentionally available before Unity bridge
 bootstrap.
 
+Use `Unity.Editor.DetectFrozenEditor` and
+`Unity.Editor.RecoverFrozenEditor` when Unity is non-responsive and no native
+modal is visible. Recovery is explicit-only: helpers may recommend
+`RecoverFrozenEditor`, but they do not kill or reopen Unity automatically.
+
 Use `Unity.Batch.ExecuteWorkflow` when a known ordered workflow needs multiple
 tools in one Lens connection. The batch tool validates or infers required packs
 per step and restores the original active packs when the workflow completes.
 
 Current live metadata baselines:
 
-- `foundation`: `15` exported tools.
-- `foundation + scene`: `37` exported tools.
-- `foundation + ui`: `31` exported tools.
-- `foundation + runtime`: `17` exported tools.
-- `project`: `24` exported tools.
-- `debug`: `26` exported tools.
+- `foundation`: `17` exported tools.
+- `foundation + scene`: `43` exported tools.
+- `foundation + ui`: `35` exported tools.
+- `foundation + runtime`: `20` exported tools.
+- `project`: `26` exported tools.
+- `foundation + assets`: `29` exported tools.
+- `debug`: `28` exported tools.
 
 Pack additions must not change the `foundation` baseline unless the metadata
 audit and workflow docs are updated at the same time.

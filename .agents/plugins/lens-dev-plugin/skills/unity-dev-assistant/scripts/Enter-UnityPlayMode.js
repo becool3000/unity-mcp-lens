@@ -33,20 +33,25 @@ async function main() {
   });
 
   if (!idleWait.success) {
-    let nativeModal = null;
-    try {
-      nativeModal = await common.detectUnityNativeModals(projectPath, { timeoutSeconds: 6, maxItems: 8 });
-    } catch (_error) {
-    }
-    const modalBlocking = nativeModal?.found === true;
+    const failureClassification = await common.classifyUnityHelperFailure(projectPath, {
+      errorMessage: idleWait.message,
+      timeoutSeconds: 6,
+      maxItems: 8,
+    });
     console.log(JSON.stringify({
       success: false,
-      message: modalBlocking
+      message: failureClassification.classification === "EditorModalBlocking"
         ? "Unity play-mode entry is blocked by an OS-native Unity modal dialog. Resolve the modal before retrying."
+        : failureClassification.classification === "EditorFrozen"
+          ? "Unity play-mode entry is blocked because Unity.exe is not responding. Run Recover-UnityFrozenEditor.ps1 explicitly before retrying."
+          : failureClassification.classification === "UnityNotRunning"
+            ? "Unity play-mode entry is blocked because the Unity editor is not running."
         : "Unity editor did not become idle before play.",
-      classification: modalBlocking ? "EditorModalBlocking" : null,
+      classification: failureClassification.classification,
+      recommendedPath: failureClassification.recommendedPath,
       idleWait,
-      nativeModal,
+      nativeModal: failureClassification.nativeModal,
+      frozenEditor: failureClassification.frozenEditor,
     }, null, 2));
     await common.shutdownUnityMcpSessions();
     process.exit(1);
@@ -114,14 +119,21 @@ async function main() {
   };
 
   if (!result.success) {
-    try {
-      const nativeModal = await common.detectUnityNativeModals(projectPath, { timeoutSeconds: 6, maxItems: 8 });
-      result.nativeModal = nativeModal;
-      if (nativeModal?.found === true) {
-        result.classification = "EditorModalBlocking";
-        result.message = "Unity play-mode entry is blocked by an OS-native Unity modal dialog. Resolve the modal before retrying.";
-      }
-    } catch (_error) {
+    const failureClassification = await common.classifyUnityHelperFailure(projectPath, {
+      errorMessage: result.playError || result.playRequestErrorMessage || result.message,
+      timeoutSeconds: 6,
+      maxItems: 8,
+    });
+    result.nativeModal = failureClassification.nativeModal;
+    result.frozenEditor = failureClassification.frozenEditor;
+    result.classification = failureClassification.classification;
+    result.recommendedPath = failureClassification.recommendedPath;
+    if (failureClassification.classification === "EditorModalBlocking") {
+      result.message = "Unity play-mode entry is blocked by an OS-native Unity modal dialog. Resolve the modal before retrying.";
+    } else if (failureClassification.classification === "EditorFrozen") {
+      result.message = "Unity play-mode entry is blocked because Unity.exe is not responding. Run Recover-UnityFrozenEditor.ps1 explicitly before retrying.";
+    } else if (failureClassification.classification === "UnityNotRunning") {
+      result.message = "Unity play-mode entry is blocked because the Unity editor is not running.";
     }
   }
 

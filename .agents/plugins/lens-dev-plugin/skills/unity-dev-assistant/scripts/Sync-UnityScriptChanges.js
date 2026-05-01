@@ -35,6 +35,7 @@ async function main() {
     fallbackClassification: null,
     directHealthFallback: null,
     nativeModal: null,
+    frozenEditor: null,
   };
 
   const startedAt = Date.now();
@@ -132,17 +133,25 @@ async function main() {
     result.expectedReloadState = common.getUnityExpectedReloadState(projectPath, true);
 
     if (!result.success) {
-      try {
-        const nativeModal = await common.detectUnityNativeModals(projectPath, { timeoutSeconds: 6, maxItems: 8 });
-        result.nativeModal = nativeModal;
-        if (nativeModal?.found === true) {
-          result.fallbackClassification = "EditorModalBlocking";
-          result.message = "Unity sync is blocked by an OS-native Unity modal dialog. Resolve the modal before retrying.";
-        }
-      } catch (_error) {
+      const failureClassification = await common.classifyUnityHelperFailure(projectPath, {
+        errorMessage: result.forceRefreshError || result.message,
+        timeoutSeconds: 6,
+        maxItems: 8,
+      });
+      result.nativeModal = failureClassification.nativeModal;
+      result.frozenEditor = failureClassification.frozenEditor;
+      if (failureClassification.classification === "EditorModalBlocking") {
+        result.fallbackClassification = "EditorModalBlocking";
+        result.message = "Unity sync is blocked by an OS-native Unity modal dialog. Resolve the modal before retrying.";
+      } else if (failureClassification.classification === "EditorFrozen") {
+        result.fallbackClassification = "EditorFrozen";
+        result.message = "Unity sync is blocked because Unity.exe is not responding. Run Recover-UnityFrozenEditor.ps1 explicitly before retrying.";
+      } else if (failureClassification.classification === "UnityNotRunning") {
+        result.fallbackClassification = "UnityNotRunning";
+        result.message = "Unity sync is blocked because the Unity editor is not running.";
       }
 
-      if (result.fallbackClassification !== "EditorModalBlocking") {
+      if (result.fallbackClassification !== "EditorModalBlocking" && result.fallbackClassification !== "EditorFrozen" && result.fallbackClassification !== "UnityNotRunning") {
         try {
           const directHealth = await common.testUnityDirectEditorHealthy(projectPath, {
             timeoutSeconds: 20,

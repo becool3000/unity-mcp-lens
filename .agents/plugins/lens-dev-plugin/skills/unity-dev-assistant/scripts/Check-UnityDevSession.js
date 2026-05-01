@@ -39,6 +39,8 @@ async function main() {
     wrapperError = "Skipped Lens editor-state probe because Check-UnityMcp classified the session as BuildInProgress.";
   } else if (bridgeCheck.result.Classification === "EditorModalBlocking") {
     wrapperError = "Skipped Lens editor-state probe because Check-UnityMcp detected a blocking Unity native modal dialog.";
+  } else if (bridgeCheck.result.Classification === "EditorFrozen") {
+    wrapperError = "Skipped Lens editor-state probe because Check-UnityMcp detected a frozen Unity editor process.";
   } else if (bridgeCheck.result.Classification === "EditorReloadingExpected") {
     wrapperError = `Skipped Lens editor-state probe because Check-UnityMcp classified the session as EditorReloadingExpected.`;
   } else if (bridgeCheck.result.EditorStatusBeacon?.Fresh && bridgeCheck.result.EditorStatusBeacon?.Classification === "BeaconTransitioning") {
@@ -133,6 +135,8 @@ async function main() {
     recommendedPath = "MonitorActiveBuild";
   } else if (bridgeCheck.result.Classification === "EditorModalBlocking") {
     recommendedPath = "ResolveEditorModal";
+  } else if (bridgeCheck.result.Classification === "EditorFrozen") {
+    recommendedPath = "RecoverFrozenEditor";
   } else if (bridgeCheck.result.Classification === "EditorReloadingExpected") {
     recommendedPath = "WaitForExpectedReload";
   } else if (bridgeCheck.result.Classification !== "Ready") {
@@ -155,11 +159,18 @@ async function main() {
       Summary: bridgeCheck.result.Summary,
       RecommendedAction: bridgeCheck.result.RecommendedAction,
       UserActionRequired: bridgeCheck.result.UserActionRequired,
-      NativeModal: bridgeCheck.result.NativeModalState
+          NativeModal: bridgeCheck.result.NativeModalState
         ? {
             Found: bridgeCheck.result.NativeModalState.found,
             ModalCount: bridgeCheck.result.NativeModalState.modalCount,
             Modals: bridgeCheck.result.NativeModalState.modals,
+          }
+        : null,
+      FrozenEditor: bridgeCheck.result.FrozenEditorState
+        ? {
+            Found: bridgeCheck.result.FrozenEditorState.found,
+            FrozenCount: bridgeCheck.result.FrozenEditorState.frozenCount,
+            Editors: bridgeCheck.result.FrozenEditorState.editors,
           }
         : null,
     },
@@ -216,6 +227,8 @@ async function main() {
     ExpectedReloadState: bridgeCheck.result.ExpectedReloadState,
     NativeModalState: bridgeCheck.result.NativeModalState,
     NativeModalError: bridgeCheck.result.NativeModalError,
+    FrozenEditorState: bridgeCheck.result.FrozenEditorState,
+    FrozenEditorError: bridgeCheck.result.FrozenEditorError,
     BuildScenePreflight: buildScenePreflight,
     BuildMonitor: buildMonitor,
     EditorIdleSnapshot: editorIdleSnapshot,

@@ -95,6 +95,7 @@ powershell -ExecutionPolicy Bypass -File $script -ProjectPath "$PWD"
 - Treat `BuildInProgress` as non-user-actionable when `Editor.log` still shows active WebGL Bee/wasm work and no later terminal build marker. Do not notify the user or keep retrying bridge recovery during that window.
 - Treat `EditorReloadingExpected` as a transient state; wait for Unity compile/domain reload settle instead of notifying the user.
 - Treat `EditorModalBlocking` as a real blocker outside the bridge. Do not keep retrying MCP; run `Resolve-UnitySceneReloadPrompt` with `DetectOnly` first, then use explicit `Reload`/`Ignore` or safe `Auto` with expected changed paths.
+- Treat `EditorFrozen` as a real blocker outside the bridge. Do not keep retrying MCP and do not kill Unity automatically; run `Recover-UnityFrozenEditor` with `DetectOnly` first, then use explicit `KillAndReopen` only when the target process is confirmed.
 - Treat `ReconnectRequired` as user action required even if the bridge status file says `ready`.
 - Treat `UnityNotRunning` or `BridgeNotReady` as unavailable; do not guess your way through scene or prefab work.
 - Only treat the bridge as healthy when MCP succeeds or the check script reports `Ready` with no hard failure signals.

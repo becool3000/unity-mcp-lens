@@ -24,6 +24,8 @@ All notable Unity MCP Lens package changes are documented here.
 - Added Phase 18 public foundation tool `Unity.Batch.ExecuteWorkflow` for same-session ordered workflows that execute registered Lens tools without recursive MCP transport calls, switch/verify packs per step, and restore the original active packs.
 - Added Phase 19 standalone foundation-visible modal recovery tools: `Unity.Editor.DetectNativeModals` and `Unity.Editor.ResolveSceneReloadPrompt`.
 - Added Phase 19 legacy uGUI font/text tools: `Unity.UI.VisualTextAudit`, `Unity.Font.PreviewImportAndBindUiFont`, and `Unity.Font.ApplyImportAndBindUiFont`.
+- Added Phase 20 explicit-only frozen-editor recovery tools: `Unity.Editor.DetectFrozenEditor` and `Unity.Editor.RecoverFrozenEditor`.
+- Added Phase 21 asset, UI, scene, and runtime verification tools: `Unity.Asset.PreviewCreateOrUpdateScriptableObject`, `Unity.Asset.ApplyCreateOrUpdateScriptableObject`, `Unity.UI.PreviewEnsureButton`, `Unity.UI.ApplyEnsureButton`, `Unity.Scene.PreviewBindUnityEvent`, `Unity.Scene.ApplyBindUnityEvent`, `Unity.Scene.PreviewSaveAndReadback`, `Unity.Scene.ApplySaveAndReadback`, and `Unity.PlayMode.VerifyPaintSurfaceInteraction`.
 
 ### Changed
 
@@ -59,6 +61,11 @@ All notable Unity MCP Lens package changes are documented here.
 - Raised Phase 18 metadata audit baselines to `foundation=13`, `foundation+scene=35`, `foundation+ui=26`, `foundation+runtime=15`, `project=22`, and `debug=24`.
 - Improved helper recovery classification so visible native Unity reload prompts can surface as `EditorModalBlocking` / `ResolveEditorModal` instead of generic reconnect noise.
 - Raised current metadata audit baselines to `foundation=15`, `foundation+scene=37`, `foundation+ui=31`, `foundation+runtime=17`, `project=24`, and `debug=26`.
+- Improved helper recovery classification so non-responsive `Unity.exe` processes can surface as `EditorFrozen` / `RecoverFrozenEditor` instead of generic reconnect noise.
+- Raised current metadata audit baselines to `foundation=17`, `foundation+scene=39`, `foundation+ui=33`, `foundation+runtime=19`, `project=26`, and `debug=28`.
+- Improved native-modal recovery hygiene so transient Unity compile/reload progress dialogs such as `Reloading Domain` are not treated as blocking editor modals.
+- Retargeted the batch helper so app-local recovery tools run directly through the standalone Lens session while bridge-backed steps use public `Unity.Batch.ExecuteWorkflow`.
+- Raised current metadata audit baselines to `foundation=17`, `foundation+scene=43`, `foundation+ui=35`, `foundation+runtime=20`, `project=26`, `assets=29`, and `debug=28`.
 
 ### Known Follow-Up
 
@@ -67,7 +74,7 @@ All notable Unity MCP Lens package changes are documented here.
 - Decide whether default package assembly filtering should exclude doc/sample/test-support asmdefs from compact compatibility reads.
 - Reduce reconnect-prone `Unity_ManageEditor` transport-noise during play transitions.
 - Add reliable editor restart/reload orchestration and prefab/serialized-reference authoring workflows.
-- Deferred candidates: ScriptableObject asset preview/apply authoring, prefab-instance UI patch/bind workflows, generic runtime component assertions, and explicit play-mode exit orchestration.
+- Deferred candidates: prefab-instance UI patch/bind workflows, richer runtime pointer/raycast assertions, and explicit play-mode exit orchestration.
 
 ### Validation
 
@@ -75,6 +82,7 @@ All notable Unity MCP Lens package changes are documented here.
 - Phase 12 helper-driven hardening smoke passed with a residual payload-shaping warning on Unity `6000.4.3f1` in `D:\2DUnityNewGame`.
 - Phase 13 payload-shaping smoke passed the primary shaping target on Unity `6000.4.3f1` in `D:\2DUnityNewGame`: `NoShapingRecorded=false`, `89,643` bytes saved (`42.58%`) in the focused scope, and tool snapshot shaping reduced `100,016` raw bytes to `9,481` shaped bytes.
 - Phase 14 compact-result and batch-helper smoke passed on Unity `6000.4.3f1` in `D:\2DUnityNewGame`: `NoShapingRecorded=false`, `26,541` bytes saved (`52.49%`) in the focused scope, `7` saving rows, and batch churn reduced to `3` connections, `6` schema requests, and `4` pack transitions.
+- Phase 21 metadata audit passed on Unity `6000.4.3f1` in `D:\TintPaint` with `foundation=17`, `foundation+scene=43`, `foundation+ui=35`, `foundation+runtime=20`, `project=26`, `assets=29`, and `debug=28`. Focused authoring smoke passed with `10` hybrid batch steps, `4` pack transitions, and restored packs; runtime paint-surface verification passed a play-mode layer-count delta assertion through `Unity.PlayMode.VerifyPaintSurfaceInteraction`.
 - Phase 15 log-compaction smoke passed on Unity `6000.4.3f1` in `D:\2DUnityNewGame`: `NoShapingRecorded=false`, `16,720` bytes saved (`29.66%`) in the focused scope, `Unity.RunCommand` saved `11,433` bytes (`65.69%`), `Unity.ReadConsole` saved `2,219` bytes (`77.00%`), with `0` unmatched requests and `0` happy-path failure rows.
 - Phase 16 batch detail-ref and editor-stability smoke passed in `D:\TintPaint`: metadata audit passed with unchanged baselines, `NoShapingRecorded=false`, `12,419` bytes saved (`20.52%`) in the focused scope, `Unity.ManageEditor.WaitForStableEditor` saved `2,498` bytes (`62.69%`), with `0` unmatched requests and `0` happy-path failure rows.
 - Longer TintPaint dogfood session recorded `NoShapingRecorded=false`, `2,362,465` bytes saved (`78.41%`) across `1999` rows, with top savings from tool snapshot shaping and `Unity.ManageEditor.WaitForStableEditor`; it also exposed a `tsamCoverage=[]` presentation gap despite `1783` coverage rows.
@@ -84,6 +92,7 @@ All notable Unity MCP Lens package changes are documented here.
 - Phase 13 focused smoke emitted complete TSAM stage coverage with no failure rows for Input System diagnostics, UI hierarchy preview/apply, scene binding preview/apply, UI layout preview/apply, and UI verify.
 - Phase 14 focused batch smoke emitted complete TSAM stage coverage with no failure rows for Input System diagnostics, UI hierarchy preview/apply, scene binding preview/apply, UI layout preview/apply, and UI verify.
 - Phase 19 focused smoke on `D:\TintPaint` passed the updated metadata audit; native modal detect and scene-reload detect-only returned a clean no-prompt result; visual text audit and no-op font preview/apply succeeded; and a follow-up usage scope reported `tsamCoverageSummary.status=present`, `tsamStageRows=8`, `2` complete TSAM tool rows, and no true failure classes.
+- Phase 20 local-tool smoke on `D:\TintPaint` passed metadata audit against the freshly built Lens app at `foundation=17`, `foundation+scene=39`, `foundation+ui=33`, `foundation+runtime=19`, `project=26`, and `debug=28`; detect-only frozen-editor checks reported the current Unity process responsive and did not mutate editor state.
 
 ## [0.1.0-alpha.1] - 2026-04-20
 

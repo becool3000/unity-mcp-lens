@@ -520,12 +520,16 @@ namespace Becool.UnityMcpLens.Editor.Lens.Usage
 
             if (text.IndexOf("domain_reload_transport_close", StringComparison.OrdinalIgnoreCase) >= 0)
                 return true;
+            if (text.IndexOf("EditorFrozen", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                text.IndexOf("editor_frozen", StringComparison.OrdinalIgnoreCase) >= 0)
+                return true;
 
             bool hasTransitionHint =
                 text.IndexOf("reload", StringComparison.OrdinalIgnoreCase) >= 0 ||
                 text.IndexOf("domain", StringComparison.OrdinalIgnoreCase) >= 0 ||
                 text.IndexOf("compile", StringComparison.OrdinalIgnoreCase) >= 0 ||
                 text.IndexOf("play", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                text.IndexOf("frozen", StringComparison.OrdinalIgnoreCase) >= 0 ||
                 text.IndexOf("expected_recovery", StringComparison.OrdinalIgnoreCase) >= 0;
 
             bool isKnownTransportLoss =
@@ -609,7 +613,7 @@ namespace Becool.UnityMcpLens.Editor.Lens.Usage
                 findings.Add(new UsageFindingRow("failures_recorded", "info", $"Scope includes {report.FailureClasses.Sum(row => row.Count)} failed or error-classified row(s)."));
 
             if ((report.ExpectedTransitionFailureClasses?.Count ?? 0) > 0)
-                findings.Add(new UsageFindingRow("expected_transition_failures", "info", $"Scope includes {report.ExpectedTransitionFailureClasses.Sum(row => row.Count)} expected reload/play transition transport row(s)."));
+                findings.Add(new UsageFindingRow("expected_transition_failures", "info", $"Scope includes {report.ExpectedTransitionFailureClasses.Sum(row => row.Count)} expected reload/play/editor-recovery transport row(s)."));
 
             var incompleteTsam = report.TsamCoverage?.FirstOrDefault(row =>
                 row.NormalizationRows != row.OperationCount ||
@@ -794,6 +798,7 @@ namespace Becool.UnityMcpLens.Editor.Lens.Usage
             return row.Classification.IndexOf("domain_reload_transport_close", StringComparison.OrdinalIgnoreCase) >= 0 ||
                 row.Classification.IndexOf("reload", StringComparison.OrdinalIgnoreCase) >= 0 ||
                 row.Classification.IndexOf("play", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                row.Classification.IndexOf("frozen", StringComparison.OrdinalIgnoreCase) >= 0 ||
                 row.Classification.IndexOf("expected", StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
@@ -952,6 +957,7 @@ namespace Becool.UnityMcpLens.Editor.Lens.Usage
             return row.Classification.IndexOf("domain_reload_transport_close", StringComparison.OrdinalIgnoreCase) >= 0 ||
                 row.Classification.IndexOf("reload", StringComparison.OrdinalIgnoreCase) >= 0 ||
                 row.Classification.IndexOf("play", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                row.Classification.IndexOf("frozen", StringComparison.OrdinalIgnoreCase) >= 0 ||
                 row.Classification.IndexOf("expected", StringComparison.OrdinalIgnoreCase) >= 0;
         }
 

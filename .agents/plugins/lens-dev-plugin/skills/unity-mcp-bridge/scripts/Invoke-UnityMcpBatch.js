@@ -52,8 +52,9 @@ function toPublicWorkflowStep(step) {
 function buildHelperDiagnostics(steps) {
   const usageReportPacks = common.inferRequiredPacks("Unity_GetLensUsageReport");
   return {
-    implementation: "public_tool",
+    implementation: "hybrid_public_batch_local_recovery",
     publicTool: "Unity_Batch_ExecuteWorkflow",
+    localRecoveryRouting: true,
     usageReportPackInference: {
       inferredPacks: usageReportPacks,
       hasDebug: usageReportPacks.includes("debug"),
@@ -67,6 +68,211 @@ function buildHelperDiagnostics(steps) {
   };
 }
 
+function summarizeStepData(toolResult) {
+  const data = common.valueOf(toolResult, "data", "Data") || toolResult;
+  const text = JSON.stringify(data || {});
+  if (text.length <= 2048) {
+    return {
+      included: true,
+      bytes: Buffer.byteLength(text, "utf8"),
+      value: data,
+    };
+  }
+
+  const selected = {};
+  for (const key of ["success", "message", "classification", "supported", "found", "modalCount", "frozenCount", "applied", "reason", "detailRef"]) {
+    const value = common.valueOf(data, key, key.charAt(0).toUpperCase() + key.slice(1));
+    if (value !== undefined) {
+      selected[key] = value;
+    }
+  }
+  return {
+    included: false,
+    bytes: Buffer.byteLength(text, "utf8"),
+    keys: data && typeof data === "object" ? Object.keys(data).slice(0, 16) : [],
+    selected,
+  };
+}
+
+function collectDetailRefs(value, path = "$", refs = []) {
+  if (!value || typeof value !== "object" || refs.length >= 8) {
+    return refs;
+  }
+
+  if (Array.isArray(value)) {
+    for (let index = 0; index < value.length && refs.length < 8; index += 1) {
+      collectDetailRefs(value[index], `${path}[${index}]`, refs);
+    }
+    return refs;
+  }
+
+  for (const [key, child] of Object.entries(value)) {
+    const childPath = `${path}.${key}`;
+    if (key === "detailRef" || key.endsWith("DetailRef")) {
+      refs.push({
+        path: childPath,
+        refId: child && typeof child === "object" ? (child.refId || child.RefId) : child,
+        tool: child && typeof child === "object" ? (child.tool || child.Tool) : null,
+        bytes: child && typeof child === "object" ? (child.bytes || child.Bytes) : null,
+      });
+    }
+    collectDetailRefs(child, childPath, refs);
+    if (refs.length >= 8) {
+      break;
+    }
+  }
+  return refs;
+}
+
+async function runPublicBatch(projectPath, bridgeSteps, timeoutSeconds) {
+  if (bridgeSteps.length === 0) {
+    return {
+      success: true,
+      completedStepCount: 0,
+      failedStepCount: 0,
+      packTransitions: 0,
+      restoredPacks: true,
+      results: [],
+    };
+  }
+
+  const response = await common.invokeUnityMcpToolJson(projectPath, "Unity_Batch_ExecuteWorkflow", {
+    steps: bridgeSteps.map(toPublicWorkflowStep),
+  }, {
+    timeoutSeconds,
+    exactPacks: true,
+  });
+
+  return common.getToolObject(response) || {
+    success: false,
+    error: "Unity_Batch_ExecuteWorkflow returned no structured payload.",
+    results: [],
+  };
+}
+
+async function runLocalRecoveryStep(projectPath, step, index) {
+  const started = Date.now();
+  const response = await common.invokeUnityMcpToolJson(projectPath, step.tool, step.arguments, {
+    timeoutSeconds: step.timeoutSeconds,
+  });
+  const toolResult = common.getToolObject(response) || {
+    success: false,
+    error: `${step.tool} returned no structured payload.`,
+  };
+  const success = common.valueOf(toolResult, "success", "Success") !== false;
+  return {
+    index,
+    name: step.name,
+    tool: step.tool,
+    requiredPacks: [],
+    continueOnError: step.continueOnError,
+    expectReload: step.expectReload,
+    readOnlyExpected: step.readOnlyExpected,
+    localRecoveryTool: true,
+    success,
+    message: common.valueOf(toolResult, "message", "Message") || null,
+    error: common.valueOf(toolResult, "error", "Error") || null,
+    durationMs: Date.now() - started,
+    data: summarizeStepData(toolResult),
+    detailRefs: collectDetailRefs(toolResult),
+  };
+}
+
+async function runHybridWorkflow(projectPath, steps, defaultTimeoutSeconds) {
+  const results = [];
+  let completedStepCount = 0;
+  let failedStepCount = 0;
+  let packTransitions = 0;
+  let restoredPacks = true;
+  let success = true;
+  let bridgeBuffer = [];
+
+  async function flushBridgeBuffer() {
+    if (bridgeBuffer.length === 0) {
+      return true;
+    }
+
+    const timeoutSeconds = Math.max(
+      defaultTimeoutSeconds,
+      bridgeBuffer.reduce((sum, step) => sum + step.timeoutSeconds, 0) + 5
+    );
+    const batchResult = await runPublicBatch(projectPath, bridgeBuffer, timeoutSeconds);
+    const batchSuccess = common.valueOf(batchResult, "success", "Success") === true;
+    const batchRows = common.valueOf(batchResult, "results", "Results") || [];
+    for (const row of batchRows) {
+      results.push(row);
+      completedStepCount += 1;
+      if (common.valueOf(row, "success", "Success") === false) {
+        failedStepCount += 1;
+        success = false;
+      }
+    }
+    packTransitions += Number(common.valueOf(batchResult, "packTransitions", "PackTransitions") || 0);
+    restoredPacks = restoredPacks && common.valueOf(batchResult, "restoredPacks", "RestoredPacks") !== false;
+    bridgeBuffer = [];
+    if (!batchSuccess) {
+      success = false;
+    }
+    return batchSuccess;
+  }
+
+  for (let index = 0; index < steps.length; index += 1) {
+    const step = steps[index];
+    if (!common.isLocalRecoveryTool(step.tool)) {
+      bridgeBuffer.push(step);
+      continue;
+    }
+
+    const bridgeOk = await flushBridgeBuffer();
+    if (!bridgeOk && !step.continueOnError) {
+      break;
+    }
+
+    try {
+      const row = await runLocalRecoveryStep(projectPath, step, index);
+      results.push(row);
+      completedStepCount += 1;
+      if (!row.success) {
+        failedStepCount += 1;
+        success = false;
+        if (!step.continueOnError) {
+          break;
+        }
+      }
+    } catch (error) {
+      failedStepCount += 1;
+      success = false;
+      results.push({
+        index,
+        name: step.name,
+        tool: step.tool,
+        requiredPacks: [],
+        localRecoveryTool: true,
+        success: false,
+        errorKind: error?.name || "Error",
+        error: error?.message || String(error),
+      });
+      if (!step.continueOnError) {
+        break;
+      }
+    }
+  }
+
+  await flushBridgeBuffer();
+  return {
+    success: success && failedStepCount === 0 && restoredPacks,
+    message: failedStepCount === 0
+      ? `Executed ${completedStepCount} hybrid workflow step(s).`
+      : `Executed ${completedStepCount} hybrid workflow step(s) with ${failedStepCount} failure(s).`,
+    stepCount: steps.length,
+    completedStepCount,
+    failedStepCount,
+    packTransitions,
+    restoredPacks,
+    results,
+  };
+}
+
 async function main() {
   const args = common.parseCliArgs(process.argv.slice(2));
   const projectPath = common.resolveProjectPath(common.getArgString(args, ["ProjectPath"], process.cwd()));
@@ -77,25 +283,11 @@ async function main() {
   }
 
   const steps = rawSteps.map((step, index) => normalizeStep(step, index, defaultTimeoutSeconds));
-  const workflowTimeoutSeconds = Math.max(
-    defaultTimeoutSeconds,
-    steps.reduce((sum, step) => sum + step.timeoutSeconds, 0) + 5
-  );
   const helperDiagnostics = buildHelperDiagnostics(steps);
   const startedAt = Date.now();
 
   try {
-    const response = await common.invokeUnityMcpToolJson(projectPath, "Unity_Batch_ExecuteWorkflow", {
-      steps: steps.map(toPublicWorkflowStep),
-    }, {
-      timeoutSeconds: workflowTimeoutSeconds,
-      exactPacks: true,
-    });
-
-    const toolResult = common.getToolObject(response) || {
-      success: false,
-      error: "Unity_Batch_ExecuteWorkflow returned no structured payload.",
-    };
+    const toolResult = await runHybridWorkflow(projectPath, steps, defaultTimeoutSeconds);
     const success = common.valueOf(toolResult, "success", "Success") === true;
     const output = {
       projectPath,
@@ -109,12 +301,11 @@ async function main() {
     process.exit(success ? 0 : 1);
   } catch (error) {
     const message = String(error?.message || error);
-    let nativeModal = null;
-    try {
-      nativeModal = await common.detectUnityNativeModals(projectPath, { timeoutSeconds: 6, maxItems: 8 });
-    } catch (_modalError) {
-    }
-    const modalBlocking = nativeModal?.found === true;
+    const classification = await common.classifyUnityHelperFailure(projectPath, {
+      errorMessage: message,
+      timeoutSeconds: 6,
+      maxItems: 8,
+    });
     const publicToolHint = message.includes("Unity_Batch_ExecuteWorkflow") || message.includes("Batch_ExecuteWorkflow")
       ? "The active Lens server may be older than this repo-local helper. In Unity, run Tools > Unity MCP Lens > Install/Refresh Lens Server, then retry."
       : null;
@@ -123,8 +314,10 @@ async function main() {
       projectPath,
       durationSeconds: Math.round(((Date.now() - startedAt) / 1000) * 1000) / 1000,
       error: message,
-      classification: modalBlocking ? "EditorModalBlocking" : null,
-      nativeModal,
+      classification: classification.classification,
+      recommendedPath: classification.recommendedPath,
+      nativeModal: classification.nativeModal,
+      frozenEditor: classification.frozenEditor,
       helperDiagnostics: {
         ...helperDiagnostics,
         installedCacheOrServerDriftHint: publicToolHint,

@@ -45,7 +45,8 @@ node .agents/plugins/lens-dev-plugin/skills/unity-dev-assistant/scripts/Check-Un
 - Prefer `Invoke-UnityMcpBatch` for repeated smoke/workflow checks that span project, ui, scene, runtime, and debug packs. It now routes through public `Unity.Batch.ExecuteWorkflow`, so Lens executes contained tools in the current connection, validates packs per step, and restores pack state.
 - Prefer helper-driven `Invoke-UnityRunCommand` for runtime probes now that it can bypass idle-wait gating in healthy play mode and preserve structured `ReturnResult(...)` payloads.
 - Treat `Unity.RunCommand` and `Unity.ReadConsole` inline logs as compact previews. Use `logSummary` and `Unity.ReadDetailRef` only when full log text or full scanned console entries are needed.
-- Keep current metadata baselines at `foundation=13`, `foundation+scene=35`, `foundation+ui=26`, `foundation+runtime=15`, `project=22`, and `debug=24` unless a deliberate pack-surface change updates the metadata audit.
+- Treat `EditorFrozen` as an explicit recovery state. Helpers can recommend `RecoverFrozenEditor`, but they must not kill or reopen Unity automatically.
+- Keep current metadata baselines at `foundation=17`, `foundation+scene=43`, `foundation+ui=35`, `foundation+runtime=20`, `project=26`, `foundation+assets=29`, and `debug=28` unless a deliberate pack-surface change updates the metadata audit.
 
 ## Current Tool Surface Reality
 
@@ -64,6 +65,7 @@ node .agents/plugins/lens-dev-plugin/skills/unity-dev-assistant/scripts/Check-Un
 - Treat `Unity.Batch.ExecuteWorkflow` as the preferred same-session workflow primitive; do not fall back to ad hoc same-connection Node scripts for usage-report/detail-ref reads unless the installed Lens server is stale.
 - Continue payload shaping for remaining editor-state edge cases now that the large TSAM targets and log-heavy probe/console paths show measurable savings.
 - Use `D:\TintPaint` as the active long-running Unity smoke host.
+- Use `Get-UnityFrozenEditor` / `Recover-UnityFrozenEditor -Action DetectOnly` before any explicit frozen-editor kill/reopen recovery.
 - Reduce noisy repeated package/editor-log signals so healthy compatibility reads stay high signal.
 - Keep `Unity.ProjectSettings.PreviewActiveInputHandler` and `Unity.ProjectSettings.SetActiveInputHandler` as the editor-authored backend change path.
 - Keep `Unity.Project.PackageCompatibility` and `Unity.InputActions.InspectAsset` as the preferred package/import read surface before raw `Editor.log` grep.

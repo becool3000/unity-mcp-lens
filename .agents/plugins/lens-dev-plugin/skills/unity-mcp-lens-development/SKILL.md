@@ -119,13 +119,13 @@ Phase 17 addresses the highest TintPaint dogfood pain without widening `foundati
 
 ## Phase 18 Public Batch And Reliability Truth
 
-Phase 18 is reliability-first and does not add ScriptableObject or prefab-instance authoring.
+Phase 18 was reliability-first and did not add ScriptableObject or prefab-instance authoring.
 
 - Prefer public `Unity.Batch.ExecuteWorkflow` for same-session workflows. It executes contained tools through `McpToolRegistry`, validates pack availability through the manifest broker, rejects recursive/pack-control contained steps, and restores original active packs.
 - `Invoke-UnityMcpBatch` remains the stable helper wrapper and should call `Unity.Batch.ExecuteWorkflow`.
 - `Unity_GetLensUsageReport` must infer `debug`; helper ownership tests cover this.
 - Usage-report compact output should keep `packSetTransitions` summarized inline, separate expected reload/play transport loss from true failure classes, and report TSAM coverage status clearly.
-- Deferred post-Phase 19 candidates are `Unity.Asset.CreateOrUpdateScriptableObject`, prefab-instance UI patch/bind, generic runtime component assertions, and explicit exit-play-mode orchestration.
+- Phase 21 added ScriptableObject preview/apply authoring, focused UI button authoring, UnityEvent binding, scene save/readback, and paint-surface interaction verification. Remaining deferred candidates are prefab-instance UI patch/bind, richer runtime pointer/raycast assertions, and explicit exit-play-mode orchestration.
 
 ## Phase 19 Modal Recovery And UI Font/Text Truth
 
@@ -136,7 +136,17 @@ Phase 19 prioritizes native Unity modal recovery and focused legacy uGUI font/te
 - Helper classifications should surface native dialog blockers as `EditorModalBlocking` and session checks should recommend `ResolveEditorModal`.
 - Prefer `Unity.UI.VisualTextAudit` for legacy `UnityEngine.UI.Text` visibility/font/alpha/rect checks before custom probes.
 - Prefer `Unity.Font.PreviewImportAndBindUiFont` before `Unity.Font.ApplyImportAndBindUiFont` for legacy Font binding; TextMeshPro is unsupported in v1 and must be reported as such.
-- Pack baselines after Phase 19: `foundation=15`, `foundation+scene=37`, `foundation+ui=31`, `foundation+runtime=17`, `project=24`, and `debug=26`.
+
+## Phase 20 Frozen Editor Recovery Truth
+
+Phase 20 prioritizes explicit recovery for a frozen Unity process.
+
+- `Unity.Editor.DetectFrozenEditor` and `Unity.Editor.RecoverFrozenEditor` are standalone Lens-server local tools. They must be listed and callable before Unity bridge bootstrap.
+- Helper classifications should surface non-responsive Unity processes as `EditorFrozen` and session checks should recommend `RecoverFrozenEditor`.
+- Recovery is explicit-only. Health checks and sync/play helpers may detect and recommend recovery, but they must not kill or reopen Unity automatically.
+- `RecoverFrozenEditor KillAndReopen` should be used only after detect-only confirms a frozen target. If multiple Unity processes match, pass `processId` explicitly.
+- Backup prompt handling is explicit: use `StartupPromptAction=UseDisk` to click `No` on `Recovering Scene Backups`, or `RecoverBackup` to click `Yes`.
+- Pack baselines after Phase 21: `foundation=17`, `foundation+scene=43`, `foundation+ui=35`, `foundation+runtime=20`, `project=26`, `foundation+assets=29`, and `debug=28`.
 
 ## Maintenance Rules
 

@@ -105,23 +105,28 @@ and restores the original pack state afterward. Phase 19 also exposes
 `Unity.Editor.DetectNativeModals` and `Unity.Editor.ResolveSceneReloadPrompt`
 as standalone Lens-server local tools so a native Unity reload dialog can be
 detected or resolved before the Unity bridge is healthy enough to answer.
+Phase 20 adds `Unity.Editor.DetectFrozenEditor` and
+`Unity.Editor.RecoverFrozenEditor` for explicit-only recovery when `Unity.exe`
+is non-responsive and bridge-ready/register-client signals are stale.
 
 Pack-specific TSAM work is used to keep the MCP surface small:
 
-- `scene`: split GameObject tools, scene serialized-reference binding, and prefab instantiate/bind workflows.
+- `scene`: split GameObject tools, scene serialized-reference binding, prefab instantiate/bind workflows, UnityEvent binding, and save/readback.
 - `project`: package/import diagnostics, Input System diagnostics, input-action asset inspection, and active input handler tools.
-- `ui`: uGUI hierarchy/layout preview/apply authoring, canvas prefab authoring, raycast/layout verification, screen-layout verification, legacy Text visual audits, and legacy Font import/bind preview/apply.
-- `runtime`: play-mode runtime probes, visual bounds snapshots, and pointer-input smoke verification.
+- `ui`: uGUI hierarchy/layout preview/apply authoring, button authoring, canvas prefab authoring, raycast/layout verification, screen-layout verification, legacy Text visual audits, and legacy Font import/bind preview/apply.
+- `assets`: asset/resource workflows, including ScriptableObject preview/apply creation and update.
+- `runtime`: play-mode runtime probes, visual bounds snapshots, pointer-input smoke verification, and paint-surface interaction verification.
 - `debug`: usage reports, payload analysis, and TSAM stage coverage inspection.
 
 Current metadata baselines are:
 
-- `foundation`: `15` exported tools.
-- `foundation + scene`: `37` exported tools.
-- `foundation + ui`: `31` exported tools.
-- `foundation + runtime`: `17` exported tools.
-- `project`: `24` exported tools.
-- `debug`: `26` exported tools.
+- `foundation`: `17` exported tools.
+- `foundation + scene`: `43` exported tools.
+- `foundation + ui`: `35` exported tools.
+- `foundation + runtime`: `20` exported tools.
+- `project`: `26` exported tools.
+- `foundation + assets`: `29` exported tools.
+- `debug`: `28` exported tools.
 
 Pack membership changes should update metadata audit expectations and workflow
 docs in the same change.
@@ -193,6 +198,20 @@ no-op apply returning `willModify=false` and `applied=false`. A follow-up usage
 scope showed `tsamCoverageSummary.status=present`, `tsamStageRows=8`, `2`
 complete TSAM tool rows, and no true failure classes.
 
+Phase 20 smoke on `D:\TintPaint` passed metadata audit against the freshly
+built Lens app at `foundation=17`, `foundation+scene=39`, `foundation+ui=33`,
+`foundation+runtime=19`, `project=26`, and `debug=28`. Detect-only frozen
+editor checks reported the current Unity process responsive and did not mutate
+editor state.
+
+Phase 21 smoke on `D:\TintPaint` passed metadata audit at `foundation=17`,
+`foundation+scene=43`, `foundation+ui=35`, `foundation+runtime=20`,
+`project=26`, `foundation+assets=29`, and `debug=28`. The authoring smoke used
+`Invoke-UnityMcpBatch` for `10` hybrid steps covering local modal detection,
+ScriptableObject preview/apply, button preview/apply, UnityEvent preview/apply,
+and scene save/readback. The runtime smoke entered play mode and verified a
+paint-surface layer-count delta through `Unity.PlayMode.VerifyPaintSurfaceInteraction`.
+
 ---
 
 ## Implemented Surfaces
@@ -209,6 +228,7 @@ Current TSAM-covered surfaces include:
 - Play-mode pointer-input smoke verification.
 - Public batch workflow execution through `Unity.Batch.ExecuteWorkflow`.
 - Standalone native modal detection/resolution through `Unity.Editor.DetectNativeModals` and `Unity.Editor.ResolveSceneReloadPrompt`.
+- Standalone explicit-only frozen editor detection/recovery through `Unity.Editor.DetectFrozenEditor` and `Unity.Editor.RecoverFrozenEditor`.
 - Legacy uGUI text/font verification through `Unity.UI.VisualTextAudit`, `Unity.Font.PreviewImportAndBindUiFont`, and `Unity.Font.ApplyImportAndBindUiFont`.
 - Compact `Unity.RunCommand` log summaries and `Unity.ReadConsole` summary reads.
 - Usage reporting for payload, bridge, pack transition, tool snapshot, detail-ref, and TSAM stage coverage analysis.

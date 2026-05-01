@@ -178,6 +178,8 @@ recorded signals include:
 - Phase 17 adds the first pass at those gaps: compact pack-transition summaries, clearer TSAM coverage summary data, uGUI canvas prefab preview/apply, scene prefab instantiate/bind preview/apply, UI raycast/layout verification, and play-mode pointer-input smoke verification.
 - Phase 18 adds public same-session workflow execution through `Unity.Batch.ExecuteWorkflow`, retargets the batch helper to that tool, and separates expected reload/play transition transport loss from true usage-report failure classes.
 - Phase 19 adds native Unity modal recovery before bridge bootstrap plus focused legacy uGUI font/text verification. A `D:\TintPaint` smoke passed metadata audit at `foundation=15`, `foundation+scene=37`, `foundation+ui=31`, `foundation+runtime=17`, `project=24`, and `debug=26`; modal detect/resolve detect-only returned a clean no-prompt result; `Unity.UI.VisualTextAudit` reported `12` legacy Text rows with compact issues/detailRef; and no-op font preview/apply returned `willModify=false` / `applied=false` for the current Noto font.
+- Phase 20 adds explicit-only frozen-editor recovery. `Unity.Editor.DetectFrozenEditor` can classify `Unity.exe` `Responding=false` plus stale bridge-ready/register-timeout symptoms as `EditorFrozen`; `Unity.Editor.RecoverFrozenEditor` can kill/reopen only when called explicitly. Detect-only smoke on `D:\TintPaint` reported the current editor responsive, and metadata audit against the freshly built Lens app passed at `foundation=17`, `foundation+scene=39`, `foundation+ui=33`, `foundation+runtime=19`, `project=26`, and `debug=28`.
+- Phase 21 adds first-class ScriptableObject asset preview/apply, uGUI button preview/apply, UnityEvent binding preview/apply, scene save/readback, and play-mode paint-surface interaction verification. `D:\TintPaint` metadata audit passed at `foundation=17`, `foundation+scene=43`, `foundation+ui=35`, `foundation+runtime=20`, `project=26`, `assets=29`, and `debug=28`; focused authoring smoke passed `10` hybrid batch steps and runtime verification passed a layer-count delta assertion without custom `Unity.RunCommand`.
 - Payload shaping is still underway for residual editor-state edge cases, but the high-volume TSAM result path, log-heavy probe path, and editor-stability wait path now default to compact inline data with full data behind `detailRef`.
 
 ## Telemetry & Privacy
@@ -213,8 +215,9 @@ Active refactor.
 
 Stable foundation. Expanding TSAM coverage and payload shaping.
 
-Current metadata audit targets are `foundation=15`, `foundation+scene=37`,
-`foundation+ui=31`, `foundation+runtime=17`, `project=24`, and `debug=26`.
+Current metadata audit targets are `foundation=17`, `foundation+scene=43`,
+`foundation+ui=35`, `foundation+runtime=20`, `project=26`,
+`foundation+assets=29`, and `debug=28`.
 
 ---
 

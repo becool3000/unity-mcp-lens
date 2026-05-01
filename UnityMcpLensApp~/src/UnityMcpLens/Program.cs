@@ -8,6 +8,7 @@ sealed class UnityMcpLensHost
     static readonly HashSet<string> s_ReadOnlyTools = new(StringComparer.OrdinalIgnoreCase)
     {
         "Unity_Editor_DetectNativeModals",
+        "Unity_Editor_DetectFrozenEditor",
         "Unity_GameObject_Inspect",
         "Unity_GameObject_PreviewChanges",
         "Unity_GetLensHealth",
@@ -20,11 +21,15 @@ sealed class UnityMcpLensHost
         "Unity_GetSha",
         "Unity_ValidateScript",
         "Unity_Font_PreviewImportAndBindUiFont",
+        "Unity_Asset_PreviewCreateOrUpdateScriptableObject",
         "Unity_UI_PreviewEnsureHierarchy",
         "Unity_UI_PreviewLayoutProperties",
+        "Unity_UI_PreviewEnsureButton",
         "Unity_UI_VerifyScreenLayout",
         "Unity_UI_VisualTextAudit",
         "Unity_Scene_PreviewBindSerializedReferences",
+        "Unity_Scene_PreviewBindUnityEvent",
+        "Unity_Scene_PreviewSaveAndReadback",
         "Unity_UI_Raycast",
         "Unity_Asset_Search",
         "Unity_Object_ValidateReferences",
@@ -38,6 +43,7 @@ sealed class UnityMcpLensHost
     static readonly HashSet<string> s_MutatingTools = new(StringComparer.OrdinalIgnoreCase)
     {
         "Unity_Editor_ResolveSceneReloadPrompt",
+        "Unity_Editor_RecoverFrozenEditor",
         "Unity_GameObject_ApplyChanges",
         "Unity_ManageGameObject",
         "Unity_ManageScene",
@@ -53,6 +59,7 @@ sealed class UnityMcpLensHost
         "Unity_DeleteScript",
         "Unity_RunCommand",
         "Unity_Font_ApplyImportAndBindUiFont",
+        "Unity_Asset_ApplyCreateOrUpdateScriptableObject",
         "Unity_Resource_Write",
         "Unity_Resource_Delete",
         "Unity_Project_ManagePackages",
@@ -60,11 +67,15 @@ sealed class UnityMcpLensHost
         "Unity_Prefab_SetSerializedProperties",
         "Unity_Scene_SetSerializedProperties",
         "Unity_Scene_ApplyBindSerializedReferences",
+        "Unity_Scene_ApplyBindUnityEvent",
+        "Unity_Scene_ApplySaveAndReadback",
         "Unity_Tile_BuildSet",
         "Unity_Tilemap_Setup",
         "Unity_Tilemap_Paint",
         "Unity_UI_ApplyEnsureHierarchy",
         "Unity_UI_ApplyLayoutProperties",
+        "Unity_UI_ApplyEnsureButton",
+        "Unity_PlayMode_VerifyPaintSurfaceInteraction",
         "Unity_UI_Toolkit"
     };
 

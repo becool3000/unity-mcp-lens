@@ -25,6 +25,7 @@ try
             Console.WriteLine($"UI:         {auditReport.UiToolCount} tools");
             Console.WriteLine($"Runtime:    {auditReport.RuntimeToolCount} tools");
             Console.WriteLine($"Project:    {auditReport.ProjectToolCount} tools");
+            Console.WriteLine($"Assets:     {auditReport.AssetsToolCount} tools");
             Console.WriteLine($"Debug:      {auditReport.DebugToolCount} tools");
             Console.WriteLine($"Result:     {(auditReport.Success ? "PASS" : "FAIL")}");
 
@@ -168,18 +169,21 @@ sealed class BenchmarkOptions
 
 sealed class MetadataAudit(BenchmarkOptions options)
 {
-    const int ExpectedFoundationToolCount = 15;
-    const int ExpectedSceneToolCount = 37;
-    const int ExpectedUiToolCount = 31;
-    const int ExpectedRuntimeToolCount = 17;
-    const int ExpectedProjectToolCount = 24;
-    const int ExpectedDebugToolCount = 26;
+    const int ExpectedFoundationToolCount = 17;
+    const int ExpectedSceneToolCount = 43;
+    const int ExpectedUiToolCount = 35;
+    const int ExpectedRuntimeToolCount = 20;
+    const int ExpectedProjectToolCount = 26;
+    const int ExpectedAssetsToolCount = 29;
+    const int ExpectedDebugToolCount = 28;
 
     static readonly string[] k_RequiredFoundationTools =
     [
         "Unity_GetLensHealth",
         "Unity_Editor_DetectNativeModals",
+        "Unity_Editor_DetectFrozenEditor",
         "Unity_Editor_ResolveSceneReloadPrompt",
+        "Unity_Editor_RecoverFrozenEditor",
         "Unity_ListToolPacks",
         "Unity_SetToolPacks",
         "Unity_ReadDetailRef",
@@ -214,6 +218,10 @@ sealed class MetadataAudit(BenchmarkOptions options)
         "Unity_Scene_ApplyBindSerializedReferences",
         "Unity_Scene_PreviewInstantiatePrefabAndBind",
         "Unity_Scene_ApplyInstantiatePrefabAndBind",
+        "Unity_Scene_PreviewBindUnityEvent",
+        "Unity_Scene_ApplyBindUnityEvent",
+        "Unity_Scene_PreviewSaveAndReadback",
+        "Unity_Scene_ApplySaveAndReadback",
         "Unity_Scene_CaptureView",
         "Unity_Tilemap_Setup",
         "Unity_Tilemap_Paint",
@@ -229,6 +237,8 @@ sealed class MetadataAudit(BenchmarkOptions options)
         "Unity_UI_VerifyScreenLayout",
         "Unity_UI_PreviewCreateCanvasPrefab",
         "Unity_UI_ApplyCreateCanvasPrefab",
+        "Unity_UI_PreviewEnsureButton",
+        "Unity_UI_ApplyEnsureButton",
         "Unity_UI_VerifyRaycastAndLayout",
         "Unity_UI_VisualTextAudit",
         "Unity_Font_PreviewImportAndBindUiFont",
@@ -248,7 +258,8 @@ sealed class MetadataAudit(BenchmarkOptions options)
     static readonly string[] k_RequiredRuntimeTools =
     [
         "Unity_Runtime_GetVisualBoundsSnapshot",
-        "Unity_PlayMode_PointerInputSmoke"
+        "Unity_PlayMode_PointerInputSmoke",
+        "Unity_PlayMode_VerifyPaintSurfaceInteraction"
     ];
 
     static readonly string[] k_RequiredProjectTools =
@@ -260,6 +271,16 @@ sealed class MetadataAudit(BenchmarkOptions options)
         "Unity_InputActions_InspectAsset",
         "Unity_ProjectSettings_PreviewActiveInputHandler",
         "Unity_ProjectSettings_SetActiveInputHandler"
+    ];
+
+    static readonly string[] k_RequiredAssetsTools =
+    [
+        "Unity_Asset_Search",
+        "Unity_Asset_ConfigureSpriteImport",
+        "Unity_Asset_PreviewCreateOrUpdateScriptableObject",
+        "Unity_Asset_ApplyCreateOrUpdateScriptableObject",
+        "Unity_Prefab_SetSerializedProperties",
+        "Unity_ManageAsset"
     ];
 
     public async Task<MetadataAuditReport> RunAsync()
@@ -294,6 +315,8 @@ sealed class MetadataAudit(BenchmarkOptions options)
             0,
             0,
             0,
+            0,
+            [],
             [],
             [],
             [],
@@ -317,6 +340,8 @@ sealed class MetadataAudit(BenchmarkOptions options)
         var runtimeTools = await session.GetToolsAsync();
         _ = await session.SetToolPacksAsync(["project"]);
         var projectTools = await session.GetToolsAsync();
+        _ = await session.SetToolPacksAsync(["assets"]);
+        var assetsTools = await session.GetToolsAsync();
         _ = await session.SetToolPacksAsync(["debug"]);
         var debugTools = await session.GetToolsAsync();
 
@@ -326,9 +351,12 @@ sealed class MetadataAudit(BenchmarkOptions options)
         ValidateToolSet("foundation+ui", uiTools, ExpectedUiToolCount, k_RequiredUiTools, failures);
         ValidateToolSet("foundation+runtime", runtimeTools, ExpectedRuntimeToolCount, k_RequiredRuntimeTools, failures);
         ValidateToolSet("foundation+project", projectTools, ExpectedProjectToolCount, k_RequiredProjectTools, failures);
+        ValidateToolSet("foundation+assets", assetsTools, ExpectedAssetsToolCount, k_RequiredAssetsTools, failures);
         ValidateToolSet("foundation+debug", debugTools, ExpectedDebugToolCount, k_RequiredDebugTools, failures);
         ValidateReadOnlyHint(foundationTools, "Unity_Editor_DetectNativeModals", expected: true, failures);
+        ValidateReadOnlyHint(foundationTools, "Unity_Editor_DetectFrozenEditor", expected: true, failures);
         ValidateReadOnlyHint(foundationTools, "Unity_Editor_ResolveSceneReloadPrompt", expected: false, failures);
+        ValidateReadOnlyHint(foundationTools, "Unity_Editor_RecoverFrozenEditor", expected: false, failures);
         ValidateReadOnlyHint(foundationTools, "Unity_Batch_ExecuteWorkflow", expected: false, failures);
         ValidateReadOnlyHint(sceneTools, "Unity_GameObject_Inspect", expected: true, failures);
         ValidateReadOnlyHint(sceneTools, "Unity_GameObject_ListComponents", expected: true, failures);
@@ -351,13 +379,22 @@ sealed class MetadataAudit(BenchmarkOptions options)
         ValidateReadOnlyHint(uiTools, "Unity_UI_VerifyScreenLayout", expected: true, failures);
         ValidateReadOnlyHint(uiTools, "Unity_UI_PreviewCreateCanvasPrefab", expected: true, failures);
         ValidateReadOnlyHint(uiTools, "Unity_UI_ApplyCreateCanvasPrefab", expected: false, failures);
+        ValidateReadOnlyHint(uiTools, "Unity_UI_PreviewEnsureButton", expected: true, failures);
+        ValidateReadOnlyHint(uiTools, "Unity_UI_ApplyEnsureButton", expected: false, failures);
         ValidateReadOnlyHint(uiTools, "Unity_UI_VerifyRaycastAndLayout", expected: true, failures);
         ValidateReadOnlyHint(uiTools, "Unity_UI_VisualTextAudit", expected: true, failures);
         ValidateReadOnlyHint(uiTools, "Unity_Font_PreviewImportAndBindUiFont", expected: true, failures);
         ValidateReadOnlyHint(uiTools, "Unity_Font_ApplyImportAndBindUiFont", expected: false, failures);
         ValidateReadOnlyHint(sceneTools, "Unity_Scene_PreviewInstantiatePrefabAndBind", expected: true, failures);
         ValidateReadOnlyHint(sceneTools, "Unity_Scene_ApplyInstantiatePrefabAndBind", expected: false, failures);
+        ValidateReadOnlyHint(sceneTools, "Unity_Scene_PreviewBindUnityEvent", expected: true, failures);
+        ValidateReadOnlyHint(sceneTools, "Unity_Scene_ApplyBindUnityEvent", expected: false, failures);
+        ValidateReadOnlyHint(sceneTools, "Unity_Scene_PreviewSaveAndReadback", expected: true, failures);
+        ValidateReadOnlyHint(sceneTools, "Unity_Scene_ApplySaveAndReadback", expected: false, failures);
         ValidateReadOnlyHint(runtimeTools, "Unity_PlayMode_PointerInputSmoke", expected: false, failures);
+        ValidateReadOnlyHint(runtimeTools, "Unity_PlayMode_VerifyPaintSurfaceInteraction", expected: false, failures);
+        ValidateReadOnlyHint(assetsTools, "Unity_Asset_PreviewCreateOrUpdateScriptableObject", expected: true, failures);
+        ValidateReadOnlyHint(assetsTools, "Unity_Asset_ApplyCreateOrUpdateScriptableObject", expected: false, failures);
         ValidateReadOnlyHint(projectTools, "Unity_InputSystem_Diagnostics", expected: true, failures);
         ValidateReadOnlyHint(projectTools, "Unity_Project_PackageCompatibility", expected: true, failures);
         ValidateReadOnlyHint(projectTools, "Unity_InputActions_InspectAsset", expected: true, failures);
@@ -369,6 +406,7 @@ sealed class MetadataAudit(BenchmarkOptions options)
         ValidateSceneBindingSchemas(sceneTools, failures);
         ValidateRuntimeToolSchemas(runtimeTools, failures);
         ValidateProjectToolSchemas(projectTools, failures);
+        ValidateAssetToolSchemas(assetsTools, failures);
         ValidateBatchWorkflowSchema(foundationTools, failures);
         ValidateEditorModalSchemas(foundationTools, failures);
         ValidateLensUsageSchema(debugTools, failures);
@@ -383,12 +421,14 @@ sealed class MetadataAudit(BenchmarkOptions options)
             uiTools.Count,
             runtimeTools.Count,
             projectTools.Count,
+            assetsTools.Count,
             debugTools.Count,
             foundationTools.Select(tool => tool.Name).OrderBy(name => name, StringComparer.Ordinal).ToArray(),
             sceneTools.Select(tool => tool.Name).OrderBy(name => name, StringComparer.Ordinal).ToArray(),
             uiTools.Select(tool => tool.Name).OrderBy(name => name, StringComparer.Ordinal).ToArray(),
             runtimeTools.Select(tool => tool.Name).OrderBy(name => name, StringComparer.Ordinal).ToArray(),
             projectTools.Select(tool => tool.Name).OrderBy(name => name, StringComparer.Ordinal).ToArray(),
+            assetsTools.Select(tool => tool.Name).OrderBy(name => name, StringComparer.Ordinal).ToArray(),
             debugTools.Select(tool => tool.Name).OrderBy(name => name, StringComparer.Ordinal).ToArray(),
             failures);
     }
@@ -626,6 +666,18 @@ sealed class MetadataAudit(BenchmarkOptions options)
             failures);
         ValidateSplitGameObjectSchema(
             tools,
+            "Unity_UI_PreviewEnsureButton",
+            ["parentTarget", "parentSearchMethod", "includeInactive", "buttonName", "buttonPath", "labelText", "layout", "imageColor", "textColor", "interactable", "onClick"],
+            ["parentTarget"],
+            failures);
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_UI_ApplyEnsureButton",
+            ["parentTarget", "parentSearchMethod", "includeInactive", "buttonName", "buttonPath", "labelText", "layout", "imageColor", "textColor", "interactable", "onClick"],
+            ["parentTarget"],
+            failures);
+        ValidateSplitGameObjectSchema(
+            tools,
             "Unity_UI_VerifyRaycastAndLayout",
             ["points", "targets", "assertions"],
             ["points"],
@@ -681,6 +733,30 @@ sealed class MetadataAudit(BenchmarkOptions options)
             ["prefabPath", "instanceName", "parent", "parentSearchMethod", "includeInactive", "position", "rotation", "scale", "bindings"],
             ["prefabPath"],
             failures);
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_Scene_PreviewBindUnityEvent",
+            ["bindings"],
+            ["bindings"],
+            failures);
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_Scene_ApplyBindUnityEvent",
+            ["bindings"],
+            ["bindings"],
+            failures);
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_Scene_PreviewSaveAndReadback",
+            ["scenePath", "saveOpenScenes", "readbacks"],
+            [],
+            failures);
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_Scene_ApplySaveAndReadback",
+            ["scenePath", "saveOpenScenes", "readbacks"],
+            [],
+            failures);
     }
 
     static void ValidateBatchWorkflowSchema(IReadOnlyList<ToolDescriptor> tools, List<string> failures)
@@ -703,8 +779,20 @@ sealed class MetadataAudit(BenchmarkOptions options)
             failures);
         ValidateSplitGameObjectSchema(
             tools,
+            "Unity_Editor_DetectFrozenEditor",
+            ["projectPath", "processId", "includeWindows", "includeBridgeStatus", "staleReadySeconds", "maxItems"],
+            [],
+            failures);
+        ValidateSplitGameObjectSchema(
+            tools,
             "Unity_Editor_ResolveSceneReloadPrompt",
             ["projectPath", "processId", "action", "expectedChangedPaths", "timeoutSeconds", "waitForBridgeReady"],
+            ["action"],
+            failures);
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_Editor_RecoverFrozenEditor",
+            ["projectPath", "processId", "action", "unityEditorPath", "waitForBridgeReady", "timeoutSeconds", "startupPromptAction", "sceneReloadPromptAction", "expectedChangedPaths"],
             ["action"],
             failures);
     }
@@ -716,6 +804,28 @@ sealed class MetadataAudit(BenchmarkOptions options)
             "Unity_PlayMode_PointerInputSmoke",
             ["screenX", "screenY", "button", "queueInput", "stepFrames", "settleMs", "uiTarget", "uiSearchMethod", "includeInactive", "cameraTarget", "cameraSearchMethod", "layerMask"],
             [],
+            failures);
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_PlayMode_VerifyPaintSurfaceInteraction",
+            ["controller", "surface", "camera", "uiRoot", "samples", "operations", "assertions"],
+            [],
+            failures);
+    }
+
+    static void ValidateAssetToolSchemas(IReadOnlyList<ToolDescriptor> tools, List<string> failures)
+    {
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_Asset_PreviewCreateOrUpdateScriptableObject",
+            ["assetPath", "scriptType", "createIfMissing", "updateIfExists", "assignments"],
+            ["assetPath", "scriptType"],
+            failures);
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_Asset_ApplyCreateOrUpdateScriptableObject",
+            ["assetPath", "scriptType", "createIfMissing", "updateIfExists", "assignments"],
+            ["assetPath", "scriptType"],
             failures);
     }
 
@@ -972,12 +1082,14 @@ sealed record MetadataAuditReport(
     int UiToolCount,
     int RuntimeToolCount,
     int ProjectToolCount,
+    int AssetsToolCount,
     int DebugToolCount,
     IReadOnlyList<string> FoundationTools,
     IReadOnlyList<string> SceneTools,
     IReadOnlyList<string> UiTools,
     IReadOnlyList<string> RuntimeTools,
     IReadOnlyList<string> ProjectTools,
+    IReadOnlyList<string> AssetsTools,
     IReadOnlyList<string> DebugTools,
     IReadOnlyList<string> Failures);
 

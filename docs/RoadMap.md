@@ -180,6 +180,7 @@ at real workflow scale:
 - Add a reliable save/quit/relaunch/reacquire workflow around the helper scripts.
 - Keep any in-editor quit tool explicit about dirty state and expected transport loss.
 - Prefer an external orchestrator for relaunch and bridge-ready verification, because Unity cannot report after its own process exits.
+- Use the Phase 20 frozen-editor path for explicit recovery when `Unity.exe` is non-responsive: detect first, then kill/reopen only through `RecoverFrozenEditor`.
 
 ---
 

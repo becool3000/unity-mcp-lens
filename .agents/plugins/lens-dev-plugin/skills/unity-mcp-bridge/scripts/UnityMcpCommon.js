@@ -266,7 +266,9 @@ const foundationToolNames = new Set(
     "Unity.ReadDetailRef",
     "Unity.Batch.ExecuteWorkflow",
     "Unity.Editor.DetectNativeModals",
+    "Unity.Editor.DetectFrozenEditor",
     "Unity.Editor.ResolveSceneReloadPrompt",
+    "Unity.Editor.RecoverFrozenEditor",
     "Unity.GetLensHealth",
     "Unity.ReadConsole",
     "Unity.ListResources",
@@ -276,6 +278,15 @@ const foundationToolNames = new Set(
     "Unity.ValidateScript",
     "Unity.ManageScript_capabilities",
     "Unity.Project.GetInfo",
+  ].map(normalizeToolName)
+);
+
+const localRecoveryToolNames = new Set(
+  [
+    "Unity.Editor.DetectNativeModals",
+    "Unity.Editor.DetectFrozenEditor",
+    "Unity.Editor.ResolveSceneReloadPrompt",
+    "Unity.Editor.RecoverFrozenEditor",
   ].map(normalizeToolName)
 );
 
@@ -383,6 +394,10 @@ function inferRequiredPacks(toolName) {
   return normalizeAdditionalPacks(Array.from(requiredPacks));
 }
 
+function isLocalRecoveryTool(toolName) {
+  return localRecoveryToolNames.has(normalizeToolName(toolName));
+}
+
 function isReconnectableUnityMcpError(error) {
   const message = String(error?.message || "").toLowerCase();
   return (
@@ -406,6 +421,20 @@ function buildUnityMcpTimeoutError(toolName, timeoutSeconds) {
   }
 
   return new Error(`Unity MCP tool '${toolName}' timed out after ${timeoutSeconds} seconds.`);
+}
+
+function classifyLocalRecoveryToolError(message) {
+  const text = String(message || "").toLowerCase();
+  if (text.includes("not available") || text.includes("not allowed") || text.includes("active lens packs")) {
+    return "local_recovery_tool_pack_routing_regression";
+  }
+  if (text.includes("unknown")) {
+    return "local_recovery_tool_unavailable";
+  }
+  if (text.includes("timed out")) {
+    return "local_recovery_tool_timeout";
+  }
+  return "local_recovery_tool_error";
 }
 
 function writeFramedMessage(child, payload) {
@@ -2099,8 +2128,34 @@ function getUnityAssistantPackageState(projectPath) {
 
 function getUnityProcesses() {
   if (process.platform === "win32") {
-    const result = spawnSync("tasklist", ["/FI", "IMAGENAME eq Unity.exe"], { encoding: "utf8" });
-    return result.stdout && result.stdout.includes("Unity.exe") ? [{ name: "Unity" }] : [];
+    const script = [
+      "$ErrorActionPreference = 'SilentlyContinue'",
+      "Get-Process -Name Unity | Select-Object Id,ProcessName,MainWindowTitle,Responding,Path,@{Name='StartTimeUtc';Expression={$_.StartTime.ToUniversalTime().ToString('o')}} | ConvertTo-Json -Depth 4 -Compress",
+    ].join("; ");
+    const result = spawnSync("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script], {
+      encoding: "utf8",
+      timeout: 5000,
+    });
+    if (result.status === 0 && result.stdout && result.stdout.trim()) {
+      try {
+        const parsed = JSON.parse(result.stdout.trim());
+        const entries = Array.isArray(parsed) ? parsed : [parsed];
+        return entries
+          .filter((entry) => entry && Number(entry.Id) > 0)
+          .map((entry) => ({
+            pid: Number(entry.Id),
+            name: entry.ProcessName || "Unity",
+            mainWindowTitle: entry.MainWindowTitle || "",
+            responding: typeof entry.Responding === "boolean" ? entry.Responding : null,
+            path: entry.Path || null,
+            startTimeUtc: entry.StartTimeUtc || null,
+          }));
+      } catch (_error) {
+      }
+    }
+
+    const fallback = spawnSync("tasklist", ["/FI", "IMAGENAME eq Unity.exe"], { encoding: "utf8" });
+    return fallback.stdout && fallback.stdout.includes("Unity.exe") ? [{ name: "Unity", responding: null }] : [];
   }
 
   const result = spawnSync("pgrep", ["-x", "Unity"], { encoding: "utf8" });
@@ -2110,6 +2165,261 @@ function getUnityProcesses() {
         .filter(Boolean)
         .map((pid) => ({ pid: Number(pid), name: "Unity" }))
     : [];
+}
+
+function processMatchesProject(processInfo, projectPath) {
+  const projectName = path.basename(resolveProjectPath(projectPath));
+  if (!projectName) {
+    return true;
+  }
+  const title = String(processInfo?.mainWindowTitle || "");
+  return title.toLowerCase().includes(projectName.toLowerCase());
+}
+
+function compactBridgeStatusForFreeze(status, staleReadySeconds) {
+  if (!status) {
+    return null;
+  }
+  const ageSeconds = status.LastWriteTimeMs ? Math.max(0, (Date.now() - status.LastWriteTimeMs) / 1000) : null;
+  return {
+    status: status.Status || null,
+    reason: status.Reason || null,
+    expectedRecovery: status.ExpectedRecovery === true,
+    expectedRecoveryExpired: status.ExpectedRecoveryExpired === true,
+    projectPath: status.ProjectPath || null,
+    projectRoot: status.ProjectRoot || null,
+    matchesProject: status.MatchesProject === true,
+    lastWriteTime: status.LastWriteTime || null,
+    ageSeconds: ageSeconds == null ? null : Math.round(ageSeconds * 100) / 100,
+    commandHealth: status.CommandHealth || null,
+    staleReadyLikely:
+      status.Status === "ready" &&
+      ageSeconds != null &&
+      ageSeconds >= Math.max(1, Number(staleReadySeconds || 30)),
+  };
+}
+
+function detectUnityFrozenEditors(projectPath, options = {}) {
+  if (process.platform !== "win32") {
+    return {
+      success: true,
+      supported: false,
+      found: false,
+      frozenCount: 0,
+      classification: "Unsupported",
+      message: "Frozen editor detection is only implemented on Windows.",
+      editors: [],
+    };
+  }
+
+  const projectRoot = resolveProjectPath(projectPath);
+  const processId = Number(options.processId || 0);
+  const staleReadySeconds = Math.max(1, Number(options.staleReadySeconds || 30));
+  const maxItems = Math.max(1, Number(options.maxItems || 8));
+  const statusCandidates = options.includeBridgeStatus === false ? [] : getBridgeStatusCandidates(projectRoot);
+  const selectedStatus = statusCandidates.find((status) => status.MatchesProject) || statusCandidates[0] || null;
+  const bridgeStatus = compactBridgeStatusForFreeze(selectedStatus, staleReadySeconds);
+  const registerClientTimeoutObserved = String(options.errorMessage || "")
+    .toLowerCase()
+    .includes("register_client");
+
+  let processes = getUnityProcesses();
+  if (processId > 0) {
+    processes = processes.filter((entry) => Number(entry.pid) === processId);
+  } else {
+    const matched = processes.filter((entry) => processMatchesProject(entry, projectRoot));
+    if (matched.length > 0) {
+      processes = matched;
+    }
+  }
+
+  const editors = processes.slice(0, maxItems).map((entry) => {
+    const responding = typeof entry.responding === "boolean" ? entry.responding : null;
+    const frozenLikely = responding === false;
+    return {
+      processId: Number(entry.pid || 0),
+      processName: entry.name || "Unity",
+      mainWindowTitle: entry.mainWindowTitle || "",
+      responding,
+      matchedProject: processMatchesProject(entry, projectRoot),
+      executablePath: entry.path || null,
+      startTimeUtc: entry.startTimeUtc || null,
+      bridgeStatus,
+      staleReadyLikely: bridgeStatus?.staleReadyLikely === true,
+      registerClientTimeoutObserved,
+      frozenLikely,
+      classification: frozenLikely ? "EditorFrozen" : "Responsive",
+      recommendedAction: frozenLikely
+        ? "Run Recover-UnityFrozenEditor.ps1 -Action DetectOnly first; then use KillAndReopen with an explicit process id when safe."
+        : "No frozen editor recovery is recommended for this process.",
+    };
+  });
+  const frozenCount = editors.filter((entry) => entry.frozenLikely).length;
+
+  return {
+    success: true,
+    supported: true,
+    found: frozenCount > 0,
+    frozenCount,
+    classification: frozenCount > 0 ? "EditorFrozen" : "NoFrozenEditor",
+    message: frozenCount > 0
+      ? `Detected ${frozenCount} frozen Unity editor process(es).`
+      : "No frozen Unity editor process was detected.",
+    editors,
+  };
+}
+
+function detectUnityNativeModalsWithPowerShell(projectPath, options = {}) {
+  if (process.platform !== "win32") {
+    return {
+      success: true,
+      supported: false,
+      found: false,
+      modalCount: 0,
+      classification: "Unsupported",
+      message: "Native modal detection is only implemented on Windows.",
+      modals: [],
+    };
+  }
+
+  const projectRoot = resolveProjectPath(projectPath);
+  const escapedProjectPath = projectRoot.replace(/'/g, "''");
+  const processId = Number(options.processId || 0);
+  const includeButtons = options.includeButtons !== false;
+  const maxItems = Math.max(1, Number(options.maxItems || 8));
+  const script = `
+$ErrorActionPreference = 'SilentlyContinue'
+Add-Type -TypeDefinition @"
+using System;
+using System.Text;
+using System.Runtime.InteropServices;
+public static class UnityNativeModalProbe {
+  public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+  [DllImport("user32.dll")] public static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
+  [DllImport("user32.dll")] public static extern bool EnumChildWindows(IntPtr hWndParent, EnumWindowsProc lpEnumFunc, IntPtr lParam);
+  [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr hWnd);
+  [DllImport("user32.dll")] public static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
+  [DllImport("user32.dll")] public static extern int GetClassName(IntPtr hWnd, StringBuilder lpClassName, int nMaxCount);
+  [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
+  [StructLayout(LayoutKind.Sequential)] public struct RECT { public int Left; public int Top; public int Right; public int Bottom; }
+  [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
+}
+"@
+function Get-WindowTextValue([IntPtr]$Handle) {
+  $builder = New-Object System.Text.StringBuilder 1024
+  [void][UnityNativeModalProbe]::GetWindowText($Handle, $builder, $builder.Capacity)
+  $builder.ToString()
+}
+function Get-WindowClassValue([IntPtr]$Handle) {
+  $builder = New-Object System.Text.StringBuilder 256
+  [void][UnityNativeModalProbe]::GetClassName($Handle, $builder, $builder.Capacity)
+  $builder.ToString()
+}
+$projectPath = '${escapedProjectPath}'
+$projectName = Split-Path -Leaf $projectPath
+$explicitProcessId = ${processId}
+$includeButtons = $${includeButtons ? "true" : "false"}
+$maxItems = ${maxItems}
+$unityProcesses = if ($explicitProcessId -gt 0) {
+  @(Get-Process -Id $explicitProcessId)
+} else {
+  @(Get-Process -Name Unity | Where-Object { [string]::IsNullOrWhiteSpace($projectName) -or $_.MainWindowTitle -like "*$projectName*" })
+}
+$unityPidSet = @{}
+foreach ($process in $unityProcesses) {
+  if ($process -and $process.Id) { $unityPidSet[[int]$process.Id] = $process }
+}
+$modals = New-Object System.Collections.ArrayList
+$callback = [UnityNativeModalProbe+EnumWindowsProc]{
+  param([IntPtr]$handle, [IntPtr]$param)
+  if (-not [UnityNativeModalProbe]::IsWindowVisible($handle)) { return $true }
+  [uint32]$windowPid = 0
+  [void][UnityNativeModalProbe]::GetWindowThreadProcessId($handle, [ref]$windowPid)
+  if (-not $unityPidSet.ContainsKey([int]$windowPid)) { return $true }
+  $className = Get-WindowClassValue $handle
+  if ($className -ne '#32770') { return $true }
+  $title = Get-WindowTextValue $handle
+  $rect = New-Object UnityNativeModalProbe+RECT
+  [void][UnityNativeModalProbe]::GetWindowRect($handle, [ref]$rect)
+  $children = New-Object System.Collections.ArrayList
+  $buttons = New-Object System.Collections.ArrayList
+  if ($includeButtons) {
+    $childCallback = [UnityNativeModalProbe+EnumWindowsProc]{
+      param([IntPtr]$childHandle, [IntPtr]$childParam)
+      $childClass = Get-WindowClassValue $childHandle
+      $childText = Get-WindowTextValue $childHandle
+      if (-not [string]::IsNullOrWhiteSpace($childText)) {
+        [void]$children.Add([pscustomobject]@{ className = $childClass; text = $childText })
+        if ($childClass -eq 'Button') { [void]$buttons.Add($childText) }
+      }
+      return $true
+    }
+    [void][UnityNativeModalProbe]::EnumChildWindows($handle, $childCallback, [IntPtr]::Zero)
+  }
+  $allText = (($title, @($children | ForEach-Object { $_.text })) -join ' ')
+  $isSceneReload = ($allText -match 'open scene\\(s\\).*modified externally|Reload') -and ($buttons -contains 'Reload' -or $buttons -contains '&Reload')
+  $isBackup = $allText -match 'Recovering Scene Backups|backup'
+  $isExpectedTransient = $title -match 'Reloading Domain|Compiling|Importing' -or (@($buttons) -match 'Skip Transcoding').Count -gt 0
+  if ($isExpectedTransient -and -not $isSceneReload -and -not $isBackup) { return $true }
+  $matchedReason = if ($isSceneReload) { 'scene_reload_prompt' } elseif ($isBackup) { 'scene_backup_prompt' } else { 'unity_native_modal' }
+  [void]$modals.Add([pscustomobject]@{
+    processId = [int]$windowPid
+    processName = $unityPidSet[[int]$windowPid].ProcessName
+    title = $title
+    className = $className
+    rect = [pscustomobject]@{ left = $rect.Left; top = $rect.Top; right = $rect.Right; bottom = $rect.Bottom }
+    buttons = @($buttons)
+    matchedReason = $matchedReason
+    isSceneReloadPrompt = [bool]$isSceneReload
+    isSceneBackupPrompt = [bool]$isBackup
+    blockingBridgeLikely = $true
+  })
+  return $modals.Count -lt $maxItems
+}
+[void][UnityNativeModalProbe]::EnumWindows($callback, [IntPtr]::Zero)
+$result = [pscustomobject]@{
+  success = $true
+  supported = $true
+  found = $modals.Count -gt 0
+  modalCount = $modals.Count
+  classification = if ($modals.Count -gt 0) { 'EditorModalBlocking' } else { 'NoNativeModal' }
+  message = if ($modals.Count -gt 0) { 'Detected Unity native modal window(s).' } else { 'No Unity native modal windows were detected.' }
+  modals = @($modals)
+}
+$result | ConvertTo-Json -Depth 8 -Compress
+`;
+
+  const result = spawnSync("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script], {
+    encoding: "utf8",
+    timeout: Math.max(5000, Number(options.timeoutSeconds || 8) * 1000),
+  });
+
+  if (result.status === 0 && result.stdout && result.stdout.trim()) {
+    try {
+      return JSON.parse(result.stdout.trim());
+    } catch (error) {
+      return {
+        success: false,
+        supported: true,
+        found: false,
+        modalCount: 0,
+        classification: "NativeModalFallbackParseError",
+        error: error.message,
+        rawOutput: result.stdout.slice(0, 512),
+        modals: [],
+      };
+    }
+  }
+
+  return {
+    success: false,
+    supported: true,
+    found: false,
+    modalCount: 0,
+    classification: result.error ? "NativeModalFallbackLaunchError" : "NativeModalFallbackFailed",
+    error: result.error?.message || result.stderr || `PowerShell modal detection exited with ${result.status}.`,
+    modals: [],
+  };
 }
 
 function getBridgeStatusCandidates(projectPath) {
@@ -2183,10 +2493,115 @@ async function detectUnityNativeModals(projectPath, options = {}) {
     payload.knownPatterns = options.knownPatterns;
   }
 
-  const response = await invokeUnityMcpToolJson(projectPath, "Unity.Editor.DetectNativeModals", payload, {
-    timeoutSeconds: options.timeoutSeconds || 8,
+  try {
+    const response = await invokeUnityMcpToolJson(projectPath, "Unity.Editor.DetectNativeModals", payload, {
+      timeoutSeconds: options.timeoutSeconds || 8,
+    });
+    const toolObject = getToolObject(response);
+    if (toolObject?.success === false) {
+      const message = String(toolObject.error || toolObject.message || "");
+      if (message.toLowerCase().includes("not available") || message.toLowerCase().includes("unknown")) {
+        const fallback = detectUnityNativeModalsWithPowerShell(projectPath, {
+          ...options,
+          errorMessage: message,
+        });
+        return {
+          ...fallback,
+          fallback: "os_window",
+          localToolErrorKind: classifyLocalRecoveryToolError(message),
+        };
+      }
+    }
+    return toolObject;
+  } catch (error) {
+    const fallback = detectUnityNativeModalsWithPowerShell(projectPath, {
+      ...options,
+      errorMessage: error.message,
+    });
+    return {
+      ...fallback,
+      fallback: "os_window",
+      localToolErrorKind: classifyLocalRecoveryToolError(error.message),
+    };
+  }
+}
+
+async function detectUnityFrozenEditor(projectPath, options = {}) {
+  const payload = {
+    projectPath: resolveProjectPath(projectPath),
+    includeWindows: options.includeWindows !== false,
+    includeBridgeStatus: options.includeBridgeStatus !== false,
+    staleReadySeconds: options.staleReadySeconds ?? 30,
+    maxItems: options.maxItems ?? 8,
+  };
+  if (options.processId) {
+    payload.processId = Number(options.processId);
+  }
+
+  try {
+    const response = await invokeUnityMcpToolJson(projectPath, "Unity.Editor.DetectFrozenEditor", payload, {
+      timeoutSeconds: options.timeoutSeconds || 8,
+    });
+    const toolObject = getToolObject(response);
+    if (toolObject?.success === false) {
+      const message = String(toolObject.error || toolObject.message || "");
+      if (message.toLowerCase().includes("not available") || message.toLowerCase().includes("unknown")) {
+        const fallback = detectUnityFrozenEditors(projectPath, {
+          ...options,
+          errorMessage: message,
+        });
+        return {
+          ...fallback,
+          fallback: "os_process",
+          localToolErrorKind: classifyLocalRecoveryToolError(message),
+        };
+      }
+    }
+    return toolObject;
+  } catch (error) {
+    const fallback = detectUnityFrozenEditors(projectPath, {
+      ...options,
+      errorMessage: error.message,
+    });
+    return {
+      ...fallback,
+      fallback: "os_process",
+      localToolErrorKind: classifyLocalRecoveryToolError(error.message),
+    };
+  }
+}
+
+async function recoverUnityFrozenEditor(projectPath, options = {}) {
+  const payload = {
+    projectPath: resolveProjectPath(projectPath),
+    action: options.action || "DetectOnly",
+    timeoutSeconds: options.timeoutSeconds ?? 90,
+    waitForBridgeReady: options.waitForBridgeReady !== false,
+    startupPromptAction: options.startupPromptAction || "DetectOnly",
+    sceneReloadPromptAction: options.sceneReloadPromptAction || "DetectOnly",
+    expectedChangedPaths: options.expectedChangedPaths || [],
+  };
+  if (options.processId) {
+    payload.processId = Number(options.processId);
+  }
+  if (options.unityEditorPath) {
+    payload.unityEditorPath = options.unityEditorPath;
+  }
+
+  const response = await invokeUnityMcpToolJson(projectPath, "Unity.Editor.RecoverFrozenEditor", payload, {
+    timeoutSeconds: Math.max(10, Number(options.timeoutSeconds || 90) + 10),
   });
-  return getToolObject(response);
+  const toolObject = getToolObject(response);
+  if (toolObject?.success === false) {
+    const message = String(toolObject.error || toolObject.message || "");
+    if (message.toLowerCase().includes("not available") || message.toLowerCase().includes("unknown")) {
+      return {
+        ...toolObject,
+        installedCacheOrServerDriftHint: "The active Lens server may be older than this repo-local helper. In Unity, run Tools > Unity MCP Lens > Install/Refresh Lens Server, then retry.",
+      };
+    }
+  }
+  return toolObject;
 }
 
 async function resolveUnitySceneReloadPrompt(projectPath, options = {}) {
@@ -2205,6 +2620,85 @@ async function resolveUnitySceneReloadPrompt(projectPath, options = {}) {
     timeoutSeconds: Math.max(5, Number(options.timeoutSeconds || 10) + 15),
   });
   return getToolObject(response);
+}
+
+async function classifyUnityHelperFailure(projectPath, options = {}) {
+  const projectRoot = resolveProjectPath(projectPath);
+  const message = String(options.errorMessage || options.message || "");
+  let nativeModal = null;
+  let nativeModalError = null;
+  let frozenEditor = null;
+  let frozenEditorError = null;
+
+  try {
+    nativeModal = await detectUnityNativeModals(projectRoot, {
+      timeoutSeconds: options.timeoutSeconds || 6,
+      maxItems: options.maxItems || 8,
+    });
+  } catch (error) {
+    nativeModalError = error.message;
+  }
+
+  if (nativeModal?.found === true) {
+    return {
+      classification: "EditorModalBlocking",
+      recommendedPath: "ResolveEditorModal",
+      message: "Unity is blocked by an OS-native Unity modal dialog.",
+      nativeModal,
+      nativeModalError,
+      frozenEditor: null,
+      frozenEditorError: null,
+      bridgeError: message || null,
+    };
+  }
+
+  try {
+    frozenEditor = await detectUnityFrozenEditor(projectRoot, {
+      timeoutSeconds: options.timeoutSeconds || 6,
+      maxItems: options.maxItems || 8,
+      errorMessage: message,
+    });
+  } catch (error) {
+    frozenEditorError = error.message;
+  }
+
+  if (frozenEditor?.found === true) {
+    return {
+      classification: "EditorFrozen",
+      recommendedPath: "RecoverFrozenEditor",
+      message: "Unity.exe is not responding.",
+      nativeModal,
+      nativeModalError,
+      frozenEditor,
+      frozenEditorError,
+      bridgeError: message || null,
+    };
+  }
+
+  const unityRunning = getUnityProcesses().length > 0;
+  if (!unityRunning) {
+    return {
+      classification: "UnityNotRunning",
+      recommendedPath: "OpenUnity",
+      message: "Unity editor is not running.",
+      nativeModal,
+      nativeModalError,
+      frozenEditor,
+      frozenEditorError,
+      bridgeError: message || null,
+    };
+  }
+
+  return {
+    classification: "BridgeFailure",
+    recommendedPath: "RepairBridge",
+    message: message || "Unity bridge failure.",
+    nativeModal,
+    nativeModalError,
+    frozenEditor,
+    frozenEditorError,
+    bridgeError: message || null,
+  };
 }
 
 function getUnityLensHealthReadinessSnapshot(lensHealth) {
@@ -2418,6 +2912,21 @@ async function checkUnityMcp(projectPath, options = {}) {
 
   const statusCandidates = getBridgeStatusCandidates(projectRoot);
   const selectedStatus = statusCandidates.find((status) => status.MatchesProject) || statusCandidates[0] || null;
+  let frozenEditorState = null;
+  let frozenEditorError = null;
+  if (unityRunning) {
+    try {
+      frozenEditorState = detectUnityFrozenEditors(projectRoot, {
+        includeBridgeStatus: true,
+        staleReadySeconds: options.staleReadySeconds || 30,
+        maxItems: 8,
+        errorMessage: nativeModalError,
+      });
+    } catch (error) {
+      frozenEditorError = error.message;
+    }
+  }
+  const editorFrozen = nativeModalState?.found !== true && frozenEditorState?.found === true;
   let lensHealth = null;
   let lensHealthError = null;
   let lensHealthOverridesBeacon = false;
@@ -2489,6 +2998,11 @@ async function checkUnityMcp(projectPath, options = {}) {
     summary = "Unity has an OS-native modal dialog open that can block bridge calls.";
     recommendedAction = "Run Resolve-UnitySceneReloadPrompt.ps1 with DetectOnly first, then Reload or Ignore explicitly when safe.";
     exitCode = 16;
+  } else if (editorFrozen) {
+    classification = "EditorFrozen";
+    summary = "Unity.exe is not responding; bridge status may be stale and new MCP clients can time out during registration.";
+    recommendedAction = "Run Recover-UnityFrozenEditor.ps1 with DetectOnly first, then KillAndReopen explicitly when safe.";
+    exitCode = 19;
   } else if (approvalSignal) {
     classification = "ApprovalPending";
     summary = "Unity MCP is waiting for user approval in the Unity Editor.";
@@ -2583,6 +3097,8 @@ async function checkUnityMcp(projectPath, options = {}) {
     ExpectedReloadState: expectedReloadState,
     NativeModalState: nativeModalState,
     NativeModalError: nativeModalError,
+    FrozenEditorState: frozenEditorState,
+    FrozenEditorError: frozenEditorError,
     DetectedSignals: detectedSignals,
     WebGLBuildState: webGlBuildState,
     EditorLogPath: pathExists(editorLogPath) ? editorLogPath : null,
@@ -2651,6 +3167,18 @@ async function checkUnityMcp(projectPath, options = {}) {
         }
       : nativeModalError
         ? { Supported: false, Found: false, Error: nativeModalError }
+        : null,
+    FrozenEditorState: frozenEditorState
+      ? {
+          Supported: frozenEditorState.supported,
+          Found: frozenEditorState.found,
+          FrozenCount: frozenEditorState.frozenCount,
+          Editors: frozenEditorState.editors,
+          Fallback: frozenEditorState.fallback || null,
+          Error: frozenEditorError || frozenEditorState.localToolErrorKind || null,
+        }
+      : frozenEditorError
+        ? { Supported: false, Found: false, Error: frozenEditorError }
         : null,
     ExpectedReloadState: expectedReloadState
       ? {
@@ -2746,6 +3274,7 @@ module.exports = {
   pathExists,
   getLensBinaryState,
   inferRequiredPacks,
+  isLocalRecoveryTool,
   ensureUnityToolPacks,
   setUnityToolPacksExact,
   resetUnityMcpSession,
@@ -2758,7 +3287,11 @@ module.exports = {
   getUnityCompactEditorState,
   getUnityLensHealth,
   detectUnityNativeModals,
+  detectUnityFrozenEditors,
+  detectUnityFrozenEditor,
+  recoverUnityFrozenEditor,
   resolveUnitySceneReloadPrompt,
+  classifyUnityHelperFailure,
   getUnityConsoleEntries,
   convertToUnityRunCommandScript,
   invokeUnityRunCommandObject,

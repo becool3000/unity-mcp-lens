@@ -429,12 +429,42 @@ Reliability work:
 - Usage reports separate expected reload/play transport loss from true failure classes.
 - TSAM coverage summaries distinguish "no TSAM tools exercised" from "TSAM-like tool rows exist but stage rows are missing."
 
-Phase 19 candidates deferred from this phase:
+Phase 19 candidates now partly addressed in Phase 21:
 
-- `Unity.Asset.CreateOrUpdateScriptableObject`
-- Prefab-instance UI patch/bind tooling
-- Generic runtime component assertions
-- Explicit play-mode exit orchestration
+- ScriptableObject asset preview/apply authoring landed as `Unity.Asset.PreviewCreateOrUpdateScriptableObject` and `Unity.Asset.ApplyCreateOrUpdateScriptableObject`.
+- Focused scene/UI authoring landed as `Unity.UI.PreviewEnsureButton`, `Unity.UI.ApplyEnsureButton`, `Unity.Scene.PreviewBindUnityEvent`, `Unity.Scene.ApplyBindUnityEvent`, `Unity.Scene.PreviewSaveAndReadback`, and `Unity.Scene.ApplySaveAndReadback`.
+- Runtime paint-surface verification landed as `Unity.PlayMode.VerifyPaintSurfaceInteraction`.
+- Still pending: prefab-instance UI patch/bind workflows, richer runtime pointer/raycast assertions, and explicit play-mode exit orchestration.
+
+---
+
+## Phase 20 Editor Freeze Detection And Guarded Recovery
+
+Phase 20 addresses the `D:\TintPaint` freeze report where `Unity.exe` stopped
+responding, no native modal was visible, bridge status stayed `ready`, and new
+MCP clients timed out during registration.
+
+Current metadata audit targets after this phase:
+
+- `foundation=17`
+- `foundation+scene=43`
+- `foundation+ui=35`
+- `foundation+runtime=20`
+- `project=26`
+- `foundation+assets=29`
+- `debug=28`
+
+Reliability work:
+
+- `Unity.Editor.DetectFrozenEditor` detects non-responsive Unity processes and stale bridge-ready evidence without requiring a healthy Unity bridge.
+- `Unity.Editor.RecoverFrozenEditor` provides explicit-only `DetectOnly`, `Kill`, and `KillAndReopen` recovery.
+- `Check-UnityDevSession` recommends `RecoverFrozenEditor` for `EditorFrozen`; sync/play/batch helpers surface the same classification after timeout/degraded paths.
+- `Recovering Scene Backups` prompts are handled explicitly through `StartupPromptAction=UseDisk` or `RecoverBackup`.
+
+Still pending validation:
+
+- Reproduce a real freeze and run the guarded `KillAndReopen` flow end to end.
+- Confirm usage-report failure grouping during a real `register_client` timeout plus `Responding=false` freeze.
 
 ---
 
