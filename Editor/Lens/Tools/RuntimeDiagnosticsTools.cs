@@ -5,6 +5,7 @@ using System.Reflection;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using Becool.UnityMcpLens.Editor.Adapters.Unity;
 using Becool.UnityMcpLens.Editor.Helpers;
 using Becool.UnityMcpLens.Editor.Lens;
 using Becool.UnityMcpLens.Editor.Services;
@@ -35,6 +36,17 @@ namespace Becool.UnityMcpLens.Editor.Tools
             public Vector3 RendererRotationEuler;
             public Color? Color;
             public float ActualDiameter;
+        }
+
+        sealed class MouseInputQueueResult
+        {
+            public bool available;
+            public bool attempted;
+            public bool scheduled;
+            public bool processed;
+            public bool succeeded;
+            public string deliveryMode;
+            public string error;
         }
 
         public const string GetVisualBoundsSnapshotDescription = @"Returns a generic runtime visual-bounds snapshot for a live scene object.
@@ -149,10 +161,75 @@ The tool is intended for verification, not authoring. It can attempt to queue a 
             });
         }
 
-        [McpTool("Unity.PlayMode.PointerInputSmoke", PointerInputSmokeDescription, Groups = new[] { "runtime", "diagnostics" }, EnabledByDefault = true)]
-        public static async Task<object> PointerInputSmoke(PointerInputSmokeParams parameters)
+        [McpSchema("Unity.PlayMode.PointerInputSmoke")]
+        public static object GetPointerInputSmokeSchema()
         {
-            parameters ??= new PointerInputSmokeParams();
+            return new
+            {
+                type = "object",
+                properties = new
+                {
+                    screenX = new { type = "number", description = "Screen-space X coordinate in pixels." },
+                    screenY = new { type = "number", description = "Screen-space Y coordinate in pixels." },
+                    button = new { type = "string", description = "Mouse button name to press while queueing input: left, right, middle, or none." },
+                    scrollX = new { type = "number", description = "Synthetic mouse wheel X scroll value to queue through MouseState.scroll." },
+                    scrollY = new { type = "number", description = "Synthetic mouse wheel Y scroll value to queue through MouseState.scroll." },
+                    queueInput = new { type = "boolean", description = "Queue a synthetic Input System mouse state before sampling." },
+                    stepFrames = new { type = "integer", description = "Advance this many editor frames after queueing input when play mode is paused." },
+                    advanceFrames = new { type = "integer", description = "Advance or wait this many runtime frames after queueing input before sampling state." },
+                    settleMs = new { type = "integer", description = "Delay after queueing input before reading observed state." },
+                    uiTarget = new { type = "string", description = "Optional UI root scope for raycast evidence." },
+                    uiSearchMethod = new { type = "string", description = "How to find the optional UI root." },
+                    includeInactive = new { type = "boolean", description = "Include inactive UI elements while evaluating raycast evidence." },
+                    cameraTarget = new { type = "string", description = "Optional camera target used for world raycast evidence." },
+                    cameraSearchMethod = new { type = "string", description = "How to find the optional camera target." },
+                    layerMask = new { type = "integer", description = "Layer mask for optional physics raycast evidence. Defaults to all layers." },
+                    stateTargets = new
+                    {
+                        type = "array",
+                        description = "Optional runtime state targets to sample before and after input.",
+                        items = new
+                        {
+                            type = "object",
+                            properties = new
+                            {
+                                key = new { type = "string", description = "Stable key used by state assertions." },
+                                target = new { type = "string", description = "Runtime GameObject, hierarchy path, or instance id." },
+                                searchMethod = new { type = "string", description = "How to find the target." },
+                                targetPath = new { type = "string", description = "Relative child path under the resolved target." },
+                                includeInactive = new { type = "boolean", description = "Include inactive objects when resolving the target." },
+                                componentType = new { type = "string", description = "Optional component type to read from the target object." },
+                                componentIndex = new { type = "integer", description = "0-based component index when multiple matching components exist." },
+                                memberPath = new { type = "string", description = "Field/property path to read via reflection." },
+                                propertyPath = new { type = "string", description = "Serialized property path to read from the component." }
+                            }
+                        }
+                    },
+                    stateAssertions = new
+                    {
+                        type = "array",
+                        description = "Optional assertions over sampled runtime state.",
+                        items = new
+                        {
+                            type = "object",
+                            properties = new
+                            {
+                                type = new { type = "string", description = "Assertion type: changed, equals, not_equals, contains, greater_than, or less_than." },
+                                targetKey = new { type = "string", description = "State target key this assertion evaluates." },
+                                value = new { description = "Expected value for equals, not_equals, greater_than, or less_than." },
+                                contains = new { type = "string", description = "Expected substring for contains." },
+                                tolerance = new { type = "number", description = "Numeric comparison tolerance." }
+                            }
+                        }
+                    }
+                }
+            };
+        }
+
+        [McpTool("Unity.PlayMode.PointerInputSmoke", PointerInputSmokeDescription, Groups = new[] { "runtime", "diagnostics" }, EnabledByDefault = true)]
+        public static async Task<object> PointerInputSmoke(JObject @params)
+        {
+            PointerInputSmokeParams parameters = NormalizePointerInputSmokeParams(@params);
             var timing = new ToolOperationTiming("Unity.PlayMode.PointerInputSmoke", "pointer_input_smoke", 0);
             object data;
             string errorKind = null;
@@ -163,6 +240,7 @@ The tool is intended for verification, not authoring. It can attempt to queue a 
                 using (timing.Measure("normalization"))
                 {
                     parameters.StepFrames = Math.Max(0, parameters.StepFrames);
+                    parameters.AdvanceFrames = Math.Max(0, parameters.AdvanceFrames);
                     parameters.SettleMs = Math.Max(0, parameters.SettleMs);
                 }
 
@@ -205,15 +283,85 @@ The tool is intended for verification, not authoring. It can attempt to queue a 
             return response;
         }
 
+        static PointerInputSmokeParams NormalizePointerInputSmokeParams(JObject parameters)
+        {
+            parameters ??= new JObject();
+            return new PointerInputSmokeParams
+            {
+                ScreenX = GetFloat(parameters, 0f, "screenX", "ScreenX"),
+                ScreenY = GetFloat(parameters, 0f, "screenY", "ScreenY"),
+                Button = GetString(parameters, "button", "Button") ?? "left",
+                ScrollX = GetFloat(parameters, 0f, "scrollX", "ScrollX"),
+                ScrollY = GetFloat(parameters, 0f, "scrollY", "ScrollY"),
+                QueueInput = GetBool(parameters, true, "queueInput", "QueueInput"),
+                StepFrames = GetInt(parameters, 1, "stepFrames", "StepFrames"),
+                AdvanceFrames = GetInt(parameters, 0, "advanceFrames", "AdvanceFrames"),
+                SettleMs = GetInt(parameters, 100, "settleMs", "SettleMs"),
+                UiTarget = GetString(parameters, "uiTarget", "UiTarget"),
+                UiSearchMethod = GetString(parameters, "uiSearchMethod", "UiSearchMethod") ?? "by_name",
+                IncludeInactive = GetBool(parameters, false, "includeInactive", "IncludeInactive"),
+                CameraTarget = GetString(parameters, "cameraTarget", "CameraTarget"),
+                CameraSearchMethod = GetString(parameters, "cameraSearchMethod", "CameraSearchMethod") ?? "by_name",
+                LayerMask = GetInt(parameters, -1, "layerMask", "LayerMask"),
+                StateTargets = GetToken(parameters, "stateTargets", "StateTargets")?.ToObject<PointerSmokeStateTarget[]>() ?? Array.Empty<PointerSmokeStateTarget>(),
+                StateAssertions = GetToken(parameters, "stateAssertions", "StateAssertions")?.ToObject<PointerSmokeStateAssertion[]>() ?? Array.Empty<PointerSmokeStateAssertion>()
+            };
+        }
+
+        static JToken GetToken(JObject parameters, params string[] names)
+        {
+            if (parameters == null)
+                return null;
+
+            foreach (string name in names)
+            {
+                if (parameters.TryGetValue(name, StringComparison.OrdinalIgnoreCase, out JToken value))
+                    return value;
+            }
+
+            return null;
+        }
+
+        static string GetString(JObject parameters, params string[] names) => GetToken(parameters, names)?.Value<string>();
+
+        static float GetFloat(JObject parameters, float fallback, params string[] names)
+        {
+            JToken token = GetToken(parameters, names);
+            return token == null || token.Type == JTokenType.Null ? fallback : token.Value<float>();
+        }
+
+        static int GetInt(JObject parameters, int fallback, params string[] names)
+        {
+            JToken token = GetToken(parameters, names);
+            return token == null || token.Type == JTokenType.Null ? fallback : token.Value<int>();
+        }
+
+        static bool GetBool(JObject parameters, bool fallback, params string[] names)
+        {
+            JToken token = GetToken(parameters, names);
+            return token == null || token.Type == JTokenType.Null ? fallback : token.Value<bool>();
+        }
+
         static async Task<object> BuildPointerInputSmokeData(PointerInputSmokeParams parameters)
         {
             Vector2 point = new(parameters.ScreenX, parameters.ScreenY);
-            var queue = TryQueueMouseState(point, parameters.Button, parameters.QueueInput, out string queueError);
+            Vector2 scroll = new(parameters.ScrollX, parameters.ScrollY);
+            var beforeState = CaptureStateTargets(parameters.StateTargets);
+            var queue = TryQueueMouseState(point, scroll, parameters.Button, parameters.QueueInput);
 
             for (int i = 0; i < parameters.StepFrames && EditorApplication.isPlaying && EditorApplication.isPaused; i++)
             {
                 EditorApplication.Step();
                 await Task.Delay(50);
+            }
+
+            int framesToAdvance = Math.Max(parameters.AdvanceFrames, parameters.QueueInput ? 1 : 0);
+            for (int i = 0; i < framesToAdvance && EditorApplication.isPlaying; i++)
+            {
+                if (EditorApplication.isPaused)
+                    EditorApplication.Step();
+
+                await Task.Delay(EditorApplication.isPaused ? 50 : 20);
             }
 
             if (parameters.SettleMs > 0)
@@ -222,7 +370,10 @@ The tool is intended for verification, not authoring. It can attempt to queue a 
             var observed = ReadObservedMouseState();
             var ui = BuildUiPointerEvidence(parameters, point);
             var world = BuildWorldPointerEvidence(parameters, point);
-            bool passed = EditorApplication.isPlaying && (!parameters.QueueInput || queue.succeeded || !queue.available);
+            var afterState = CaptureStateTargets(parameters.StateTargets);
+            var state = BuildStateEvidence(beforeState, afterState, parameters.StateAssertions);
+            bool inputPassed = !parameters.QueueInput || queue.succeeded;
+            bool passed = EditorApplication.isPlaying && inputPassed && (JObject.FromObject(state)["passed"]?.Value<bool>() != false);
 
             return new
             {
@@ -232,11 +383,13 @@ The tool is intended for verification, not authoring. It can attempt to queue a 
                     isPlaying = EditorApplication.isPlaying,
                     isPaused = EditorApplication.isPaused,
                     stepFrames = parameters.StepFrames,
+                    advanceFrames = parameters.AdvanceFrames,
                     settleMs = parameters.SettleMs
                 },
                 requested = new
                 {
                     point = ToVector2Object(point),
+                    scroll = ToVector2Object(scroll),
                     button = parameters.Button,
                     queueInput = parameters.QueueInput
                 },
@@ -244,35 +397,45 @@ The tool is intended for verification, not authoring. It can attempt to queue a 
                 {
                     queue.available,
                     queue.attempted,
+                    queue.scheduled,
+                    queue.processed,
                     queue.succeeded,
-                    error = queueError
+                    queue.deliveryMode,
+                    queue.error
                 },
                 observed,
                 ui,
-                world
+                world,
+                state
             };
         }
 
-        static (bool available, bool attempted, bool succeeded) TryQueueMouseState(Vector2 point, string button, bool queueInput, out string error)
+        static MouseInputQueueResult TryQueueMouseState(Vector2 point, Vector2 scroll, string button, bool queueInput)
         {
-            error = null;
+            MouseInputQueueResult result = new()
+            {
+                deliveryMode = "not_requested"
+            };
+
             Type inputSystemType = Type.GetType("UnityEngine.InputSystem.InputSystem,Unity.InputSystem");
             Type mouseType = Type.GetType("UnityEngine.InputSystem.Mouse,Unity.InputSystem");
             Type mouseStateType = Type.GetType("UnityEngine.InputSystem.LowLevel.MouseState,Unity.InputSystem");
             if (inputSystemType == null || mouseType == null || mouseStateType == null)
             {
-                error = "Input System types are not loaded.";
-                return (false, false, false);
+                result.error = "Input System types are not loaded.";
+                return result;
             }
 
+            result.available = true;
             if (!queueInput)
-                return (true, false, false);
+                return result;
 
+            result.attempted = true;
             object mouse = mouseType.GetProperty("current", BindingFlags.Public | BindingFlags.Static)?.GetValue(null);
             if (mouse == null)
             {
-                error = "Mouse.current is null.";
-                return (true, true, false);
+                result.error = "Mouse.current is null.";
+                return result;
             }
 
             try
@@ -280,6 +443,7 @@ The tool is intended for verification, not authoring. It can attempt to queue a 
                 object state = Activator.CreateInstance(mouseStateType);
                 SetFieldOrProperty(state, mouseStateType, "position", point);
                 SetFieldOrProperty(state, mouseStateType, "delta", Vector2.zero);
+                SetFieldOrProperty(state, mouseStateType, "scroll", scroll);
 
                 MethodInfo withButton = mouseStateType.GetMethods(BindingFlags.Public | BindingFlags.Instance)
                     .FirstOrDefault(method => method.Name == "WithButton" && method.GetParameters().Length >= 1);
@@ -296,24 +460,62 @@ The tool is intended for verification, not authoring. It can attempt to queue a 
                     .FirstOrDefault(method => method.Name == "QueueStateEvent" && method.IsGenericMethodDefinition && method.GetParameters().Length >= 2);
                 if (queueStateEvent == null)
                 {
-                    error = "InputSystem.QueueStateEvent<TState> could not be resolved.";
-                    return (true, true, false);
+                    result.error = "InputSystem.QueueStateEvent<TState> could not be resolved.";
+                    return result;
                 }
 
                 MethodInfo generic = queueStateEvent.MakeGenericMethod(mouseStateType);
-                var parameters = generic.GetParameters();
-                object[] args = parameters.Length >= 3 ? new[] { mouse, state, (object)(-1d) } : new[] { mouse, state };
-                generic.Invoke(null, args);
+                Action queueNow = () =>
+                {
+                    try
+                    {
+                        QueueMouseStateEvent(generic, mouse, state);
+                        result.processed = true;
+                        result.succeeded = true;
+                    }
+                    catch (Exception ex)
+                    {
+                        result.processed = true;
+                        result.succeeded = false;
+                        result.error = ex.InnerException?.Message ?? ex.Message;
+                    }
+                };
+
+                EventInfo beforeUpdate = inputSystemType.GetEvent("onBeforeUpdate", BindingFlags.Public | BindingFlags.Static);
+                if (beforeUpdate != null && EditorApplication.isPlaying)
+                {
+                    Action handler = null;
+                    handler = () =>
+                    {
+                        beforeUpdate.RemoveEventHandler(null, handler);
+                        queueNow();
+                    };
+
+                    beforeUpdate.AddEventHandler(null, handler);
+                    result.scheduled = true;
+                    result.deliveryMode = "input_system_on_before_update";
+                    return result;
+                }
+
+                queueNow();
                 inputSystemType.GetMethods(BindingFlags.Public | BindingFlags.Static)
                     .FirstOrDefault(method => method.Name == "Update" && method.GetParameters().Length == 0)
                     ?.Invoke(null, Array.Empty<object>());
-                return (true, true, true);
+                result.deliveryMode = "immediate_update";
+                return result;
             }
             catch (Exception ex)
             {
-                error = ex.InnerException?.Message ?? ex.Message;
-                return (true, true, false);
+                result.error = ex.InnerException?.Message ?? ex.Message;
+                return result;
             }
+        }
+
+        static void QueueMouseStateEvent(MethodInfo genericQueueStateEvent, object mouse, object state)
+        {
+            var parameters = genericQueueStateEvent.GetParameters();
+            object[] args = parameters.Length >= 3 ? new[] { mouse, state, (object)(-1d) } : new[] { mouse, state };
+            genericQueueStateEvent.Invoke(null, args);
         }
 
         static void SetFieldOrProperty(object target, Type type, string name, object value)
@@ -354,7 +556,8 @@ The tool is intended for verification, not authoring. It can attempt to queue a 
                 position = ReadControlValue(mouseType.GetProperty("position")?.GetValue(mouse)),
                 leftButton = ReadControlValue(mouseType.GetProperty("leftButton")?.GetValue(mouse)),
                 rightButton = ReadControlValue(mouseType.GetProperty("rightButton")?.GetValue(mouse)),
-                middleButton = ReadControlValue(mouseType.GetProperty("middleButton")?.GetValue(mouse))
+                middleButton = ReadControlValue(mouseType.GetProperty("middleButton")?.GetValue(mouse)),
+                scroll = ReadControlValue(mouseType.GetProperty("scroll")?.GetValue(mouse))
             };
         }
 
@@ -378,6 +581,371 @@ The tool is intended for verification, not authoring. It can attempt to queue a 
             {
                 return new { error = ex.Message };
             }
+        }
+
+        static List<object> CaptureStateTargets(PointerSmokeStateTarget[] targets)
+        {
+            var rows = new List<object>();
+            foreach (PointerSmokeStateTarget target in targets ?? Array.Empty<PointerSmokeStateTarget>())
+            {
+                rows.Add(CaptureStateTarget(target));
+            }
+
+            return rows;
+        }
+
+        static object CaptureStateTarget(PointerSmokeStateTarget target)
+        {
+            string key = target?.Key;
+            if (target == null || string.IsNullOrWhiteSpace(target.Target))
+            {
+                return new
+                {
+                    key,
+                    success = false,
+                    error = "State target requires target."
+                };
+            }
+
+            if (!TryResolveGameObject(target.Target, target.SearchMethod, target.IncludeInactive, out GameObject root))
+            {
+                return new
+                {
+                    key,
+                    success = false,
+                    error = $"Target '{target.Target}' could not be resolved."
+                };
+            }
+
+            string targetPath = string.IsNullOrWhiteSpace(target.TargetPath) ? "." : target.TargetPath.Trim();
+            Transform transform = targetPath == "." ? root.transform : root.transform.Find(targetPath);
+            if (transform == null)
+            {
+                return new
+                {
+                    key,
+                    success = false,
+                    root = UiDiagnosticsHelper.GetHierarchyPath(root.transform),
+                    error = $"TargetPath '{targetPath}' was not found."
+                };
+            }
+
+            object readTarget = transform.gameObject;
+            string componentTypeName = null;
+            if (!string.IsNullOrWhiteSpace(target.ComponentType))
+            {
+                Type componentType = UnityComponentResolver.FindType(target.ComponentType);
+                if (componentType == null || !typeof(Component).IsAssignableFrom(componentType))
+                {
+                    return new
+                    {
+                        key,
+                        success = false,
+                        path = UiDiagnosticsHelper.GetHierarchyPath(transform),
+                        error = $"Component type '{target.ComponentType}' could not be resolved."
+                    };
+                }
+
+                Component[] components = transform.GetComponents(componentType);
+                int componentIndex = Math.Max(0, target.ComponentIndex);
+                if (components == null || componentIndex >= components.Length || components[componentIndex] == null)
+                {
+                    return new
+                    {
+                        key,
+                        success = false,
+                        path = UiDiagnosticsHelper.GetHierarchyPath(transform),
+                        error = $"Component '{target.ComponentType}' with index {componentIndex} was not found."
+                    };
+                }
+
+                readTarget = components[componentIndex];
+                componentTypeName = components[componentIndex].GetType().FullName;
+            }
+
+            bool readSucceeded;
+            object value;
+            string error = null;
+            if (!string.IsNullOrWhiteSpace(target.PropertyPath) && readTarget is Component component)
+            {
+                readSucceeded = TryReadSerializedProperty(component, target.PropertyPath, out value, out error);
+            }
+            else if (!string.IsNullOrWhiteSpace(target.MemberPath))
+            {
+                readSucceeded = TryReadMemberPath(readTarget, target.MemberPath, out value, out error);
+            }
+            else
+            {
+                readSucceeded = true;
+                value = DescribeInspectableObject(readTarget);
+            }
+
+            return new
+            {
+                key,
+                success = readSucceeded,
+                path = UiDiagnosticsHelper.GetHierarchyPath(transform),
+                componentType = componentTypeName,
+                memberPath = target.MemberPath,
+                propertyPath = target.PropertyPath,
+                value = NormalizeInspectableValue(value),
+                error
+            };
+        }
+
+        static object BuildStateEvidence(List<object> beforeRows, List<object> afterRows, PointerSmokeStateAssertion[] assertions)
+        {
+            var beforeByKey = RowsByKey(beforeRows);
+            var afterByKey = RowsByKey(afterRows);
+            var assertionRows = new List<object>();
+            bool passed = true;
+
+            foreach (PointerSmokeStateAssertion assertion in assertions ?? Array.Empty<PointerSmokeStateAssertion>())
+            {
+                object row = EvaluateStateAssertion(assertion, beforeByKey, afterByKey);
+                assertionRows.Add(row);
+                bool rowPassed = JObject.FromObject(row)["passed"]?.Value<bool>() == true;
+                passed &= rowPassed;
+            }
+
+            return new
+            {
+                passed,
+                targetCount = afterRows?.Count ?? 0,
+                assertionCount = assertionRows.Count,
+                before = beforeRows ?? new List<object>(),
+                after = afterRows ?? new List<object>(),
+                assertions = assertionRows.ToArray()
+            };
+        }
+
+        static Dictionary<string, JObject> RowsByKey(IEnumerable<object> rows)
+        {
+            var result = new Dictionary<string, JObject>(StringComparer.OrdinalIgnoreCase);
+            foreach (object row in rows ?? Array.Empty<object>())
+            {
+                JObject obj = JObject.FromObject(row);
+                string key = obj["key"]?.ToString();
+                if (!string.IsNullOrWhiteSpace(key))
+                    result[key] = obj;
+            }
+
+            return result;
+        }
+
+        static object EvaluateStateAssertion(PointerSmokeStateAssertion assertion, IReadOnlyDictionary<string, JObject> beforeByKey, IReadOnlyDictionary<string, JObject> afterByKey)
+        {
+            string type = (assertion?.Type ?? "changed").Trim().ToLowerInvariant();
+            string key = assertion?.TargetKey;
+            beforeByKey.TryGetValue(key ?? string.Empty, out JObject before);
+            afterByKey.TryGetValue(key ?? string.Empty, out JObject after);
+            JToken beforeValue = before?["value"];
+            JToken afterValue = after?["value"];
+            bool targetResolved = after?["success"]?.Value<bool>() == true;
+            bool passed = false;
+            string message = null;
+
+            if (!targetResolved)
+            {
+                message = after?["error"]?.ToString() ?? $"State target '{key}' was not resolved.";
+            }
+            else
+            {
+                switch (type)
+                {
+                    case "equals":
+                        passed = JTokenEquals(afterValue, assertion.Value, assertion.Tolerance);
+                        break;
+                    case "not_equals":
+                        passed = !JTokenEquals(afterValue, assertion.Value, assertion.Tolerance);
+                        break;
+                    case "contains":
+                        passed = (afterValue?.ToString() ?? string.Empty).IndexOf(assertion.Contains ?? string.Empty, StringComparison.OrdinalIgnoreCase) >= 0;
+                        break;
+                    case "greater_than":
+                        passed = TryGetDouble(afterValue, out double greaterActual) && TryGetDouble(assertion.Value, out double greaterExpected) && greaterActual > greaterExpected - Math.Max(0, assertion.Tolerance);
+                        break;
+                    case "less_than":
+                        passed = TryGetDouble(afterValue, out double lessActual) && TryGetDouble(assertion.Value, out double lessExpected) && lessActual < lessExpected + Math.Max(0, assertion.Tolerance);
+                        break;
+                    default:
+                        passed = !JToken.DeepEquals(beforeValue, afterValue);
+                        type = "changed";
+                        break;
+                }
+            }
+
+            return new
+            {
+                type,
+                targetKey = key,
+                passed,
+                before = beforeValue,
+                after = afterValue,
+                expected = assertion?.Value,
+                contains = assertion?.Contains,
+                tolerance = assertion?.Tolerance ?? 0.001f,
+                message
+            };
+        }
+
+        static bool JTokenEquals(JToken actual, JToken expected, float tolerance)
+        {
+            if (TryGetDouble(actual, out double actualNumber) && TryGetDouble(expected, out double expectedNumber))
+                return Math.Abs(actualNumber - expectedNumber) <= Math.Max(0, tolerance);
+
+            return string.Equals(actual?.ToString(), expected?.ToString(), StringComparison.Ordinal);
+        }
+
+        static bool TryGetDouble(JToken token, out double value)
+        {
+            value = 0;
+            if (token == null || token.Type == JTokenType.Null)
+                return false;
+
+            if (token.Type == JTokenType.Float || token.Type == JTokenType.Integer)
+            {
+                value = token.Value<double>();
+                return true;
+            }
+
+            return double.TryParse(token.ToString(), out value);
+        }
+
+        static bool TryReadSerializedProperty(Component component, string propertyPath, out object value, out string error)
+        {
+            value = null;
+            error = null;
+            try
+            {
+                SerializedObject serializedObject = new(component);
+                SerializedProperty property = serializedObject.FindProperty(propertyPath);
+                if (property == null)
+                {
+                    error = $"Serialized property '{propertyPath}' was not found.";
+                    return false;
+                }
+
+                value = ReadSerializedPropertyValue(property);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                error = ex.Message;
+                return false;
+            }
+        }
+
+        static bool TryReadMemberPath(object target, string memberPath, out object value, out string error)
+        {
+            value = target;
+            error = null;
+            foreach (string segment in (memberPath ?? string.Empty).Split('.'))
+            {
+                if (value == null)
+                {
+                    error = $"Cannot read '{segment}' from null.";
+                    return false;
+                }
+
+                Type type = value.GetType();
+                FieldInfo field = type.GetField(segment, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (field != null)
+                {
+                    value = field.GetValue(value);
+                    continue;
+                }
+
+                PropertyInfo property = type.GetProperty(segment, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (property != null)
+                {
+                    value = property.GetValue(value);
+                    continue;
+                }
+
+                error = $"Member '{segment}' was not found on '{type.FullName}'.";
+                return false;
+            }
+
+            return true;
+        }
+
+        static object ReadSerializedPropertyValue(SerializedProperty property)
+        {
+            return property.propertyType switch
+            {
+                SerializedPropertyType.Boolean => property.boolValue,
+                SerializedPropertyType.Integer => property.intValue,
+                SerializedPropertyType.Float => property.floatValue,
+                SerializedPropertyType.String => property.stringValue,
+                SerializedPropertyType.Color => ToColorObject(property.colorValue),
+                SerializedPropertyType.ObjectReference => DescribeUnityObject(property.objectReferenceValue),
+                SerializedPropertyType.Enum => property.enumDisplayNames != null && property.enumValueIndex >= 0 && property.enumValueIndex < property.enumDisplayNames.Length
+                    ? property.enumDisplayNames[property.enumValueIndex]
+                    : property.enumValueIndex,
+                SerializedPropertyType.Vector2 => ToVector2Object(property.vector2Value),
+                SerializedPropertyType.Vector3 => ToVector3Object(property.vector3Value),
+                SerializedPropertyType.Rect => ToRectObject(property.rectValue),
+                _ => property.ToString()
+            };
+        }
+
+        static object DescribeInspectableObject(object value)
+        {
+            return value switch
+            {
+                Component component => DescribeUnityObject(component),
+                GameObject gameObject => DescribeUnityObject(gameObject),
+                UnityEngine.Object unityObject => DescribeUnityObject(unityObject),
+                _ => value
+            };
+        }
+
+        static object NormalizeInspectableValue(object value)
+        {
+            return value switch
+            {
+                Vector2 vector2 => ToVector2Object(vector2),
+                Vector3 vector3 => ToVector3Object(vector3),
+                Color color => ToColorObject(color),
+                Rect rect => ToRectObject(rect),
+                UnityEngine.Object unityObject => DescribeUnityObject(unityObject),
+                _ => value
+            };
+        }
+
+        static object DescribeUnityObject(UnityEngine.Object value)
+        {
+            if (value == null)
+                return null;
+
+            if (value is Component component)
+            {
+                return new
+                {
+                    type = component.GetType().FullName,
+                    name = component.name,
+                    hierarchyPath = UiDiagnosticsHelper.GetHierarchyPath(component.transform)
+                };
+            }
+
+            if (value is GameObject gameObject)
+            {
+                return new
+                {
+                    type = gameObject.GetType().FullName,
+                    name = gameObject.name,
+                    hierarchyPath = UiDiagnosticsHelper.GetHierarchyPath(gameObject.transform)
+                };
+            }
+
+            string assetPath = AssetDatabase.GetAssetPath(value);
+            return new
+            {
+                type = value.GetType().FullName,
+                name = value.name,
+                assetPath = string.IsNullOrWhiteSpace(assetPath) ? null : assetPath
+            };
         }
 
         static object BuildUiPointerEvidence(PointerInputSmokeParams parameters, Vector2 point)
@@ -460,7 +1028,14 @@ The tool is intended for verification, not authoring. It can attempt to queue a 
                     blocked = root["ui"]?["blocked"],
                     topHit = root["ui"]?["topHit"]
                 },
-                world = root["world"]
+                world = root["world"],
+                state = new
+                {
+                    passed = root["state"]?["passed"],
+                    targetCount = root["state"]?["targetCount"],
+                    assertionCount = root["state"]?["assertionCount"],
+                    assertions = root["state"]?["assertions"]
+                }
             };
         }
 

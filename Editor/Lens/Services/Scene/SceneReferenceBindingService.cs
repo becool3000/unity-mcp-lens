@@ -37,6 +37,42 @@ namespace Becool.UnityMcpLens.Editor.Services.Scene
             return RunInstantiatePrefabAndBind(request, previewOnly: false, timing);
         }
 
+        public SceneReferenceBindingOperationResult VerifySerializedReferences(SceneSerializedReferenceVerifyRequest request, ToolOperationTiming timing)
+        {
+            if (request?.Target == null)
+            {
+                return SceneReferenceBindingOperationResult.Error("target is required.", "target_required");
+            }
+
+            if (request.Checks == null || request.Checks.Length == 0)
+            {
+                return SceneReferenceBindingOperationResult.Error("checks is required.", "checks_required");
+            }
+
+            using (timing.Measure("adapter"))
+            {
+                if (!m_Adapter.TryVerifySerializedReferences(request, out var targetRoot, out var checks, out var passed, out var error))
+                {
+                    return SceneReferenceBindingOperationResult.Error(
+                        $"Failed to verify serialized references: {error}",
+                        "serialized_reference_verify_failed",
+                        new { errorKind = "serialized_reference_verify_failed", error });
+                }
+
+                return SceneReferenceBindingOperationResult.Ok(
+                    passed
+                        ? $"Verified serialized references on '{UiDiagnosticsHelper.GetHierarchyPath(targetRoot.transform)}'."
+                        : $"Serialized reference verification failed on '{UiDiagnosticsHelper.GetHierarchyPath(targetRoot.transform)}'.",
+                    new
+                    {
+                        target = UiDiagnosticsHelper.GetHierarchyPath(targetRoot.transform),
+                        passed,
+                        checkCount = checks.Count,
+                        checks = checks.ToArray()
+                    });
+            }
+        }
+
         SceneReferenceBindingOperationResult Run(SceneReferenceBindingRequest request, bool previewOnly, ToolOperationTiming timing)
         {
             if (request?.Target == null)

@@ -102,20 +102,20 @@ agent should inspect first instead of running custom editor code.
 
 Pack-specific TSAM work is used to keep the MCP surface small:
 
-- `scene`: split GameObject tools, scene serialized-reference binding, and prefab instantiate/bind workflows.
+- `scene`: split GameObject tools, scene serialized-reference binding, prefab instantiate/bind workflows, and read-only serialized-reference verification.
 - `project`: package/import diagnostics, Input System diagnostics, input-action asset inspection, and active input handler tools.
-- `ui`: uGUI hierarchy/layout preview/apply authoring, canvas prefab authoring, raycast/layout verification, and screen-layout verification.
-- `runtime`: play-mode runtime probes, visual bounds snapshots, and pointer-input smoke verification.
+- `ui`: uGUI hierarchy/layout preview/apply authoring, canvas prefab authoring, raycast/layout verification, and screen-layout or resolution-matrix verification.
+- `runtime`: play-mode runtime probes, visual bounds snapshots, pointer/scroll input smoke verification, and explicit play-mode exit.
 - `debug`: usage reports, payload analysis, and TSAM stage coverage inspection.
 
 Current metadata baselines are:
 
 - `foundation`: `12` exported tools.
-- `foundation + scene`: `34` exported tools.
-- `foundation + ui`: `25` exported tools.
-- `foundation + runtime`: `14` exported tools.
+- `foundation + scene`: `35` exported tools.
+- `foundation + ui`: `26` exported tools.
+- `foundation + runtime`: `15` exported tools.
 - `project`: `21` exported tools.
-- `debug`: `22` exported tools.
+- `debug`: `23` exported tools.
 
 Pack membership changes should update metadata audit expectations and workflow
 docs in the same change.

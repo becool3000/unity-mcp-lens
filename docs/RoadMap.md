@@ -12,12 +12,12 @@ when Unity reloads, recompiles, or changes project/package state.
 - Preferred MCP transport: the owned `unity-mcp-lens` stdio server.
 - Default model-facing tool surface: `foundation`.
 - Current `foundation` baseline: `12` exported tools.
-- Current `foundation + scene` baseline: `34` exported tools.
-- Current `foundation + ui` baseline: `25` exported tools.
-- Current `foundation + runtime` baseline: `14` exported tools.
+- Current `foundation + scene` baseline: `35` exported tools.
+- Current `foundation + ui` baseline: `26` exported tools.
+- Current `foundation + runtime` baseline: `15` exported tools.
 - Current Phase 8 surface: split GameObject TSAM tools for inspect, component reads, preview/apply mutation, create, and delete.
 - Current Phase 12 surface: split UI hierarchy/layout preview/apply, scene serialized-reference preview/apply binding, UI screen-layout verification, center-based UI verify relations, and structured `Unity.RunCommand` return values.
-- Current Phase 17 surface: UI canvas prefab preview/apply, scene prefab instantiate/bind preview/apply, UI raycast/layout verification, play-mode pointer-input smoke verification, and compact usage-report pack-transition summaries.
+- Current Phase 17+ surface: UI canvas prefab preview/apply, scene prefab instantiate/bind preview/apply, UI raycast/layout verification, Game view resolution-matrix layout verification, scene serialized-reference verification, play-mode pointer/scroll smoke verification, explicit play-mode exit, and compact usage-report pack-transition summaries.
 - Current Phase 11 surface: project/Input System diagnostics, package compatibility, input-action asset inspection, and active input handler preview/apply.
 - Current validation surface: static package checks plus a metadata audit in the pack-switch helper app.
 - Current telemetry surface: payload stats, bridge request/response rows, compact `tool_result` savings rows, tool snapshot rows, pack transition rows, detail-ref rows, and TSAM stage rows.
@@ -38,6 +38,10 @@ The 2026-04-25 hardening pass improved the helper path itself:
 - `Sync-UnityScriptChanges` no longer fails up front on a transient `console` pack restore; it can wait through the reload cycle and recover through direct Lens health.
 - `Invoke-UnityRunCommand` now skips helper-side idle gating in healthy play mode and still returns structured `ReturnResult(...)` payloads.
 - `Unity.UI.VerifyScreenLayout` now supports `right_of_center`, `left_of_center`, `above_center`, and `below_center` in addition to the strict non-overlap relations.
+- `Unity.UI.VerifyScreenLayoutMatrix` verifies the same layout assertions across fixed Game view resolutions and restores the original selected size by default.
+- `Unity.Scene.VerifySerializedReferences` distinguishes prefab-inherited refs, local overrides, local null overrides, actual nulls, and non-prefab scene refs.
+- `Unity.PlayMode.PointerInputSmoke` now supports scroll input plus optional gameplay-state sampling/assertions.
+- `Unity.Editor.ExitPlayMode` and `Exit-UnityPlayMode.ps1` provide first-class play cleanup with recovered-transition reporting.
 
 The largest delays came from project-state and lifecycle work:
 
@@ -120,7 +124,7 @@ at real workflow scale:
 - Scope contained `1999` rows with `216` payload rows and `1783` coverage rows.
 - Payload size was `3,012,895` raw bytes -> `650,430` shaped bytes, saving `2,362,465` bytes (`78.41%`).
 - `Unity.ManageEditor.WaitForStableEditor` alone saved `727,569` bytes (`96.51%`) across repeated waits.
-- The main workflow gaps were durable uGUI prefab creation, scene prefab instantiation/binding, UI raycast verification, pointer-input smoke verification, and usage-report presentation for large pack-transition lists and TSAM coverage summaries.
+- The main workflow gaps were durable uGUI prefab creation, scene prefab instantiation/binding, UI raycast verification, pointer-input smoke verification, and usage-report presentation for large pack-transition lists and TSAM coverage summaries; the TintPaint Brush HUD follow-up adds first-class tools for these UI/input/reference/play-exit gaps, with hardening still needed through live dogfood.
 
 ---
 

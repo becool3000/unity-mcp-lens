@@ -20,6 +20,7 @@ async function main() {
   const expectedScenes = common.getArgArray(args, ["ExpectedScenes"], []);
   const monitorBuildMode = common.getArgString(args, ["MonitorBuildMode"], "");
   const editorLogTail = common.getArgNumber(args, ["EditorLogTail"], 400);
+  const sourceIntegrity = common.getUnitySourceFileIntegrity(projectPath);
 
   const bridgeCheck = await common.checkUnityMcp(projectPath, {
     includeDiagnostics,
@@ -125,7 +126,9 @@ async function main() {
     : null;
 
   let recommendedPath;
-  if (buildScenePreflight && !buildScenePreflight.exactMatch) {
+  if (!sourceIntegrity.success) {
+    recommendedPath = "FixSourceFileIntegrity";
+  } else if (buildScenePreflight && !buildScenePreflight.exactMatch) {
     recommendedPath = "FixBuildSceneList";
   } else if (bridgeCheck.result.Classification === "BuildInProgress") {
     recommendedPath = "MonitorActiveBuild";
@@ -167,6 +170,12 @@ async function main() {
           : null,
     },
     Build: {
+      SourceIntegrity: {
+        Success: sourceIntegrity.success,
+        CheckedFileCount: sourceIntegrity.checkedFileCount,
+        IssueCount: sourceIntegrity.issueCount,
+        FirstIssue: sourceIntegrity.issues[0] || null,
+      },
       SceneList: buildScenePreflight
         ? {
             ExactMatch: buildScenePreflight.exactMatch,
@@ -203,6 +212,7 @@ async function main() {
     LensHelperError: wrapperError,
     EditorState: editorState,
     ExpectedReloadState: bridgeCheck.result.ExpectedReloadState,
+    SourceIntegrity: sourceIntegrity,
     BuildScenePreflight: buildScenePreflight,
     BuildMonitor: buildMonitor,
     EditorIdleSnapshot: editorIdleSnapshot,

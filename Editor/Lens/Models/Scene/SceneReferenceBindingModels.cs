@@ -21,6 +21,24 @@ namespace Becool.UnityMcpLens.Editor.Models.Scene
         public SceneReferenceBindingEntry[] Bindings { get; set; } = new SceneReferenceBindingEntry[0];
     }
 
+    sealed class SceneSerializedReferenceVerifyCheck
+    {
+        public string targetPath { get; set; } = ".";
+        public string componentType { get; set; }
+        public int componentIndex { get; set; }
+        public string propertyPath { get; set; }
+        public JToken expectedReference { get; set; }
+        public JToken[] expectedReferences { get; set; } = new JToken[0];
+    }
+
+    sealed class SceneSerializedReferenceVerifyRequest
+    {
+        public JToken Target { get; set; }
+        public string SearchMethod { get; set; } = "by_name";
+        public bool IncludeInactive { get; set; } = true;
+        public SceneSerializedReferenceVerifyCheck[] Checks { get; set; } = new SceneSerializedReferenceVerifyCheck[0];
+    }
+
     sealed class ScenePrefabInstantiateAndBindRequest
     {
         public string PrefabPath { get; set; }

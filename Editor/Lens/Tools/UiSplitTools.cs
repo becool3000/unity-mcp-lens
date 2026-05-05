@@ -22,6 +22,7 @@ namespace Becool.UnityMcpLens.Editor.Tools
         const string PreviewLayoutPropertiesToolName = "Unity.UI.PreviewLayoutProperties";
         const string ApplyLayoutPropertiesToolName = "Unity.UI.ApplyLayoutProperties";
         const string VerifyScreenLayoutToolName = "Unity.UI.VerifyScreenLayout";
+        const string VerifyScreenLayoutMatrixToolName = "Unity.UI.VerifyScreenLayoutMatrix";
         const string PreviewCreateCanvasPrefabToolName = "Unity.UI.PreviewCreateCanvasPrefab";
         const string ApplyCreateCanvasPrefabToolName = "Unity.UI.ApplyCreateCanvasPrefab";
         const string VerifyRaycastAndLayoutToolName = "Unity.UI.VerifyRaycastAndLayout";
@@ -41,6 +42,10 @@ Uses the same target/search semantics as the earlier ensure hierarchy tool, with
         const string VerifyScreenLayoutDescription = @"Verifies measured screen-space UI layout assertions without mutation.
 
 Supports inside-screen, relative-position, axis-alignment, and ordered-stack assertions over keyed UI targets. Relative-position keeps strict rect relations (`right_of`, `left_of`, `above`, `below`) and also supports center-based comparisons (`right_of_center`, `left_of_center`, `above_center`, `below_center`).";
+
+        const string VerifyScreenLayoutMatrixDescription = @"Verifies measured screen-space UI layout assertions across a Game view resolution matrix without persistent scene mutation.
+
+The tool creates missing fixed Game view sizes as needed, selects each requested resolution, runs the same assertions as Unity.UI.VerifyScreenLayout, and restores the original selected Game view size by default.";
 
         const string PreviewCreateCanvasPrefabDescription = @"Previews durable uGUI Canvas prefab authoring without saving assets.
 
@@ -135,6 +140,12 @@ Use this to prove UI points are blocked by the expected element and to combine h
             };
         }
 
+        [McpSchema(VerifyScreenLayoutMatrixToolName)]
+        public static object GetVerifyScreenLayoutMatrixSchema()
+        {
+            return BuildVerifyScreenLayoutMatrixSchema();
+        }
+
         [McpSchema(PreviewCreateCanvasPrefabToolName)]
         public static object GetPreviewCreateCanvasPrefabSchema()
         {
@@ -205,6 +216,36 @@ Use this to prove UI points are blocked by the expected element and to combine h
             }
 
             return ShapeResponse(VerifyScreenLayoutToolName, result, timing, errorKind);
+        }
+
+        [McpTool(VerifyScreenLayoutMatrixToolName, VerifyScreenLayoutMatrixDescription, "Verify UI Screen Layout Matrix", Groups = new[] { "ui" }, EnabledByDefault = true)]
+        public static object VerifyScreenLayoutMatrix(JObject @params)
+        {
+            @params ??= new JObject();
+            var timing = new ToolOperationTiming(VerifyScreenLayoutMatrixToolName, "verify_screen_layout_matrix", GetUtf8ByteCount(@params.ToString(Formatting.None)));
+            UiOperationResult result;
+            string errorKind = null;
+
+            try
+            {
+                UiVerifyScreenLayoutMatrixRequest request;
+                using (timing.Measure("normalization"))
+                {
+                    request = NormalizeVerifyScreenLayoutMatrixRequest(@params);
+                }
+
+                using (timing.Measure("service"))
+                {
+                    result = Service.VerifyScreenLayoutMatrix(request, timing);
+                }
+            }
+            catch (Exception ex)
+            {
+                errorKind = ex.GetType().Name;
+                result = UiOperationResult.Error($"Internal error verifying UI screen layout matrix: {ex.Message}", errorKind);
+            }
+
+            return ShapeResponse(VerifyScreenLayoutMatrixToolName, result, timing, errorKind);
         }
 
         [McpTool(PreviewCreateCanvasPrefabToolName, PreviewCreateCanvasPrefabDescription, "Preview Create Canvas Prefab", Groups = new[] { "ui" }, EnabledByDefault = true)]
@@ -409,6 +450,38 @@ Use this to prove UI points are blocked by the expected element and to combine h
             };
         }
 
+        static object BuildVerifyScreenLayoutMatrixSchema()
+        {
+            return new
+            {
+                type = "object",
+                properties = new
+                {
+                    resolutions = new
+                    {
+                        type = "array",
+                        description = "Game view resolutions to select before verifying layout.",
+                        items = new
+                        {
+                            type = "object",
+                            properties = new
+                            {
+                                key = new { type = "string", description = "Stable key for this resolution." },
+                                width = new { type = "integer", description = "Fixed Game view width in pixels." },
+                                height = new { type = "integer", description = "Fixed Game view height in pixels." }
+                            },
+                            required = new[] { "width", "height" }
+                        }
+                    },
+                    targets = new { type = "array", description = "Keyed UI layout targets, same shape as Unity.UI.VerifyScreenLayout." },
+                    assertions = new { type = "array", description = "Layout assertions, same shape as Unity.UI.VerifyScreenLayout." },
+                    restoreOriginal = new { type = "boolean", description = "Restore the original selected Game view size after verification." },
+                    warmupMs = new { type = "integer", description = "Delay after selecting each Game view size before measuring." }
+                },
+                required = new[] { "resolutions", "targets", "assertions" }
+            };
+        }
+
         static object BuildVerifyRaycastAndLayoutSchema()
         {
             return new
@@ -494,6 +567,18 @@ Use this to prove UI points are blocked by the expected element and to combine h
             };
         }
 
+        static UiVerifyScreenLayoutMatrixRequest NormalizeVerifyScreenLayoutMatrixRequest(JObject parameters)
+        {
+            return new UiVerifyScreenLayoutMatrixRequest
+            {
+                Resolutions = GetToken(parameters, "resolutions", "Resolutions")?.ToObject<UiScreenResolutionRequest[]>() ?? Array.Empty<UiScreenResolutionRequest>(),
+                Targets = GetToken(parameters, "targets", "Targets")?.ToObject<UiVerifyTargetRequest[]>() ?? Array.Empty<UiVerifyTargetRequest>(),
+                Assertions = GetToken(parameters, "assertions", "Assertions")?.ToObject<UiVerifyAssertionRequest[]>() ?? Array.Empty<UiVerifyAssertionRequest>(),
+                RestoreOriginal = GetBool(parameters, true, "restoreOriginal", "RestoreOriginal"),
+                WarmupMs = GetNullableInt(parameters, "warmupMs", "WarmupMs") ?? 100
+            };
+        }
+
         static UiCanvasPrefabRequest NormalizeCreateCanvasPrefabRequest(JObject parameters)
         {
             return new UiCanvasPrefabRequest
@@ -567,6 +652,16 @@ Use this to prove UI points are blocked by the expected element and to combine h
                     BuildVerifyScreenLayoutCompactData(data),
                     detailRefMeta: new { kind = "ui_verify_screen_layout_full_result" },
                     payloadClass: "ui_verify_screen_layout");
+            }
+
+            if (string.Equals(toolName, VerifyScreenLayoutMatrixToolName, StringComparison.Ordinal))
+            {
+                return ToolResultCompactor.ShapeStructuredPayload(
+                    toolName,
+                    data,
+                    BuildVerifyScreenLayoutMatrixCompactData(data),
+                    detailRefMeta: new { kind = "ui_verify_screen_layout_matrix_full_result" },
+                    payloadClass: "ui_verify_screen_layout_matrix");
             }
 
             if (string.Equals(toolName, VerifyRaycastAndLayoutToolName, StringComparison.Ordinal))
@@ -720,6 +815,66 @@ Use this to prove UI points are blocked by the expected element and to combine h
                 targets = compactTargets,
                 assertions = compactAssertions,
                 failedAssertions
+            };
+        }
+
+        static object BuildVerifyScreenLayoutMatrixCompactData(object data)
+        {
+            JObject root = JObject.FromObject(data ?? new { });
+            JArray resolutions = root["resolutions"] as JArray ?? new JArray();
+            var compactRows = new JArray();
+            var failedRows = new JArray();
+
+            foreach (JObject row in resolutions.OfType<JObject>())
+            {
+                JObject layout = row["layout"] as JObject;
+                JArray assertions = layout?["assertions"] as JArray ?? new JArray();
+                var failedAssertions = new JArray();
+                foreach (JObject assertion in assertions.OfType<JObject>())
+                {
+                    if (assertion["passed"]?.Value<bool>() == false)
+                    {
+                        failedAssertions.Add(new JObject
+                        {
+                            ["type"] = assertion["type"]?.DeepClone(),
+                            ["targetKey"] = assertion["targetKey"]?.DeepClone(),
+                            ["otherTargetKey"] = assertion["otherTargetKey"]?.DeepClone(),
+                            ["relation"] = assertion["relation"]?.DeepClone(),
+                            ["axis"] = assertion["axis"]?.DeepClone(),
+                            ["direction"] = assertion["direction"]?.DeepClone(),
+                            ["passed"] = assertion["passed"]?.DeepClone(),
+                            ["actual"] = assertion["actual"]?.DeepClone(),
+                            ["message"] = assertion["message"]?.DeepClone()
+                        });
+                    }
+                }
+
+                var compact = new JObject
+                {
+                    ["key"] = row["key"]?.DeepClone(),
+                    ["requested"] = row["requested"]?.DeepClone(),
+                    ["screen"] = row["screen"]?.DeepClone(),
+                    ["gameViewSize"] = row["gameViewSize"]?.DeepClone(),
+                    ["setSucceeded"] = row["setSucceeded"]?.DeepClone(),
+                    ["passed"] = row["passed"]?.DeepClone(),
+                    ["layoutPassed"] = layout?["passed"]?.DeepClone(),
+                    ["failedAssertionCount"] = failedAssertions.Count,
+                    ["failedAssertions"] = failedAssertions
+                };
+                compactRows.Add(compact);
+                if (row["passed"]?.Value<bool>() == false)
+                    failedRows.Add(compact.DeepClone());
+            }
+
+            return new
+            {
+                passed = root["passed"],
+                original = root["original"],
+                restore = root["restore"],
+                resolutionCount = root["resolutionCount"],
+                failedResolutionCount = failedRows.Count,
+                resolutions = compactRows,
+                failedResolutions = failedRows
             };
         }
 

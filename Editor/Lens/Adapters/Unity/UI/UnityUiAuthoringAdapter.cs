@@ -3,6 +3,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reflection;
+using System.Threading;
 using Becool.UnityMcpLens.Editor.Helpers;
 using Becool.UnityMcpLens.Editor.Models.UI;
 using Becool.UnityMcpLens.Editor.Tools;
@@ -26,6 +28,13 @@ namespace Becool.UnityMcpLens.Editor.Adapters.Unity.UI
             public Vector2[] ScreenCorners { get; init; }
             public string Path { get; init; }
             public string CanvasPath { get; init; }
+        }
+
+        sealed class GameViewSelectionSnapshot
+        {
+            public int SelectedSizeIndex { get; init; }
+            public int ScreenWidth { get; init; }
+            public int ScreenHeight { get; init; }
         }
 
         public bool TryEnsureHierarchy(
@@ -167,6 +176,124 @@ namespace Becool.UnityMcpLens.Editor.Adapters.Unity.UI
                     worldCorners = target.WorldCorners.Select(ToVector3Object).ToArray()
                 }).ToArray(),
                 assertions = assertionRows.ToArray()
+            };
+            return true;
+        }
+
+        public bool TryVerifyScreenLayoutMatrix(UiVerifyScreenLayoutMatrixRequest request, out object data, out string error)
+        {
+            data = null;
+            error = null;
+            if (request?.Resolutions == null || request.Resolutions.Length == 0)
+            {
+                error = "At least one resolution is required.";
+                return false;
+            }
+
+            if (request.Targets == null || request.Targets.Length == 0)
+            {
+                error = "At least one verify target is required.";
+                return false;
+            }
+
+            if (!TryCaptureGameViewSelection(out GameViewSelectionSnapshot original, out error))
+                return false;
+
+            var rows = new List<object>();
+            bool passed = true;
+            object restoreData = null;
+            int warmupMs = Math.Max(0, request.WarmupMs);
+
+            try
+            {
+                foreach (UiScreenResolutionRequest resolution in request.Resolutions)
+                {
+                    if (resolution == null || resolution.width <= 0 || resolution.height <= 0)
+                    {
+                        error = "Each resolution requires positive width and height.";
+                        return false;
+                    }
+
+                    string key = string.IsNullOrWhiteSpace(resolution.key)
+                        ? $"{resolution.width}x{resolution.height}"
+                        : resolution.key.Trim();
+                    bool setSucceeded = TrySetGameViewResolution(resolution.width, resolution.height, $"Lens {resolution.width}x{resolution.height}", out object selection, out string setError);
+                    if (warmupMs > 0)
+                        Thread.Sleep(warmupMs);
+
+                    Vector2 gameViewSize = Handles.GetMainGameViewSize();
+                    object layoutData = null;
+                    bool layoutPassed = false;
+                    string layoutError = null;
+                    if (setSucceeded)
+                    {
+                        bool verified = TryVerifyScreenLayout(
+                            new UiVerifyScreenLayoutRequest
+                            {
+                                Targets = request.Targets ?? Array.Empty<UiVerifyTargetRequest>(),
+                                Assertions = request.Assertions ?? Array.Empty<UiVerifyAssertionRequest>()
+                            },
+                            out layoutData,
+                            out layoutError);
+                        if (!verified)
+                        {
+                            layoutError ??= "Layout verification failed.";
+                        }
+                        else
+                        {
+                            layoutPassed = JObject.FromObject(layoutData ?? new { })["passed"]?.Value<bool>() == true;
+                        }
+                    }
+
+                    bool rowPassed = setSucceeded && layoutPassed;
+                    passed &= rowPassed;
+                    rows.Add(new
+                    {
+                        key,
+                        requested = new { width = resolution.width, height = resolution.height },
+                        setSucceeded,
+                        setError,
+                        selection,
+                        screen = new { width = Screen.width, height = Screen.height },
+                        gameViewSize = ToVector2Object(gameViewSize),
+                        passed = rowPassed,
+                        layoutError,
+                        layout = layoutData
+                    });
+                }
+            }
+            finally
+            {
+                if (request.RestoreOriginal)
+                {
+                    bool restored = TrySetGameViewSizeIndex(original.SelectedSizeIndex, out string restoreError);
+                    if (warmupMs > 0)
+                        Thread.Sleep(warmupMs);
+
+                    restoreData = new
+                    {
+                        requested = true,
+                        succeeded = restored,
+                        error = restoreError,
+                        original = original,
+                        screen = new { width = Screen.width, height = Screen.height },
+                        gameViewSize = ToVector2Object(Handles.GetMainGameViewSize())
+                    };
+                    passed &= restored;
+                }
+                else
+                {
+                    restoreData = new { requested = false, succeeded = (bool?)null };
+                }
+            }
+
+            data = new
+            {
+                passed,
+                original,
+                restore = restoreData,
+                resolutionCount = rows.Count,
+                resolutions = rows.ToArray()
             };
             return true;
         }
@@ -782,6 +909,289 @@ namespace Becool.UnityMcpLens.Editor.Adapters.Unity.UI
                         rows);
                 }
             }
+        }
+
+        static bool TryCaptureGameViewSelection(out GameViewSelectionSnapshot snapshot, out string error)
+        {
+            snapshot = null;
+            if (!TryResolveGameView(out EditorWindow gameView, out _, out _, out error))
+                return false;
+
+            if (!TryGetSelectedGameViewSizeIndex(gameView, out int selectedIndex, out error))
+                return false;
+
+            snapshot = new GameViewSelectionSnapshot
+            {
+                SelectedSizeIndex = selectedIndex,
+                ScreenWidth = Screen.width,
+                ScreenHeight = Screen.height
+            };
+            return true;
+        }
+
+        static bool TrySetGameViewResolution(int width, int height, string label, out object selection, out string error)
+        {
+            selection = null;
+            if (!TryResolveGameView(out EditorWindow gameView, out object group, out Type groupType, out error))
+                return false;
+
+            int index = FindGameViewSizeIndex(group, groupType, width, height);
+            bool created = false;
+            if (index < 0)
+            {
+                if (!TryAddCustomGameViewSize(group, groupType, width, height, label, out error))
+                    return false;
+
+                created = true;
+                index = FindGameViewSizeIndex(group, groupType, width, height);
+                if (index < 0)
+                {
+                    error = "Custom Game view size was added but could not be selected.";
+                    return false;
+                }
+            }
+
+            if (!TrySetGameViewSizeIndex(gameView, index, out error))
+                return false;
+
+            selection = new
+            {
+                selectedSizeIndex = index,
+                created,
+                label,
+                width,
+                height
+            };
+            return true;
+        }
+
+        static bool TrySetGameViewSizeIndex(int index, out string error)
+        {
+            if (!TryResolveGameView(out EditorWindow gameView, out object group, out Type groupType, out error))
+                return false;
+
+            int count = GetGameViewSizeCount(group, groupType);
+            if (index < 0 || index >= count)
+            {
+                error = $"Game view size index {index} is outside the available range 0..{Math.Max(0, count - 1)}.";
+                return false;
+            }
+
+            return TrySetGameViewSizeIndex(gameView, index, out error);
+        }
+
+        static bool TryResolveGameView(out EditorWindow gameView, out object sizeGroup, out Type sizeGroupType, out string error)
+        {
+            gameView = null;
+            sizeGroup = null;
+            sizeGroupType = null;
+            error = null;
+            Type gameViewType = Type.GetType("UnityEditor.GameView,UnityEditor");
+            if (gameViewType == null)
+            {
+                error = "UnityEditor.GameView type could not be resolved.";
+                return false;
+            }
+
+            gameView = EditorWindow.GetWindow(gameViewType, false, "Game", false);
+            if (gameView == null)
+            {
+                error = "Game view window could not be created or resolved.";
+                return false;
+            }
+
+            Type gameViewSizesType = Type.GetType("UnityEditor.GameViewSizes,UnityEditor");
+            if (gameViewSizesType == null)
+            {
+                error = "UnityEditor.GameViewSizes type could not be resolved.";
+                return false;
+            }
+
+            Type singletonType = typeof(ScriptableSingleton<>).MakeGenericType(gameViewSizesType);
+            object singleton = singletonType.GetProperty("instance", BindingFlags.Public | BindingFlags.Static)?.GetValue(null);
+            MethodInfo getGroup = gameViewSizesType.GetMethod("GetGroup", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+            if (singleton == null || getGroup == null)
+            {
+                error = "GameViewSizes singleton or GetGroup method could not be resolved.";
+                return false;
+            }
+
+            sizeGroup = getGroup.Invoke(singleton, new object[] { GameViewSizeGroupType.Standalone });
+            if (sizeGroup == null)
+            {
+                error = "Standalone Game view size group could not be resolved.";
+                return false;
+            }
+
+            sizeGroupType = sizeGroup.GetType();
+            gameView.Focus();
+            gameView.Repaint();
+            return true;
+        }
+
+        static bool TryGetSelectedGameViewSizeIndex(EditorWindow gameView, out int selectedIndex, out string error)
+        {
+            selectedIndex = -1;
+            error = null;
+            Type gameViewType = gameView.GetType();
+            PropertyInfo property = gameViewType.GetProperty("selectedSizeIndex", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+            if (property != null)
+            {
+                selectedIndex = Convert.ToInt32(property.GetValue(gameView));
+                return true;
+            }
+
+            FieldInfo field = gameViewType.GetField("m_SelectedSizeIndex", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+            if (field != null)
+            {
+                selectedIndex = Convert.ToInt32(field.GetValue(gameView));
+                return true;
+            }
+
+            error = "Game view selected size index could not be read.";
+            return false;
+        }
+
+        static bool TrySetGameViewSizeIndex(EditorWindow gameView, int index, out string error)
+        {
+            error = null;
+            Type gameViewType = gameView.GetType();
+
+            MethodInfo callback = gameViewType.GetMethod("SizeSelectionCallback", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+            if (callback != null)
+            {
+                ParameterInfo[] parameters = callback.GetParameters();
+                object[] args = parameters.Length switch
+                {
+                    1 => new object[] { index },
+                    2 when parameters[0].ParameterType == typeof(int) => new object[] { index, null },
+                    2 => new object[] { null, index },
+                    3 when parameters[0].ParameterType == typeof(int) => new object[] { index, null, null },
+                    3 => new object[] { null, index, null },
+                    _ => null
+                };
+
+                if (args != null)
+                {
+                    try
+                    {
+                        callback.Invoke(gameView, args);
+                        gameView.Repaint();
+                        EditorApplication.QueuePlayerLoopUpdate();
+                        return true;
+                    }
+                    catch (TargetInvocationException ex)
+                    {
+                        error = ex.InnerException?.Message ?? ex.Message;
+                    }
+                    catch (Exception ex)
+                    {
+                        error = ex.Message;
+                    }
+                }
+            }
+
+            PropertyInfo property = gameViewType.GetProperty("selectedSizeIndex", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+            if (property != null && property.CanWrite)
+            {
+                property.SetValue(gameView, index);
+                gameView.Repaint();
+                EditorApplication.QueuePlayerLoopUpdate();
+                return true;
+            }
+
+            FieldInfo field = gameViewType.GetField("m_SelectedSizeIndex", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+            if (field != null)
+            {
+                field.SetValue(gameView, index);
+                gameView.Repaint();
+                EditorApplication.QueuePlayerLoopUpdate();
+                return true;
+            }
+
+            error ??= "Game view selected size index could not be set.";
+            return false;
+        }
+
+        static int FindGameViewSizeIndex(object group, Type groupType, int width, int height)
+        {
+            int count = GetGameViewSizeCount(group, groupType);
+            MethodInfo getSize = groupType.GetMethod("GetGameViewSize", BindingFlags.Public | BindingFlags.Instance);
+            if (getSize == null)
+                return -1;
+
+            for (int i = 0; i < count; i++)
+            {
+                object size = getSize.Invoke(group, new object[] { i });
+                if (TryReadIntMember(size, "width", out int candidateWidth) &&
+                    TryReadIntMember(size, "height", out int candidateHeight) &&
+                    candidateWidth == width &&
+                    candidateHeight == height)
+                {
+                    return i;
+                }
+            }
+
+            return -1;
+        }
+
+        static int GetGameViewSizeCount(object group, Type groupType)
+        {
+            MethodInfo count = groupType.GetMethod("GetTotalCount", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+            return count != null ? Convert.ToInt32(count.Invoke(group, null)) : 0;
+        }
+
+        static bool TryAddCustomGameViewSize(object group, Type groupType, int width, int height, string label, out string error)
+        {
+            error = null;
+            Type sizeType = Type.GetType("UnityEditor.GameViewSize,UnityEditor");
+            Type sizeKindType = Type.GetType("UnityEditor.GameViewSizeType,UnityEditor");
+            MethodInfo addCustomSize = groupType.GetMethod("AddCustomSize", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+            if (sizeType == null || sizeKindType == null || addCustomSize == null)
+            {
+                error = "Game view custom-size APIs could not be resolved.";
+                return false;
+            }
+
+            object fixedResolution = Enum.Parse(sizeKindType, "FixedResolution");
+            ConstructorInfo ctor = sizeType.GetConstructor(
+                BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance,
+                null,
+                new[] { sizeKindType, typeof(int), typeof(int), typeof(string) },
+                null);
+            if (ctor == null)
+            {
+                error = "GameViewSize fixed-resolution constructor could not be resolved.";
+                return false;
+            }
+
+            object size = ctor.Invoke(new[] { fixedResolution, width, height, label });
+            addCustomSize.Invoke(group, new[] { size });
+            return true;
+        }
+
+        static bool TryReadIntMember(object target, string name, out int value)
+        {
+            value = 0;
+            if (target == null)
+                return false;
+
+            Type type = target.GetType();
+            PropertyInfo property = type.GetProperty(name, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.IgnoreCase);
+            if (property != null)
+            {
+                value = Convert.ToInt32(property.GetValue(target));
+                return true;
+            }
+
+            FieldInfo field = type.GetField(name, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.IgnoreCase);
+            if (field != null)
+            {
+                value = Convert.ToInt32(field.GetValue(target));
+                return true;
+            }
+
+            return false;
         }
 
         static RenderMode ParseRenderMode(string value)

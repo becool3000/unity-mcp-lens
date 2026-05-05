@@ -45,7 +45,7 @@ node .agents/plugins/lens-dev-plugin/skills/unity-dev-assistant/scripts/Check-Un
 - Prefer `Invoke-UnityMcpBatch` for repeated smoke/workflow checks that span project, ui, scene, and debug packs, so one Lens session can cover the ordered steps.
 - Prefer helper-driven `Invoke-UnityRunCommand` for runtime probes now that it can bypass idle-wait gating in healthy play mode and preserve structured `ReturnResult(...)` payloads.
 - Treat `Unity.RunCommand` and `Unity.ReadConsole` inline logs as compact previews. Use `logSummary` and `Unity.ReadDetailRef` only when full log text or full scanned console entries are needed.
-- Keep `foundation` at `12` exported tools, `foundation + scene` at `34`, `foundation + ui` at `25`, and `foundation + runtime` at `14` unless a deliberate pack-surface change updates the metadata audit.
+- Keep `foundation` at `12` exported tools, `foundation + scene` at `35`, `foundation + ui` at `26`, and `foundation + runtime` at `15` unless a deliberate pack-surface change updates the metadata audit.
 
 ## Current Tool Surface Reality
 
@@ -159,7 +159,10 @@ Phase 17 implementation status:
 - Added `Unity.UI.PreviewCreateCanvasPrefab` and `Unity.UI.ApplyCreateCanvasPrefab` for durable uGUI canvas prefab authoring.
 - Added `Unity.Scene.PreviewInstantiatePrefabAndBind` and `Unity.Scene.ApplyInstantiatePrefabAndBind` for scene prefab instantiation plus serialized reference binding.
 - Added `Unity.UI.VerifyRaycastAndLayout` for read-only UI raycast/layout assertions.
-- Added `Unity.PlayMode.PointerInputSmoke` in the new `runtime` pack for play-mode pointer/input smoke evidence.
+- Added `Unity.UI.VerifyScreenLayoutMatrix` for fixed-resolution UI layout matrix checks.
+- Added `Unity.Scene.VerifySerializedReferences` for nested prefab reference status/readback checks.
+- Added `Unity.PlayMode.PointerInputSmoke` in the new `runtime` pack for play-mode pointer/scroll/input smoke evidence.
+- Added `Unity.Editor.ExitPlayMode` and `Exit-UnityPlayMode.ps1` for explicit play-mode cleanup.
 - Updated usage-report compact output so pack transitions are summarized inline and full transition rows can live behind detail refs.
 
 ## Maintenance

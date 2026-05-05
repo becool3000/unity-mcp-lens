@@ -61,6 +61,24 @@ namespace Becool.UnityMcpLens.Editor.Services.UI
             return UiOperationResult.Ok("Verified UI screen layout.", data);
         }
 
+        public UiOperationResult VerifyScreenLayoutMatrix(UiVerifyScreenLayoutMatrixRequest request, ToolOperationTiming timing)
+        {
+            object data;
+            string error;
+            using (timing.Measure("adapter"))
+            {
+                if (!m_Adapter.TryVerifyScreenLayoutMatrix(request, out data, out error))
+                {
+                    return UiOperationResult.Error(
+                        $"Failed to verify screen layout matrix: {error}",
+                        "verify_matrix_failed",
+                        new { errorKind = "verify_matrix_failed", error });
+                }
+            }
+
+            return UiOperationResult.Ok("Verified UI screen layout matrix.", data);
+        }
+
         public UiOperationResult PreviewCreateCanvasPrefab(UiCanvasPrefabRequest request, ToolOperationTiming timing)
         {
             return RunCreateCanvasPrefab(request, previewOnly: true, timing);

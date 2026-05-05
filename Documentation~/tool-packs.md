@@ -8,9 +8,9 @@ Common packs:
 
 - `console` for compact console inspection.
 - `project` for project/package/import metadata, validation, missing script/reference checks, Input System diagnostics, package compatibility, input-action inspection, and active input handler preview/apply.
-- `scene` for scene and GameObject inspection/editing, including the Phase 8 split GameObject TSAM surface, Phase 12 serialized-reference binding tools, and prefab instantiate/bind workflows.
-- `ui` for UI Toolkit reads, uGUI hierarchy/layout preview/apply authoring, canvas prefab authoring, raycast/layout verification, and read-only screen-layout verification.
-- `runtime` for play-mode runtime probes, visual bounds snapshots, and pointer-input smoke verification.
+- `scene` for scene and GameObject inspection/editing, including the Phase 8 split GameObject TSAM surface, Phase 12 serialized-reference binding tools, prefab instantiate/bind workflows, and read-only serialized-reference verification.
+- `ui` for UI Toolkit reads, uGUI hierarchy/layout preview/apply authoring, canvas prefab authoring, raycast/layout verification, and read-only screen-layout or resolution-matrix verification.
+- `runtime` for play-mode runtime probes, visual bounds snapshots, pointer/scroll smoke verification, and explicit play-mode exit.
 - `scripting` for scripts, edits, command execution, and structured `Unity.RunCommand` return payloads.
 - `assets` for asset/resource workflows.
 - `debug` for diagnostics and profiling.
@@ -21,11 +21,11 @@ Use `Unity.ListToolPacks` to inspect available packs and `Unity.SetToolPacks` to
 Current live metadata baselines:
 
 - `foundation`: `12` exported tools.
-- `foundation + scene`: `34` exported tools.
-- `foundation + ui`: `25` exported tools.
-- `foundation + runtime`: `14` exported tools.
+- `foundation + scene`: `35` exported tools.
+- `foundation + ui`: `26` exported tools.
+- `foundation + runtime`: `15` exported tools.
 - `project`: `21` exported tools.
-- `debug`: `22` exported tools.
+- `debug`: `23` exported tools.
 
 Pack additions must not change the `foundation` baseline unless the metadata
 audit and workflow docs are updated at the same time.

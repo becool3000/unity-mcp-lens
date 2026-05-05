@@ -9,10 +9,10 @@ latest dogfood findings.
 ## Current Baselines
 
 - `foundation` exports `12` tools.
-- `foundation + scene` now targets `34` tools.
-- `foundation + ui` now targets `25` tools.
-- `foundation + runtime` now targets `14` tools.
-- Latest completed metadata audit passed with `project=21` and `debug=22`; Phase 12 raises the expected `scene` and `ui` counts.
+- `foundation + scene` now targets `35` tools.
+- `foundation + ui` now targets `26` tools.
+- `foundation + runtime` now targets `15` tools.
+- Latest expected metadata audit baseline keeps `project=21` and observes `debug=23`; the TintPaint Brush HUD dogfood pass raises the expected `scene`, `ui`, and `runtime` counts.
 - Phase 8 split GameObject tools are in the `scene` pack.
 - Phase 12 scene serialized-reference preview/apply binding tools are in the `scene` pack.
 - Phase 12 UI hierarchy/layout preview/apply tools and `Unity.UI.VerifyScreenLayout` are in the `ui` pack.
@@ -23,7 +23,7 @@ latest dogfood findings.
 - Phase 14 payload telemetry records measurable compact-result savings for large TSAM results, and the batch helper reduces repeated smoke/session churn.
 - Phase 15 payload telemetry records measurable compact-log savings for `Unity.RunCommand` and `Unity.ReadConsole` summary results.
 - Phase 16 moves the active long-running smoke host to `D:\TintPaint`, normalizes batch-helper `Unity.ReadDetailRef` results, and records measurable `Unity.ManageEditor.WaitForStableEditor` savings.
-- Phase 17 addresses the highest TintPaint dogfood pain with compact usage-report pack transition summaries, clearer TSAM coverage presentation, durable uGUI canvas prefab authoring, scene prefab instantiate/bind, UI raycast/layout verification, and play-mode pointer-input smoke verification.
+- Phase 17+ addresses the highest TintPaint dogfood pain with compact usage-report pack transition summaries, clearer TSAM coverage presentation, durable uGUI canvas prefab authoring, scene prefab instantiate/bind, UI raycast/layout and resolution-matrix verification, scene serialized-reference verification, play-mode pointer/scroll smoke verification, and explicit play-mode exit.
 
 ---
 
@@ -398,8 +398,10 @@ Implemented Phase 17 tool responses to this dogfood:
 - `Unity.UI.PreviewCreateCanvasPrefab` / `Unity.UI.ApplyCreateCanvasPrefab` in `ui`: preview/apply durable uGUI canvas prefab authoring with node hierarchy specs and common Canvas/CanvasScaler/GraphicRaycaster setup.
 - `Unity.Scene.PreviewInstantiatePrefabAndBind` / `Unity.Scene.ApplyInstantiatePrefabAndBind` in `scene`: preview/apply scene prefab instantiation plus ordered serialized reference binding.
 - `Unity.UI.VerifyRaycastAndLayout` in `ui`: read-only raycast stack, top hit, blocking result, and optional layout assertions for screen points or UI object names.
-- `Unity.PlayMode.PointerInputSmoke` in `runtime`: play-mode pointer smoke with observed Input System state, UI hit evidence, and world raycast evidence.
-- `Unity.Editor.ExitPlayMode` helper or foundation tool: explicit stop/pause/unpause semantics with final editor state, not subject to `Unity.RunCommand` play-state restoration.
+- `Unity.PlayMode.PointerInputSmoke` in `runtime`: play-mode pointer/scroll smoke with observed Input System state, UI hit evidence, world raycast evidence, and optional gameplay-state assertions.
+- `Unity.Editor.ExitPlayMode` in `runtime` plus `Exit-UnityPlayMode.ps1`: explicit stop/pause/unpause semantics with final editor state, not subject to `Unity.RunCommand` play-state restoration.
+- `Unity.UI.VerifyScreenLayoutMatrix` in `ui`: fixed-resolution layout matrix checks with original Game view size restoration.
+- `Unity.Scene.VerifySerializedReferences` in `scene`: read-only nested prefab reference verification with inherited/local/null status.
 
 ---
 

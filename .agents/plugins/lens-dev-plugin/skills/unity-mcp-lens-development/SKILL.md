@@ -59,7 +59,7 @@ The current Phase 11 project surface includes package/import/Input System diagno
 - Prefer `Unity.InputSystem.Diagnostics` for one-call Input System package, assembly, device, `.inputactions`, define, compatibility, and editor-log signals.
 - Prefer `Unity.ProjectSettings.PreviewActiveInputHandler` before changing the active input backend.
 - Use `Unity.ProjectSettings.SetActiveInputHandler` for editor-authored active input backend changes; do not hand-edit `ProjectSettings.asset` as the first path.
-- `foundation` remains `12` tools, `foundation + scene` now targets `34` tools, `foundation + ui` now targets `25`, `foundation + runtime` targets `14`, and the current `project` smoke baseline remains `21` tools.
+- `foundation` remains `12` tools, `foundation + scene` now targets `35` tools, `foundation + ui` now targets `26`, `foundation + runtime` targets `15`, and the current `project` smoke baseline remains `21` tools.
 
 ## Phase 12 UI And Scene Binding Truth
 
@@ -78,7 +78,7 @@ Phase 14 keeps the public tool surface stable and makes high-volume TSAM results
 - Compact default results are expected for `Unity.InputSystem.Diagnostics`, UI hierarchy preview/apply, scene serialized-reference binding preview/apply, and `Unity.UI.VerifyScreenLayout`.
 - Full bulky data should remain available through `detailRef` when the bridge detail store is available.
 - Use `Invoke-UnityMcpBatch` for focused smoke/workflow sequences that need multiple project/ui/scene/debug calls in one Lens session.
-- Pack baselines after Phase 17: `foundation=12`, `foundation+scene=34`, `foundation+ui=25`, `foundation+runtime=14`, `project=21`, and `debug=22`.
+- Pack baselines after the TintPaint Brush HUD dogfood pass: `foundation=12`, `foundation+scene=35`, `foundation+ui=26`, `foundation+runtime=15`, `project=21`, and live `debug=23`.
 - Current Phase 14 smoke baseline: `NoShapingRecorded=false`, `7` saving rows, `50,566` raw bytes -> `24,025` shaped bytes, `3` connections, `6` schema requests, and `4` pack transitions.
 
 ## Phase 15 RunCommand And Console Truth
@@ -105,7 +105,7 @@ Phase 16 moves the active long-running smoke host to `D:\TintPaint`.
 - Current Phase 16 smoke baseline: `NoShapingRecorded=false`, `12,419` bytes saved, `Unity.RunCommand` saved `5,969` bytes (`50.93%`), and `Unity.ManageEditor.WaitForStableEditor` saved `2,498` bytes (`62.69%`).
 - Longer TintPaint dogfood baseline: `NoShapingRecorded=false`, `2,362,465` bytes saved (`78.41%`) across `1999` rows; top savings were tool snapshots and `Unity.ManageEditor.WaitForStableEditor`.
 - Watch for usage-report presentation gaps: large inline `packSetTransitions` arrays and `tsamCoverage=[]` despite coverage rows.
-- Current missing-tool pressure is durable uGUI prefab creation, scene prefab instantiate-and-bind, UI raycast/layout verification, pointer-input smoke verification, and explicit exit-play-mode orchestration.
+- Current missing-tool pressure from the TintPaint HUD pass has moved to hardening: Game view resolution reflection, scroll delivery reliability, nested prefab readback clarity, and recovered transition presentation.
 
 ## Phase 17 UI/Scene/Runtime Truth
 
@@ -114,8 +114,17 @@ Phase 17 addresses the highest TintPaint dogfood pain without widening `foundati
 - Prefer `Unity.UI.PreviewCreateCanvasPrefab` and `Unity.UI.ApplyCreateCanvasPrefab` before custom `Unity.RunCommand` prefab-authoring scripts.
 - Prefer `Unity.Scene.PreviewInstantiatePrefabAndBind` and `Unity.Scene.ApplyInstantiatePrefabAndBind` before custom scene instantiation/binding scripts.
 - Prefer `Unity.UI.VerifyRaycastAndLayout` for UI blocking and hit-test assertions before ad hoc hierarchy probes.
-- Prefer `Unity.PlayMode.PointerInputSmoke` for pointer-path evidence in play mode; it reports observed Input System state plus UI/world hit evidence.
+- Prefer `Unity.UI.VerifyScreenLayoutMatrix` when responsive UI layout must be proven across Game view sizes; it restores the original selected Game view size by default.
+- Prefer `Unity.Scene.VerifySerializedReferences` when nested prefab instance references need read-only verification; it distinguishes inherited prefab refs, local overrides, local null overrides, actual nulls, and non-prefab instances.
+- Prefer `Unity.PlayMode.PointerInputSmoke` for pointer-path evidence in play mode; it reports observed Input System state, scroll state, UI/world hit evidence, and optional sampled gameplay state.
+- Prefer `Unity.Editor.ExitPlayMode` or `Exit-UnityPlayMode.ps1` for play-mode cleanup; avoid custom `Unity.RunCommand` stop snippets.
 - `Unity.GetLensUsageReport` compact output should summarize large pack-transition lists and report TSAM coverage summary data.
+
+## GitNexus Preflight
+
+- If `npx gitnexus status` reports this repo is unindexed or stale, run `npx gitnexus analyze` before symbol edits.
+- If impact for a new or recently added symbol returns target-not-found, re-run `npx gitnexus analyze`, then rerun impact.
+- Keep deeper diff-aware new-symbol behavior as upstream GitNexus work; do not implement it in Lens.
 
 ## Maintenance Rules
 

@@ -17,6 +17,18 @@ async function main() {
   const pollIntervalSeconds = common.getArgNumber(args, ["PollIntervalSeconds"], 1.0);
   const warmupSeconds = common.getArgNumber(args, ["WarmupSeconds"], 1.0);
   const playRequestTimeoutSeconds = common.getArgNumber(args, ["PlayRequestTimeoutSeconds"], 180);
+  const sourceIntegrity = common.getUnitySourceFileIntegrity(projectPath);
+
+  if (!sourceIntegrity.success) {
+    console.log(JSON.stringify({
+      success: false,
+      message: "Unity source integrity check failed before play-mode entry.",
+      sourceIntegrity,
+    }, null, 2));
+    await common.shutdownUnityMcpSessions();
+    process.exit(1);
+    return;
+  }
 
   if (common.getArgBool(args, ["StopFirst"], false)) {
     try {
@@ -33,7 +45,7 @@ async function main() {
   });
 
   if (!idleWait.success) {
-    console.log(JSON.stringify({ success: false, message: "Unity editor did not become idle before play.", idleWait }, null, 2));
+    console.log(JSON.stringify({ success: false, message: "Unity editor did not become idle before play.", sourceIntegrity, idleWait }, null, 2));
     await common.shutdownUnityMcpSessions();
     process.exit(1);
     return;
@@ -85,9 +97,25 @@ async function main() {
     finalMessage = "Play mode entered and runtime advanced after an expected reconnect-prone play transition.";
   }
 
+  let consoleErrors = null;
+  if (!playReady.success) {
+    try {
+      consoleErrors = await common.getUnityConsoleEntries(projectPath, {
+        types: ["Error"],
+        count: 10,
+        format: "Summary",
+        includeStacktrace: false,
+        timeoutSeconds: 20,
+      });
+    } catch (error) {
+      consoleErrors = { success: false, error: error.message };
+    }
+  }
+
   const result = {
     success: playReady.success,
     message: finalMessage,
+    sourceIntegrity,
     idleWait,
     degradedPath,
     playRequestTimeoutSeconds,
@@ -97,6 +125,7 @@ async function main() {
     playError,
     playReady,
     degradedFallback,
+    consoleErrors,
   };
 
   console.log(JSON.stringify(result, null, 2));

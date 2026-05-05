@@ -169,9 +169,9 @@ sealed class BenchmarkOptions
 sealed class MetadataAudit(BenchmarkOptions options)
 {
     const int ExpectedFoundationToolCount = 12;
-    const int ExpectedSceneToolCount = 34;
-    const int ExpectedUiToolCount = 25;
-    const int ExpectedRuntimeToolCount = 14;
+    const int ExpectedSceneToolCount = 35;
+    const int ExpectedUiToolCount = 26;
+    const int ExpectedRuntimeToolCount = 15;
     const int ExpectedProjectToolCount = 21;
 
     static readonly string[] k_RequiredFoundationTools =
@@ -210,6 +210,7 @@ sealed class MetadataAudit(BenchmarkOptions options)
         "Unity_Scene_ApplyBindSerializedReferences",
         "Unity_Scene_PreviewInstantiatePrefabAndBind",
         "Unity_Scene_ApplyInstantiatePrefabAndBind",
+        "Unity_Scene_VerifySerializedReferences",
         "Unity_Scene_CaptureView",
         "Unity_Tilemap_Setup",
         "Unity_Tilemap_Paint",
@@ -223,6 +224,7 @@ sealed class MetadataAudit(BenchmarkOptions options)
         "Unity_UI_PreviewLayoutProperties",
         "Unity_UI_ApplyLayoutProperties",
         "Unity_UI_VerifyScreenLayout",
+        "Unity_UI_VerifyScreenLayoutMatrix",
         "Unity_UI_PreviewCreateCanvasPrefab",
         "Unity_UI_ApplyCreateCanvasPrefab",
         "Unity_UI_VerifyRaycastAndLayout",
@@ -241,7 +243,8 @@ sealed class MetadataAudit(BenchmarkOptions options)
     static readonly string[] k_RequiredRuntimeTools =
     [
         "Unity_Runtime_GetVisualBoundsSnapshot",
-        "Unity_PlayMode_PointerInputSmoke"
+        "Unity_PlayMode_PointerInputSmoke",
+        "Unity_Editor_ExitPlayMode"
     ];
 
     static readonly string[] k_RequiredProjectTools =
@@ -333,18 +336,21 @@ sealed class MetadataAudit(BenchmarkOptions options)
         ValidateReadOnlyHint(sceneTools, "Unity_GameObject_Delete", expected: false, failures);
         ValidateReadOnlyHint(sceneTools, "Unity_Scene_PreviewBindSerializedReferences", expected: true, failures);
         ValidateReadOnlyHint(sceneTools, "Unity_Scene_ApplyBindSerializedReferences", expected: false, failures);
+        ValidateReadOnlyHint(sceneTools, "Unity_Scene_VerifySerializedReferences", expected: true, failures);
         ValidateReadOnlyHint(sceneTools, "Unity_ManageGameObject", expected: false, failures);
         ValidateReadOnlyHint(uiTools, "Unity_UI_PreviewEnsureHierarchy", expected: true, failures);
         ValidateReadOnlyHint(uiTools, "Unity_UI_ApplyEnsureHierarchy", expected: false, failures);
         ValidateReadOnlyHint(uiTools, "Unity_UI_PreviewLayoutProperties", expected: true, failures);
         ValidateReadOnlyHint(uiTools, "Unity_UI_ApplyLayoutProperties", expected: false, failures);
         ValidateReadOnlyHint(uiTools, "Unity_UI_VerifyScreenLayout", expected: true, failures);
+        ValidateReadOnlyHint(uiTools, "Unity_UI_VerifyScreenLayoutMatrix", expected: true, failures);
         ValidateReadOnlyHint(uiTools, "Unity_UI_PreviewCreateCanvasPrefab", expected: true, failures);
         ValidateReadOnlyHint(uiTools, "Unity_UI_ApplyCreateCanvasPrefab", expected: false, failures);
         ValidateReadOnlyHint(uiTools, "Unity_UI_VerifyRaycastAndLayout", expected: true, failures);
         ValidateReadOnlyHint(sceneTools, "Unity_Scene_PreviewInstantiatePrefabAndBind", expected: true, failures);
         ValidateReadOnlyHint(sceneTools, "Unity_Scene_ApplyInstantiatePrefabAndBind", expected: false, failures);
         ValidateReadOnlyHint(runtimeTools, "Unity_PlayMode_PointerInputSmoke", expected: false, failures);
+        ValidateReadOnlyHint(runtimeTools, "Unity_Editor_ExitPlayMode", expected: false, failures);
         ValidateReadOnlyHint(projectTools, "Unity_InputSystem_Diagnostics", expected: true, failures);
         ValidateReadOnlyHint(projectTools, "Unity_Project_PackageCompatibility", expected: true, failures);
         ValidateReadOnlyHint(projectTools, "Unity_InputActions_InspectAsset", expected: true, failures);
@@ -599,6 +605,12 @@ sealed class MetadataAudit(BenchmarkOptions options)
             failures);
         ValidateSplitGameObjectSchema(
             tools,
+            "Unity_UI_VerifyScreenLayoutMatrix",
+            ["resolutions", "targets", "assertions", "restoreOriginal", "warmupMs"],
+            ["resolutions", "targets", "assertions"],
+            failures);
+        ValidateSplitGameObjectSchema(
+            tools,
             "Unity_UI_PreviewCreateCanvasPrefab",
             ["prefabPath", "rootName", "renderMode", "sortingOrder", "pixelPerfect", "referenceResolution", "scaleMode", "nodes"],
             ["prefabPath"],
@@ -648,6 +660,12 @@ sealed class MetadataAudit(BenchmarkOptions options)
             ["prefabPath", "instanceName", "parent", "parentSearchMethod", "includeInactive", "position", "rotation", "scale", "bindings"],
             ["prefabPath"],
             failures);
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_Scene_VerifySerializedReferences",
+            ["target", "searchMethod", "includeInactive", "checks"],
+            ["target", "checks"],
+            failures);
     }
 
     static void ValidateRuntimeToolSchemas(IReadOnlyList<ToolDescriptor> tools, List<string> failures)
@@ -655,7 +673,13 @@ sealed class MetadataAudit(BenchmarkOptions options)
         ValidateSplitGameObjectSchema(
             tools,
             "Unity_PlayMode_PointerInputSmoke",
-            ["screenX", "screenY", "button", "queueInput", "stepFrames", "settleMs", "uiTarget", "uiSearchMethod", "includeInactive", "cameraTarget", "cameraSearchMethod", "layerMask"],
+            ["screenX", "screenY", "button", "scrollX", "scrollY", "queueInput", "stepFrames", "advanceFrames", "settleMs", "uiTarget", "uiSearchMethod", "includeInactive", "cameraTarget", "cameraSearchMethod", "layerMask", "stateTargets", "stateAssertions"],
+            [],
+            failures);
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_Editor_ExitPlayMode",
+            ["waitForStableEditor", "timeoutMs", "pollIntervalMs", "stablePollCount", "postStableDelayMs", "unpauseBeforeExit"],
             [],
             failures);
     }

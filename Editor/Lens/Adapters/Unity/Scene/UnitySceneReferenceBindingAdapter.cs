@@ -180,6 +180,47 @@ namespace Becool.UnityMcpLens.Editor.Adapters.Unity.Scene
             return true;
         }
 
+        public bool TryVerifySerializedReferences(
+            SceneSerializedReferenceVerifyRequest request,
+            out GameObject targetRoot,
+            out List<object> checks,
+            out bool passed,
+            out string error)
+        {
+            checks = new List<object>();
+            passed = true;
+            error = null;
+            targetRoot = null;
+
+            if (request?.Target == null)
+            {
+                error = "target is required.";
+                return false;
+            }
+
+            JObject findParams = new()
+            {
+                ["search_inactive"] = request.IncludeInactive
+            };
+            targetRoot = ObjectsHelper.FindObject(request.Target, request.SearchMethod, findParams);
+            if (targetRoot == null)
+            {
+                error = "Scene target could not be found.";
+                return false;
+            }
+
+            foreach (SceneSerializedReferenceVerifyCheck check in request.Checks ?? Array.Empty<SceneSerializedReferenceVerifyCheck>())
+            {
+                if (!TryVerifySerializedReferenceCheck(targetRoot, check, out object row, out bool rowPassed, out error))
+                    return false;
+
+                passed &= rowPassed;
+                checks.Add(row);
+            }
+
+            return true;
+        }
+
         static GameObject FindExistingInstance(Transform parent, string instanceName, bool includeInactive)
         {
             if (string.IsNullOrWhiteSpace(instanceName))
@@ -486,6 +527,218 @@ namespace Becool.UnityMcpLens.Editor.Adapters.Unity.Scene
                 willModify = applied,
                 applied = !previewOnly && applied
             };
+            return true;
+        }
+
+        static bool TryVerifySerializedReferenceCheck(GameObject targetRoot, SceneSerializedReferenceVerifyCheck check, out object row, out bool passed, out string error)
+        {
+            row = null;
+            passed = true;
+            error = null;
+            if (check == null)
+            {
+                error = "Check entry cannot be null.";
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(check.componentType))
+            {
+                error = "check.componentType is required.";
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(check.propertyPath))
+            {
+                error = "check.propertyPath is required.";
+                return false;
+            }
+
+            string targetPath = string.IsNullOrWhiteSpace(check.targetPath) ? "." : check.targetPath.Trim();
+            Transform targetTransform = targetPath == "." ? targetRoot.transform : targetRoot.transform.Find(targetPath);
+            if (targetTransform == null)
+            {
+                error = $"TargetPath '{targetPath}' was not found under '{UiDiagnosticsHelper.GetHierarchyPath(targetRoot.transform)}'.";
+                return false;
+            }
+
+            Type componentType = UnityComponentResolver.FindType(check.componentType);
+            if (componentType == null || !typeof(Component).IsAssignableFrom(componentType))
+            {
+                error = $"Component type '{check.componentType}' could not be resolved.";
+                return false;
+            }
+
+            Component[] matches = targetTransform.GetComponents(componentType);
+            int index = Math.Max(0, check.componentIndex);
+            if (matches == null || matches.Length <= index || matches[index] == null)
+            {
+                error = $"Component '{check.componentType}' with index {index} was not found on '{UiDiagnosticsHelper.GetHierarchyPath(targetTransform)}'.";
+                return false;
+            }
+
+            Component component = matches[index];
+            SerializedObject serializedObject = new(component);
+            SerializedProperty property = serializedObject.FindProperty(check.propertyPath);
+            if (property == null)
+            {
+                error = $"Serialized property '{check.propertyPath}' was not found on component '{check.componentType}'.";
+                return false;
+            }
+
+            if (!TryClassifyBindingTarget(component.GetType(), check.propertyPath, out bool isSingleReference, out bool isReferenceArray, out string classificationError))
+            {
+                error = classificationError;
+                return false;
+            }
+
+            UnityEngine.Object[] effectiveReferences = ReadPropertyReferences(property, isSingleReference);
+            UnityEngine.Object[] inheritedReferences = ReadInheritedReferences(component, check.propertyPath, isSingleReference, out bool hasSourceProperty);
+            bool hasLocalOverride = HasLocalReferenceOverride(component, check.propertyPath);
+            bool isPrefabInstance = PrefabUtility.IsPartOfPrefabInstance(component);
+            string sourcePrefabPath = PrefabUtility.GetPrefabAssetPathOfNearestInstanceRoot(component);
+            string status = ClassifyReferenceStatus(effectiveReferences, isPrefabInstance, hasLocalOverride, hasSourceProperty);
+
+            bool expectedProvided = TryResolveExpectedReferences(check, isSingleReference, isReferenceArray, out UnityEngine.Object[] expectedReferences, out error);
+            if (!string.IsNullOrWhiteSpace(error))
+                return false;
+
+            passed = !expectedProvided || AreReferenceArraysEqual(effectiveReferences, expectedReferences);
+            row = new
+            {
+                targetPath,
+                hierarchyPath = UiDiagnosticsHelper.GetHierarchyPath(targetTransform),
+                componentType = component.GetType().FullName,
+                componentIndex = index,
+                propertyPath = check.propertyPath,
+                bindingType = isSingleReference ? "single" : "array",
+                status,
+                sourcePrefabPath = string.IsNullOrWhiteSpace(sourcePrefabPath) ? null : sourcePrefabPath,
+                localOverride = hasLocalOverride,
+                hasSourceProperty,
+                expectedProvided,
+                passed,
+                effectiveReference = isSingleReference ? DescribeReference(effectiveReferences.FirstOrDefault()) : null,
+                effectiveReferences = isSingleReference ? null : effectiveReferences.Select(DescribeReference).ToArray(),
+                inheritedReference = isSingleReference ? DescribeReference(inheritedReferences.FirstOrDefault()) : null,
+                inheritedReferences = isSingleReference ? null : inheritedReferences.Select(DescribeReference).ToArray(),
+                expectedReference = isSingleReference && expectedProvided ? DescribeReference(expectedReferences.FirstOrDefault()) : null,
+                expectedReferences = !isSingleReference && expectedProvided ? expectedReferences.Select(DescribeReference).ToArray() : null
+            };
+            return true;
+        }
+
+        static UnityEngine.Object[] ReadPropertyReferences(SerializedProperty property, bool isSingleReference)
+        {
+            if (property == null)
+                return Array.Empty<UnityEngine.Object>();
+
+            if (isSingleReference)
+                return new[] { property.objectReferenceValue };
+
+            if (!property.isArray)
+                return Array.Empty<UnityEngine.Object>();
+
+            return Enumerable.Range(0, property.arraySize)
+                .Select(i => property.GetArrayElementAtIndex(i))
+                .Where(element => element != null)
+                .Select(element => element.objectReferenceValue)
+                .ToArray();
+        }
+
+        static UnityEngine.Object[] ReadInheritedReferences(Component component, string propertyPath, bool isSingleReference, out bool hasSourceProperty)
+        {
+            hasSourceProperty = false;
+            Component sourceComponent = PrefabUtility.GetCorrespondingObjectFromSource(component);
+            if (sourceComponent == null)
+                return Array.Empty<UnityEngine.Object>();
+
+            SerializedObject sourceObject = new(sourceComponent);
+            SerializedProperty sourceProperty = sourceObject.FindProperty(propertyPath);
+            if (sourceProperty == null)
+                return Array.Empty<UnityEngine.Object>();
+
+            hasSourceProperty = true;
+            return ReadPropertyReferences(sourceProperty, isSingleReference);
+        }
+
+        static bool HasLocalReferenceOverride(Component component, string propertyPath)
+        {
+            PropertyModification[] modifications = PrefabUtility.GetPropertyModifications(component);
+            if (modifications == null)
+                return false;
+
+            return modifications.Any(modification =>
+                modification != null &&
+                modification.target == component &&
+                !string.IsNullOrWhiteSpace(modification.propertyPath) &&
+                (string.Equals(modification.propertyPath, propertyPath, StringComparison.Ordinal) ||
+                 modification.propertyPath.StartsWith(propertyPath + ".", StringComparison.Ordinal)));
+        }
+
+        static string ClassifyReferenceStatus(UnityEngine.Object[] effectiveReferences, bool isPrefabInstance, bool hasLocalOverride, bool hasSourceProperty)
+        {
+            bool effectiveNull = effectiveReferences == null ||
+                effectiveReferences.Length == 0 ||
+                effectiveReferences.All(reference => reference == null);
+
+            if (hasLocalOverride)
+                return effectiveNull ? "local_override_null" : "local_override";
+
+            if (effectiveNull)
+                return "actual_null";
+
+            if (isPrefabInstance && hasSourceProperty)
+                return "prefab_inherited";
+
+            return "not_prefab_instance";
+        }
+
+        static bool TryResolveExpectedReferences(
+            SceneSerializedReferenceVerifyCheck check,
+            bool isSingleReference,
+            bool isReferenceArray,
+            out UnityEngine.Object[] expectedReferences,
+            out string error)
+        {
+            expectedReferences = Array.Empty<UnityEngine.Object>();
+            error = null;
+            bool hasSingleExpected = check.expectedReference != null;
+            bool hasArrayExpected = check.expectedReferences is { Length: > 0 };
+
+            if (!hasSingleExpected && !hasArrayExpected)
+                return false;
+
+            if (isSingleReference && hasArrayExpected)
+            {
+                error = $"Property '{check.propertyPath}' accepts a single object reference; use 'expectedReference' instead of 'expectedReferences'.";
+                return true;
+            }
+
+            if (isReferenceArray && hasSingleExpected)
+            {
+                error = $"Property '{check.propertyPath}' accepts an array/list of object references; use 'expectedReferences'.";
+                return true;
+            }
+
+            if (isSingleReference)
+            {
+                if (!SceneTools.TryResolveObjectReference(check.expectedReference, out UnityEngine.Object expected, out error))
+                    return true;
+
+                expectedReferences = new[] { expected };
+                return true;
+            }
+
+            var values = new List<UnityEngine.Object>();
+            foreach (JToken token in check.expectedReferences ?? Array.Empty<JToken>())
+            {
+                if (!SceneTools.TryResolveObjectReference(token, out UnityEngine.Object expected, out error))
+                    return true;
+
+                values.Add(expected);
+            }
+
+            expectedReferences = values.ToArray();
             return true;
         }
 

@@ -89,6 +89,15 @@ function Test-UnityPlayReadyDegradedFallback {
 }
 
 $resolvedProjectPath = Resolve-UnityProjectPath -ProjectPath $ProjectPath
+$sourceIntegrity = Test-UnitySourceFileIntegrity -ProjectPath $resolvedProjectPath
+if (-not $sourceIntegrity.success) {
+    [ordered]@{
+        success         = $false
+        message         = "Unity source integrity check failed before play-mode entry."
+        sourceIntegrity = $sourceIntegrity
+    } | ConvertTo-Json -Depth 30
+    exit 1
+}
 
 if ($StopFirst) {
     try {
@@ -101,9 +110,10 @@ if ($StopFirst) {
 $idleWait = Wait-UnityEditorIdle -ProjectPath $resolvedProjectPath -TimeoutSeconds $IdleTimeoutSeconds -StablePollCount $IdleStablePollCount -PollIntervalSeconds $IdlePollIntervalSeconds -PostIdleDelaySeconds $PostIdleDelaySeconds
 if (-not $idleWait.success) {
     [ordered]@{
-        success  = $false
-        message  = "Unity editor did not become idle before play."
-        idleWait = $idleWait
+        success         = $false
+        message         = "Unity editor did not become idle before play."
+        sourceIntegrity = $sourceIntegrity
+        idleWait        = $idleWait
     } | ConvertTo-Json -Depth 30
     exit 1
 }
@@ -147,9 +157,29 @@ if ($playReady.success) {
     }
 }
 
+$consoleErrors = $null
+if (-not $playReady.success) {
+    try {
+        $consoleErrors = Get-UnityConsoleEntries `
+            -ProjectPath $resolvedProjectPath `
+            -Types @("Error") `
+            -Count 10 `
+            -Format "Summary" `
+            -IncludeStacktrace:$false `
+            -TimeoutSeconds 20
+    }
+    catch {
+        $consoleErrors = [pscustomobject]@{
+            success = $false
+            error   = $_.Exception.Message
+        }
+    }
+}
+
 [ordered]@{
     success      = $playReady.success
     message      = $finalMessage
+    sourceIntegrity = $sourceIntegrity
     idleWait     = $idleWait
     degradedPath = $degradedPath
     playRequestTimeoutSeconds = $PlayRequestTimeoutSeconds
@@ -159,6 +189,7 @@ if ($playReady.success) {
     playError    = $playError
     playReady    = $playReady
     degradedFallback = $degradedFallback
+    consoleErrors = $consoleErrors
 } | ConvertTo-Json -Depth 30
 
 if ($playReady.success) {

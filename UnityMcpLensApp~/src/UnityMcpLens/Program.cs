@@ -21,7 +21,12 @@ sealed class UnityMcpLensHost
         "Unity_UI_PreviewEnsureHierarchy",
         "Unity_UI_PreviewLayoutProperties",
         "Unity_UI_VerifyScreenLayout",
+        "Unity_UI_VerifyScreenLayoutMatrix",
+        "Unity_UI_PreviewCreateCanvasPrefab",
+        "Unity_UI_VerifyRaycastAndLayout",
         "Unity_Scene_PreviewBindSerializedReferences",
+        "Unity_Scene_PreviewInstantiatePrefabAndBind",
+        "Unity_Scene_VerifySerializedReferences",
         "Unity_UI_Raycast",
         "Unity_Asset_Search",
         "Unity_Object_ValidateReferences",
@@ -60,6 +65,10 @@ sealed class UnityMcpLensHost
         "Unity_Tilemap_Paint",
         "Unity_UI_ApplyEnsureHierarchy",
         "Unity_UI_ApplyLayoutProperties",
+        "Unity_UI_ApplyCreateCanvasPrefab",
+        "Unity_Scene_ApplyInstantiatePrefabAndBind",
+        "Unity_PlayMode_PointerInputSmoke",
+        "Unity_Editor_ExitPlayMode",
         "Unity_UI_Toolkit"
     };
 

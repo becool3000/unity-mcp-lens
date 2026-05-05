@@ -538,24 +538,17 @@ Returns:
 
             try
             {
-                // Atomic create without BOM; schedule refresh after reply
-                var enc = new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
-                var tmp = fullPath + ".tmp";
-                File.WriteAllText(tmp, contents, enc);
-                try
+                if (!TryWriteScriptTextAtomically(fullPath, relativePath, contents, out string writeError, out object writeIntegrity))
                 {
-                    File.Move(tmp, fullPath);
-                }
-                catch (IOException)
-                {
-                    File.Copy(tmp, fullPath, overwrite: true);
-                    try { File.Delete(tmp); } catch { }
+                    return Response.Error(
+                        "source_integrity_failed",
+                        new { status = "source_integrity_failed", path = relativePath, error = writeError, integrity = writeIntegrity });
                 }
 
                 var uri = $"unity://path/{relativePath}";
                 var ok = Response.Success(
                     $"Script '{name}.cs' created successfully at '{relativePath}'.",
-                    new { uri, scheduledRefresh = false }
+                    new { uri, scheduledRefresh = false, writeIntegrity }
                 );
 
                 ManageScriptRefreshHelpers.ImportAndRequestCompile(relativePath);
@@ -652,35 +645,18 @@ Returns:
 
             try
             {
-                // Safe write with atomic replace when available, without BOM
-                var encoding = new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
-                string tempPath = fullPath + ".tmp";
-                File.WriteAllText(tempPath, contents, encoding);
-
-                string backupPath = fullPath + ".bak";
-                try
+                if (!TryWriteScriptTextAtomically(fullPath, relativePath, contents, out string writeError, out object writeIntegrity))
                 {
-                    File.Replace(tempPath, fullPath, backupPath);
-                    try { if (File.Exists(backupPath)) File.Delete(backupPath); } catch { }
-                }
-                catch (PlatformNotSupportedException)
-                {
-                    File.Copy(tempPath, fullPath, true);
-                    try { File.Delete(tempPath); } catch { }
-                    try { if (File.Exists(backupPath)) File.Delete(backupPath); } catch { }
-                }
-                catch (IOException)
-                {
-                    File.Copy(tempPath, fullPath, true);
-                    try { File.Delete(tempPath); } catch { }
-                    try { if (File.Exists(backupPath)) File.Delete(backupPath); } catch { }
+                    return Response.Error(
+                        "source_integrity_failed",
+                        new { status = "source_integrity_failed", path = relativePath, error = writeError, integrity = writeIntegrity });
                 }
 
                 // Prepare success response BEFORE any operation that can trigger a domain reload
                 var uri = $"unity://path/{relativePath}";
                 var ok = Response.Success(
                     $"Script '{name}.cs' updated successfully at '{relativePath}'.",
-                    new { uri, path = relativePath, scheduledRefresh = true }
+                    new { uri, path = relativePath, scheduledRefresh = true, writeIntegrity }
                 );
 
                 // Schedule a debounced import/compile on next editor tick to avoid stalling the reply
@@ -955,26 +931,11 @@ Returns:
             // Atomic write and schedule refresh
             try
             {
-                var enc = new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
-                var tmp = fullPath + ".tmp";
-                File.WriteAllText(tmp, working, enc);
-                string backup = fullPath + ".bak";
-                try
+                if (!TryWriteScriptTextAtomically(fullPath, relativePath, working, out string writeError, out object writeIntegrity))
                 {
-                    File.Replace(tmp, fullPath, backup);
-                    try { if (File.Exists(backup)) File.Delete(backup); } catch { /* ignore */ }
-                }
-                catch (PlatformNotSupportedException)
-                {
-                    File.Copy(tmp, fullPath, true);
-                    try { File.Delete(tmp); } catch { }
-                    try { if (File.Exists(backup)) File.Delete(backup); } catch { }
-                }
-                catch (IOException)
-                {
-                    File.Copy(tmp, fullPath, true);
-                    try { File.Delete(tmp); } catch { }
-                    try { if (File.Exists(backup)) File.Delete(backup); } catch { }
+                    return Response.Error(
+                        "source_integrity_failed",
+                        new { status = "source_integrity_failed", path = relativePath, error = writeError, integrity = writeIntegrity });
                 }
 
                 // Respect refresh mode: immediate vs debounced
@@ -1005,7 +966,8 @@ Returns:
                         path = relativePath,
                         editsApplied = spans.Count,
                         sha256 = newSha,
-                        scheduledRefresh = !immediate
+                        scheduledRefresh = !immediate,
+                        writeIntegrity
                     }
                 );
             }
@@ -1058,6 +1020,193 @@ Returns:
                 var hash = sha.ComputeHash(bytes);
                 return BitConverter.ToString(hash).Replace("-", string.Empty).ToLowerInvariant();
             }
+        }
+
+        static string ComputeSha256(byte[] bytes)
+        {
+            using (var sha = SHA256.Create())
+            {
+                var hash = sha.ComputeHash(bytes ?? Array.Empty<byte>());
+                return BitConverter.ToString(hash).Replace("-", string.Empty).ToLowerInvariant();
+            }
+        }
+
+        static bool TryWriteScriptTextAtomically(string fullPath, string relativePath, string contents, out string error, out object integrity)
+        {
+            error = null;
+            integrity = null;
+            string tempPath = fullPath + ".tmp";
+            string backupPath = fullPath + ".bak";
+            bool hadOriginal = File.Exists(fullPath);
+            bool restoredFromBackup = false;
+
+            try
+            {
+                var encoding = new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
+                File.WriteAllText(tempPath, contents ?? string.Empty, encoding);
+                if (!TryVerifyScriptFileIntegrity(tempPath, relativePath, contents ?? string.Empty, out error, out integrity))
+                {
+                    TryDeleteFile(tempPath);
+                    return false;
+                }
+
+                try
+                {
+                    if (hadOriginal)
+                    {
+                        File.Replace(tempPath, fullPath, backupPath);
+                    }
+                    else
+                    {
+                        File.Move(tempPath, fullPath);
+                    }
+                }
+                catch (PlatformNotSupportedException)
+                {
+                    ReplaceByCopy(tempPath, fullPath, backupPath, hadOriginal);
+                }
+                catch (IOException)
+                {
+                    ReplaceByCopy(tempPath, fullPath, backupPath, hadOriginal);
+                }
+
+                if (!TryVerifyScriptFileIntegrity(fullPath, relativePath, contents ?? string.Empty, out error, out integrity))
+                {
+                    restoredFromBackup = TryRestoreScriptBackup(fullPath, backupPath, hadOriginal);
+                    error = "source_integrity_failed_after_write: " + error;
+                    integrity = AttachWriteRestoreState(integrity, backupPath, restoredFromBackup);
+                    return false;
+                }
+
+                TryDeleteFile(backupPath);
+                integrity = AttachWriteRestoreState(integrity, backupPath, restoredFromBackup);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                TryDeleteFile(tempPath);
+                error = ex.Message;
+                integrity = new
+                {
+                    path = relativePath,
+                    fullPath,
+                    backupPath,
+                    restoredFromBackup
+                };
+                return false;
+            }
+        }
+
+        static void ReplaceByCopy(string tempPath, string fullPath, string backupPath, bool hadOriginal)
+        {
+            if (hadOriginal)
+            {
+                File.Copy(fullPath, backupPath, true);
+            }
+
+            File.Copy(tempPath, fullPath, true);
+            TryDeleteFile(tempPath);
+        }
+
+        static bool TryRestoreScriptBackup(string fullPath, string backupPath, bool hadOriginal)
+        {
+            try
+            {
+                if (hadOriginal && File.Exists(backupPath))
+                {
+                    File.Copy(backupPath, fullPath, true);
+                    return true;
+                }
+
+                if (!hadOriginal && File.Exists(fullPath))
+                {
+                    File.Delete(fullPath);
+                    return true;
+                }
+            }
+            catch
+            {
+            }
+
+            return false;
+        }
+
+        static void TryDeleteFile(string pathValue)
+        {
+            try
+            {
+                if (!string.IsNullOrWhiteSpace(pathValue) && File.Exists(pathValue))
+                    File.Delete(pathValue);
+            }
+            catch
+            {
+            }
+        }
+
+        static bool TryVerifyScriptFileIntegrity(string fullPath, string relativePath, string expectedContents, out string error, out object integrity)
+        {
+            error = null;
+            integrity = null;
+
+            try
+            {
+                byte[] bytes = File.ReadAllBytes(fullPath);
+                var encoding = new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
+                byte[] expectedBytes = encoding.GetBytes(expectedContents ?? string.Empty);
+                int nulByteCount = bytes.Count(b => b == 0);
+                string actualSha256 = ComputeSha256(bytes);
+                string expectedSha256 = ComputeSha256(expectedBytes);
+
+                integrity = new
+                {
+                    path = relativePath,
+                    fullPath,
+                    lengthBytes = bytes.LongLength,
+                    expectedLengthBytes = expectedBytes.LongLength,
+                    nulByteCount,
+                    sha256 = actualSha256,
+                    expectedSha256
+                };
+
+                if (bytes.LongLength == 0 && expectedBytes.LongLength > 0)
+                {
+                    error = "File is empty after write.";
+                    return false;
+                }
+
+                if (nulByteCount > 0)
+                {
+                    error = $"File contains {nulByteCount} NUL byte(s) after write.";
+                    return false;
+                }
+
+                string decoded = encoding.GetString(bytes);
+                if (!string.Equals(decoded, expectedContents ?? string.Empty, StringComparison.Ordinal))
+                {
+                    error = "File contents changed during write/readback.";
+                    return false;
+                }
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                error = ex.Message;
+                integrity = new
+                {
+                    path = relativePath,
+                    fullPath
+                };
+                return false;
+            }
+        }
+
+        static object AttachWriteRestoreState(object integrity, string backupPath, bool restoredFromBackup)
+        {
+            JObject data = integrity == null ? new JObject() : JObject.FromObject(integrity);
+            data["backupPath"] = backupPath;
+            data["restoredFromBackup"] = restoredFromBackup;
+            return data;
         }
 
         static bool CheckBalancedDelimiters(string text, out int line, out char expected)
@@ -1603,26 +1752,11 @@ Returns:
                 bool immediate = refreshMode == "immediate" || refreshMode == "sync";
 
                 // Persist changes atomically (no BOM), then compute/return new file SHA
-                var enc = new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
-                var tmp = fullPath + ".tmp";
-                File.WriteAllText(tmp, working, enc);
-                var backup = fullPath + ".bak";
-                try
+                if (!TryWriteScriptTextAtomically(fullPath, relativePath, working, out string writeError, out object writeIntegrity))
                 {
-                    File.Replace(tmp, fullPath, backup);
-                    try { if (File.Exists(backup)) File.Delete(backup); } catch { }
-                }
-                catch (PlatformNotSupportedException)
-                {
-                    File.Copy(tmp, fullPath, true);
-                    try { File.Delete(tmp); } catch { }
-                    try { if (File.Exists(backup)) File.Delete(backup); } catch { }
-                }
-                catch (IOException)
-                {
-                    File.Copy(tmp, fullPath, true);
-                    try { File.Delete(tmp); } catch { }
-                    try { if (File.Exists(backup)) File.Delete(backup); } catch { }
+                    return Response.Error(
+                        "source_integrity_failed",
+                        new { status = "source_integrity_failed", path = relativePath, error = writeError, integrity = writeIntegrity });
                 }
 
                 var newSha = ComputeSha256(working);
@@ -1634,7 +1768,8 @@ Returns:
                         uri = $"unity://path/{relativePath}",
                         editsApplied = appliedCount,
                         scheduledRefresh = !immediate,
-                        sha256 = newSha
+                        sha256 = newSha,
+                        writeIntegrity
                     }
                 );
 

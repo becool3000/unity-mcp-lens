@@ -50,6 +50,22 @@ namespace Becool.UnityMcpLens.Editor.Models.UI
         public UiVerifyAssertionRequest[] Assertions { get; set; } = new UiVerifyAssertionRequest[0];
     }
 
+    sealed class UiScreenResolutionRequest
+    {
+        public string key { get; set; }
+        public int width { get; set; }
+        public int height { get; set; }
+    }
+
+    sealed class UiVerifyScreenLayoutMatrixRequest
+    {
+        public UiScreenResolutionRequest[] Resolutions { get; set; } = new UiScreenResolutionRequest[0];
+        public UiVerifyTargetRequest[] Targets { get; set; } = new UiVerifyTargetRequest[0];
+        public UiVerifyAssertionRequest[] Assertions { get; set; } = new UiVerifyAssertionRequest[0];
+        public bool RestoreOriginal { get; set; } = true;
+        public int WarmupMs { get; set; } = 100;
+    }
+
     sealed class UiCanvasPrefabRequest
     {
         public string PrefabPath { get; set; }

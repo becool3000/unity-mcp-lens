@@ -57,7 +57,7 @@ Status values:
 | `Unity.GetUIAssetPreview` | ported | `Unity.UI.Toolkit` | `get_asset_preview` writes image artifact metadata. |
 | `Unity.GetConsoleLogs` | covered | `Unity.ReadConsole` | No old alias. |
 | `Unity.EnterPlayMode` | covered | `Unity.ManageEditor` | Play action. |
-| `Unity.ExitPlayMode` | covered | `Unity.ManageEditor` | Stop action. |
+| `Unity.ExitPlayMode` | covered | `Unity.Editor.ExitPlayMode` / `Unity.ManageEditor` | Prefer the explicit Lens exit-play tool; `Unity.ManageEditor` Stop remains compatible. |
 | `Unity.RunCommand` | covered | `Unity.RunCommand` | MCP-owned support. |
 | `Unity.RunCommandValidator` | ported | `Unity.RunCommand` | `mode: validate`. |
 | `Unity.Skill.ReadSkillBody` | exclude/defer | none | Codex/Assistant skill concern, not Unity bridge ownership. |

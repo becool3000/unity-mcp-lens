@@ -2,6 +2,7 @@ const { spawn, spawnSync } = require("child_process");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
+const { TextDecoder } = require("util");
 
 const bridgeScriptsDir = __dirname;
 
@@ -181,6 +182,100 @@ function pathExists(filePath) {
   }
 }
 
+function getUnitySourceFileIntegrity(projectPath, options = {}) {
+  const projectRoot = resolveProjectPath(projectPath);
+  const roots = options.roots || ["Assets", "Packages"];
+  const maxIssues = Math.max(1, Number(options.maxIssues || 20));
+  const issues = [];
+  let checkedFileCount = 0;
+  const decoder = new TextDecoder("utf-8", { fatal: true });
+
+  function addIssue(filePath, issue) {
+    if (issues.length >= maxIssues) {
+      return;
+    }
+    issues.push({
+      path: path.relative(projectRoot, filePath).replace(/\\/g, "/"),
+      fullPath: filePath,
+      ...issue,
+    });
+  }
+
+  function scanFile(filePath) {
+    checkedFileCount += 1;
+    let bytes;
+    try {
+      bytes = fs.readFileSync(filePath);
+    } catch (error) {
+      addIssue(filePath, { kind: "read_failed", error: error.message });
+      return;
+    }
+
+    let nulByteCount = 0;
+    for (const byte of bytes) {
+      if (byte === 0) {
+        nulByteCount += 1;
+      }
+    }
+
+    if (nulByteCount > 0) {
+      addIssue(filePath, {
+        kind: "nul_bytes",
+        lengthBytes: bytes.length,
+        nulByteCount,
+      });
+      return;
+    }
+
+    try {
+      decoder.decode(bytes);
+    } catch (error) {
+      addIssue(filePath, {
+        kind: "invalid_utf8",
+        lengthBytes: bytes.length,
+        error: error.message,
+      });
+    }
+  }
+
+  function scanDirectory(directory) {
+    let entries;
+    try {
+      entries = fs.readdirSync(directory, { withFileTypes: true });
+    } catch (_error) {
+      return;
+    }
+
+    for (const entry of entries) {
+      const fullPath = path.join(directory, entry.name);
+      if (entry.isDirectory()) {
+        if (["Library", "Temp", "Obj", "Logs", ".git", "UserSettings"].includes(entry.name)) {
+          continue;
+        }
+        scanDirectory(fullPath);
+      } else if (entry.isFile() && entry.name.toLowerCase().endsWith(".cs")) {
+        scanFile(fullPath);
+      }
+    }
+  }
+
+  for (const root of roots) {
+    const rootPath = path.join(projectRoot, root);
+    if (pathExists(rootPath)) {
+      scanDirectory(rootPath);
+    }
+  }
+
+  return {
+    success: issues.length === 0,
+    checkedFileCount,
+    issueCount: issues.length,
+    truncated: issues.length >= maxIssues,
+    issues,
+    roots,
+  };
+}
+
 function getDefaultLensPath() {
   const serverDir = path.join(os.homedir(), ".unity", "unity-mcp-lens");
   if (process.platform === "win32") {
@@ -298,6 +393,7 @@ const exactPackMap = new Map(
     Unity_Project_ScanMissingScripts: ["project"],
     Unity_Runtime_GetVisualBoundsSnapshot: ["runtime"],
     Unity_PlayMode_PointerInputSmoke: ["runtime"],
+    Unity_Editor_ExitPlayMode: ["runtime"],
     Unity_GetLensUsageReport: ["debug"],
   })
 );
@@ -305,6 +401,7 @@ const exactPackMap = new Map(
 const prefixPackMap = [
   { prefix: "Unity_UI_", packs: ["ui"] },
   { prefix: "Unity_Scene_", packs: ["scene"] },
+  { prefix: "Unity_GameObject_", packs: ["scene"] },
   { prefix: "Unity_Runtime_", packs: ["runtime"] },
   { prefix: "Unity_PlayMode_", packs: ["runtime"] },
   { prefix: "Unity_ManageGameObject", packs: ["scene"] },
@@ -2673,6 +2770,7 @@ module.exports = {
   readJsonFile,
   writeJsonFile,
   pathExists,
+  getUnitySourceFileIntegrity,
   getLensBinaryState,
   inferRequiredPacks,
   ensureUnityToolPacks,

@@ -77,6 +77,7 @@ or YAML edits.
 7. After external edits to compile-affecting files (`*.cs`, `*.asmdef`, `*.asmref`, `*.rsp`, package manifest changes), run `scripts/Sync-UnityScriptChanges.js` on macOS/Linux or `scripts/Sync-UnityScriptChanges.ps1` on Windows before the next Unity-side action.
    - Let it observe the natural compile/reload cycle first.
    - Treat transient pack-restore or compact-state failures during an expected reload window as recoverable unless direct Lens health also fails.
+   - If compile/play behavior looks wrong after file edits, run `scripts/Test-UnitySourceFileIntegrity.ps1` on Windows to check for NUL-byte or invalid UTF-8 source corruption before interpreting bridge failures.
 8. Prefer direct MCP tools through the Lens path by default.
    - Use helper scripts for orchestration-heavy flows such as long builds, autoplay, or deterministic screenshot capture.
    - Those helper scripts must also stay on the Lens path; do not bounce into legacy relay or stale fallback behavior.
@@ -93,7 +94,7 @@ or YAML edits.
    - `export_krita_state_to_unity.py`
    - `Import-UnitySpriteState.ps1`
 12. For long custom builds or exports, validate the exact enabled build-scene list first with `scripts/Test-UnityBuildSceneList.js --ExpectedScenes ...` on macOS/Linux, or `scripts/Test-UnityBuildSceneList.ps1 -ExpectedScenes ...` on Windows.
-13. For play mode, use `scripts/Enter-UnityPlayMode.js` on macOS/Linux or `scripts/Enter-UnityPlayMode.ps1` on Windows, require runtime advancement plus a short warmup, and treat transient disconnects during play transition as recoverable until the runtime probe proves success or failure.
+13. For play mode, use `scripts/Enter-UnityPlayMode.js` on macOS/Linux or `scripts/Enter-UnityPlayMode.ps1` on Windows, require source-integrity preflight plus runtime advancement and a short warmup, read its inline `consoleErrors` summary on failure, exit with `scripts/Exit-UnityPlayMode.ps1` on Windows or `Unity.Editor.ExitPlayMode`, and treat transient disconnects during play/exit transition as recoverable until the runtime probe proves success or failure.
 14. For `Unity_RunCommand`, use `scripts/Invoke-UnityRunCommand.js` on macOS/Linux or `scripts/Invoke-UnityRunCommand.ps1` on Windows instead of hand-escaping JSON, and prefer small focused probes over one large validation script.
    - In healthy play mode, the helper should skip its own idle-wait gate and run directly.
    - Prefer `result.ReturnResult(...)` for structured probe output; do not promote probe data to warning logs just to make it visible.
@@ -125,7 +126,7 @@ or YAML edits.
 23. For scene object-reference fields or arrays that should bind to authored scene objects, use `scripts/Bind-UnitySceneSerializedReferences.ps1`.
 24. For persistent scene UI subtree repair or creation, use `scripts/Ensure-UnityUiHierarchy.ps1`, which now targets the split Phase 12 preview/apply UI hierarchy tools.
 25. For deterministic UI layout edits on authored scene objects, use `scripts/Set-UnityUiLayout.ps1`, which now targets the split Phase 12 preview/apply layout tools.
-26. For measured HUD/layout assertions such as inside-screen, right-of, below, below-center, or ordered-stack checks, use `scripts/Verify-UnityUiScreenLayout.ps1` or `Unity.UI.VerifyScreenLayout`.
+26. For measured HUD/layout assertions such as inside-screen, right-of, below, below-center, or ordered-stack checks, use `scripts/Verify-UnityUiScreenLayout.ps1` or `Unity.UI.VerifyScreenLayout`; when a layout matrix is required, use `Unity.UI.VerifyScreenLayoutMatrix`.
    - Keep strict `right_of`, `left_of`, `above`, and `below` for non-overlap rect semantics.
    - Use `right_of_center`, `left_of_center`, `above_center`, or `below_center` for “visually higher/lower within the same card” cases such as count labels inside HUD slots.
 27. For repeated smoke/workflow sequences, use `scripts/Invoke-UnityMcpBatch.js` or `scripts/Invoke-UnityMcpBatch.ps1` with an ordered JSON step list. Keep per-step outputs compact and read `detailRef` only when the passing summary is insufficient.

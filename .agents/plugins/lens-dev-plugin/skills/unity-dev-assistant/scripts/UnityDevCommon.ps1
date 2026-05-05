@@ -439,6 +439,89 @@ function Search-UnityRepositoryText {
     return $files | Select-String -Pattern $Pattern -CaseSensitive:$CaseSensitive.IsPresent
 }
 
+function Test-UnitySourceFileIntegrity {
+    param(
+        [Parameter(Mandatory = $true)][string]$ProjectPath,
+        [Parameter()][string[]]$Roots = @("Assets", "Packages"),
+        [Parameter()][int]$MaxIssues = 20
+    )
+
+    $projectRoot = Resolve-UnityProjectPath -ProjectPath $ProjectPath
+    $issues = New-Object System.Collections.Generic.List[object]
+    $checkedFileCount = 0
+    $utf8 = New-Object System.Text.UTF8Encoding($false, $true)
+    $maxIssueCount = [Math]::Max([int]1, [int]$MaxIssues)
+
+    foreach ($root in $Roots) {
+        $rootPath = Join-Path $projectRoot $root
+        if (-not (Test-Path -LiteralPath $rootPath)) {
+            continue
+        }
+
+        $files = Get-ChildItem -LiteralPath $rootPath -Recurse -File -Filter "*.cs" -ErrorAction SilentlyContinue
+        foreach ($file in $files) {
+            $checkedFileCount += 1
+            if ($issues.Count -ge $maxIssueCount) {
+                continue
+            }
+
+            $relativePath = Resolve-UnityRelativePath -ProjectPath $projectRoot -PathValue $file.FullName
+            try {
+                [byte[]]$bytes = [System.IO.File]::ReadAllBytes($file.FullName)
+            }
+            catch {
+                $issues.Add([pscustomobject]@{
+                    path     = $relativePath
+                    fullPath = $file.FullName
+                    kind     = "read_failed"
+                    error    = $_.Exception.Message
+                })
+                continue
+            }
+
+            $nulByteCount = 0
+            foreach ($byte in $bytes) {
+                if ($byte -eq 0) {
+                    $nulByteCount += 1
+                }
+            }
+
+            if ($nulByteCount -gt 0) {
+                $issues.Add([pscustomobject]@{
+                    path          = $relativePath
+                    fullPath      = $file.FullName
+                    kind          = "nul_bytes"
+                    lengthBytes   = $bytes.LongLength
+                    nulByteCount  = $nulByteCount
+                })
+                continue
+            }
+
+            try {
+                [void]$utf8.GetString($bytes)
+            }
+            catch {
+                $issues.Add([pscustomobject]@{
+                    path        = $relativePath
+                    fullPath    = $file.FullName
+                    kind        = "invalid_utf8"
+                    lengthBytes = $bytes.LongLength
+                    error       = $_.Exception.Message
+                })
+            }
+        }
+    }
+
+    return [ordered]@{
+        success          = ($issues.Count -eq 0)
+        checkedFileCount = $checkedFileCount
+        issueCount       = $issues.Count
+        truncated        = ($issues.Count -ge $maxIssueCount)
+        issues           = @($issues.ToArray())
+        roots            = @($Roots)
+    }
+}
+
 function Resolve-UnityAbsolutePath {
     param(
         [Parameter(Mandatory = $true)][string]$ProjectPath,

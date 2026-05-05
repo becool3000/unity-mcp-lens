@@ -1,3 +1,4 @@
+using Newtonsoft.Json.Linq;
 using Becool.UnityMcpLens.Editor.ToolRegistry;
 
 namespace Becool.UnityMcpLens.Editor.Tools.Parameters
@@ -49,11 +50,20 @@ namespace Becool.UnityMcpLens.Editor.Tools.Parameters
         [McpDescription("Mouse button name to press while queueing input: left, right, middle, or none.", Required = false)]
         public string Button { get; set; } = "left";
 
+        [McpDescription("Synthetic mouse wheel X scroll value to queue through MouseState.scroll.", Required = false)]
+        public float ScrollX { get; set; } = 0f;
+
+        [McpDescription("Synthetic mouse wheel Y scroll value to queue through MouseState.scroll.", Required = false)]
+        public float ScrollY { get; set; } = 0f;
+
         [McpDescription("Queue a synthetic Input System mouse state before sampling. Uses reflection and reports unsupported state when Input System APIs are unavailable.", Required = false)]
         public bool QueueInput { get; set; } = true;
 
         [McpDescription("Advance this many editor frames after queueing input when play mode is paused.", Required = false)]
         public int StepFrames { get; set; } = 1;
+
+        [McpDescription("Advance or wait this many runtime frames after queueing input before sampling state.", Required = false)]
+        public int AdvanceFrames { get; set; } = 0;
 
         [McpDescription("Delay after queueing input before reading observed state.", Required = false)]
         public int SettleMs { get; set; } = 100;
@@ -75,5 +85,59 @@ namespace Becool.UnityMcpLens.Editor.Tools.Parameters
 
         [McpDescription("Layer mask for optional physics raycast evidence. Defaults to all layers.", Required = false)]
         public int LayerMask { get; set; } = -1;
+
+        [McpDescription("Optional runtime state targets to sample before and after input.", Required = false)]
+        public PointerSmokeStateTarget[] StateTargets { get; set; } = new PointerSmokeStateTarget[0];
+
+        [McpDescription("Optional assertions over sampled runtime state.", Required = false)]
+        public PointerSmokeStateAssertion[] StateAssertions { get; set; } = new PointerSmokeStateAssertion[0];
+    }
+
+    public record PointerSmokeStateTarget
+    {
+        [McpDescription("Stable key used by state assertions.", Required = true)]
+        public string Key { get; set; }
+
+        [McpDescription("Runtime GameObject, hierarchy path, or instance id.", Required = true)]
+        public string Target { get; set; }
+
+        [McpDescription("How to find the target ('by_name', 'by_id', 'by_path').", Required = false)]
+        public string SearchMethod { get; set; } = "by_name";
+
+        [McpDescription("Relative child path under the resolved target. Use '.' or omit for the root.", Required = false)]
+        public string TargetPath { get; set; } = ".";
+
+        [McpDescription("Include inactive objects when resolving the target.", Required = false)]
+        public bool IncludeInactive { get; set; } = true;
+
+        [McpDescription("Optional component type to read from the target object.", Required = false)]
+        public string ComponentType { get; set; }
+
+        [McpDescription("0-based component index when multiple matching components exist.", Required = false)]
+        public int ComponentIndex { get; set; } = 0;
+
+        [McpDescription("Field/property path to read via reflection.", Required = false)]
+        public string MemberPath { get; set; }
+
+        [McpDescription("Serialized property path to read from the component.", Required = false)]
+        public string PropertyPath { get; set; }
+    }
+
+    public record PointerSmokeStateAssertion
+    {
+        [McpDescription("Assertion type: changed, equals, not_equals, contains, greater_than, or less_than.", Required = true)]
+        public string Type { get; set; } = "changed";
+
+        [McpDescription("State target key this assertion evaluates.", Required = true)]
+        public string TargetKey { get; set; }
+
+        [McpDescription("Expected value for equals, not_equals, greater_than, or less_than.", Required = false)]
+        public JToken Value { get; set; }
+
+        [McpDescription("Expected substring for contains.", Required = false)]
+        public string Contains { get; set; }
+
+        [McpDescription("Numeric comparison tolerance.", Required = false)]
+        public float Tolerance { get; set; } = 0.001f;
     }
 }

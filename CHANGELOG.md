@@ -21,12 +21,16 @@ All notable Unity MCP Lens package changes are documented here.
 - Added Phase 17 scene prefab instantiate/bind tools: `Unity.Scene.PreviewInstantiatePrefabAndBind` and `Unity.Scene.ApplyInstantiatePrefabAndBind`.
 - Added Phase 17 `Unity.UI.VerifyRaycastAndLayout` for read-only UI hit-test and layout verification.
 - Added Phase 17 `Unity.PlayMode.PointerInputSmoke` in the new `runtime` pack.
+- Added `Unity.UI.VerifyScreenLayoutMatrix` for fixed-resolution Game view layout verification with original-size restoration.
+- Added `Unity.Scene.VerifySerializedReferences` for nested prefab/reference verification with inherited/local/null status.
+- Added `Unity.Editor.ExitPlayMode` and `Exit-UnityPlayMode.ps1` for play-mode cleanup without custom RunCommand stop snippets.
+- Extended `Unity.PlayMode.PointerInputSmoke` with scroll input and optional sampled runtime state assertions.
 
 ### Changed
 
 - Kept `foundation` as the narrow default export surface with a `12` tool baseline.
 - Raised the `foundation + scene` baseline from `30` to `32` tools and added a `foundation + ui` baseline of `22` tools.
-- Raised the current `foundation + scene` baseline to `34`, `foundation + ui` baseline to `25`, and added `foundation + runtime=14`.
+- Raised the current `foundation + scene` baseline to `35`, `foundation + ui` baseline to `26`, and `foundation + runtime=15`.
 - Raised the `project` pack smoke baseline from `19` to `21` tools while keeping `foundation` and `scene` unchanged.
 - Replaced the public `Unity.UI.EnsureNamedHierarchy` and `Unity.UI.SetLayoutProperties` registrations with split preview/apply tool pairs.
 - Extended `Unity.InputSystem.Diagnostics` with compatibility signals and concrete `.inputactions` wrapper metadata.
@@ -69,7 +73,7 @@ All notable Unity MCP Lens package changes are documented here.
 - Phase 15 log-compaction smoke passed on Unity `6000.4.3f1` in `D:\2DUnityNewGame`: `NoShapingRecorded=false`, `16,720` bytes saved (`29.66%`) in the focused scope, `Unity.RunCommand` saved `11,433` bytes (`65.69%`), `Unity.ReadConsole` saved `2,219` bytes (`77.00%`), with `0` unmatched requests and `0` happy-path failure rows.
 - Phase 16 batch detail-ref and editor-stability smoke passed in `D:\TintPaint`: metadata audit passed with unchanged baselines, `NoShapingRecorded=false`, `12,419` bytes saved (`20.52%`) in the focused scope, `Unity.ManageEditor.WaitForStableEditor` saved `2,498` bytes (`62.69%`), with `0` unmatched requests and `0` happy-path failure rows.
 - Longer TintPaint dogfood session recorded `NoShapingRecorded=false`, `2,362,465` bytes saved (`78.41%`) across `1999` rows, with top savings from tool snapshot shaping and `Unity.ManageEditor.WaitForStableEditor`; it also exposed a `tsamCoverage=[]` presentation gap despite `1783` coverage rows.
-- Earlier Phase 16 metadata audit passed with `foundation=12`, `foundation+scene=32`, `foundation+ui=22`, `project=21`, and `debug=22`; Phase 17 raises the expected baselines and still needs a clean live audit after the TintPaint bridge settles.
+- Earlier Phase 16 metadata audit passed with `foundation=12`, `foundation+scene=32`, `foundation+ui=22`, `project=21`, and `debug=22`; the current expected baselines are `foundation=12`, `foundation+scene=35`, `foundation+ui=26`, `foundation+runtime=15`, `project=21`, and live `debug=23`.
 - Phase 11 package compatibility, input-actions inspection, diagnostics, preview, and set calls emitted complete TSAM stage coverage with no failure classes.
 - Phase 12 UI hierarchy, scene binding, layout, and verify calls emitted complete TSAM stage coverage with no tool failure rows in the focused helper-driven scope.
 - Phase 13 focused smoke emitted complete TSAM stage coverage with no failure rows for Input System diagnostics, UI hierarchy preview/apply, scene binding preview/apply, UI layout preview/apply, and UI verify.
