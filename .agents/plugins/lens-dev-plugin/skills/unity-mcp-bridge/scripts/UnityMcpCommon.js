@@ -475,8 +475,28 @@ function inferRequiredPacks(toolName) {
   return normalizeAdditionalPacks(Array.from(requiredPacks));
 }
 
-function isReconnectableUnityMcpError(error) {
-  const message = String(error?.message || "").toLowerCase();
+function getUnityMcpErrorText(value) {
+  if (value instanceof Error) {
+    return value.message || "";
+  }
+  if (typeof value === "string") {
+    return value;
+  }
+  if (value && typeof value === "object") {
+    const directMessage = value.message || value.Message || value.error || value.Error || value.code || value.Code;
+    if (directMessage) {
+      return String(directMessage);
+    }
+    try {
+      return JSON.stringify(value);
+    } catch (_error) {
+    }
+  }
+  return value == null ? "" : String(value);
+}
+
+function isUnityMcpTransportFailure(value) {
+  const message = getUnityMcpErrorText(value).toLowerCase();
   return (
     message.includes("transport closed") ||
     message.includes("connection closed") ||
@@ -486,8 +506,13 @@ function isReconnectableUnityMcpError(error) {
     message.includes("timed out waiting for response") ||
     message.includes("exited before tool response") ||
     message.includes("produced no stdout output") ||
+    message.includes("pipe is broken") ||
     message.includes("broken pipe")
   );
+}
+
+function isReconnectableUnityMcpError(error) {
+  return isUnityMcpTransportFailure(error);
 }
 
 function buildUnityMcpTimeoutError(toolName, timeoutSeconds) {
@@ -2303,6 +2328,31 @@ function getUnityLensHealthReadinessSnapshot(lensHealth) {
   };
 }
 
+function getUnityLensHealthProbeSummary(lensHealth, error = null) {
+  const snapshot = getUnityLensHealthReadinessSnapshot(lensHealth);
+  const success = valueOf(lensHealth, "success", "Success") === true;
+  const errorMessage = error
+    ? getUnityMcpErrorText(error)
+    : success
+      ? null
+      : getUnityMcpErrorText(valueOf(lensHealth, "message", "Message", "error", "Error") || lensHealth);
+  const transportFailure = isUnityMcpTransportFailure(error || errorMessage || lensHealth);
+
+  return {
+    Success: success,
+    TransportHealthy: !transportFailure,
+    TransportFailure: transportFailure,
+    Error: errorMessage || null,
+    BridgeStatus: snapshot.BridgeStatus,
+    ToolDiscoveryMode: snapshot.ToolDiscoveryMode,
+    ToolCount: snapshot.ToolCount,
+    EditorStable: snapshot.LensEditorStable,
+    ExpectedRecoveryActive: snapshot.LensExpectedRecoveryActive,
+    IdleReady: snapshot.IdleReady,
+    DirectToolReady: success && snapshot.BridgeStatus === "ready" && !transportFailure,
+  };
+}
+
 function getUnityCompactStateFromLensHealth(lensHealth) {
   const snapshot = getUnityLensHealthReadinessSnapshot(lensHealth);
   return {
@@ -2464,9 +2514,14 @@ async function checkUnityMcp(projectPath, options = {}) {
   let lensHealth = null;
   let lensHealthError = null;
   let lensHealthOverridesBeacon = false;
+  let readyAuthorityProbe = null;
+  let readyAuthorityProbeSummary = null;
+  let readyAuthorityProbeError = null;
   if (unityRunning && beaconIndicatesTransition && !beaconIndicatesBuild && selectedStatus?.Status === "ready" && lensBinary.exists) {
     try {
       lensHealth = await getUnityLensHealth(projectRoot);
+      readyAuthorityProbe = lensHealth;
+      readyAuthorityProbeSummary = getUnityLensHealthProbeSummary(lensHealth);
       const data = valueOf(lensHealth, "data", "Data") || {};
       const bridgeStatus = valueOf(data, "bridgeStatus", "BridgeStatus") || {};
       const editorStability = valueOf(data, "editorStability", "EditorStability") || {};
@@ -2481,6 +2536,8 @@ async function checkUnityMcp(projectPath, options = {}) {
       }
     } catch (error) {
       lensHealthError = error.message;
+      readyAuthorityProbeError = error.message;
+      readyAuthorityProbeSummary = getUnityLensHealthProbeSummary(null, error);
     }
   }
 
@@ -2494,6 +2551,29 @@ async function checkUnityMcp(projectPath, options = {}) {
   const handshakeSignal = detectedSignals.find((signal) => signal.Name === "HandshakeFailed");
   const bridgeCommandHealthFailed = selectedStatus && selectedStatus.CommandHealth === "failed";
   const bridgeTransportRecovering = selectedStatus && ["transport_recovering", "transport_degraded"].includes(selectedStatus.Status);
+  if (
+    unityRunning &&
+    lensBinary.exists &&
+    selectedStatus?.Status === "ready" &&
+    !beaconIndicatesBuild &&
+    !beaconIndicatesTransition &&
+    webGlBuildState.Status !== "InProgress"
+  ) {
+    try {
+      readyAuthorityProbe = await getUnityLensHealth(projectRoot, 15);
+      readyAuthorityProbeSummary = getUnityLensHealthProbeSummary(readyAuthorityProbe);
+      if (!lensHealth) {
+        lensHealth = readyAuthorityProbe;
+      }
+    } catch (error) {
+      readyAuthorityProbeError = error.message;
+      readyAuthorityProbeSummary = getUnityLensHealthProbeSummary(null, error);
+      if (!lensHealthError) {
+        lensHealthError = error.message;
+      }
+    }
+  }
+  const readyAuthorityProbeOk = readyAuthorityProbeSummary?.DirectToolReady === true;
   let degradedAuthorityProbe = null;
   let degradedAuthorityProbeError = null;
   if (
@@ -2579,12 +2659,23 @@ async function checkUnityMcp(projectPath, options = {}) {
     summary = `Bridge status remained in '${selectedStatus.Status}' past its expected recovery window.`;
     recommendedAction = "Reconnect or restart the Unity MCP bridge, then retry the MCP call.";
     exitCode = 11;
+  } else if (selectedStatus?.Status === "ready" && unityRunning && readyAuthorityProbeSummary && !readyAuthorityProbeOk) {
+    classification = "ReconnectRequired";
+    summary = readyAuthorityProbeSummary.Error
+      ? `Bridge status reports ready, but a fresh direct Lens health probe failed: ${readyAuthorityProbeSummary.Error}`
+      : "Bridge status reports ready, but a fresh direct Lens health probe did not confirm a ready transport.";
+    recommendedAction = readyAuthorityProbeSummary.TransportFailure
+      ? "Reconnect or restart the Unity MCP bridge, then retry the MCP call."
+      : "Wait for Lens health to report ready, then retry the MCP call.";
+    exitCode = 11;
   } else if (selectedStatus?.Status === "ready" && unityRunning) {
     classification = "Ready";
     userActionRequired = false;
     summary = lensHealthOverridesBeacon
       ? "Lens health confirmed the bridge is ready and the editor is stable, overriding a lagging reload beacon."
-      : "Bridge status reports ready and no blocking failure signal was found in the latest Unity log tail.";
+      : readyAuthorityProbeOk
+        ? "Bridge status reports ready and a fresh direct Lens health probe succeeded."
+        : "Bridge status reports ready and no blocking failure signal was found in the latest Unity log tail.";
     recommendedAction = "Proceed with a lightweight Unity MCP call.";
     exitCode = 0;
   } else if (!unityRunning) {
@@ -2615,6 +2706,9 @@ async function checkUnityMcp(projectPath, options = {}) {
     BeaconWait: beaconWait,
     LensHealth: lensHealth,
     LensHealthError: lensHealthError,
+    ReadyAuthorityProbe: readyAuthorityProbe,
+    ReadyAuthorityProbeSummary: readyAuthorityProbeSummary,
+    ReadyAuthorityProbeError: readyAuthorityProbeError,
     DegradedAuthorityProbe: degradedAuthorityProbe,
     DegradedAuthorityProbeError: degradedAuthorityProbeError,
     LensHealthOverridesBeacon: lensHealthOverridesBeacon,
@@ -2654,6 +2748,17 @@ async function checkUnityMcp(projectPath, options = {}) {
           ToolDiscoveryMode: selectedStatus.ToolDiscoveryMode,
           ToolCount: selectedStatus.ToolCount,
           CommandHealth: selectedStatus.CommandHealth,
+        }
+      : null,
+    ReadyAuthorityProbe: readyAuthorityProbeSummary
+      ? {
+          Success: readyAuthorityProbeSummary.Success,
+          DirectToolReady: readyAuthorityProbeSummary.DirectToolReady,
+          TransportHealthy: readyAuthorityProbeSummary.TransportHealthy,
+          TransportFailure: readyAuthorityProbeSummary.TransportFailure,
+          BridgeStatus: readyAuthorityProbeSummary.BridgeStatus,
+          ToolDiscoveryMode: readyAuthorityProbeSummary.ToolDiscoveryMode,
+          Error: readyAuthorityProbeSummary.Error || readyAuthorityProbeError,
         }
       : null,
     DegradedAuthorityProbe: degradedAuthorityProbe
@@ -2781,9 +2886,11 @@ module.exports = {
   getToolObject,
   valueOf,
   boolOf,
+  isUnityMcpTransportFailure,
   getUnityEditorState,
   getUnityCompactEditorState,
   getUnityLensHealth,
+  getUnityLensHealthProbeSummary,
   getUnityConsoleEntries,
   convertToUnityRunCommandScript,
   invokeUnityRunCommandObject,

@@ -168,11 +168,11 @@ sealed class BenchmarkOptions
 
 sealed class MetadataAudit(BenchmarkOptions options)
 {
-    const int ExpectedFoundationToolCount = 12;
-    const int ExpectedSceneToolCount = 35;
-    const int ExpectedUiToolCount = 26;
-    const int ExpectedRuntimeToolCount = 15;
-    const int ExpectedProjectToolCount = 21;
+    const int ExpectedFoundationToolCount = 13;
+    const int ExpectedSceneToolCount = 36;
+    const int ExpectedUiToolCount = 27;
+    const int ExpectedRuntimeToolCount = 16;
+    const int ExpectedProjectToolCount = 22;
 
     static readonly string[] k_RequiredFoundationTools =
     [
@@ -187,7 +187,8 @@ sealed class MetadataAudit(BenchmarkOptions options)
         "Unity_GetSha",
         "Unity_ValidateScript",
         "Unity_ManageScript_capabilities",
-        "Unity_Project_GetInfo"
+        "Unity_Project_GetInfo",
+        "Unity_Editor_ScriptUpdatingConsentModal"
     ];
 
     static readonly string[] k_RequiredSceneTools =
@@ -323,6 +324,7 @@ sealed class MetadataAudit(BenchmarkOptions options)
         ValidateToolSet("foundation+runtime", runtimeTools, ExpectedRuntimeToolCount, k_RequiredRuntimeTools, failures);
         ValidateToolSet("foundation+project", projectTools, ExpectedProjectToolCount, k_RequiredProjectTools, failures);
         ValidateToolSet("foundation+debug", debugTools, null, k_RequiredDebugTools, failures);
+        ValidateReadOnlyHint(foundationTools, "Unity_Editor_ScriptUpdatingConsentModal", expected: false, failures);
         ValidateReadOnlyHint(sceneTools, "Unity_GameObject_Inspect", expected: true, failures);
         ValidateReadOnlyHint(sceneTools, "Unity_GameObject_ListComponents", expected: true, failures);
         ValidateReadOnlyHint(sceneTools, "Unity_GameObject_GetComponent", expected: true, failures);

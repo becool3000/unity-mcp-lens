@@ -1,8 +1,9 @@
 # Tool Packs And MCP Surface
 
 Lens keeps the default tool surface small. The `foundation` pack is always
-active and currently exports `12` tools for health, pack control, detail refs,
-console/resource reads, script validation, and compact project information.
+active and currently exports `13` tools for health, pack control, detail refs,
+console/resource reads, script validation, compact project information, and
+host-local recovery from Unity's Script Updating Consent modal.
 
 Common packs:
 
@@ -20,12 +21,12 @@ Use `Unity.ListToolPacks` to inspect available packs and `Unity.SetToolPacks` to
 
 Current live metadata baselines:
 
-- `foundation`: `12` exported tools.
-- `foundation + scene`: `35` exported tools.
-- `foundation + ui`: `26` exported tools.
-- `foundation + runtime`: `15` exported tools.
-- `project`: `21` exported tools.
-- `debug`: `23` exported tools.
+- `foundation`: `13` exported tools.
+- `foundation + scene`: `36` exported tools.
+- `foundation + ui`: `27` exported tools.
+- `foundation + runtime`: `16` exported tools.
+- `project`: `22` exported tools.
+- `debug`: `24` exported tools.
 
 Pack additions must not change the `foundation` baseline unless the metadata
 audit and workflow docs are updated at the same time.

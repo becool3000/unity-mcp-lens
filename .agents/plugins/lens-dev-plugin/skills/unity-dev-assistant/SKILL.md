@@ -52,7 +52,8 @@ or YAML edits.
    - Do not start with broad tool discovery or ad hoc MCP status probes when the beacon is fresh.
    - Only confirm MCP authority after the session check reports `BeaconIdle`, `BeaconStale`, or `BeaconMissing`.
    - Treat MCP as the authority for editor mutations and tool execution once the editor is idle enough to act.
-   - Treat `ProceedWithDirectLensTools` as “direct MCP is healthy, but the helper wrapper path is degraded.”
+   - Treat `ProceedWithDirectLensTools` as direct MCP is healthy, but the helper wrapper path is degraded.
+   - `ProceedWithDirectLensTools` requires `DirectHealthProbe.DirectToolReady=true`; if `DirectHealthProbe.TransportFailure=true` or the error is `Pipe is broken`, follow bridge recovery and stop editor-facing work.
    - Default output is compact and operator-focused. Use `-IncludeDiagnostics` only for explicit maintenance.
 3. If the bridge is unhealthy, follow [$unity-mcp-bridge](../unity-mcp-bridge/SKILL.md) recovery and stop editor-facing work.
 4. Before real Unity work, keep the exported tool surface narrow:
@@ -176,7 +177,8 @@ Prefer a scene-owned debugger component when a project needs fast UI or state it
 - Expand packs explicitly, not heuristically
 - Use `Unity.GetLensUsageReport` in `debug` for telemetry baselines, appended smoke rows, and TSAM stage coverage
 - Session and bridge checks are compact by default; use `-IncludeDiagnostics` only for explicit maintenance
-- `ProceedWithDirectLensTools` means the bridge is healthy even if the wrapper path is not
+- `ProceedWithDirectLensTools` means the bridge status and fresh direct health probe are healthy even if the helper wrapper path is not
+- `RepairBridge` with `DirectHealthProbe.TransportFailure=true` means the bridge status file may be ready, but direct Lens tool transport is not usable
 - Status from the local editor-status beacon first when available; MCP remains the authority for mutations
 - Unity editor compile/import is the authority; do not run `dotnet build` as a Unity compile preflight
 - Editor idle gating before all Unity-facing work except helper-driven `Unity_RunCommand` in healthy play mode

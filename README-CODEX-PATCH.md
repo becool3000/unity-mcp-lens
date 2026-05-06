@@ -45,7 +45,7 @@ node .agents/plugins/lens-dev-plugin/skills/unity-dev-assistant/scripts/Check-Un
 - Prefer `Invoke-UnityMcpBatch` for repeated smoke/workflow checks that span project, ui, scene, and debug packs, so one Lens session can cover the ordered steps.
 - Prefer helper-driven `Invoke-UnityRunCommand` for runtime probes now that it can bypass idle-wait gating in healthy play mode and preserve structured `ReturnResult(...)` payloads.
 - Treat `Unity.RunCommand` and `Unity.ReadConsole` inline logs as compact previews. Use `logSummary` and `Unity.ReadDetailRef` only when full log text or full scanned console entries are needed.
-- Keep `foundation` at `12` exported tools, `foundation + scene` at `35`, `foundation + ui` at `26`, and `foundation + runtime` at `15` unless a deliberate pack-surface change updates the metadata audit.
+- Keep `foundation` at `13` exported tools, `foundation + scene` at `36`, `foundation + ui` at `27`, and `foundation + runtime` at `16` unless a deliberate pack-surface change updates the metadata audit.
 
 ## Current Tool Surface Reality
 

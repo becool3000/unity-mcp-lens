@@ -39,6 +39,8 @@ Use this skill as the operational guide for the local Unity MCP bridge and the o
 5. Attempt one lightweight MCP authority check only when bridge authority still needs to be confirmed.
    - Preferred Lens check: `Unity.ListToolPacks`
    - Fallback if Lens tools are not exposed yet: one narrow read-only Unity MCP tool already available in the session
+   - `Check-UnityMcp` reports `Ready` only after `ReadyAuthorityProbe.DirectToolReady=true` when a ready bridge status can be probed.
+   - If `ReadyAuthorityProbe.TransportFailure=true` or the error is `Pipe is broken`, treat the status file as stale optimism and follow reconnect recovery.
 6. If the MCP call succeeds, continue with Unity editor work.
 7. If the MCP call fails or times out, run:
 
@@ -69,10 +71,11 @@ powershell -ExecutionPolicy Bypass -File $script -ProjectPath "$PWD"
 ## Lens-Specific Rules
 
 - Prefer `unity-mcp-lens` configured as:
-  - Codex plugin command: `node ./skills/unity-mcp-bridge/scripts/Launch-UnityMcpLens.js`
+  - Codex Desktop plugin command: the installed native Lens binary, not a relative `./skills/...` launcher path
   - Windows command: `%USERPROFILE%\.unity\unity-mcp-lens\unity_mcp_lens_win.exe`
   - macOS Intel command: `~/.unity/unity-mcp-lens/unity_mcp_lens_mac_x64`
   - macOS Apple Silicon command: `~/.unity/unity-mcp-lens/unity_mcp_lens_mac_arm64`
+  - Helper-script launcher: `node <plugin-dir>/skills/unity-mcp-bridge/scripts/Launch-UnityMcpLens.js` only when the caller supplies an absolute script path or a known plugin working directory
   - args: none
 - Treat the legacy relay path as:
   - Windows command: `%USERPROFILE%\.unity\relay\relay_win.exe`

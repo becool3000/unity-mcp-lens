@@ -60,6 +60,7 @@ sealed class UnityMcpLensHost
         "Unity_Prefab_SetSerializedProperties",
         "Unity_Scene_SetSerializedProperties",
         "Unity_Scene_ApplyBindSerializedReferences",
+        "Unity_Editor_ScriptUpdatingConsentModal",
         "Unity_Tile_BuildSet",
         "Unity_Tilemap_Setup",
         "Unity_Tilemap_Paint",
@@ -223,7 +224,10 @@ sealed class UnityMcpLensHost
         catch (Exception ex)
         {
             Console.Error.WriteLine($"[unity-mcp-lens] tools/list bridge bootstrap failed: {ex.Message}");
+            EnsureBootstrapToolsAvailable();
         }
+
+        EnsureBootstrapToolsAvailable();
 
         var tools = m_ToolCache.Values
             .OrderBy(tool => tool.Name, StringComparer.Ordinal)
@@ -250,6 +254,99 @@ sealed class UnityMcpLensHost
         }, cancellationToken).ConfigureAwait(false);
     }
 
+    void EnsureBootstrapToolsAvailable()
+    {
+        bool needsBridgeBootstrap = m_ToolCache.Count == 0;
+        if (needsBridgeBootstrap)
+        {
+            foreach (var tool in BuildBootstrapTools())
+                m_ToolCache[tool.Name] = tool;
+        }
+
+        m_ToolCache[ScriptUpdatingConsentModalTool.ToolName] =
+            ScriptUpdatingConsentModalTool.BuildDescriptor(m_JsonOptions);
+    }
+
+    BridgeToolDescriptor[] BuildBootstrapTools()
+    {
+        JsonElement emptyInputSchema = JsonSerializer.SerializeToElement(new
+        {
+            type = "object",
+            properties = new { }
+        }, m_JsonOptions);
+
+        JsonElement setToolPacksInputSchema = JsonSerializer.SerializeToElement(new
+        {
+            type = "object",
+            properties = new
+            {
+                packs = new
+                {
+                    type = "array",
+                    items = new { type = "string" },
+                    description = "The non-foundation tool packs to activate for this connection."
+                }
+            }
+        }, m_JsonOptions);
+
+        JsonElement readDetailRefInputSchema = JsonSerializer.SerializeToElement(new
+        {
+            type = "object",
+            properties = new
+            {
+                refId = new
+                {
+                    type = "string",
+                    description = "The stored detail ref identifier to resolve."
+                }
+            },
+            required = new[] { "refId" }
+        }, m_JsonOptions);
+
+        return
+        [
+            BuildBootstrapTool(
+                "Unity_GetLensHealth",
+                "Get Unity Lens Health",
+                "Returns a compact Lens health summary for the current Unity bridge connection, including active packs, exported tool count, bridge status, editor stability, and the recommended next action.",
+                emptyInputSchema,
+                readOnlyHint: true),
+            BuildBootstrapTool(
+                "Unity_ListToolPacks",
+                "List Unity Tool Packs",
+                "Lists the available Unity MCP tool packs, the active packs for this connection, and recommended next expansions.",
+                emptyInputSchema,
+                readOnlyHint: true),
+            BuildBootstrapTool(
+                "Unity_SetToolPacks",
+                "Set Unity Tool Packs",
+                "Sets the active Unity MCP tool packs for this connection. Foundation stays active automatically and at most two additional packs may be selected.",
+                setToolPacksInputSchema,
+                readOnlyHint: false),
+            BuildBootstrapTool(
+                "Unity_ReadDetailRef",
+                "Read Unity Detail Ref",
+                "Reads a stored detail ref payload previously returned by a compact Unity MCP tool result.",
+                readDetailRefInputSchema,
+                readOnlyHint: true)
+        ];
+    }
+
+    BridgeToolDescriptor BuildBootstrapTool(string name, string title, string description, JsonElement inputSchema, bool readOnlyHint)
+    {
+        return new BridgeToolDescriptor
+        {
+            Name = name,
+            Title = title,
+            Description = description,
+            Groups = ["assistant", "core"],
+            Packs = ["foundation"],
+            ReadOnlyHint = readOnlyHint,
+            InputSchema = inputSchema,
+            Annotations = JsonSerializer.SerializeToElement(new { readOnlyHint }, m_JsonOptions)
+        };
+    }
+
     async Task HandleToolsCallAsync(JsonElement? idElement, JsonElement paramsElement, CancellationToken cancellationToken)
     {
         if (!paramsElement.TryGetProperty("name", out var toolNameElement))
@@ -270,6 +367,18 @@ sealed class UnityMcpLensHost
         string toolName = toolNameElement.GetString() ?? string.Empty;
         string canonicalToolName = CanonicalizeToolName(toolName);
         JsonElement argumentsElement = paramsElement.TryGetProperty("arguments", out var arguments) ? arguments : JsonSerializer.SerializeToElement(new { }, m_JsonOptions);
+
+        if (ScriptUpdatingConsentModalTool.MatchesToolName(canonicalToolName))
+        {
+            var localPayload = ScriptUpdatingConsentModalTool.Execute(argumentsElement, m_JsonOptions);
+            await WriteRpcAsync(new
+            {
+                jsonrpc = "2.0",
+                id = idElement.GetValueOrDefault(),
+                result = BuildToolCallResult(localPayload, IsToolLevelError(localPayload))
+            }, cancellationToken).ConfigureAwait(false);
+            return;
+        }
 
         try
         {
@@ -409,7 +518,10 @@ sealed class UnityMcpLensHost
         m_ActiveToolPacks = manifest.ActiveToolPacks;
 
         if (string.Equals(manifest.Kind, "unchanged", StringComparison.OrdinalIgnoreCase))
+        {
+            EnsureBootstrapToolsAvailable();
             return;
+        }
 
         HashSet<string> toolsNeedingSchemas = new(StringComparer.OrdinalIgnoreCase);
 
@@ -436,6 +548,8 @@ sealed class UnityMcpLensHost
                 m_ToolCache[updatedTool.Name] = ResolveToolSchemas(updatedTool, toolsNeedingSchemas);
             }
         }
+
+        EnsureBootstrapToolsAvailable();
 
         if (!shouldFetchSchemas || toolsNeedingSchemas.Count == 0)
             return;

@@ -33,18 +33,21 @@ async function main() {
   let helperDegraded = false;
   let editorIdleSnapshot = null;
   let playReadySnapshot = null;
-  const directMcpHealthy = bridgeCheck.result.Classification === "Ready";
+  const bridgeReady = bridgeCheck.result.Classification === "Ready";
+  let directMcpHealthy = false;
+  let directHealthProbe = null;
   let lowLevelPackActivationFailed = false;
 
   if (bridgeCheck.result.Classification === "BuildInProgress") {
     wrapperError = "Skipped Lens editor-state probe because Check-UnityMcp classified the session as BuildInProgress.";
   } else if (bridgeCheck.result.Classification === "EditorReloadingExpected") {
     wrapperError = `Skipped Lens editor-state probe because Check-UnityMcp classified the session as EditorReloadingExpected.`;
-  } else if (bridgeCheck.result.EditorStatusBeacon?.Fresh && bridgeCheck.result.EditorStatusBeacon?.Classification === "BeaconTransitioning") {
+  } else if (!bridgeReady && bridgeCheck.result.EditorStatusBeacon?.Fresh && bridgeCheck.result.EditorStatusBeacon?.Classification === "BeaconTransitioning") {
     wrapperError = `Skipped Lens editor-state probe because the editor status beacon reports phase '${bridgeCheck.result.EditorStatusBeacon.Phase}'.`;
-  } else if (bridgeCheck.result.Classification === "Ready") {
+  } else if (bridgeReady) {
     try {
       const lensHealth = await common.getUnityLensHealth(projectPath, common.getArgNumber(args, ["EditorStateTimeoutSeconds"], 15));
+      directHealthProbe = common.getUnityLensHealthProbeSummary(lensHealth);
       const lensData = common.valueOf(lensHealth, "data", "Data") || {};
       const bridgeStatus = common.valueOf(common.valueOf(lensData, "bridgeStatus", "BridgeStatus") || {}, "status", "Status") || null;
       const toolDiscoveryMode = common.valueOf(common.valueOf(lensData, "bridgeStatus", "BridgeStatus") || {}, "toolDiscoveryMode", "ToolDiscoveryMode") || null;
@@ -56,6 +59,7 @@ async function main() {
       const isBuildingPlayer = common.valueOf(editorStability, "isBuildingPlayer", "IsBuildingPlayer") === true;
       const editorStable = common.valueOf(editorStability, "isStable", "IsStable") === true;
       const expectedRecoveryActive = common.valueOf(expectedRecovery, "isActive", "IsActive") === true;
+      directMcpHealthy = directHealthProbe.DirectToolReady === true;
       wrapperHealthy =
         common.valueOf(lensHealth, "success", "Success") === true &&
         bridgeStatus === "ready" &&
@@ -106,10 +110,12 @@ async function main() {
           Snapshot: readiness,
         };
       } else {
-        wrapperError = common.valueOf(lensHealth, "message", "error", "Error") || "Unity Lens health did not report a stable idle editor.";
+        wrapperError = directHealthProbe.Error || "Unity Lens health did not report a stable idle editor.";
       }
     } catch (error) {
       wrapperError = error.message;
+      directHealthProbe = common.getUnityLensHealthProbeSummary(null, error);
+      directMcpHealthy = false;
     }
 
     lowLevelPackActivationFailed = isLowLevelPackActivationFailure(wrapperError);
@@ -140,6 +146,8 @@ async function main() {
     recommendedPath = "ProceedWithLensHelpers";
   } else if (lowLevelPackActivationFailed) {
     recommendedPath = "InvestigateLensHelperPath";
+  } else if (!directMcpHealthy) {
+    recommendedPath = "RepairBridge";
   } else if (directMcpHealthy) {
     recommendedPath = "ProceedWithDirectLensTools";
   } else {
@@ -157,11 +165,13 @@ async function main() {
     },
     Editor: {
       DirectMcpHealthy: directMcpHealthy,
+      BridgeStatusHealthy: bridgeReady,
       ManualWrapperHealthy: wrapperHealthy,
       LensHelperHealthy: wrapperHealthy,
       HelperDegraded: helperDegraded,
       LowLevelPackActivationFailed: lowLevelPackActivationFailed,
       Error: wrapperError,
+      DirectHealthProbe: directHealthProbe,
       IdleReady: editorIdleSnapshot ? editorIdleSnapshot.Ready : null,
       PlayReady: playReadySnapshot ? playReadySnapshot.Ready : null,
       State:
@@ -204,6 +214,8 @@ async function main() {
     EditorStatusBeacon: bridgeCheck.result.EditorStatusBeacon,
     BeaconWait: bridgeCheck.result.BeaconWait,
     DirectMcpHealthy: directMcpHealthy,
+    BridgeStatusHealthy: bridgeReady,
+    DirectHealthProbe: directHealthProbe,
     ManualWrapperHealthy: wrapperHealthy,
     LensHelperHealthy: wrapperHealthy,
     HelperDegraded: helperDegraded,

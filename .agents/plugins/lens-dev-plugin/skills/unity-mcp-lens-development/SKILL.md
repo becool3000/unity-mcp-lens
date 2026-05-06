@@ -59,7 +59,7 @@ The current Phase 11 project surface includes package/import/Input System diagno
 - Prefer `Unity.InputSystem.Diagnostics` for one-call Input System package, assembly, device, `.inputactions`, define, compatibility, and editor-log signals.
 - Prefer `Unity.ProjectSettings.PreviewActiveInputHandler` before changing the active input backend.
 - Use `Unity.ProjectSettings.SetActiveInputHandler` for editor-authored active input backend changes; do not hand-edit `ProjectSettings.asset` as the first path.
-- `foundation` remains `12` tools, `foundation + scene` now targets `35` tools, `foundation + ui` now targets `26`, `foundation + runtime` targets `15`, and the current `project` smoke baseline remains `21` tools.
+- `foundation` remains `13` tools, `foundation + scene` now targets `36` tools, `foundation + ui` now targets `27`, `foundation + runtime` targets `16`, and the current `project` smoke baseline remains `22` tools.
 
 ## Phase 12 UI And Scene Binding Truth
 
@@ -78,7 +78,7 @@ Phase 14 keeps the public tool surface stable and makes high-volume TSAM results
 - Compact default results are expected for `Unity.InputSystem.Diagnostics`, UI hierarchy preview/apply, scene serialized-reference binding preview/apply, and `Unity.UI.VerifyScreenLayout`.
 - Full bulky data should remain available through `detailRef` when the bridge detail store is available.
 - Use `Invoke-UnityMcpBatch` for focused smoke/workflow sequences that need multiple project/ui/scene/debug calls in one Lens session.
-- Pack baselines after the TintPaint Brush HUD dogfood pass: `foundation=12`, `foundation+scene=35`, `foundation+ui=26`, `foundation+runtime=15`, `project=21`, and live `debug=23`.
+- Pack baselines after the TintPaint Brush HUD dogfood pass plus the host-local Script Updating Consent modal recovery tool: `foundation=13`, `foundation+scene=36`, `foundation+ui=27`, `foundation+runtime=16`, `project=22`, and live `debug=24`.
 - Current Phase 14 smoke baseline: `NoShapingRecorded=false`, `7` saving rows, `50,566` raw bytes -> `24,025` shaped bytes, `3` connections, `6` schema requests, and `4` pack transitions.
 
 ## Phase 15 RunCommand And Console Truth
