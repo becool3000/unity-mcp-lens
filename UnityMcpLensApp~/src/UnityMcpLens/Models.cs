@@ -29,6 +29,9 @@ sealed class BridgeStatusFile
     [JsonPropertyName("last_heartbeat")]
     public string? LastHeartbeat { get; set; }
 
+    [JsonPropertyName("editor_pid")]
+    public int EditorPid { get; set; }
+
     [JsonPropertyName("bridge_session_id")]
     public string? BridgeSessionId { get; set; }
 

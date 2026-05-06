@@ -6,6 +6,57 @@ latest dogfood findings.
 
 ---
 
+## Latest BeeSurvivors Dogfood Finding
+
+Date: 2026-05-06
+
+Host project:
+
+- `D:\BeeSurvivors`
+- Branch `BeeSurvivorsRoachWars`
+- Unity `6000.4.5f1`
+- Active scene `RoachWars`
+
+Finding:
+
+- Helper workflows were usable, but direct model-facing tools repeatedly returned `Pipe is broken` while helper health and batch calls reported the bridge/editor were ready.
+- `Invoke-UnityMcpBatch.ps1 -StepsPath` worked; `-StepsJson` was fragile for multi-line JSON on Windows.
+- PowerShell helper boolean parameters such as `-WaitForEditorIdle` and `-IncludeInactive` were fragile in nested calls.
+- `Sync-UnityScriptChanges.ps1` could succeed after recovery while burying forced-cycle pipe/beacon failures in a large payload.
+
+Implemented response in this branch:
+
+- Native Lens host now treats stale bridge pipe failures on safe/read-only direct tools as reconnectable and retries once.
+- Direct host bridge discovery now excludes stale ready status files, quarantines just-failed pipes/status files for 30 seconds, restores active packs after reconnect, and reports host/bridge diagnostics in structured transport errors.
+- Mutating direct tools no longer retry after a request may have reached Unity; they return `UNITY_MCP_TRANSPORT_ERROR` with `retrySafe=false` and `maybeApplied=true`.
+- Lens server install refresh now republishes/copies even when metadata versions match, and repo-dev source newer than bundled prebuilt forces a source publish instead of reinstalling a stale prebuilt.
+- `Check-UnityDevSession` now treats fresh successful Lens health authority probes as ready even when stale Editor.log handshake/auth lines are still visible in the diagnostic tail.
+- PowerShell helper boolean parameters now normalize common nested-call values such as `$true`, `true`, `1`, `yes`, and switch-style values.
+- PowerShell batch wrapper writes `-StepsJson` to a temp steps file before invoking Node, and the Node parser gives Windows-specific guidance on JSON parse failures.
+- Script sync output now includes top-level `warnings`, `warningCount`, `warningSummary`, and `recoveredWithWarnings` when recovery hid transient pipe/beacon failures.
+
+Implemented response in Phase 18:
+
+- Asset-pack tools now cover sprite-sheet import/slicing/binding and sprite-array binding verification:
+  - `Unity.Asset.PreviewImportSpriteSheetAndBind`
+  - `Unity.Asset.ApplyImportSpriteSheetAndBind`
+  - `Unity.Asset.ImportSpriteSheetAndBind` compatibility facade, preview by default and apply only with `mode=apply` or `apply=true`
+  - `Unity.Asset.VerifySpriteArrayBinding`
+- Live BeeSurvivors helper-batch validation passed after Unity recompiled the package:
+  - helper health reported `internalRegistryToolCount=83`, editor stable, bridge ready, and active `foundation` pack.
+  - `Unity.Asset.Search` found `Assets/Resources/Player/RoachBeeCoolSurvive-Sheet.png` and `Assets/Data/RoachWars/RoachPresentationConfig.asset`.
+  - `Unity.Asset.PreviewImportSpriteSheetAndBind` returned compact preview data plus a `detailRef` for the Roach sheet/config binding.
+  - `Unity.Asset.VerifySpriteArrayBinding` passed for Roach `PlayerFrames` using `RoachBeeCoolSurvive-Sheet`.
+  - `Unity.Asset.VerifySpriteArrayBinding` passed for main `PlayerFrames` using `BeeCoolSurvive-Sheet`.
+  - `Unity.GetLensUsageReport` showed complete TSAM coverage for `Unity.Asset.PreviewImportSpriteSheetAndBind` and `Unity.Asset.VerifySpriteArrayBinding`, with zero failed TSAM rows and `NoShapingRecorded=false`.
+
+Still needed:
+
+- Live BeeSurvivors validation after the refreshed native host is installed and Codex respawns its direct MCP process.
+- Continue watching for `Unity_ManageEditor` transport-noise during domain reload/play transitions; safe calls now recover, but maybe-applied mutating calls intentionally require state verification before retry.
+
+---
+
 ## Current Baselines
 
 - `foundation` exports `13` tools, including the host-local Script Updating Consent modal recovery tool.
@@ -13,6 +64,7 @@ latest dogfood findings.
 - `foundation + ui` now targets `27` tools.
 - `foundation + runtime` now targets `16` tools.
 - Latest expected metadata audit baseline keeps `project=22` and observes `debug=24`; the TintPaint Brush HUD dogfood pass raises the expected `scene`, `ui`, and `runtime` counts.
+- Phase 18 adds the `foundation+assets=24` metadata audit baseline for asset/resource workflows and sprite-sheet binding tools.
 - Phase 8 split GameObject tools are in the `scene` pack.
 - Phase 12 scene serialized-reference preview/apply binding tools are in the `scene` pack.
 - Phase 12 UI hierarchy/layout preview/apply tools and `Unity.UI.VerifyScreenLayout` are in the `ui` pack.
@@ -23,7 +75,7 @@ latest dogfood findings.
 - Phase 14 payload telemetry records measurable compact-result savings for large TSAM results, and the batch helper reduces repeated smoke/session churn.
 - Phase 15 payload telemetry records measurable compact-log savings for `Unity.RunCommand` and `Unity.ReadConsole` summary results.
 - Phase 16 moves the active long-running smoke host to `D:\TintPaint`, normalizes batch-helper `Unity.ReadDetailRef` results, and records measurable `Unity.ManageEditor.WaitForStableEditor` savings.
-- Phase 17+ addresses the highest TintPaint dogfood pain with compact usage-report pack transition summaries, clearer TSAM coverage presentation, durable uGUI canvas prefab authoring, scene prefab instantiate/bind, UI raycast/layout and resolution-matrix verification, scene serialized-reference verification, play-mode pointer/scroll smoke verification, and explicit play-mode exit.
+- Phase 17+ addresses the highest TintPaint dogfood pain with compact usage-report pack transition summaries, clearer TSAM coverage presentation, durable uGUI canvas prefab authoring, scene prefab instantiate/bind, UI raycast/layout and resolution-matrix verification, scene serialized-reference verification, play-mode pointer/scroll smoke verification, explicit play-mode exit, and Phase 18 asset sprite-sheet binding workflows.
 
 ---
 

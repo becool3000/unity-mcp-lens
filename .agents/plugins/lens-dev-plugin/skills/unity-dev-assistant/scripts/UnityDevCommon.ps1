@@ -8,6 +8,50 @@ function Get-UnityWrapperDiagnosticsPath {
     Join-Path $env:USERPROFILE ".codex\cache\unity-mcp-wrapper-status.json"
 }
 
+function ConvertTo-UnityBool {
+    param(
+        [object]$Value,
+        [bool]$Default = $false
+    )
+
+    if ($null -eq $Value) {
+        return $Default
+    }
+
+    if ($Value -is [bool]) {
+        return [bool]$Value
+    }
+
+    if ($Value -is [int]) {
+        return $Value -ne 0
+    }
+
+    if ($Value -is [System.Management.Automation.SwitchParameter]) {
+        return $Value.IsPresent
+    }
+
+    $text = ([string]$Value).Trim()
+    if ([string]::IsNullOrWhiteSpace($text)) {
+        return $Default
+    }
+
+    switch ($text.ToLowerInvariant()) {
+        "1" { return $true }
+        "true" { return $true }
+        '$true' { return $true }
+        "yes" { return $true }
+        "y" { return $true }
+        "on" { return $true }
+        "0" { return $false }
+        "false" { return $false }
+        '$false' { return $false }
+        "no" { return $false }
+        "n" { return $false }
+        "off" { return $false }
+        default { return $Default }
+    }
+}
+
 function Get-UnityWrapperDiagnostics {
     $path = Get-UnityWrapperDiagnosticsPath
     if (-not (Test-Path -LiteralPath $path)) {

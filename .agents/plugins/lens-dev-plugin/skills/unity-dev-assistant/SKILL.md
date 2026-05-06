@@ -17,6 +17,8 @@ Helper script selection:
 - macOS/Linux: run the `.js` helper with `node`, for example `node scripts/Check-UnityDevSession.js --ProjectPath "$PWD"`
 - Windows: run the matching `.ps1` helper with PowerShell
 - When both exist, choose the platform-native helper automatically; keep both on the Lens path.
+- On Windows, prefer `-StepsPath` for multi-line batch JSON. The PowerShell batch wrapper accepts `-StepsJson`, but generated temp JSON files avoid shell quote damage.
+- Windows helper boolean parameters accept normal nested-call values such as `-WaitForEditorIdle true`, `-WaitForEditorIdle 1`, `-IncludeInactive $true`, or `-IncludeInactive:$true`.
 
 ## Phase 8 GameObject Tool Preference
 
@@ -53,7 +55,9 @@ or YAML edits.
    - Only confirm MCP authority after the session check reports `BeaconIdle`, `BeaconStale`, or `BeaconMissing`.
    - Treat MCP as the authority for editor mutations and tool execution once the editor is idle enough to act.
    - Treat `ProceedWithDirectLensTools` as direct MCP is healthy, but the helper wrapper path is degraded.
-   - `ProceedWithDirectLensTools` requires `DirectHealthProbe.DirectToolReady=true`; if `DirectHealthProbe.TransportFailure=true` or the error is `Pipe is broken`, follow bridge recovery and stop editor-facing work.
+   - `ProceedWithDirectLensTools` requires `DirectHealthProbe.DirectToolReady=true`.
+   - If a direct model-facing tool returns `Pipe is broken` while helper health says the bridge and editor are ready, use `Invoke-UnityMcpBatch` for read-only/helper-driven verification, record a transport issue, and retry one lightweight direct Lens probe after the native host reconnects.
+   - If `DirectHealthProbe.TransportFailure=true` and helper health is not ready, follow bridge recovery and stop editor-facing work.
    - Default output is compact and operator-focused. Use `-IncludeDiagnostics` only for explicit maintenance.
 3. If the bridge is unhealthy, follow [$unity-mcp-bridge](../unity-mcp-bridge/SKILL.md) recovery and stop editor-facing work.
 4. Before real Unity work, keep the exported tool surface narrow:
@@ -110,6 +114,7 @@ or YAML edits.
    - sprite import or serialized reference binding
    - motion or presentation retuning
    Do not mix both concerns in one broad probe unless you already know the ownership chain.
+   Until `Unity.Asset.ImportSpriteSheetAndBind` and `Unity.Asset.VerifySpriteArrayBinding` exist, use the narrow recipe: import/configure the PNG with `scripts/Import-UnitySpriteAsset.ps1`, bind the project-specific sprite array with one focused `Unity.RunCommand`/helper probe, then verify readback with a dedicated narrow probe or serialized-field verification helper.
 18. When authored scale, tint, sprite assignment, or motion does not stick, use the visual-ownership triage path before changing values again:
    - prefab local scale
    - child renderer local scale
@@ -130,7 +135,7 @@ or YAML edits.
 26. For measured HUD/layout assertions such as inside-screen, right-of, below, below-center, or ordered-stack checks, use `scripts/Verify-UnityUiScreenLayout.ps1` or `Unity.UI.VerifyScreenLayout`; when a layout matrix is required, use `Unity.UI.VerifyScreenLayoutMatrix`.
    - Keep strict `right_of`, `left_of`, `above`, and `below` for non-overlap rect semantics.
    - Use `right_of_center`, `left_of_center`, `above_center`, or `below_center` for “visually higher/lower within the same card” cases such as count labels inside HUD slots.
-27. For repeated smoke/workflow sequences, use `scripts/Invoke-UnityMcpBatch.js` or `scripts/Invoke-UnityMcpBatch.ps1` with an ordered JSON step list. Keep per-step outputs compact and read `detailRef` only when the passing summary is insufficient.
+27. For repeated smoke/workflow sequences, use `scripts/Invoke-UnityMcpBatch.js` or `scripts/Invoke-UnityMcpBatch.ps1` with an ordered JSON step list. Keep per-step outputs compact and read `detailRef` only when the passing summary is insufficient. On Windows, prefer `-StepsPath` for hand-written or multi-line JSON; `-StepsJson` is mainly for generated single-string payloads.
 28. If a `Unity_RunCommand` starts a long WebGL build on Windows, pass `-MonitorBuildMode WebGL` plus any known output/report/artifact paths so the PowerShell helper can fall back to passive log/disk monitoring when MCP stdout becomes unreliable. On macOS/Linux, launch the build with the JS helper, then use the session check build monitor and `Editor.log` while the build is active.
 29. For autoplay or scripted validation, use `scripts/Run-UnityAutoplayPlaytest.ps1`.
 30. For screenshots, use `scripts/Capture-UnityPlaytestArtifacts.js` on macOS/Linux or `scripts/Capture-UnityPlaytestArtifacts.ps1` on Windows. It waits for idle, supports pre-capture state locks, prefers relative project paths, and falls back to desktop capture when Unity-aware capture is flaky.
@@ -168,8 +173,9 @@ Prefer a scene-owned debugger component when a project needs fast UI or state it
 - Mandatory first step for Unity work in a fresh chat: `scripts/Check-UnityDevSession.js` on macOS/Linux or `scripts/Check-UnityDevSession.ps1` on Windows
 - Preferred transport: `unity-mcp-lens`
 - Default exported tool surface: `foundation`
-- Current `foundation` + `scene` surface: `32` tools
-- Current `foundation` + `ui` surface: `22` tools
+- Current `foundation` + `scene` surface: `36` tools
+- Current `foundation` + `ui` surface: `27` tools
+- Current `foundation` + `runtime` surface: `16` tools
 - Prefer split GameObject TSAM tools before legacy `Unity.ManageGameObject`
 - Prefer Phase 11 `project` tools for package/import/Input System diagnostics and active input handler changes
 - Prefer Phase 12 `ui` and scene-binding tools for persistent HUD authoring, scene reference binding, and screen-layout verification before custom editor-side `Unity_RunCommand`

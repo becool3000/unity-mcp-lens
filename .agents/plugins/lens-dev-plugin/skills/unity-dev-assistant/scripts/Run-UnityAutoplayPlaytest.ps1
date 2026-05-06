@@ -10,13 +10,16 @@ param(
     [string]$CapturePathMode = "Hybrid",
     [string]$OutputDir,
     [switch]$StopOnFinish,
-    [bool]$PausePlaymodeForCapture = $true,
+    [object]$PausePlaymodeForCapture = $true,
     [int]$StepFramesBeforeCapture = 0,
-    [bool]$CapturePauseAndStepOnly = $false,
+    [object]$CapturePauseAndStepOnly = $false,
     [int]$UnityCaptureTimeoutSeconds = 45
 )
 
 . "$PSScriptRoot\UnityDevCommon.ps1"
+
+$PausePlaymodeForCapture = ConvertTo-UnityBool -Value $PausePlaymodeForCapture -Default $true
+$CapturePauseAndStepOnly = ConvertTo-UnityBool -Value $CapturePauseAndStepOnly -Default $false
 
 $resolvedProjectPath = Resolve-UnityProjectPath -ProjectPath $ProjectPath
 if ([string]::IsNullOrWhiteSpace($OutputDir)) {

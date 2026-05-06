@@ -39,7 +39,7 @@ namespace Becool.UnityMcpLens.Editor.Settings.UI
         [MenuItem(k_MenuRoot + "Install/Refresh Lens Server", false, 1020)]
         static void InstallOrRefreshLensServer()
         {
-            ServerInstaller.RefreshInstalledServers();
+            ServerInstaller.RefreshInstalledServers(forceRefresh: true);
         }
 
         [MenuItem(k_MenuRoot + "Open Server Folder", false, 1030)]

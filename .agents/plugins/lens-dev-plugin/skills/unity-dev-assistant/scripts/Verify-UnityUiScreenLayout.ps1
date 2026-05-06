@@ -2,7 +2,7 @@ param(
     [string]$ProjectPath = (Get-Location).Path,
     [Parameter(Mandatory = $true)][string]$TargetsJson,
     [Parameter(Mandatory = $true)][string]$AssertionsJson,
-    [bool]$WaitForEditorIdle = $true,
+    [object]$WaitForEditorIdle = $true,
     [int]$IdleTimeoutSeconds = 60,
     [int]$IdleStablePollCount = 3,
     [double]$IdlePollIntervalSeconds = 0.5,
@@ -11,6 +11,8 @@ param(
 )
 
 . "$PSScriptRoot\UnityDevCommon.ps1"
+
+$WaitForEditorIdle = ConvertTo-UnityBool -Value $WaitForEditorIdle -Default $true
 
 $targets = @($TargetsJson | ConvertFrom-Json)
 $assertions = @($AssertionsJson | ConvertFrom-Json)

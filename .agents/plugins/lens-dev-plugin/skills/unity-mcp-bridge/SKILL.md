@@ -41,6 +41,7 @@ Use this skill as the operational guide for the local Unity MCP bridge and the o
    - Fallback if Lens tools are not exposed yet: one narrow read-only Unity MCP tool already available in the session
    - `Check-UnityMcp` reports `Ready` only after `ReadyAuthorityProbe.DirectToolReady=true` when a ready bridge status can be probed.
    - If `ReadyAuthorityProbe.TransportFailure=true` or the error is `Pipe is broken`, treat the status file as stale optimism and follow reconnect recovery.
+   - If helper health remains ready while direct model-facing tools report `Pipe is broken`, prefer helper batch for read-only verification, record the direct transport issue, and retry one lightweight direct Lens probe after reconnect.
 6. If the MCP call succeeds, continue with Unity editor work.
 7. If the MCP call fails or times out, run:
 
@@ -90,6 +91,7 @@ powershell -ExecutionPolicy Bypass -File $script -ProjectPath "$PWD"
 - When a tool result includes `detailRef`, use `Unity.ReadDetailRef` only when the preview/summary is insufficient. Do not immediately expand every large result.
 - `Unity.RunCommand`, `Unity.ReadConsole`, and `Unity.ManageEditor WaitForStableEditor` are expected to return compact, stage-aware results. Treat detail refs as the source for full logs, full scanned console entries, or full editor-state attempts when needed.
 - For known multi-step smoke or workflow sequences, prefer `Invoke-UnityMcpBatch` so one Lens session can activate the needed exact pack sets and avoid repeated schema/session churn.
+- On Windows, prefer `Invoke-UnityMcpBatch.ps1 -StepsPath <file>` for multi-line JSON. `-StepsJson` is accepted but shell quoting can strip JSON property quotes before Lens sees the payload.
 
 ## Classification Rules
 

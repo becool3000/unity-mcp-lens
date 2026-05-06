@@ -26,6 +26,8 @@ All notable Unity MCP Lens package changes are documented here.
 - Added `Unity.Editor.ExitPlayMode` and `Exit-UnityPlayMode.ps1` for play-mode cleanup without custom RunCommand stop snippets.
 - Extended `Unity.PlayMode.PointerInputSmoke` with scroll input and optional sampled runtime state assertions.
 - Added host-local `Unity.Editor.ScriptUpdatingConsentModal` recovery for Unity's Script Updating Consent popup during expected Codex-triggered script refreshes.
+- Added Phase 18 asset sprite-sheet tools: `Unity.Asset.PreviewImportSpriteSheetAndBind`, `Unity.Asset.ApplyImportSpriteSheetAndBind`, the compatibility facade `Unity.Asset.ImportSpriteSheetAndBind`, and `Unity.Asset.VerifySpriteArrayBinding`.
+- Added a fake-bridge direct-host transport recovery regression test for stale status files, setup-path reconnects, read-only retry, and mutating no-retry behavior.
 
 ### Changed
 
@@ -56,6 +58,10 @@ All notable Unity MCP Lens package changes are documented here.
 - Improved `Invoke-UnityMcpBatch` detail-ref handling so unwrapped `Unity.ReadDetailRef` structured payloads are treated as successful steps and large details are summarized instead of inlined.
 - Documented the first longer `D:\TintPaint` dogfood report, including measured `78.41%` payload savings and the next UI/prefab/input/usage-report gaps.
 - Improved `Unity.GetLensUsageReport` compact output so large `packSetTransitions` lists are summarized inline and TSAM coverage summary data explains coverage-vs-TSAM row counts.
+- Extended metadata-audit coverage to the `assets` pack with a `foundation+assets=24` baseline and read-only/schema assertions for the Phase 18 sprite tools.
+- Hardened the direct model-facing Lens host so stale/broken bridge pipes are quarantined, rediscovered, and retried once for safe read-only/control-plane calls, while mutating calls return structured maybe-applied transport errors.
+- Improved Lens server install freshness so explicit refreshes bypass the metadata-only up-to-date check and source-newer-than-prebuilt dev builds republish the native host.
+- Improved helper readiness classification so fresh successful Lens health authority probes override stale Editor.log handshake/auth signals.
 
 ### Known Follow-Up
 
@@ -74,6 +80,8 @@ All notable Unity MCP Lens package changes are documented here.
 - Phase 15 log-compaction smoke passed on Unity `6000.4.3f1` in `D:\2DUnityNewGame`: `NoShapingRecorded=false`, `16,720` bytes saved (`29.66%`) in the focused scope, `Unity.RunCommand` saved `11,433` bytes (`65.69%`), `Unity.ReadConsole` saved `2,219` bytes (`77.00%`), with `0` unmatched requests and `0` happy-path failure rows.
 - Phase 16 batch detail-ref and editor-stability smoke passed in `D:\TintPaint`: metadata audit passed with unchanged baselines, `NoShapingRecorded=false`, `12,419` bytes saved (`20.52%`) in the focused scope, `Unity.ManageEditor.WaitForStableEditor` saved `2,498` bytes (`62.69%`), with `0` unmatched requests and `0` happy-path failure rows.
 - Longer TintPaint dogfood session recorded `NoShapingRecorded=false`, `2,362,465` bytes saved (`78.41%`) across `1999` rows, with top savings from tool snapshot shaping and `Unity.ManageEditor.WaitForStableEditor`; it also exposed a `tsamCoverage=[]` presentation gap despite `1783` coverage rows.
+- Phase 18 BeeSurvivors asset smoke passed after Unity recompiled the package: assets-pack helper calls found the Roach sheet/config, previewed `RoachBeeCoolSurvive-Sheet` import/bind with a detail ref, verified Roach `PlayerFrames` against `RoachBeeCoolSurvive-Sheet`, verified main `PlayerFrames` against `BeeCoolSurvive-Sheet`, and usage telemetry showed complete TSAM coverage for the new asset preview/verify tools.
+- Direct-host transport recovery regression passed: normal `tools/list`, stale-status selection, broken pipes during `register_client`, `get_manifest`, `get_tool_schema`, read-only tool retry, and mutating no-retry/maybe-applied errors all validated against the fake bridge harness.
 - Earlier Phase 16 metadata audit passed with `foundation=12`, `foundation+scene=32`, `foundation+ui=22`, `project=21`, and `debug=22`; the current expected baselines are `foundation=13`, `foundation+scene=36`, `foundation+ui=27`, `foundation+runtime=16`, `project=22`, and live `debug=24`.
 - Phase 11 package compatibility, input-actions inspection, diagnostics, preview, and set calls emitted complete TSAM stage coverage with no failure classes.
 - Phase 12 UI hierarchy, scene binding, layout, and verify calls emitted complete TSAM stage coverage with no tool failure rows in the focused helper-driven scope.

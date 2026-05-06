@@ -6,10 +6,23 @@ using System.Text.Json;
 
 namespace UnityMcpLens;
 
+sealed class BridgeTransportException : IOException
+{
+    public string CommandType { get; }
+    public bool RequestSent { get; }
+
+    public BridgeTransportException(string commandType, bool requestSent, string message, Exception? innerException = null)
+        : base(message, innerException)
+    {
+        CommandType = commandType;
+        RequestSent = requestSent;
+    }
+}
+
 sealed class UnityBridgeClient : IAsyncDisposable
 {
     readonly JsonSerializerOptions m_JsonOptions;
-    readonly ConcurrentDictionary<string, TaskCompletionSource<JsonDocument>> m_PendingResponses = new(StringComparer.Ordinal);
+    readonly ConcurrentDictionary<string, PendingBridgeRequest> m_PendingResponses = new(StringComparer.Ordinal);
     readonly SemaphoreSlim m_WriteLock = new(1, 1);
 
     Stream? m_Stream;
@@ -18,10 +31,18 @@ sealed class UnityBridgeClient : IAsyncDisposable
     Socket? m_Socket;
     Task? m_ReadLoopTask;
     CancellationTokenSource? m_ReadLoopCts;
+    volatile bool m_IsConnected;
 
     public event Func<BridgeToolsChangedNotification, Task>? ToolsChanged;
 
-    public bool IsConnected => m_Stream != null && m_ReadLoopCts is { IsCancellationRequested: false };
+    public bool IsConnected => m_IsConnected && m_ReadLoopCts is { IsCancellationRequested: false };
+
+    sealed class PendingBridgeRequest
+    {
+        public required string CommandType { get; init; }
+        public required TaskCompletionSource<JsonDocument> Completion { get; init; }
+        public bool RequestSent { get; set; }
+    }
 
     public UnityBridgeClient(JsonSerializerOptions jsonOptions)
     {
@@ -37,14 +58,28 @@ sealed class UnityBridgeClient : IAsyncDisposable
             string pipeName = discoveryResult.StatusFile.ConnectionPath!
                 .Replace(@"\\.\pipe\", string.Empty, StringComparison.OrdinalIgnoreCase);
             var pipe = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
-            await pipe.ConnectAsync(5000, cancellationToken).ConfigureAwait(false);
+            try
+            {
+                await pipe.ConnectAsync(5000, cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                throw new BridgeTransportException("connect", requestSent: false, $"Unity bridge pipe connection failed: {ex.Message}", ex);
+            }
             m_Stream = pipe;
         }
         else
         {
             m_Socket = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
             var endPoint = new UnixDomainSocketEndPoint(discoveryResult.StatusFile.ConnectionPath!);
-            await m_Socket.ConnectAsync(endPoint, cancellationToken).ConfigureAwait(false);
+            try
+            {
+                await m_Socket.ConnectAsync(endPoint, cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                throw new BridgeTransportException("connect", requestSent: false, $"Unity bridge socket connection failed: {ex.Message}", ex);
+            }
             m_Stream = new NetworkStream(m_Socket, ownsSocket: false);
         }
 
@@ -56,7 +91,7 @@ sealed class UnityBridgeClient : IAsyncDisposable
 
         string? handshake = await m_Reader.ReadLineAsync(cancellationToken).ConfigureAwait(false);
         if (string.IsNullOrWhiteSpace(handshake))
-            throw new InvalidOperationException("Unity bridge did not send a handshake.");
+            throw new BridgeTransportException("connect", requestSent: false, "Unity bridge did not send a handshake.");
 
         using var handshakeDoc = JsonDocument.Parse(handshake);
         if (!handshakeDoc.RootElement.TryGetProperty("type", out var handshakeType) ||
@@ -66,6 +101,7 @@ sealed class UnityBridgeClient : IAsyncDisposable
         }
 
         m_ReadLoopCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        m_IsConnected = true;
         m_ReadLoopTask = Task.Run(() => ReadLoopAsync(m_ReadLoopCts.Token), m_ReadLoopCts.Token);
     }
 
@@ -148,6 +184,8 @@ sealed class UnityBridgeClient : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        m_IsConnected = false;
+
         if (m_ReadLoopCts != null)
         {
             try { m_ReadLoopCts.Cancel(); } catch { }
@@ -158,8 +196,8 @@ sealed class UnityBridgeClient : IAsyncDisposable
             try { await m_ReadLoopTask.ConfigureAwait(false); } catch { }
         }
 
-        foreach (var tcs in m_PendingResponses.Values)
-            tcs.TrySetCanceled();
+        foreach (var pending in m_PendingResponses.Values)
+            pending.Completion.TrySetCanceled();
         m_PendingResponses.Clear();
 
         m_Reader?.Dispose();
@@ -191,9 +229,9 @@ sealed class UnityBridgeClient : IAsyncDisposable
 
                 if (root.TryGetProperty("requestId", out var requestIdElement) &&
                     requestIdElement.ValueKind == JsonValueKind.String &&
-                    m_PendingResponses.TryRemove(requestIdElement.GetString()!, out var tcs))
+                    m_PendingResponses.TryRemove(requestIdElement.GetString()!, out var pending))
                 {
-                    tcs.TrySetResult(document);
+                    pending.Completion.TrySetResult(document);
                     document = null;
                     continue;
                 }
@@ -230,19 +268,30 @@ sealed class UnityBridgeClient : IAsyncDisposable
             }
         }
 
+        m_IsConnected = false;
+
         foreach (var pending in m_PendingResponses.Values)
-            pending.TrySetException(new IOException("Unity bridge connection closed."));
+        {
+            pending.Completion.TrySetException(new BridgeTransportException(
+                pending.CommandType,
+                pending.RequestSent,
+                $"Unity bridge connection closed before '{pending.CommandType}' returned a response."));
+        }
         m_PendingResponses.Clear();
     }
 
     async Task<BridgeEnvelope<T>> SendCommandAsync<T>(string type, object? parameters, TimeSpan? timeout, CancellationToken cancellationToken)
     {
         if (m_Writer == null)
-            throw new InvalidOperationException("Unity bridge is not connected.");
+            throw new BridgeTransportException(type, requestSent: false, "Unity bridge is not connected.");
 
         string requestId = Guid.NewGuid().ToString("N");
-        var tcs = new TaskCompletionSource<JsonDocument>(TaskCreationOptions.RunContinuationsAsynchronously);
-        if (!m_PendingResponses.TryAdd(requestId, tcs))
+        var pendingRequest = new PendingBridgeRequest
+        {
+            CommandType = type,
+            Completion = new TaskCompletionSource<JsonDocument>(TaskCreationOptions.RunContinuationsAsynchronously)
+        };
+        if (!m_PendingResponses.TryAdd(requestId, pendingRequest))
             throw new InvalidOperationException("Failed to register pending bridge request.");
 
         string payload = JsonSerializer.Serialize(new
@@ -255,7 +304,18 @@ sealed class UnityBridgeClient : IAsyncDisposable
         await m_WriteLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            await m_Writer.WriteLineAsync(payload).ConfigureAwait(false);
+            try
+            {
+                await m_Writer.WriteLineAsync(payload).ConfigureAwait(false);
+                pendingRequest.RequestSent = true;
+            }
+            catch (Exception ex)
+            {
+                m_IsConnected = false;
+                if (m_PendingResponses.TryRemove(requestId, out var pending))
+                    pending.Completion.TrySetException(new BridgeTransportException(type, requestSent: false, $"Unity bridge write failed for '{type}'.", ex));
+                throw new BridgeTransportException(type, requestSent: false, $"Unity bridge write failed for '{type}': {ex.Message}", ex);
+            }
         }
         finally
         {
@@ -269,7 +329,7 @@ sealed class UnityBridgeClient : IAsyncDisposable
             timeoutCts.CancelAfter(delay);
             try
             {
-                using var responseDocument = await tcs.Task.WaitAsync(timeoutCts.Token).ConfigureAwait(false);
+                using var responseDocument = await pendingRequest.Completion.Task.WaitAsync(timeoutCts.Token).ConfigureAwait(false);
                 var envelope = responseDocument.RootElement.Deserialize<BridgeEnvelope<T>>(m_JsonOptions);
                 if (envelope == null)
                     throw new InvalidOperationException($"Unity bridge returned an invalid response for '{type}'.");
@@ -277,12 +337,13 @@ sealed class UnityBridgeClient : IAsyncDisposable
             }
             catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
             {
-                throw new TimeoutException($"Unity bridge request '{type}' timed out after {delay.TotalSeconds} seconds.");
+                m_PendingResponses.TryRemove(requestId, out _);
+                throw new BridgeTransportException(type, pendingRequest.RequestSent, $"Unity bridge request '{type}' timed out after {delay.TotalSeconds} seconds.");
             }
         }
         else
         {
-            using var responseDocument = await tcs.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+            using var responseDocument = await pendingRequest.Completion.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
             var envelope = responseDocument.RootElement.Deserialize<BridgeEnvelope<T>>(m_JsonOptions);
             if (envelope == null)
                 throw new InvalidOperationException($"Unity bridge returned an invalid response for '{type}'.");

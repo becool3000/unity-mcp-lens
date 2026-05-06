@@ -15,19 +15,31 @@ $nodePath = (Get-Command node -ErrorAction Stop).Source
 $bridgeScriptsDir = Join-Path (Get-UnityBridgeSkillPath) "scripts"
 $scriptPath = Join-Path $bridgeScriptsDir "Invoke-UnityMcpBatch.js"
 $resolvedProjectPath = Resolve-UnityProjectPath -ProjectPath $ProjectPath
+$temporaryStepsPath = $null
 
-$scriptArgs = @(
-    $scriptPath,
-    "--ProjectPath", $resolvedProjectPath,
-    "--TimeoutSeconds", [string]$TimeoutSeconds
-)
+try {
+    $scriptArgs = @(
+        $scriptPath,
+        "--ProjectPath", $resolvedProjectPath,
+        "--TimeoutSeconds", [string]$TimeoutSeconds
+    )
 
-if (-not [string]::IsNullOrWhiteSpace($StepsPath)) {
-    $scriptArgs += @("--StepsPath", (Resolve-Path -LiteralPath $StepsPath).Path)
+    if (-not [string]::IsNullOrWhiteSpace($StepsPath)) {
+        $scriptArgs += @("--StepsPath", (Resolve-Path -LiteralPath $StepsPath).Path)
+    }
+    else {
+        $tempDirectory = Join-Path ([System.IO.Path]::GetTempPath()) "codex-unity"
+        New-Item -ItemType Directory -Force -Path $tempDirectory | Out-Null
+        $temporaryStepsPath = Join-Path $tempDirectory ("unity-mcp-batch-steps-" + [guid]::NewGuid().ToString("N") + ".json")
+        Set-Content -LiteralPath $temporaryStepsPath -Value $StepsJson -Encoding UTF8
+        $scriptArgs += @("--StepsPath", $temporaryStepsPath)
+    }
+
+    & $nodePath @scriptArgs
+    exit $LASTEXITCODE
 }
-else {
-    $scriptArgs += @("--StepsJson", $StepsJson)
+finally {
+    if ($temporaryStepsPath -and (Test-Path -LiteralPath $temporaryStepsPath)) {
+        Remove-Item -LiteralPath $temporaryStepsPath -Force -ErrorAction SilentlyContinue
+    }
 }
-
-& $nodePath @scriptArgs
-exit $LASTEXITCODE

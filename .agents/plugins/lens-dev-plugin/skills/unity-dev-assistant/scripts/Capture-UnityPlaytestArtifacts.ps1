@@ -8,13 +8,13 @@ param(
     [string]$StateCodePath,
     [string]$PreCaptureCode,
     [string]$PreCaptureCodePath,
-    [bool]$WaitForEditorIdle = $true,
+    [object]$WaitForEditorIdle = $true,
     [int]$IdleTimeoutSeconds = 60,
     [int]$IdleStablePollCount = 3,
     [double]$IdlePollIntervalSeconds = 0.5,
     [double]$PostIdleDelaySeconds = 1.0,
     [double]$WarmupSeconds = 1.0,
-    [bool]$ContinueOnProbeFailure = $true,
+    [object]$ContinueOnProbeFailure = $true,
     [object]$PausePlaymodeForCapture = $true,
     [int]$StepFramesBeforeCapture = 0,
     [object]$CapturePauseAndStepOnly = $false,
@@ -27,6 +27,9 @@ param(
 . "$PSScriptRoot\UnityDevCommon.ps1"
 
 $resolvedProjectPath = Resolve-UnityProjectPath -ProjectPath $ProjectPath
+
+$WaitForEditorIdle = ConvertTo-UnityBool -Value $WaitForEditorIdle -Default $true
+$ContinueOnProbeFailure = ConvertTo-UnityBool -Value $ContinueOnProbeFailure -Default $true
 
 function ConvertTo-BoolFlag {
     param(

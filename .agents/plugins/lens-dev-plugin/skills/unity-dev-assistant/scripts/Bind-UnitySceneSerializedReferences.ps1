@@ -4,8 +4,8 @@ param(
     [string]$SearchMethod = "by_name",
     [Parameter()][string]$BindingsJson,
     [Parameter()][string]$BindingsPath,
-    [bool]$PreviewOnly = $false,
-    [bool]$WaitForEditorIdle = $true,
+    [object]$PreviewOnly = $false,
+    [object]$WaitForEditorIdle = $true,
     [int]$IdleTimeoutSeconds = 60,
     [int]$IdleStablePollCount = 3,
     [double]$IdlePollIntervalSeconds = 0.5,
@@ -14,6 +14,9 @@ param(
 )
 
 . "$PSScriptRoot\UnityDevCommon.ps1"
+
+$PreviewOnly = ConvertTo-UnityBool -Value $PreviewOnly -Default $false
+$WaitForEditorIdle = ConvertTo-UnityBool -Value $WaitForEditorIdle -Default $true
 
 if ([string]::IsNullOrWhiteSpace($BindingsJson) -and [string]::IsNullOrWhiteSpace($BindingsPath)) {
     throw "Provide -BindingsJson or -BindingsPath."

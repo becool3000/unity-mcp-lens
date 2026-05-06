@@ -2,12 +2,12 @@ param(
     [string]$ProjectPath = (Get-Location).Path,
     [Parameter(Mandatory = $true)][string]$AssetPath,
     [string]$SpriteMode = "",
-    [Nullable[bool]]$AlphaIsTransparency = $null,
+    [object]$AlphaIsTransparency = $null,
     [string]$FilterMode = "",
     [string]$Compression = "",
     [Nullable[float]]$PixelsPerUnit = $null,
-    [bool]$PreserveExistingSlicing = $true,
-    [bool]$WaitForEditorIdle = $true,
+    [object]$PreserveExistingSlicing = $true,
+    [object]$WaitForEditorIdle = $true,
     [int]$IdleTimeoutSeconds = 60,
     [int]$IdleStablePollCount = 3,
     [double]$IdlePollIntervalSeconds = 0.5,
@@ -16,6 +16,9 @@ param(
 )
 
 . "$PSScriptRoot\UnityDevCommon.ps1"
+
+$PreserveExistingSlicing = ConvertTo-UnityBool -Value $PreserveExistingSlicing -Default $true
+$WaitForEditorIdle = ConvertTo-UnityBool -Value $WaitForEditorIdle -Default $true
 
 $resolvedProjectPath = Resolve-UnityProjectPath -ProjectPath $ProjectPath
 $idleWait = $null
@@ -41,8 +44,8 @@ if (-not [string]::IsNullOrWhiteSpace($SpriteMode)) {
     $payload.SpriteMode = $SpriteMode
 }
 
-if ($null -ne $AlphaIsTransparency) {
-    $payload.AlphaIsTransparency = [bool]$AlphaIsTransparency
+if ($null -ne $AlphaIsTransparency -and -not [string]::IsNullOrWhiteSpace([string]$AlphaIsTransparency)) {
+    $payload.AlphaIsTransparency = ConvertTo-UnityBool -Value $AlphaIsTransparency -Default $false
 }
 
 if (-not [string]::IsNullOrWhiteSpace($FilterMode)) {

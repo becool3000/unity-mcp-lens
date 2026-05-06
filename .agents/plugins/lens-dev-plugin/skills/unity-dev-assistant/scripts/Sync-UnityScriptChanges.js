@@ -2,6 +2,79 @@
 
 const common = require("../../unity-mcp-bridge/scripts/UnityMcpCommon");
 
+function countCycleTransientFailures(cycle) {
+  if (!cycle || typeof cycle !== "object") {
+    return 0;
+  }
+
+  let count = Number(cycle.transientExpectedReloadFailures || 0);
+  const idleWait = cycle.idleWait || cycle.IdleWait;
+  if (idleWait && idleWait.expectedReloadFailureCount != null) {
+    count += Number(idleWait.expectedReloadFailureCount || 0);
+  }
+  return Number.isFinite(count) ? count : 0;
+}
+
+function collectSyncWarnings(result) {
+  const warnings = [];
+
+  if (result.forceRefreshError) {
+    warnings.push({
+      kind: "force_refresh_transport",
+      message: `Forced refresh request hit a transport failure: ${result.forceRefreshError}`,
+    });
+  }
+
+  const naturalTransientFailures = countCycleTransientFailures(result.naturalCycle);
+  if (naturalTransientFailures > 0) {
+    warnings.push({
+      kind: "natural_reload_transient_failures",
+      message: `Natural reload observation saw ${naturalTransientFailures} transient MCP/beacon failure(s).`,
+      count: naturalTransientFailures,
+    });
+  }
+
+  const forcedTransientFailures = countCycleTransientFailures(result.forcedCycle);
+  if (forcedTransientFailures > 0) {
+    warnings.push({
+      kind: "forced_reload_transient_failures",
+      message: `Forced reload observation saw ${forcedTransientFailures} transient MCP/beacon failure(s).`,
+      count: forcedTransientFailures,
+    });
+  }
+
+  if (result.fallbackClassification === "LensHelpersRecovered" && result.directHealthFallback) {
+    warnings.push({
+      kind: "health_fallback_recovered",
+      message: "Helper sync recovered through direct Lens health and compact editor-state fallback probes.",
+    });
+  }
+
+  if (result.expectedReloadState?.IsActive || result.expectedReloadState?.isActive) {
+    warnings.push({
+      kind: "reload_marker_still_active",
+      message: "Expected reload marker is still active after sync output was assembled.",
+    });
+  }
+
+  return warnings;
+}
+
+function applySyncWarnings(result) {
+  const warnings = collectSyncWarnings(result);
+  result.warnings = warnings;
+  result.warningCount = warnings.length;
+  result.recoveredWithWarnings = result.success === true && warnings.length > 0;
+  result.warningSummary = warnings.length > 0
+    ? warnings.map((warning) => warning.message).join(" ")
+    : null;
+
+  if (result.recoveredWithWarnings) {
+    const baseMessage = result.message || "Unity script sync completed.";
+    result.message = `${baseMessage} Recovered with warnings: ${result.warningSummary}`;
+  }
+}
+
 async function main() {
   const args = common.parseCliArgs(process.argv.slice(2));
   const projectPath = common.resolveProjectPath(common.getArgString(args, ["ProjectPath"], process.cwd()));
@@ -34,6 +107,10 @@ async function main() {
     expectedReloadState: null,
     fallbackClassification: null,
     directHealthFallback: null,
+    recoveredWithWarnings: false,
+    warningCount: 0,
+    warnings: [],
+    warningSummary: null,
   };
 
   const startedAt = Date.now();
@@ -153,6 +230,7 @@ async function main() {
     }
   }
 
+  applySyncWarnings(result);
   console.log(JSON.stringify(result, null, 2));
   await common.shutdownUnityMcpSessions();
   process.exit(result.success ? 0 : 1);

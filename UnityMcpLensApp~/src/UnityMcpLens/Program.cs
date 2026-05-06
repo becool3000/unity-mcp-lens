@@ -1,10 +1,15 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Diagnostics;
+using System.Reflection;
 
 namespace UnityMcpLens;
 
 sealed class UnityMcpLensHost
 {
+    static readonly TimeSpan s_BridgeQuarantineTtl = TimeSpan.FromSeconds(30);
+    static readonly string s_HostVersion = ResolveHostVersion();
+
     static readonly HashSet<string> s_ReadOnlyTools = new(StringComparer.OrdinalIgnoreCase)
     {
         "Unity_GameObject_Inspect",
@@ -27,6 +32,8 @@ sealed class UnityMcpLensHost
         "Unity_Scene_PreviewBindSerializedReferences",
         "Unity_Scene_PreviewInstantiatePrefabAndBind",
         "Unity_Scene_VerifySerializedReferences",
+        "Unity_Asset_PreviewImportSpriteSheetAndBind",
+        "Unity_Asset_VerifySpriteArrayBinding",
         "Unity_UI_Raycast",
         "Unity_Asset_Search",
         "Unity_Object_ValidateReferences",
@@ -57,6 +64,8 @@ sealed class UnityMcpLensHost
         "Unity_Resource_Delete",
         "Unity_Project_ManagePackages",
         "Unity_Asset_ConfigureSpriteImport",
+        "Unity_Asset_ImportSpriteSheetAndBind",
+        "Unity_Asset_ApplyImportSpriteSheetAndBind",
         "Unity_Prefab_SetSerializedProperties",
         "Unity_Scene_SetSerializedProperties",
         "Unity_Scene_ApplyBindSerializedReferences",
@@ -94,6 +103,52 @@ sealed class UnityMcpLensHost
         public JsonElement Annotations { get; init; }
     }
 
+    sealed class BridgeConnectionSnapshot
+    {
+        public required string StatusPath { get; init; }
+        public required string ConnectionPath { get; init; }
+        public required string ProjectRoot { get; init; }
+        public required DateTime LastHeartbeatUtc { get; init; }
+        public required TimeSpan HeartbeatAge { get; init; }
+        public required bool IsFresh { get; init; }
+        public required bool IsProjectMatch { get; init; }
+        public required bool EditorPidAlive { get; init; }
+        public required DateTime ConnectedUtc { get; init; }
+        public int EditorPid { get; init; }
+        public string? BridgeSessionId { get; set; }
+        public long ManifestVersion { get; set; }
+
+        public static BridgeConnectionSnapshot From(BridgeDiscoveryResult discoveryResult)
+        {
+            return new BridgeConnectionSnapshot
+            {
+                StatusPath = discoveryResult.StatusPath,
+                ConnectionPath = discoveryResult.ConnectionPath,
+                ProjectRoot = discoveryResult.ProjectRoot,
+                LastHeartbeatUtc = discoveryResult.LastHeartbeatUtc,
+                HeartbeatAge = discoveryResult.HeartbeatAge,
+                IsFresh = discoveryResult.IsFresh,
+                IsProjectMatch = discoveryResult.IsProjectMatch,
+                EditorPidAlive = discoveryResult.EditorPidAlive,
+                ConnectedUtc = DateTime.UtcNow,
+                EditorPid = discoveryResult.EditorPid,
+                BridgeSessionId = discoveryResult.StatusFile.BridgeSessionId,
+                ManifestVersion = discoveryResult.StatusFile.ManifestVersion
+            };
+        }
+    }
+
+    sealed class BridgeRecoveryState
+    {
+        public bool RetrySafe { get; init; }
+        public bool RetryAttempted { get; set; }
+        public bool RetrySucceeded { get; set; }
+        public bool MaybeApplied { get; set; }
+        public string? RecoveryError { get; set; }
+        public string? FailedConnectionPath { get; set; }
+        public string? FailedStatusPath { get; set; }
+    }
+
     readonly JsonSerializerOptions m_JsonOptions = new(JsonSerializerDefaults.Web)
     {
         DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
@@ -104,10 +159,13 @@ sealed class UnityMcpLensHost
     readonly Dictionary<string, CachedToolSchema> m_ToolSchemaCache = new(StringComparer.OrdinalIgnoreCase);
 
     UnityBridgeClient? m_BridgeClient;
+    BridgeConnectionSnapshot? m_BridgeConnection;
+    BridgeRecoveryState? m_LastRecoveryState;
     string? m_BridgeSessionId;
     long m_ManifestVersion;
     string[] m_ActiveToolPacks = ["foundation"];
     bool m_ClientInitialized;
+    readonly Dictionary<string, DateTime> m_BridgeQuarantine = new(StringComparer.OrdinalIgnoreCase);
 
     public async Task RunAsync(CancellationToken cancellationToken)
     {
@@ -170,7 +228,7 @@ sealed class UnityMcpLensHost
                         serverInfo = new
                         {
                             name = "unity-mcp-lens",
-                            version = "0.1.0-alpha.1"
+                            version = s_HostVersion
                         }
                     }
                 }, cancellationToken).ConfigureAwait(false);
@@ -219,7 +277,7 @@ sealed class UnityMcpLensHost
     {
         try
         {
-            await EnsureBridgeReadyAsync(cancellationToken).ConfigureAwait(false);
+            await EnsureBridgeReadyWithRecoveryAsync("tools/list", cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -380,114 +438,340 @@ sealed class UnityMcpLensHost
             return;
         }
 
+        BridgeRecoveryState recoveryState = new()
+        {
+            RetrySafe = IsSafeBridgeRetryTool(canonicalToolName)
+        };
+        int maxAttempts = recoveryState.RetrySafe ? 2 : 1;
+
+        for (int attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            try
+            {
+                object result = await InvokeToolCallAsync(toolName, canonicalToolName, argumentsElement, cancellationToken).ConfigureAwait(false);
+                recoveryState.RetrySucceeded = recoveryState.RetryAttempted;
+                await WriteRpcAsync(new
+                {
+                    jsonrpc = "2.0",
+                    id = idElement.GetValueOrDefault(),
+                    result
+                }, cancellationToken).ConfigureAwait(false);
+                return;
+            }
+            catch (Exception ex) when (attempt < maxAttempts && IsBridgeTransportFailure(ex))
+            {
+                recoveryState.RetryAttempted = true;
+                recoveryState.MaybeApplied = !recoveryState.RetrySafe && BridgeRequestWasSent(ex);
+                Console.Error.WriteLine($"[unity-mcp-lens] Bridge transport failed for '{canonicalToolName}', reconnecting and retrying once: {ex.Message}");
+                try
+                {
+                    await RecoverBridgeAfterTransportFailureAsync(ex, canonicalToolName, recoveryState, cancellationToken).ConfigureAwait(false);
+                }
+                catch (Exception recoveryEx)
+                {
+                    recoveryState.RecoveryError = recoveryEx.Message;
+                    JsonElement payload = CreateTransportErrorPayload(recoveryEx, canonicalToolName, recoveryState);
+                    await WriteRpcAsync(new
+                    {
+                        jsonrpc = "2.0",
+                        id = idElement.GetValueOrDefault(),
+                        result = BuildToolCallResult(payload, isError: true)
+                    }, cancellationToken).ConfigureAwait(false);
+                    return;
+                }
+            }
+            catch (Exception ex)
+            {
+                JsonElement payload;
+                if (IsBridgeTransportFailure(ex))
+                {
+                    BridgeRecoveryState finalRecoveryState = new()
+                    {
+                        RetrySafe = recoveryState.RetrySafe,
+                        RetryAttempted = recoveryState.RetryAttempted,
+                        RetrySucceeded = recoveryState.RetrySucceeded,
+                        MaybeApplied = !recoveryState.RetrySafe,
+                        RecoveryError = recoveryState.RecoveryError,
+                        FailedConnectionPath = recoveryState.FailedConnectionPath ?? m_BridgeConnection?.ConnectionPath,
+                        FailedStatusPath = recoveryState.FailedStatusPath ?? m_BridgeConnection?.StatusPath
+                    };
+                    QuarantineCurrentBridge();
+                    await ResetBridgeClientAsync(preserveActivePacks: true, clearToolCache: true).ConfigureAwait(false);
+                    payload = CreateTransportErrorPayload(ex, canonicalToolName, finalRecoveryState);
+                }
+                else
+                {
+                    payload = CreateErrorPayload(ex.Message);
+                }
+
+                await WriteRpcAsync(new
+                {
+                    jsonrpc = "2.0",
+                    id = idElement.GetValueOrDefault(),
+                    result = BuildToolCallResult(payload, isError: true)
+                }, cancellationToken).ConfigureAwait(false);
+                return;
+            }
+        }
+    }
+
+    async Task<object> InvokeToolCallAsync(string toolName, string canonicalToolName, JsonElement argumentsElement, CancellationToken cancellationToken)
+    {
+        await EnsureBridgeReadyAsync(cancellationToken).ConfigureAwait(false);
+
+        if (ToolNamesMatch(canonicalToolName, "Unity.SetToolPacks"))
+        {
+            string[] requestedPacks = ExtractPacks(argumentsElement);
+            var manifestEnvelope = await m_BridgeClient!.SetToolPacksAsync(requestedPacks, includeSchemas: false, cancellationToken).ConfigureAwait(false);
+            if (!string.Equals(manifestEnvelope.Status, "success", StringComparison.OrdinalIgnoreCase) || manifestEnvelope.Result == null)
+            {
+                return BuildToolCallResult(CreateErrorPayload(manifestEnvelope.Error ?? "Failed to update Unity tool packs."), isError: true);
+            }
+
+            bool unchanged = string.Equals(manifestEnvelope.Result.Kind, "unchanged", StringComparison.OrdinalIgnoreCase);
+            await ApplyManifestAsync(manifestEnvelope.Result, shouldFetchSchemas: true, cancellationToken).ConfigureAwait(false);
+            if (!unchanged && m_ClientInitialized)
+                await SendToolsListChangedNotificationAsync(cancellationToken).ConfigureAwait(false);
+
+            return BuildToolCallResult(JsonSerializer.SerializeToElement(new
+            {
+                success = true,
+                message = unchanged ? "Active Unity MCP tool packs unchanged." : "Updated active Unity MCP tool packs.",
+                data = new
+                {
+                    activeToolPacks = manifestEnvelope.Result.ActiveToolPacks,
+                    manifestVersion = manifestEnvelope.Result.ManifestVersion,
+                    bridgeSessionId = manifestEnvelope.Result.BridgeSessionId,
+                    unchanged,
+                    manifestKind = manifestEnvelope.Result.Kind,
+                    toolCount = m_ToolCache.Count
+                }
+            }, m_JsonOptions));
+        }
+
+        if (ToolNamesMatch(canonicalToolName, "Unity.ReadDetailRef"))
+        {
+            string refId = ExtractRefId(argumentsElement);
+            var detailEnvelope = await m_BridgeClient!.ReadDetailRefAsync(refId, cancellationToken).ConfigureAwait(false);
+            if (!string.Equals(detailEnvelope.Status, "success", StringComparison.OrdinalIgnoreCase))
+            {
+                return BuildToolCallResult(CreateErrorPayload(detailEnvelope.Error ?? $"Detail ref '{refId}' was not found."), isError: true);
+            }
+
+            return BuildToolCallResult(detailEnvelope.Result);
+        }
+
+        var toolEnvelope = await m_BridgeClient!.CallToolAsync(canonicalToolName, argumentsElement, cancellationToken).ConfigureAwait(false);
+        if (!string.Equals(toolEnvelope.Status, "success", StringComparison.OrdinalIgnoreCase))
+        {
+            return BuildToolCallResult(CreateErrorPayload(toolEnvelope.Error ?? $"Tool '{toolName}' failed."), isError: true);
+        }
+
+        bool isError = IsToolLevelError(toolEnvelope.Result);
+        return BuildToolCallResult(toolEnvelope.Result, isError);
+    }
+
+    async Task EnsureBridgeReadyWithRecoveryAsync(string operationName, CancellationToken cancellationToken)
+    {
+        BridgeRecoveryState recoveryState = new()
+        {
+            RetrySafe = true
+        };
+
         try
         {
             await EnsureBridgeReadyAsync(cancellationToken).ConfigureAwait(false);
-
-            object result;
-            if (ToolNamesMatch(toolName, "Unity.SetToolPacks"))
-            {
-                string[] requestedPacks = ExtractPacks(argumentsElement);
-                var manifestEnvelope = await m_BridgeClient!.SetToolPacksAsync(requestedPacks, includeSchemas: false, cancellationToken).ConfigureAwait(false);
-                if (!string.Equals(manifestEnvelope.Status, "success", StringComparison.OrdinalIgnoreCase) || manifestEnvelope.Result == null)
-                {
-                    result = BuildToolCallResult(CreateErrorPayload(manifestEnvelope.Error ?? "Failed to update Unity tool packs."), isError: true);
-                }
-                else
-                {
-                    bool unchanged = string.Equals(manifestEnvelope.Result.Kind, "unchanged", StringComparison.OrdinalIgnoreCase);
-                    await ApplyManifestAsync(manifestEnvelope.Result, shouldFetchSchemas: true, cancellationToken).ConfigureAwait(false);
-                    if (!unchanged && m_ClientInitialized)
-                        await SendToolsListChangedNotificationAsync(cancellationToken).ConfigureAwait(false);
-
-                    result = BuildToolCallResult(JsonSerializer.SerializeToElement(new
-                    {
-                        success = true,
-                        message = unchanged ? "Active Unity MCP tool packs unchanged." : "Updated active Unity MCP tool packs.",
-                        data = new
-                        {
-                            activeToolPacks = manifestEnvelope.Result.ActiveToolPacks,
-                            manifestVersion = manifestEnvelope.Result.ManifestVersion,
-                            bridgeSessionId = manifestEnvelope.Result.BridgeSessionId,
-                            unchanged,
-                            manifestKind = manifestEnvelope.Result.Kind,
-                            toolCount = m_ToolCache.Count
-                        }
-                    }, m_JsonOptions));
-                }
-            }
-            else if (ToolNamesMatch(toolName, "Unity.ReadDetailRef"))
-            {
-                string refId = ExtractRefId(argumentsElement);
-                var detailEnvelope = await m_BridgeClient!.ReadDetailRefAsync(refId, cancellationToken).ConfigureAwait(false);
-                if (!string.Equals(detailEnvelope.Status, "success", StringComparison.OrdinalIgnoreCase))
-                {
-                    result = BuildToolCallResult(CreateErrorPayload(detailEnvelope.Error ?? $"Detail ref '{refId}' was not found."), isError: true);
-                }
-                else
-                {
-                    result = BuildToolCallResult(detailEnvelope.Result);
-                }
-            }
-            else
-            {
-                var toolEnvelope = await m_BridgeClient!.CallToolAsync(canonicalToolName, argumentsElement, cancellationToken).ConfigureAwait(false);
-                if (!string.Equals(toolEnvelope.Status, "success", StringComparison.OrdinalIgnoreCase))
-                {
-                    result = BuildToolCallResult(CreateErrorPayload(toolEnvelope.Error ?? $"Tool '{toolName}' failed."), isError: true);
-                }
-                else
-                {
-                    bool isError = IsToolLevelError(toolEnvelope.Result);
-                    result = BuildToolCallResult(toolEnvelope.Result, isError);
-                }
-            }
-
-            await WriteRpcAsync(new
-            {
-                jsonrpc = "2.0",
-                id = idElement.GetValueOrDefault(),
-                result
-            }, cancellationToken).ConfigureAwait(false);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (IsBridgeTransportFailure(ex))
         {
-            await WriteRpcAsync(new
-            {
-                jsonrpc = "2.0",
-                id = idElement.GetValueOrDefault(),
-                result = BuildToolCallResult(CreateErrorPayload(ex.Message), isError: true)
-            }, cancellationToken).ConfigureAwait(false);
+            recoveryState.RetryAttempted = true;
+            Console.Error.WriteLine($"[unity-mcp-lens] Bridge setup failed for '{operationName}', reconnecting once: {ex.Message}");
+            await RecoverBridgeAfterTransportFailureAsync(ex, operationName, recoveryState, cancellationToken).ConfigureAwait(false);
+            recoveryState.RetrySucceeded = true;
+            m_LastRecoveryState = recoveryState;
         }
     }
 
     async Task EnsureBridgeReadyAsync(CancellationToken cancellationToken)
     {
-        if (m_BridgeClient is { IsConnected: true })
+        BridgeDiscoveryResult? currentDiscovery = FindCurrentBridge();
+        if (m_BridgeClient is { IsConnected: true } &&
+            m_BridgeConnection != null &&
+            currentDiscovery != null &&
+            IsSameBridgeGeneration(m_BridgeConnection, currentDiscovery))
+        {
             return;
+        }
 
-        string projectPathHint = Environment.GetEnvironmentVariable("UNITY_MCP_PROJECT_PATH") ?? Directory.GetCurrentDirectory();
-        BridgeDiscoveryResult? discoveryResult = BridgeDiscovery.FindBestBridge(projectPathHint);
+        string[] desiredActivePacks = m_ActiveToolPacks.Length > 0 ? m_ActiveToolPacks : ["foundation"];
+        if (m_BridgeClient != null)
+            await ResetBridgeClientAsync(preserveActivePacks: true, clearToolCache: true).ConfigureAwait(false);
+
+        BridgeDiscoveryResult? discoveryResult = currentDiscovery ?? FindCurrentBridge();
         if (discoveryResult == null)
-            throw new InvalidOperationException("No active Unity MCP bridge status file was found.");
+            throw new InvalidOperationException("No fresh active Unity MCP bridge status file was found.");
 
+        m_BridgeConnection = BridgeConnectionSnapshot.From(discoveryResult);
         m_BridgeClient = new UnityBridgeClient(m_JsonOptions);
         m_BridgeClient.ToolsChanged += HandleBridgeToolsChangedAsync;
         await m_BridgeClient.ConnectAsync(discoveryResult, cancellationToken).ConfigureAwait(false);
 
-        var registerEnvelope = await m_BridgeClient.RegisterClientAsync("unity-mcp-lens", "0.1.0-alpha.1", "Unity MCP Lens", cancellationToken).ConfigureAwait(false);
+        var registerEnvelope = await m_BridgeClient.RegisterClientAsync("unity-mcp-lens", s_HostVersion, "Unity MCP Lens", cancellationToken).ConfigureAwait(false);
         if (!string.Equals(registerEnvelope.Status, "success", StringComparison.OrdinalIgnoreCase) || registerEnvelope.Result == null)
             throw new InvalidOperationException(registerEnvelope.Error ?? "Unity bridge rejected Lens client registration.");
 
         m_BridgeSessionId = registerEnvelope.Result.BridgeSessionId;
         m_ManifestVersion = registerEnvelope.Result.ManifestVersion;
         m_ActiveToolPacks = registerEnvelope.Result.ActiveToolPacks;
+        if (m_BridgeConnection != null)
+        {
+            m_BridgeConnection.BridgeSessionId = m_BridgeSessionId;
+            m_BridgeConnection.ManifestVersion = m_ManifestVersion;
+        }
 
         var manifestEnvelope = await m_BridgeClient.GetManifestAsync(null, null, includeSchemas: false, cancellationToken).ConfigureAwait(false);
         if (!string.Equals(manifestEnvelope.Status, "success", StringComparison.OrdinalIgnoreCase) || manifestEnvelope.Result == null)
             throw new InvalidOperationException(manifestEnvelope.Error ?? "Unity bridge did not return an initial manifest.");
 
         await ApplyManifestAsync(manifestEnvelope.Result, shouldFetchSchemas: true, cancellationToken).ConfigureAwait(false);
+        await RestoreActiveToolPacksAsync(desiredActivePacks, cancellationToken).ConfigureAwait(false);
+    }
+
+    async Task RecoverBridgeAfterTransportFailureAsync(
+        Exception exception,
+        string operationName,
+        BridgeRecoveryState recoveryState,
+        CancellationToken cancellationToken)
+    {
+        recoveryState.FailedConnectionPath = m_BridgeConnection?.ConnectionPath;
+        recoveryState.FailedStatusPath = m_BridgeConnection?.StatusPath;
+        QuarantineCurrentBridge();
+        await ResetBridgeClientAsync(preserveActivePacks: true, clearToolCache: true).ConfigureAwait(false);
+        await EnsureBridgeReadyAsync(cancellationToken).ConfigureAwait(false);
+        m_LastRecoveryState = recoveryState;
+    }
+
+    async Task ResetBridgeClientAsync(bool preserveActivePacks = true, bool clearToolCache = false)
+    {
+        var bridgeClient = m_BridgeClient;
+        m_BridgeClient = null;
+        m_BridgeConnection = null;
+        m_BridgeSessionId = null;
+        m_ManifestVersion = 0;
+        if (!preserveActivePacks)
+            m_ActiveToolPacks = ["foundation"];
+        if (clearToolCache)
+            m_ToolCache.Clear();
+
+        if (bridgeClient == null)
+            return;
+
+        bridgeClient.ToolsChanged -= HandleBridgeToolsChangedAsync;
+        await bridgeClient.DisposeAsync().ConfigureAwait(false);
+    }
+
+    BridgeDiscoveryResult? FindCurrentBridge()
+    {
+        string projectPathHint = ResolveProjectPathHint(out bool requireProjectMatch);
+        return BridgeDiscovery.FindBestBridge(projectPathHint, GetActiveQuarantineIds(), requireProjectMatch);
+    }
+
+    string ResolveProjectPathHint(out bool requireProjectMatch)
+    {
+        string? projectPath = Environment.GetEnvironmentVariable("UNITY_MCP_PROJECT_PATH");
+        requireProjectMatch = !string.IsNullOrWhiteSpace(projectPath);
+        return requireProjectMatch ? projectPath! : Directory.GetCurrentDirectory();
+    }
+
+    bool IsSameBridgeGeneration(BridgeConnectionSnapshot connection, BridgeDiscoveryResult discoveryResult)
+    {
+        return discoveryResult.IsFresh &&
+            string.Equals(connection.StatusPath, discoveryResult.StatusPath, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(connection.ConnectionPath, discoveryResult.ConnectionPath, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(connection.ProjectRoot, discoveryResult.ProjectRoot, StringComparison.OrdinalIgnoreCase);
+    }
+
+    async Task RestoreActiveToolPacksAsync(string[] desiredActivePacks, CancellationToken cancellationToken)
+    {
+        if (m_BridgeClient == null)
+            return;
+
+        string[] desiredAdditionalPacks = NormalizeAdditionalToolPacks(desiredActivePacks);
+        string[] currentAdditionalPacks = NormalizeAdditionalToolPacks(m_ActiveToolPacks);
+        if (desiredAdditionalPacks.SequenceEqual(currentAdditionalPacks, StringComparer.OrdinalIgnoreCase))
+            return;
+
+        var restoreEnvelope = await m_BridgeClient.SetToolPacksAsync(desiredAdditionalPacks, includeSchemas: false, cancellationToken).ConfigureAwait(false);
+        if (!string.Equals(restoreEnvelope.Status, "success", StringComparison.OrdinalIgnoreCase) || restoreEnvelope.Result == null)
+            throw new InvalidOperationException(restoreEnvelope.Error ?? "Unity bridge did not restore active tool packs after reconnect.");
+
+        await ApplyManifestAsync(restoreEnvelope.Result, shouldFetchSchemas: true, cancellationToken).ConfigureAwait(false);
+    }
+
+    static string[] NormalizeAdditionalToolPacks(string[] packs)
+    {
+        return packs
+            .Where(pack => !string.IsNullOrWhiteSpace(pack))
+            .Select(pack => pack.Trim())
+            .Where(pack => !string.Equals(pack, "foundation", StringComparison.OrdinalIgnoreCase))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(pack => pack, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    void QuarantineCurrentBridge()
+    {
+        if (m_BridgeConnection == null)
+            return;
+
+        DateTime expiresUtc = DateTime.UtcNow.Add(s_BridgeQuarantineTtl);
+        AddBridgeQuarantine(m_BridgeConnection.ConnectionPath, expiresUtc);
+        AddBridgeQuarantine(m_BridgeConnection.StatusPath, expiresUtc);
+    }
+
+    void AddBridgeQuarantine(string? id, DateTime expiresUtc)
+    {
+        if (string.IsNullOrWhiteSpace(id))
+            return;
+
+        m_BridgeQuarantine[NormalizeBridgeQuarantineId(id)] = expiresUtc;
+    }
+
+    string[] GetActiveQuarantineIds()
+    {
+        PruneBridgeQuarantine();
+        return m_BridgeQuarantine.Keys.ToArray();
+    }
+
+    void PruneBridgeQuarantine()
+    {
+        DateTime nowUtc = DateTime.UtcNow;
+        foreach (string expiredKey in m_BridgeQuarantine
+            .Where(entry => entry.Value <= nowUtc)
+            .Select(entry => entry.Key)
+            .ToArray())
+        {
+            m_BridgeQuarantine.Remove(expiredKey);
+        }
+    }
+
+    static string NormalizeBridgeQuarantineId(string id)
+    {
+        string trimmed = id.Trim();
+        if (trimmed.Contains(Path.DirectorySeparatorChar) || trimmed.Contains(Path.AltDirectorySeparatorChar))
+        {
+            try
+            {
+                return Path.GetFullPath(trimmed)
+                    .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            }
+            catch
+            {
+                return trimmed.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            }
+        }
+
+        return trimmed;
     }
 
     async Task HandleBridgeToolsChangedAsync(BridgeToolsChangedNotification notification)
@@ -508,6 +792,18 @@ sealed class UnityMcpLensHost
         catch (Exception ex)
         {
             Console.Error.WriteLine($"[unity-mcp-lens] tools_changed refresh failed: {ex.Message}");
+            if (IsBridgeTransportFailure(ex))
+            {
+                try
+                {
+                    QuarantineCurrentBridge();
+                    await ResetBridgeClientAsync(preserveActivePacks: true, clearToolCache: true).ConfigureAwait(false);
+                }
+                catch (Exception resetEx)
+                {
+                    Console.Error.WriteLine($"[unity-mcp-lens] tools_changed transport reset failed: {resetEx.Message}");
+                }
+            }
         }
     }
 
@@ -516,6 +812,11 @@ sealed class UnityMcpLensHost
         m_BridgeSessionId = manifest.BridgeSessionId;
         m_ManifestVersion = manifest.ManifestVersion;
         m_ActiveToolPacks = manifest.ActiveToolPacks;
+        if (m_BridgeConnection != null)
+        {
+            m_BridgeConnection.BridgeSessionId = manifest.BridgeSessionId;
+            m_BridgeConnection.ManifestVersion = manifest.ManifestVersion;
+        }
 
         if (string.Equals(manifest.Kind, "unchanged", StringComparison.OrdinalIgnoreCase))
         {
@@ -779,14 +1080,169 @@ sealed class UnityMcpLensHost
         return document.RootElement.Clone();
     }
 
-    static JsonElement CreateErrorPayload(string message)
+    JsonElement CreateTransportErrorPayload(Exception exception, string toolName, BridgeRecoveryState recoveryState)
     {
+        string message = recoveryState.RetryAttempted
+            ? $"Unity MCP bridge transport failed for '{toolName}' after one reconnect retry: {exception.Message}"
+            : $"Unity MCP bridge transport failed for '{toolName}': {exception.Message}";
+
+        m_LastRecoveryState = recoveryState;
+        PruneBridgeQuarantine();
+        return CreateErrorPayload(
+            message,
+            "UNITY_MCP_TRANSPORT_ERROR",
+            new
+            {
+                transportFailure = true,
+                retryAttempted = recoveryState.RetryAttempted,
+                retrySucceeded = recoveryState.RetrySucceeded,
+                retrySafe = recoveryState.RetrySafe,
+                maybeApplied = recoveryState.MaybeApplied,
+                recoveryError = recoveryState.RecoveryError,
+                recovery = ResolveRecoveryGuidance(recoveryState),
+                host = CreateHostDiagnostics(),
+                bridge = CreateBridgeDiagnostics(recoveryState),
+                quarantine = new
+                {
+                    ttlSeconds = (int)s_BridgeQuarantineTtl.TotalSeconds,
+                    count = m_BridgeQuarantine.Count
+                }
+            });
+    }
+
+    static string ResolveRecoveryGuidance(BridgeRecoveryState recoveryState)
+    {
+        if (recoveryState.RetrySucceeded)
+            return "The Lens host recovered from a stale Unity bridge transport and retried this safe call successfully.";
+        if (recoveryState.RetryAttempted)
+            return "The Lens host already reconnected and retried this safe call once. Check Unity bridge health, then retry the tool call.";
+        if (recoveryState.MaybeApplied)
+            return "The Unity tool call may have reached the editor before transport closed. Verify Unity state before retrying this mutating call.";
+        if (recoveryState.RetrySafe)
+            return "For read-only Lens tools the host retries one stale-pipe failure automatically; retry the call after the bridge reports ready.";
+
+        return "Reconnect or restart the Unity MCP bridge, verify Unity state, then retry the tool call if it is safe to do so.";
+    }
+
+    object CreateHostDiagnostics()
+    {
+        using var process = Process.GetCurrentProcess();
+        return new
+        {
+            processId = process.Id,
+            executablePath = Environment.ProcessPath,
+            currentDirectory = Directory.GetCurrentDirectory(),
+            assemblyVersion = typeof(UnityMcpLensHost).Assembly.GetName().Version?.ToString(),
+            informationalVersion = s_HostVersion,
+            fileVersion = ResolveFileVersion(Environment.ProcessPath)
+        };
+    }
+
+    object CreateBridgeDiagnostics(BridgeRecoveryState recoveryState)
+    {
+        return new
+        {
+            selectedStatusPath = m_BridgeConnection?.StatusPath,
+            selectedConnectionPath = m_BridgeConnection?.ConnectionPath,
+            projectRoot = m_BridgeConnection?.ProjectRoot,
+            editorPid = m_BridgeConnection?.EditorPid,
+            editorPidAlive = m_BridgeConnection?.EditorPidAlive,
+            heartbeatAgeSeconds = m_BridgeConnection == null || m_BridgeConnection.HeartbeatAge == TimeSpan.MaxValue
+                ? (double?)null
+                : Math.Round(m_BridgeConnection.HeartbeatAge.TotalSeconds, 3),
+            bridgeSessionId = m_BridgeConnection?.BridgeSessionId,
+            manifestVersion = m_BridgeConnection?.ManifestVersion,
+            failedStatusPath = recoveryState.FailedStatusPath,
+            failedConnectionPath = recoveryState.FailedConnectionPath
+        };
+    }
+
+    static JsonElement CreateErrorPayload(string message, string code = "UNITY_MCP_ERROR", object? data = null)
+    {
+        if (data == null)
+        {
+            return JsonSerializer.SerializeToElement(new
+            {
+                success = false,
+                error = message,
+                code
+            });
+        }
+
         return JsonSerializer.SerializeToElement(new
         {
             success = false,
             error = message,
-            code = "UNITY_MCP_ERROR"
+            code,
+            data
         });
+    }
+
+    static bool IsSafeBridgeRetryTool(string toolName)
+    {
+        return ToolNamesMatch(toolName, "Unity.SetToolPacks") ||
+            ToolNamesMatch(toolName, "Unity.ReadDetailRef") ||
+            DeriveReadOnlyHint(toolName, descriptorHint: false);
+    }
+
+    static bool BridgeRequestWasSent(Exception exception)
+    {
+        for (Exception? current = exception; current != null; current = current.InnerException)
+        {
+            if (current is BridgeTransportException bridgeTransportException)
+                return bridgeTransportException.RequestSent;
+        }
+
+        return false;
+    }
+
+    static bool IsBridgeTransportFailure(Exception exception)
+    {
+        for (Exception? current = exception; current != null; current = current.InnerException)
+        {
+            if (current is BridgeTransportException or System.IO.IOException or ObjectDisposedException or TimeoutException)
+                return true;
+
+            string message = current.Message ?? string.Empty;
+            if (message.Contains("pipe is broken", StringComparison.OrdinalIgnoreCase) ||
+                message.Contains("broken pipe", StringComparison.OrdinalIgnoreCase) ||
+                message.Contains("connection closed", StringComparison.OrdinalIgnoreCase) ||
+                message.Contains("transport closed", StringComparison.OrdinalIgnoreCase) ||
+                message.Contains("connection disconnected", StringComparison.OrdinalIgnoreCase) ||
+                message.Contains("Unity bridge connection closed", StringComparison.OrdinalIgnoreCase) ||
+                message.Contains("Cannot access a disposed object", StringComparison.OrdinalIgnoreCase) ||
+                message.Contains("did not send a handshake", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    static string ResolveHostVersion()
+    {
+        var assembly = typeof(UnityMcpLensHost).Assembly;
+        string? informationalVersion = assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
+        if (!string.IsNullOrWhiteSpace(informationalVersion))
+            return informationalVersion;
+
+        return assembly.GetName().Version?.ToString() ?? "0.0.0";
+    }
+
+    static string? ResolveFileVersion(string? executablePath)
+    {
+        if (string.IsNullOrWhiteSpace(executablePath) || !File.Exists(executablePath))
+            return null;
+
+        try
+        {
+            return FileVersionInfo.GetVersionInfo(executablePath).FileVersion;
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     static bool IsToolLevelError(JsonElement structuredContent)

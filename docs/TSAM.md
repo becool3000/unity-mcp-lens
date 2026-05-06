@@ -106,6 +106,7 @@ Pack-specific TSAM work is used to keep the MCP surface small:
 - `project`: package/import diagnostics, Input System diagnostics, input-action asset inspection, and active input handler tools.
 - `ui`: uGUI hierarchy/layout preview/apply authoring, canvas prefab authoring, raycast/layout verification, and screen-layout or resolution-matrix verification.
 - `runtime`: play-mode runtime probes, visual bounds snapshots, pointer/scroll input smoke verification, and explicit play-mode exit.
+- `assets`: asset/resource workflows, sprite-sheet import/slicing/binding preview/apply, and Sprite-array binding verification.
 - `debug`: usage reports, payload analysis, and TSAM stage coverage inspection.
 
 Current metadata baselines are:
@@ -115,6 +116,7 @@ Current metadata baselines are:
 - `foundation + ui`: `27` exported tools.
 - `foundation + runtime`: `16` exported tools.
 - `project`: `22` exported tools.
+- `foundation + assets`: `24` exported tools.
 - `debug`: `24` exported tools.
 
 Pack membership changes should update metadata audit expectations and workflow
@@ -136,7 +138,8 @@ and deeper investigation.
 Current compact-by-default TSAM result targets include Input System diagnostics,
 UI hierarchy preview/apply, scene serialized-reference binding preview/apply,
 UI screen-layout verification, `Unity.RunCommand` log blocks, and
-`Unity.ReadConsole` summary reads. These inline results should contain enough
+`Unity.ReadConsole` summary reads, plus asset sprite-sheet import/bind and
+Sprite-array binding verification. These inline results should contain enough
 data for pass/fail decisions while moving bulky device, binding, log, corner,
 and readback rows behind `detailRef`.
 
@@ -192,6 +195,7 @@ Current TSAM-covered surfaces include:
 - Scene serialized-reference preview/apply binding.
 - Scene prefab instantiate/bind preview/apply tools.
 - Play-mode pointer-input smoke verification.
+- Asset sprite-sheet import/bind preview/apply tools and Sprite-array binding verification.
 - Compact `Unity.RunCommand` log summaries and `Unity.ReadConsole` summary reads.
 - Usage reporting for payload, bridge, pack transition, tool snapshot, detail-ref, and TSAM stage coverage analysis.
 

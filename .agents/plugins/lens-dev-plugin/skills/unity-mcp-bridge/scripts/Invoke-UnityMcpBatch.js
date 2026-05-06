@@ -7,12 +7,42 @@ function loadSteps(args) {
   const stepsPath = common.getArgString(args, ["StepsPath"], "");
   const stepsJson = common.getArgString(args, ["StepsJson"], "") || process.env.UNITY_MCP_BATCH_STEPS_JSON || "";
   if (stepsPath) {
-    return JSON.parse(fs.readFileSync(stepsPath, "utf8").replace(/^\uFEFF/, ""));
+    return parseStepsJson(fs.readFileSync(stepsPath, "utf8").replace(/^\uFEFF/, ""), `file '${stepsPath}'`);
   }
   if (stepsJson) {
-    return JSON.parse(stepsJson);
+    return parseStepsJson(stepsJson, "--StepsJson");
   }
   throw new Error("Provide --StepsPath or --StepsJson.");
+}
+
+function parseStepsJson(rawJson, sourceLabel) {
+  try {
+    return JSON.parse(rawJson);
+  } catch (error) {
+    const repairedJson = repairPowerShellStrippedJson(rawJson);
+    if (repairedJson !== rawJson) {
+      try {
+        return JSON.parse(repairedJson);
+      } catch (_repairError) {
+      }
+    }
+
+    const preview = String(rawJson || "")
+      .replace(/\s+/g, " ")
+      .slice(0, 160);
+    throw new Error(
+      `Failed to parse batch steps from ${sourceLabel}: ${error.message}. ` +
+        "On Windows, prefer -StepsPath or pipe JSON through the PowerShell wrapper so quoted property names survive shell parsing. " +
+        `Input preview: ${preview}`
+    );
+  }
+}
+
+function repairPowerShellStrippedJson(rawJson) {
+  let repaired = String(rawJson || "");
+  repaired = repaired.replace(/([{,]\s*)([A-Za-z_][A-Za-z0-9_]*)(\s*:)/g, '$1"$2"$3');
+  repaired = repaired.replace(/(:\s*)([A-Za-z_][A-Za-z0-9_.-]*)(\s*[,}\]])/g, '$1"$2"$3');
+  return repaired;
 }
 
 function normalizeStep(step, index, defaultTimeoutSeconds) {

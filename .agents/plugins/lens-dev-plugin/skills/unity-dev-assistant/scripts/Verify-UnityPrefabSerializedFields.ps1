@@ -3,7 +3,7 @@ param(
     [Parameter(Mandatory = $true)][string]$PrefabPath,
     [Parameter()][string]$ChecksJson,
     [Parameter()][string]$ChecksPath,
-    [bool]$WaitForEditorIdle = $true,
+    [object]$WaitForEditorIdle = $true,
     [int]$IdleTimeoutSeconds = 60,
     [int]$IdleStablePollCount = 3,
     [double]$IdlePollIntervalSeconds = 0.5,
@@ -12,6 +12,8 @@ param(
 )
 
 . "$PSScriptRoot\UnityDevCommon.ps1"
+
+$WaitForEditorIdle = ConvertTo-UnityBool -Value $WaitForEditorIdle -Default $true
 
 if ([string]::IsNullOrWhiteSpace($ChecksJson) -and [string]::IsNullOrWhiteSpace($ChecksPath)) {
     throw "Provide -ChecksJson or -ChecksPath."

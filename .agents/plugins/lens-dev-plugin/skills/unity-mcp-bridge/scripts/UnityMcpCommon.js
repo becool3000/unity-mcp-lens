@@ -2574,6 +2574,11 @@ async function checkUnityMcp(projectPath, options = {}) {
     }
   }
   const readyAuthorityProbeOk = readyAuthorityProbeSummary?.DirectToolReady === true;
+  const recoveredSignals = readyAuthorityProbeOk
+    ? detectedSignals.filter((signal) =>
+        ["HandshakeFailed", "AuthWarning", "Disconnected", "ReadDisconnect", "DisposedTransport"].includes(signal.Name)
+      )
+    : [];
   let degradedAuthorityProbe = null;
   let degradedAuthorityProbeError = null;
   if (
@@ -2636,6 +2641,14 @@ async function checkUnityMcp(projectPath, options = {}) {
     summary = "Unity is inside an expected compile/domain reload window and transient MCP disconnects are being treated as normal.";
     recommendedAction = "Wait for Unity to settle back to idle, then retry the MCP call.";
     exitCode = 14;
+  } else if (selectedStatus?.Status === "ready" && unityRunning && readyAuthorityProbeOk) {
+    classification = "Ready";
+    userActionRequired = false;
+    summary = recoveredSignals.length > 0
+      ? "Bridge status reports ready and a fresh direct Lens health probe succeeded; stale log-tail transport signals were treated as recovered."
+      : "Bridge status reports ready and a fresh direct Lens health probe succeeded.";
+    recommendedAction = "Proceed with Lens tools using normal idle gating.";
+    exitCode = 0;
   } else if (handshakeSignal) {
     classification = "ReconnectRequired";
     summary = "Unity MCP reached the bridge, but the handshake failed before tools became available.";
@@ -2712,6 +2725,7 @@ async function checkUnityMcp(projectPath, options = {}) {
     DegradedAuthorityProbe: degradedAuthorityProbe,
     DegradedAuthorityProbeError: degradedAuthorityProbeError,
     LensHealthOverridesBeacon: lensHealthOverridesBeacon,
+    RecoveredSignals: recoveredSignals,
     ExpectedReloadState: expectedReloadState,
     DetectedSignals: detectedSignals,
     WebGLBuildState: webGlBuildState,
@@ -2761,6 +2775,7 @@ async function checkUnityMcp(projectPath, options = {}) {
           Error: readyAuthorityProbeSummary.Error || readyAuthorityProbeError,
         }
       : null,
+    RecoveredSignals: recoveredSignals,
     DegradedAuthorityProbe: degradedAuthorityProbe
       ? { Success: degradedAuthorityProbeOk, Error: degradedAuthorityProbeError }
       : degradedAuthorityProbeError

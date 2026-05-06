@@ -25,6 +25,19 @@ node ./skills/unity-mcp-bridge/scripts/Launch-UnityMcpLens.js
 
 Wait for Unity to finish compiling, importing, or reloading before retrying editor mutations. Lens health and bridge status are available through `Unity.GetLensHealth` once the bridge is reachable.
 
+## Direct tools report Pipe is broken
+
+If direct model-facing tools such as `Unity.GetLensHealth`, `Unity.ListToolPacks`,
+or `Unity.ListResources` report `Pipe is broken` while helper health says Unity
+is idle and the bridge is ready, treat the direct transport as stale. Retry one
+lightweight direct Lens probe after the host reconnects. For read-only checks,
+use `Invoke-UnityMcpBatch` with `-StepsPath` as the temporary reliable path and
+record the transport issue in the backlog or smoke notes.
+
+On Windows, prefer helper boolean arguments as `-Flag:$true` or `-Flag true`.
+For batch helper JSON, prefer `-StepsPath` for multi-line payloads; `-StepsJson`
+is safest for generated single-string payloads.
+
 ## Input System or active input backend failures
 
 Activate the `project` pack and run `Unity.InputSystem.Diagnostics` before

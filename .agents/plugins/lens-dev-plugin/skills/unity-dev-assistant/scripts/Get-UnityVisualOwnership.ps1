@@ -2,19 +2,23 @@ param(
     [string]$ProjectPath = (Get-Location).Path,
     [Parameter(Mandatory = $true)][string]$Target,
     [string]$SearchMethod = "by_name",
-    [bool]$IncludeInactive = $true,
+    [object]$IncludeInactive = $true,
     [string]$CameraTarget = "",
     [string]$CameraSearchMethod = "by_name",
     [string]$ReferenceTarget = "",
     [string]$ReferenceSearchMethod = "by_name",
-    [bool]$IncludeOwnership = $true,
-    [bool]$SampleOverTime = $false,
+    [object]$IncludeOwnership = $true,
+    [object]$SampleOverTime = $false,
     [int]$SampleDurationMs = 400,
     [int]$SampleIntervalMs = 50,
     [int]$ToolTimeoutSeconds = 45
 )
 
 . "$PSScriptRoot\UnityDevCommon.ps1"
+
+$IncludeInactive = ConvertTo-UnityBool -Value $IncludeInactive -Default $true
+$IncludeOwnership = ConvertTo-UnityBool -Value $IncludeOwnership -Default $true
+$SampleOverTime = ConvertTo-UnityBool -Value $SampleOverTime -Default $false
 
 $resolvedProjectPath = Resolve-UnityProjectPath -ProjectPath $ProjectPath
 $payload = [ordered]@{

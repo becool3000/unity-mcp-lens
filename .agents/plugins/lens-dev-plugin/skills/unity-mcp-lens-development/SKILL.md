@@ -120,6 +120,17 @@ Phase 17 addresses the highest TintPaint dogfood pain without widening `foundati
 - Prefer `Unity.Editor.ExitPlayMode` or `Exit-UnityPlayMode.ps1` for play-mode cleanup; avoid custom `Unity.RunCommand` stop snippets.
 - `Unity.GetLensUsageReport` compact output should summarize large pack-transition lists and report TSAM coverage summary data.
 
+## Phase 18 Asset Sprite Pipeline Truth
+
+Phase 18 addresses the BeeSurvivors Roach BeeCool sprite-upgrade workflow.
+
+- Prefer `Unity.Asset.PreviewImportSpriteSheetAndBind` before applying sprite-sheet import/slicing/binding changes.
+- Use `Unity.Asset.ApplyImportSpriteSheetAndBind` to persist importer metadata and ScriptableObject Sprite-array bindings after the preview plan is acceptable.
+- `Unity.Asset.ImportSpriteSheetAndBind` is a compatibility facade; it previews by default and applies only with `mode=apply` or `apply=true`.
+- Prefer `Unity.Asset.VerifySpriteArrayBinding` over custom `Unity.RunCommand` or YAML reads when verifying Sprite-array counts, names, texture names, or texture GUIDs.
+- The `assets` pack metadata-audit baseline is `foundation+assets=24`.
+- Phase 18 asset tools must keep pass/fail and changed-count data inline while storing full importer metadata, sprite rows, and serialized-field readback behind `detailRef`.
+
 ## GitNexus Preflight
 
 - If `npx gitnexus status` reports this repo is unindexed or stale, run `npx gitnexus analyze` before symbol edits.

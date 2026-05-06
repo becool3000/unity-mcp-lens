@@ -13,7 +13,7 @@ Common packs:
 - `ui` for UI Toolkit reads, uGUI hierarchy/layout preview/apply authoring, canvas prefab authoring, raycast/layout verification, and read-only screen-layout or resolution-matrix verification.
 - `runtime` for play-mode runtime probes, visual bounds snapshots, pointer/scroll smoke verification, and explicit play-mode exit.
 - `scripting` for scripts, edits, command execution, and structured `Unity.RunCommand` return payloads.
-- `assets` for asset/resource workflows.
+- `assets` for asset/resource workflows, including sprite-sheet import/slicing/binding and Sprite-array binding verification.
 - `debug` for diagnostics and profiling.
 - `full` for admin/debug operations that should not be default.
 
@@ -26,6 +26,7 @@ Current live metadata baselines:
 - `foundation + ui`: `27` exported tools.
 - `foundation + runtime`: `16` exported tools.
 - `project`: `22` exported tools.
+- `foundation + assets`: `24` exported tools.
 - `debug`: `24` exported tools.
 
 Pack additions must not change the `foundation` baseline unless the metadata

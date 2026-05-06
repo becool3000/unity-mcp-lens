@@ -25,6 +25,7 @@ try
             Console.WriteLine($"UI:         {auditReport.UiToolCount} tools");
             Console.WriteLine($"Runtime:    {auditReport.RuntimeToolCount} tools");
             Console.WriteLine($"Project:    {auditReport.ProjectToolCount} tools");
+            Console.WriteLine($"Assets:     {auditReport.AssetsToolCount} tools");
             Console.WriteLine($"Debug:      {auditReport.DebugToolCount} tools");
             Console.WriteLine($"Result:     {(auditReport.Success ? "PASS" : "FAIL")}");
 
@@ -173,6 +174,7 @@ sealed class MetadataAudit(BenchmarkOptions options)
     const int ExpectedUiToolCount = 27;
     const int ExpectedRuntimeToolCount = 16;
     const int ExpectedProjectToolCount = 22;
+    const int ExpectedAssetsToolCount = 24;
 
     static readonly string[] k_RequiredFoundationTools =
     [
@@ -259,6 +261,21 @@ sealed class MetadataAudit(BenchmarkOptions options)
         "Unity_ProjectSettings_SetActiveInputHandler"
     ];
 
+    static readonly string[] k_RequiredAssetsTools =
+    [
+        "Unity_Asset_Search",
+        "Unity_Asset_ConfigureSpriteImport",
+        "Unity_Asset_ImportSpriteSheetAndBind",
+        "Unity_Asset_PreviewImportSpriteSheetAndBind",
+        "Unity_Asset_ApplyImportSpriteSheetAndBind",
+        "Unity_Asset_VerifySpriteArrayBinding",
+        "Unity_ManageAsset",
+        "Unity_Prefab_SetSerializedProperties",
+        "Unity_Resource_Write",
+        "Unity_Tile_BuildSet",
+        "Unity_ImportExternalModel"
+    ];
+
     public async Task<MetadataAuditReport> RunAsync()
     {
         Exception? lastError = null;
@@ -291,6 +308,8 @@ sealed class MetadataAudit(BenchmarkOptions options)
             0,
             0,
             0,
+            0,
+            [],
             [],
             [],
             [],
@@ -314,6 +333,8 @@ sealed class MetadataAudit(BenchmarkOptions options)
         var runtimeTools = await session.GetToolsAsync();
         _ = await session.SetToolPacksAsync(["project"]);
         var projectTools = await session.GetToolsAsync();
+        _ = await session.SetToolPacksAsync(["assets"]);
+        var assetsTools = await session.GetToolsAsync();
         _ = await session.SetToolPacksAsync(["debug"]);
         var debugTools = await session.GetToolsAsync();
 
@@ -323,6 +344,7 @@ sealed class MetadataAudit(BenchmarkOptions options)
         ValidateToolSet("foundation+ui", uiTools, ExpectedUiToolCount, k_RequiredUiTools, failures);
         ValidateToolSet("foundation+runtime", runtimeTools, ExpectedRuntimeToolCount, k_RequiredRuntimeTools, failures);
         ValidateToolSet("foundation+project", projectTools, ExpectedProjectToolCount, k_RequiredProjectTools, failures);
+        ValidateToolSet("foundation+assets", assetsTools, ExpectedAssetsToolCount, k_RequiredAssetsTools, failures);
         ValidateToolSet("foundation+debug", debugTools, null, k_RequiredDebugTools, failures);
         ValidateReadOnlyHint(foundationTools, "Unity_Editor_ScriptUpdatingConsentModal", expected: false, failures);
         ValidateReadOnlyHint(sceneTools, "Unity_GameObject_Inspect", expected: true, failures);
@@ -358,12 +380,19 @@ sealed class MetadataAudit(BenchmarkOptions options)
         ValidateReadOnlyHint(projectTools, "Unity_InputActions_InspectAsset", expected: true, failures);
         ValidateReadOnlyHint(projectTools, "Unity_ProjectSettings_PreviewActiveInputHandler", expected: true, failures);
         ValidateReadOnlyHint(projectTools, "Unity_ProjectSettings_SetActiveInputHandler", expected: false, failures);
+        ValidateReadOnlyHint(assetsTools, "Unity_Asset_Search", expected: true, failures);
+        ValidateReadOnlyHint(assetsTools, "Unity_Asset_ConfigureSpriteImport", expected: false, failures);
+        ValidateReadOnlyHint(assetsTools, "Unity_Asset_ImportSpriteSheetAndBind", expected: false, failures);
+        ValidateReadOnlyHint(assetsTools, "Unity_Asset_PreviewImportSpriteSheetAndBind", expected: true, failures);
+        ValidateReadOnlyHint(assetsTools, "Unity_Asset_ApplyImportSpriteSheetAndBind", expected: false, failures);
+        ValidateReadOnlyHint(assetsTools, "Unity_Asset_VerifySpriteArrayBinding", expected: true, failures);
         ValidateReadOnlyHint(debugTools, "Unity_GetLensUsageReport", expected: true, failures);
         ValidateGameObjectSchemas(sceneTools, failures);
         ValidateUiToolSchemas(uiTools, failures);
         ValidateSceneBindingSchemas(sceneTools, failures);
         ValidateRuntimeToolSchemas(runtimeTools, failures);
         ValidateProjectToolSchemas(projectTools, failures);
+        ValidateAssetToolSchemas(assetsTools, failures);
         ValidateLensUsageSchema(debugTools, failures);
 
         return new MetadataAuditReport(
@@ -376,12 +405,14 @@ sealed class MetadataAudit(BenchmarkOptions options)
             uiTools.Count,
             runtimeTools.Count,
             projectTools.Count,
+            assetsTools.Count,
             debugTools.Count,
             foundationTools.Select(tool => tool.Name).OrderBy(name => name, StringComparer.Ordinal).ToArray(),
             sceneTools.Select(tool => tool.Name).OrderBy(name => name, StringComparer.Ordinal).ToArray(),
             uiTools.Select(tool => tool.Name).OrderBy(name => name, StringComparer.Ordinal).ToArray(),
             runtimeTools.Select(tool => tool.Name).OrderBy(name => name, StringComparer.Ordinal).ToArray(),
             projectTools.Select(tool => tool.Name).OrderBy(name => name, StringComparer.Ordinal).ToArray(),
+            assetsTools.Select(tool => tool.Name).OrderBy(name => name, StringComparer.Ordinal).ToArray(),
             debugTools.Select(tool => tool.Name).OrderBy(name => name, StringComparer.Ordinal).ToArray(),
             failures);
     }
@@ -570,6 +601,34 @@ sealed class MetadataAudit(BenchmarkOptions options)
             "Unity_ProjectSettings_SetActiveInputHandler",
             ["mode", "save", "requestScriptReload"],
             ["mode"],
+            failures);
+    }
+
+    static void ValidateAssetToolSchemas(IReadOnlyList<ToolDescriptor> tools, List<string> failures)
+    {
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_Asset_ImportSpriteSheetAndBind",
+            ["mode", "apply", "assetPath", "frameCount", "frameWidth", "frameHeight", "paddingX", "paddingY", "offsetX", "offsetY", "spriteNamePrefix", "pixelsPerUnit", "mipmapEnabled", "alphaIsTransparency", "compression", "filterMode", "wrapMode", "targetAssetPath", "targetFieldName"],
+            ["assetPath", "frameCount", "frameWidth", "frameHeight", "targetAssetPath", "targetFieldName"],
+            failures);
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_Asset_PreviewImportSpriteSheetAndBind",
+            ["assetPath", "frameCount", "frameWidth", "frameHeight", "paddingX", "paddingY", "offsetX", "offsetY", "spriteNamePrefix", "pixelsPerUnit", "mipmapEnabled", "alphaIsTransparency", "compression", "filterMode", "wrapMode", "targetAssetPath", "targetFieldName"],
+            ["assetPath", "frameCount", "frameWidth", "frameHeight", "targetAssetPath", "targetFieldName"],
+            failures);
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_Asset_ApplyImportSpriteSheetAndBind",
+            ["assetPath", "frameCount", "frameWidth", "frameHeight", "paddingX", "paddingY", "offsetX", "offsetY", "spriteNamePrefix", "pixelsPerUnit", "mipmapEnabled", "alphaIsTransparency", "compression", "filterMode", "wrapMode", "targetAssetPath", "targetFieldName"],
+            ["assetPath", "frameCount", "frameWidth", "frameHeight", "targetAssetPath", "targetFieldName"],
+            failures);
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_Asset_VerifySpriteArrayBinding",
+            ["targetAssetPath", "targetFieldName", "expectedCount", "expectedTextureName", "expectedTextureGuid", "expectedSpriteNames"],
+            ["targetAssetPath", "targetFieldName"],
             failures);
     }
 
@@ -939,12 +998,14 @@ sealed record MetadataAuditReport(
     int UiToolCount,
     int RuntimeToolCount,
     int ProjectToolCount,
+    int AssetsToolCount,
     int DebugToolCount,
     IReadOnlyList<string> FoundationTools,
     IReadOnlyList<string> SceneTools,
     IReadOnlyList<string> UiTools,
     IReadOnlyList<string> RuntimeTools,
     IReadOnlyList<string> ProjectTools,
+    IReadOnlyList<string> AssetsTools,
     IReadOnlyList<string> DebugTools,
     IReadOnlyList<string> Failures);
 

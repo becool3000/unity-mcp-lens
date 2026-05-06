@@ -2,7 +2,7 @@ param(
     [string]$ProjectPath = (Get-Location).Path,
     [string]$ManifestPath,
     [string]$StateFolder,
-    [bool]$WaitForEditorIdle = $true,
+    [object]$WaitForEditorIdle = $true,
     [int]$IdleTimeoutSeconds = 60,
     [int]$IdleStablePollCount = 3,
     [double]$IdlePollIntervalSeconds = 0.5,
@@ -10,6 +10,8 @@ param(
 )
 
 . "$PSScriptRoot\UnityDevCommon.ps1"
+
+$WaitForEditorIdle = ConvertTo-UnityBool -Value $WaitForEditorIdle -Default $true
 
 if ([string]::IsNullOrWhiteSpace($ManifestPath) -and [string]::IsNullOrWhiteSpace($StateFolder)) {
     throw "Provide -ManifestPath or -StateFolder."

@@ -23,14 +23,14 @@ namespace Becool.UnityMcpLens.Editor.Helpers
             RefreshInstalledServers();
         }
 
-        public static void RefreshInstalledServers()
+        public static void RefreshInstalledServers(bool forceRefresh = false)
         {
             if (McpProjectPreferences.LegacyRelayEnabled)
             {
                 McpLog.Warning("Legacy relay compatibility is enabled, but standalone Unity MCP Lens does not bundle or install the legacy Unity relay. Install the official Assistant package if that relay path is required.");
             }
 
-            InstallOrUpdateOwnedMcpServer();
+            InstallOrUpdateOwnedMcpServer(forceRefresh);
         }
 
         static string ReadVersionFromMetadata(string metadataPath)
@@ -70,7 +70,7 @@ namespace Becool.UnityMcpLens.Editor.Helpers
             }
         }
 
-        static void InstallOrUpdateOwnedMcpServer()
+        static void InstallOrUpdateOwnedMcpServer(bool forceRefresh)
         {
             try
             {
@@ -83,8 +83,19 @@ namespace Becool.UnityMcpLens.Editor.Helpers
 
                 string bundledVersion = ReadVersionFromMetadata(MCPConstants.BundledLensMetadataFile);
                 string installedVersion = ReadVersionFromMetadata(MCPConstants.LensInstalledMetadataFile);
+                DateTime installedServerWriteUtc = File.Exists(MCPConstants.LensInstalledServerMainFile)
+                    ? File.GetLastWriteTimeUtc(MCPConstants.LensInstalledServerMainFile)
+                    : DateTime.MinValue;
+                DateTime prebuiltWriteUtc = GetRuntimePrebuiltNewestWriteUtc(sourceDir);
+                DateTime sourceWriteUtc = GetServerSourceNewestWriteUtc();
+                bool sourceNewerThanPrebuilt = sourceWriteUtc > prebuiltWriteUtc.AddSeconds(1);
+                bool bundledNewerThanInstalled = prebuiltWriteUtc > installedServerWriteUtc.AddSeconds(1) ||
+                    sourceWriteUtc > installedServerWriteUtc.AddSeconds(1);
 
-                if (!IsNewerVersion(bundledVersion, installedVersion) && File.Exists(MCPConstants.LensInstalledServerMainFile))
+                if (!forceRefresh &&
+                    !IsNewerVersion(bundledVersion, installedVersion) &&
+                    !bundledNewerThanInstalled &&
+                    File.Exists(MCPConstants.LensInstalledServerMainFile))
                 {
                     McpLog.Log($"Unity MCP Lens server is up to date (bundled: {bundledVersion}, installed: {installedVersion})");
                     return;
@@ -96,7 +107,7 @@ namespace Becool.UnityMcpLens.Editor.Helpers
                 string stagingDirectory = Path.Combine(Path.GetTempPath(), $"unity-mcp-lens-{Guid.NewGuid():N}");
                 try
                 {
-                    PublishOwnedServer(stagingDirectory);
+                    PublishOwnedServer(stagingDirectory, preferSourcePublish: sourceNewerThanPrebuilt);
                     CopyDirectoryContents(stagingDirectory, MCPConstants.UnityMcpBaseDirectory);
                     ReconcileOwnedServerBinary(MCPConstants.UnityMcpBaseDirectory);
                     File.Copy(MCPConstants.BundledLensMetadataFile, MCPConstants.LensInstalledMetadataFile, true);
@@ -104,7 +115,14 @@ namespace Becool.UnityMcpLens.Editor.Helpers
                     if (!PlatformUtils.IsWindows)
                         SetExecutable(MCPConstants.LensInstalledServerMainFile);
 
-                    McpLog.Log($"Unity MCP Lens server installed to {MCPConstants.UnityMcpBaseDirectory} (version {bundledVersion})");
+                    string reason = forceRefresh
+                        ? "explicit refresh"
+                        : sourceNewerThanPrebuilt
+                            ? "source newer than prebuilt"
+                            : bundledNewerThanInstalled
+                                ? "bundled server newer than installed server"
+                                : "version update";
+                    McpLog.Log($"Unity MCP Lens server installed to {MCPConstants.UnityMcpBaseDirectory} (version {bundledVersion}, reason: {reason})");
                 }
                 finally
                 {
@@ -122,6 +140,53 @@ namespace Becool.UnityMcpLens.Editor.Helpers
             catch (Exception ex)
             {
                 McpLog.Warning($"Could not install Unity MCP Lens server: {ex.Message}");
+            }
+        }
+
+        static DateTime GetRuntimePrebuiltNewestWriteUtc(string sourceDir)
+        {
+            string runtimeIdentifier = GetCurrentRuntimeIdentifier();
+            string prebuiltDirectory = Path.Combine(sourceDir, "prebuilt", runtimeIdentifier);
+            return GetNewestWriteUtc(prebuiltDirectory);
+        }
+
+        static DateTime GetServerSourceNewestWriteUtc()
+        {
+            string projectFile = MCPConstants.BundledLensProjectFile;
+            string projectDirectory = Path.GetDirectoryName(projectFile);
+            return GetNewestWriteUtc(projectDirectory, ShouldIncludeSourceFile);
+        }
+
+        static bool ShouldIncludeSourceFile(string filePath)
+        {
+            string normalized = filePath.Replace('\\', '/');
+            return !normalized.Contains("/bin/", StringComparison.OrdinalIgnoreCase) &&
+                !normalized.Contains("/obj/", StringComparison.OrdinalIgnoreCase);
+        }
+
+        static DateTime GetNewestWriteUtc(string directory, Func<string, bool> includeFile = null)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(directory) || !Directory.Exists(directory))
+                    return DateTime.MinValue;
+
+                DateTime newest = DateTime.MinValue;
+                foreach (string file in Directory.GetFiles(directory, "*", SearchOption.AllDirectories))
+                {
+                    if (includeFile != null && !includeFile(file))
+                        continue;
+
+                    DateTime writeUtc = File.GetLastWriteTimeUtc(file);
+                    if (writeUtc > newest)
+                        newest = writeUtc;
+                }
+
+                return newest;
+            }
+            catch
+            {
+                return DateTime.MinValue;
             }
         }
 
@@ -165,11 +230,11 @@ namespace Becool.UnityMcpLens.Editor.Helpers
             }
         }
 
-        static void PublishOwnedServer(string stagingDirectory)
+        static void PublishOwnedServer(string stagingDirectory, bool preferSourcePublish)
         {
             string runtimeIdentifier = GetCurrentRuntimeIdentifier();
             string prebuiltDirectory = Path.Combine(Path.GetFullPath(MCPConstants.unityMcpLensAppPath), "prebuilt", runtimeIdentifier);
-            if (Directory.Exists(prebuiltDirectory))
+            if (!preferSourcePublish && Directory.Exists(prebuiltDirectory))
             {
                 CopyDirectoryContents(prebuiltDirectory, stagingDirectory);
                 ReconcileOwnedServerBinary(stagingDirectory);
