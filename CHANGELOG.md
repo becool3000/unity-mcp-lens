@@ -28,6 +28,8 @@ All notable Unity MCP Lens package changes are documented here.
 - Added host-local `Unity.Editor.ScriptUpdatingConsentModal` recovery for Unity's Script Updating Consent popup during expected Codex-triggered script refreshes.
 - Added Phase 18 asset sprite-sheet tools: `Unity.Asset.PreviewImportSpriteSheetAndBind`, `Unity.Asset.ApplyImportSpriteSheetAndBind`, the compatibility facade `Unity.Asset.ImportSpriteSheetAndBind`, and `Unity.Asset.VerifySpriteArrayBinding`.
 - Added a fake-bridge direct-host transport recovery regression test for stale status files, setup-path reconnects, read-only retry, and mutating no-retry behavior.
+- Added a fake-bridge dynamic tool exposure regression test for initialize, foundation `tools/list`, `Unity.SetToolPacks(["assets"])`, `notifications/tools/list_changed`, and the follow-up `tools/list` asset surface.
+- Added `Export-McpDynamicToolIndexingEvidence.ps1` plus a Codex dynamic-tool indexing evidence note for comparing raw installed-host `tools/list` results against Codex `tool_search` exposure after pack switches.
 
 ### Changed
 
@@ -62,6 +64,7 @@ All notable Unity MCP Lens package changes are documented here.
 - Hardened the direct model-facing Lens host so stale/broken bridge pipes are quarantined, rediscovered, and retried once for safe read-only/control-plane calls, while mutating calls return structured maybe-applied transport errors.
 - Improved Lens server install freshness so explicit refreshes bypass the metadata-only up-to-date check and source-newer-than-prebuilt dev builds republish the native host.
 - Improved helper readiness classification so fresh successful Lens health authority probes override stale Editor.log handshake/auth signals.
+- Normalized the `Unity.Asset.VerifySpriteArrayBinding` input schema so `expectedSpriteNames` declares string array `items`, and expanded metadata audit coverage to reject exported array input schemas without `items`.
 
 ### Known Follow-Up
 
@@ -82,6 +85,10 @@ All notable Unity MCP Lens package changes are documented here.
 - Longer TintPaint dogfood session recorded `NoShapingRecorded=false`, `2,362,465` bytes saved (`78.41%`) across `1999` rows, with top savings from tool snapshot shaping and `Unity.ManageEditor.WaitForStableEditor`; it also exposed a `tsamCoverage=[]` presentation gap despite `1783` coverage rows.
 - Phase 18 BeeSurvivors asset smoke passed after Unity recompiled the package: assets-pack helper calls found the Roach sheet/config, previewed `RoachBeeCoolSurvive-Sheet` import/bind with a detail ref, verified Roach `PlayerFrames` against `RoachBeeCoolSurvive-Sheet`, verified main `PlayerFrames` against `BeeCoolSurvive-Sheet`, and usage telemetry showed complete TSAM coverage for the new asset preview/verify tools.
 - Direct-host transport recovery regression passed: normal `tools/list`, stale-status selection, broken pipes during `register_client`, `get_manifest`, `get_tool_schema`, read-only tool retry, and mutating no-retry/maybe-applied errors all validated against the fake bridge harness.
+- Phase 19 dynamic tool exposure regression passed: fake-bridge `Unity.SetToolPacks(["assets"])` emitted `notifications/tools/list_changed`, the follow-up `tools/list` exposed the Phase 18 asset tools, and exported array schemas included `items`.
+- Post-Unity/Codex-restart raw installed-host validation confirmed `Unity.SetToolPacks(["assets"])` emits `notifications/tools/list_changed`, follow-up `tools/list` exposes all Phase 18 asset tools, and `Unity_Asset_VerifySpriteArrayBinding.expectedSpriteNames` includes string `items`; Codex `tool_search` still did not expose the verifier in the current client thread.
+- Phase 20 evidence exporter passed against `D:\BeeSurvivors`, confirming the installed Lens host contract independently of Codex's dynamic tool index.
+- Post-Codex-reload direct BeeSurvivors validation passed for `Unity.GetLensHealth`, `Unity.ListToolPacks`, `Unity.SetToolPacks` to `foundation+assets`, and `Unity.ListResources` against RoachWars assets.
 - Earlier Phase 16 metadata audit passed with `foundation=12`, `foundation+scene=32`, `foundation+ui=22`, `project=21`, and `debug=22`; the current expected baselines are `foundation=13`, `foundation+scene=36`, `foundation+ui=27`, `foundation+runtime=16`, `project=22`, and live `debug=24`.
 - Phase 11 package compatibility, input-actions inspection, diagnostics, preview, and set calls emitted complete TSAM stage coverage with no failure classes.
 - Phase 12 UI hierarchy, scene binding, layout, and verify calls emitted complete TSAM stage coverage with no tool failure rows in the focused helper-driven scope.

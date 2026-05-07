@@ -189,7 +189,7 @@ Prefer the split preview/apply tools for routine authoring. This compatibility f
                     expectedCount = new { type = "integer", description = "Optional expected array element count." },
                     expectedTextureName = new { type = "string", description = "Optional texture name every bound Sprite should use." },
                     expectedTextureGuid = new { type = "string", description = "Optional texture GUID every bound Sprite should use." },
-                    expectedSpriteNames = new { type = "array", description = "Optional expected ordered Sprite names." }
+                    expectedSpriteNames = new { type = "array", description = "Optional expected ordered Sprite names.", items = new { type = "string" } }
                 },
                 required = new[] { "targetAssetPath", "targetFieldName" }
             };

@@ -31,6 +31,7 @@ Implemented response in this branch:
 - Mutating direct tools no longer retry after a request may have reached Unity; they return `UNITY_MCP_TRANSPORT_ERROR` with `retrySafe=false` and `maybeApplied=true`.
 - Lens server install refresh now republishes/copies even when metadata versions match, and repo-dev source newer than bundled prebuilt forces a source publish instead of reinstalling a stale prebuilt.
 - `Check-UnityDevSession` now treats fresh successful Lens health authority probes as ready even when stale Editor.log handshake/auth lines are still visible in the diagnostic tail.
+- After Codex reload, direct model-facing Lens calls succeeded against `D:\BeeSurvivors`: `Unity.GetLensHealth`, `Unity.ListToolPacks`, `Unity.SetToolPacks` to `foundation+assets`, and `Unity.ListResources` for `Assets/Data/RoachWars`.
 - PowerShell helper boolean parameters now normalize common nested-call values such as `$true`, `true`, `1`, `yes`, and switch-style values.
 - PowerShell batch wrapper writes `-StepsJson` to a temp steps file before invoking Node, and the Node parser gives Windows-specific guidance on JSON parse failures.
 - Script sync output now includes top-level `warnings`, `warningCount`, `warningSummary`, and `recoveredWithWarnings` when recovery hid transient pipe/beacon failures.
@@ -50,9 +51,24 @@ Implemented response in Phase 18:
   - `Unity.Asset.VerifySpriteArrayBinding` passed for main `PlayerFrames` using `BeeCoolSurvive-Sheet`.
   - `Unity.GetLensUsageReport` showed complete TSAM coverage for `Unity.Asset.PreviewImportSpriteSheetAndBind` and `Unity.Asset.VerifySpriteArrayBinding`, with zero failed TSAM rows and `NoShapingRecorded=false`.
 
+Implemented response in Phase 19:
+
+- `Unity.Asset.VerifySpriteArrayBinding` now declares `expectedSpriteNames.items = { type: "string" }` for stricter client-compatible JSON Schema.
+- Metadata audit now rejects any exported input schema property that declares `type: "array"` without an `items` schema.
+- `Tools~/Test-McpDynamicToolExposure.ps1` covers the direct host sequence: initialize, foundation `tools/list`, `Unity.SetToolPacks(["assets"])`, `notifications/tools/list_changed`, and a second `tools/list` that exposes the Phase 18 asset tools.
+- Required `foundation+assets=24` metadata assertions continue to include `Unity.Asset.PreviewImportSpriteSheetAndBind`, `Unity.Asset.ApplyImportSpriteSheetAndBind`, `Unity.Asset.ImportSpriteSheetAndBind`, and `Unity.Asset.VerifySpriteArrayBinding`.
+
+Implemented response in Phase 20:
+
+- Added `Tools~/Export-McpDynamicToolIndexingEvidence.ps1` to capture raw installed-host MCP evidence for dynamic pack switching and post-`tools/list_changed` tool exposure.
+- Added `docs/codex-dynamic-tool-indexing-evidence.md` with the raw-host repro, Codex `tool_search` comparison, and interpretation rule for separating Lens host correctness from Codex client indexing behavior.
+- Latest evidence points away from Lens host/bridge/schema behavior: raw `tools/list` exposes the asset verifier with strict schema, while Codex `tool_search` still does not surface it after restart.
+
 Still needed:
 
-- Live BeeSurvivors validation after the refreshed native host is installed and Codex respawns its direct MCP process.
+- 2026-05-06 post-Unity/Codex-restart direct check: `Unity.GetLensHealth` and `Unity.SetToolPacks(["assets"])` succeeded with `foundation+assets` active, but `tool_search` still did not expose `Unity.Asset.VerifySpriteArrayBinding`.
+- Raw installed-host MCP evidence after the same restart: initial `tools/list` returned `13` foundation tools, `Unity.SetToolPacks(["assets"])` succeeded with `toolCount=25`, host emitted `notifications/tools/list_changed`, follow-up `tools/list` returned `25` tools, all Phase 18 asset tools were present, and `expectedSpriteNames` included `items: { type: "string" }`.
+- Escalate or investigate Codex Desktop dynamic-tool indexing/refresh after MCP `notifications/tools/list_changed`; Lens-side raw host contract now has a repeatable evidence script.
 - Continue watching for `Unity_ManageEditor` transport-noise during domain reload/play transitions; safe calls now recover, but maybe-applied mutating calls intentionally require state verification before retry.
 
 ---

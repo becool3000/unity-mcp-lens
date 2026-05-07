@@ -439,7 +439,66 @@ sealed class MetadataAudit(BenchmarkOptions options)
                 failures.Add($"{label} tool '{tool.Name}' has an empty description.");
             if (!tool.HasObjectInputSchema())
                 failures.Add($"{label} tool '{tool.Name}' does not expose an object input schema.");
+            ValidateToolSchemaShape(label, tool, failures);
         }
+    }
+
+    static void ValidateToolSchemaShape(string label, ToolDescriptor tool, List<string> failures)
+    {
+        ValidateArraySchemasHaveItems($"{label} tool '{tool.Name}' inputSchema", tool.InputSchema, failures);
+    }
+
+    static void ValidateArraySchemasHaveItems(string path, JsonElement schema, List<string> failures)
+    {
+        if (schema.ValueKind != JsonValueKind.Object)
+            return;
+
+        if (SchemaTypeIncludes(schema, "array") && !schema.TryGetProperty("items", out _))
+            failures.Add($"{path} declares type 'array' without an 'items' schema.");
+
+        if (schema.TryGetProperty("properties", out var properties) && properties.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var property in properties.EnumerateObject())
+                ValidateArraySchemasHaveItems($"{path}.properties.{property.Name}", property.Value, failures);
+        }
+
+        if (schema.TryGetProperty("items", out var items))
+            ValidateArraySchemasHaveItems($"{path}.items", items, failures);
+
+        if (schema.TryGetProperty("additionalProperties", out var additionalProperties) &&
+            additionalProperties.ValueKind == JsonValueKind.Object)
+        {
+            ValidateArraySchemasHaveItems($"{path}.additionalProperties", additionalProperties, failures);
+        }
+
+        foreach (var keyword in new[] { "oneOf", "anyOf", "allOf", "prefixItems" })
+        {
+            if (!schema.TryGetProperty(keyword, out var schemaArray) || schemaArray.ValueKind != JsonValueKind.Array)
+                continue;
+
+            var index = 0;
+            foreach (var childSchema in schemaArray.EnumerateArray())
+            {
+                ValidateArraySchemasHaveItems($"{path}.{keyword}[{index}]", childSchema, failures);
+                index++;
+            }
+        }
+    }
+
+    static bool SchemaTypeIncludes(JsonElement schema, string expectedType)
+    {
+        if (!schema.TryGetProperty("type", out var typeElement))
+            return false;
+
+        if (typeElement.ValueKind == JsonValueKind.String)
+            return string.Equals(typeElement.GetString(), expectedType, StringComparison.OrdinalIgnoreCase);
+
+        if (typeElement.ValueKind != JsonValueKind.Array)
+            return false;
+
+        return typeElement.EnumerateArray().Any(item =>
+            item.ValueKind == JsonValueKind.String &&
+            string.Equals(item.GetString(), expectedType, StringComparison.OrdinalIgnoreCase));
     }
 
     static void ValidateLensUsageSchema(IReadOnlyList<ToolDescriptor> tools, List<string> failures)
