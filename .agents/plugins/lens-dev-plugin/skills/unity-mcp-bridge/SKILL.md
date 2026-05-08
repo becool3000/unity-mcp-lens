@@ -86,8 +86,14 @@ powershell -ExecutionPolicy Bypass -File $script -ProjectPath "$PWD"
   - `Unity.ListToolPacks`
   - `Unity.SetToolPacks`
   - `Unity.ReadDetailRef`
+  - `Unity.Tools.Describe`
+  - `Unity.Tools.ActivateAndVerify`
 - `foundation` is the default pack and is always on.
 - At most two additional non-foundation packs should be active at once.
+- Helper pack state is per Lens session/process. New helper invocations should auto-prime required packs through the exact map or `Unity.Tools.Describe`; do not assume a pack selected in a previous helper process is still active.
+- If Codex dynamic indexing is stale after `notifications/tools/list_changed`, use `Unity.Tools.ActivateAndVerify`, `Invoke-UnityMcpTool.js`, `Invoke-UnityMcpBatch`, or `Unity.Tools.Describe` to query the live manifest/schema/pack requirements until the client refreshes.
+- When `Unity.SetToolPacks` reports `clientSurface.expectedRefresh=true`, Lens has done the server-side part by emitting `notifications/tools/list_changed`. If Codex still cannot call a described tool, record it as client indexing drift rather than a bridge pack failure.
+- Installed Codex plugin cache versions can move. The repo-local `.agents/plugins/lens-dev-plugin` source stays authoritative; locate the active cache version only when debugging Codex's installed view.
 - When a tool result includes `detailRef`, use `Unity.ReadDetailRef` only when the preview/summary is insufficient. Do not immediately expand every large result.
 - `Unity.RunCommand`, `Unity.ReadConsole`, and `Unity.ManageEditor WaitForStableEditor` are expected to return compact, stage-aware results. Treat detail refs as the source for full logs, full scanned console entries, or full editor-state attempts when needed.
 - For known multi-step smoke or workflow sequences, prefer `Invoke-UnityMcpBatch` so one Lens session can activate the needed exact pack sets and avoid repeated schema/session churn.
@@ -97,6 +103,7 @@ powershell -ExecutionPolicy Bypass -File $script -ProjectPath "$PWD"
 
 - Treat `ApprovalPending` as user action required in Unity.
 - Treat `BuildInProgress` as non-user-actionable when `Editor.log` still shows active WebGL Bee/wasm work and no later terminal build marker. Do not notify the user or keep retrying bridge recovery during that window.
+- Treat `BeaconMissing` as non-blocking when the old editor-status beacon is retired or absent; continue with MCP health and only escalate on hard bridge/editor failures.
 - Treat `EditorReloadingExpected` as a transient state; wait for Unity compile/domain reload settle instead of notifying the user.
 - Treat `ReconnectRequired` as user action required even if the bridge status file says `ready`.
 - Treat `UnityNotRunning` or `BridgeNotReady` as unavailable; do not guess your way through scene or prefab work.

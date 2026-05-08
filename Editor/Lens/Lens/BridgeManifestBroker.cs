@@ -313,6 +313,70 @@ namespace Becool.UnityMcpLens.Editor.Lens
             }
         }
 
+        public static object DescribeTools(
+            string connectionId,
+            string toolName,
+            bool includeSchemas,
+            bool includePackRequirements,
+            bool includeExamples,
+            int maxTools)
+        {
+            lock (s_Lock)
+            {
+                EnsureCurrentSnapshotLocked();
+
+                maxTools = Math.Max(1, Math.Min(500, maxTools));
+                var activeToolPacks = BridgeLensSessionRegistry.GetActiveToolPacks(connectionId);
+                var normalizedQuery = McpToolRegistry.NormalizeToolName(toolName);
+                var allTools = s_CurrentTools ?? Array.Empty<BridgeToolDescriptor>();
+                var matches = allTools.AsEnumerable();
+                bool exactMatch = false;
+
+                if (!string.IsNullOrWhiteSpace(normalizedQuery))
+                {
+                    var exactMatches = allTools
+                        .Where(tool => string.Equals(McpToolRegistry.NormalizeToolName(tool.name), normalizedQuery, StringComparison.OrdinalIgnoreCase))
+                        .ToArray();
+                    exactMatch = exactMatches.Length > 0;
+                    matches = exactMatch
+                        ? exactMatches
+                        : allTools.Where(tool =>
+                            (tool.name?.IndexOf(toolName, StringComparison.OrdinalIgnoreCase) ?? -1) >= 0 ||
+                            (McpToolRegistry.NormalizeToolName(tool.name)?.IndexOf(normalizedQuery, StringComparison.OrdinalIgnoreCase) ?? -1) >= 0 ||
+                            (tool.title?.IndexOf(toolName, StringComparison.OrdinalIgnoreCase) ?? -1) >= 0 ||
+                            (tool.description?.IndexOf(toolName, StringComparison.OrdinalIgnoreCase) ?? -1) >= 0);
+                }
+
+                var matchedTools = matches
+                    .OrderBy(tool => tool.name, StringComparer.Ordinal)
+                    .ToArray();
+                var returnedTools = matchedTools
+                    .Take(maxTools)
+                    .Select(tool => BuildToolDescription(CloneDescriptor(tool, includeSchemas), includePackRequirements, includeExamples))
+                    .ToArray();
+
+                BridgeLensSessionRegistry.UpdateAcknowledgedManifest(connectionId, s_BridgeSessionId, s_ManifestVersion);
+                return new
+                {
+                    bridgeSessionId = s_BridgeSessionId,
+                    manifestVersion = s_ManifestVersion,
+                    profileCatalogVersion = ToolPackCatalog.ProfileCatalogVersion,
+                    activeToolPacks,
+                    query = string.IsNullOrWhiteSpace(toolName) ? null : toolName,
+                    exactMatch,
+                    includeSchemas,
+                    includePackRequirements,
+                    includeExamples,
+                    totalToolCount = allTools.Length,
+                    matchedToolCount = matchedTools.Length,
+                    returnedToolCount = returnedTools.Length,
+                    truncated = matchedTools.Length > returnedTools.Length,
+                    maxTools,
+                    tools = returnedTools
+                };
+            }
+        }
+
         static BridgeManifestResult CreateFullResult(
             BridgeToolDescriptor[] tools,
             string[] activeToolPacks,
@@ -492,6 +556,47 @@ namespace Becool.UnityMcpLens.Editor.Lens
                 outputSchema = includeSchemas ? tool.outputSchema : null,
                 annotations = includeSchemas ? tool.annotations : null
             };
+        }
+
+        static object BuildToolDescription(BridgeToolDescriptor tool, bool includePackRequirements, bool includeExamples)
+        {
+            var requiredPacks = GetRequiredActivationPacks(tool);
+            return new
+            {
+                tool.name,
+                tool.title,
+                tool.description,
+                tool.schemaHash,
+                groups = tool.groups ?? Array.Empty<string>(),
+                packs = tool.packs ?? Array.Empty<string>(),
+                requiredPacks = includePackRequirements ? requiredPacks : null,
+                tool.readOnlyHint,
+                tool.inputSchema,
+                tool.outputSchema,
+                tool.annotations,
+                example = includeExamples
+                    ? new
+                    {
+                        setToolPacks = requiredPacks,
+                        call = new
+                        {
+                            tool = tool.name,
+                            arguments = new { }
+                        }
+                    }
+                    : null
+            };
+        }
+
+        static string[] GetRequiredActivationPacks(BridgeToolDescriptor tool)
+        {
+            return (tool.packs ?? Array.Empty<string>())
+                .Where(pack =>
+                    !string.Equals(pack, ToolPackCatalog.FoundationPackId, StringComparison.OrdinalIgnoreCase) &&
+                    !string.Equals(pack, ToolPackCatalog.FullPackId, StringComparison.OrdinalIgnoreCase))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(pack => pack, StringComparer.Ordinal)
+                .ToArray();
         }
 
         static BridgeToolDescriptor[] CloneTools(BridgeToolDescriptor[] tools, bool includeSchemas)

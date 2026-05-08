@@ -11,10 +11,10 @@ when Unity reloads, recompiles, or changes project/package state.
 - Standalone package id: `com.becool3000.unity-mcp-lens`.
 - Preferred MCP transport: the owned `unity-mcp-lens` stdio server.
 - Default model-facing tool surface: `foundation`.
-- Current `foundation` baseline: `13` exported tools.
-- Current `foundation + scene` baseline: `36` exported tools.
-- Current `foundation + ui` baseline: `27` exported tools.
-- Current `foundation + runtime` baseline: `16` exported tools.
+- Current `foundation` baseline: `15` exported tools.
+- Current `foundation + scene` baseline: `38` exported tools.
+- Current `foundation + ui` baseline: `29` exported tools.
+- Current `foundation + runtime` baseline: `19` exported tools.
 - Current Phase 8 surface: split GameObject TSAM tools for inspect, component reads, preview/apply mutation, create, and delete.
 - Current Phase 12 surface: split UI hierarchy/layout preview/apply, scene serialized-reference preview/apply binding, UI screen-layout verification, center-based UI verify relations, and structured `Unity.RunCommand` return values.
 - Current Phase 17+ surface: UI canvas prefab preview/apply, scene prefab instantiate/bind preview/apply, UI raycast/layout verification, Game view resolution-matrix layout verification, scene serialized-reference verification, play-mode pointer/scroll smoke verification, explicit play-mode exit, and compact usage-report pack-transition summaries.

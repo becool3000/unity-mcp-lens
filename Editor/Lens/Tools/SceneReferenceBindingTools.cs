@@ -202,7 +202,7 @@ Reports effective values, prefab-inherited source values, local override status,
                     target = new { description = "Scene GameObject target, path, or instance id." },
                     searchMethod = new { type = "string", description = "How to find the scene target ('by_name', 'by_id', 'by_path')." },
                     includeInactive = new { type = "boolean", description = "Include inactive scene objects when resolving the target." },
-                    bindings = new { type = "array", description = "Serialized reference bindings to preview or apply." }
+                    bindings = new { type = "array", description = "Serialized reference bindings to preview or apply.", items = new { type = "object" } }
                 },
                 required = new[] { "target", "bindings" }
             };
@@ -223,7 +223,7 @@ Reports effective values, prefab-inherited source values, local override status,
                     position = new { description = "Optional local position as {x,y,z} or [x,y,z]." },
                     rotation = new { description = "Optional local Euler rotation as {x,y,z} or [x,y,z]." },
                     scale = new { description = "Optional local scale as {x,y,z} or [x,y,z]." },
-                    bindings = new { type = "array", description = "Serialized reference bindings to preview/apply after the instance exists." }
+                    bindings = new { type = "array", description = "Serialized reference bindings to preview/apply after the instance exists.", items = new { type = "object" } }
                 },
                 required = new[] { "prefabPath" }
             };
@@ -253,7 +253,7 @@ Reports effective values, prefab-inherited source values, local override status,
                                 componentIndex = new { type = "integer", description = "0-based component index when multiple matching components exist." },
                                 propertyPath = new { type = "string", description = "Serialized property path to verify." },
                                 expectedReference = new { description = "Optional expected single object reference." },
-                                expectedReferences = new { type = "array", description = "Optional expected object-reference array/list." }
+                                expectedReferences = new { type = "array", description = "Optional expected object-reference array/list.", items = new { description = "Expected object reference." } }
                             },
                             required = new[] { "componentType", "propertyPath" }
                         }

@@ -124,7 +124,7 @@ Use this to prove UI points are blocked by the expected element and to combine h
                                 type = new { type = "string", description = "Assertion type: inside_screen, relative_position, axis_alignment, or ordered_stack." },
                                 targetKey = new { type = "string", description = "Primary target key for inside_screen, relative_position, and axis_alignment." },
                                 otherTargetKey = new { type = "string", description = "Secondary target key for relative_position and axis_alignment." },
-                                targetKeys = new { type = "array", description = "Ordered keys for ordered_stack assertions." },
+                                targetKeys = new { type = "array", description = "Ordered keys for ordered_stack assertions.", items = new { type = "string" } },
                                 relation = new { type = "string", description = "For relative_position: right_of, left_of, above, below, right_of_center, left_of_center, above_center, or below_center." },
                                 axis = new { type = "string", description = "For axis_alignment: horizontal_center, vertical_center, left, right, top, or bottom." },
                                 edge = new { type = "string", description = "Alias for axis in axis_alignment assertions." },
@@ -393,7 +393,7 @@ Use this to prove UI points are blocked by the expected element and to combine h
                     target = new { description = "Scene GameObject, path, or instance id to use as the root parent." },
                     searchMethod = new { type = "string", description = "How to find the target root ('by_name', 'by_id', 'by_path')." },
                     includeInactive = new { type = "boolean", description = "Include inactive scene objects when resolving the root target." },
-                    nodes = new { type = "array", description = "Named UI node specs to ensure under the root target." }
+                    nodes = new { type = "array", description = "Named UI node specs to ensure under the root target.", items = new { type = "object" } }
                 },
                 required = new[] { "target", "nodes" }
             };
@@ -444,7 +444,7 @@ Use this to prove UI points are blocked by the expected element and to combine h
                     pixelPerfect = new { type = "boolean", description = "Optional Canvas pixelPerfect value." },
                     referenceResolution = new { description = "Optional CanvasScaler referenceResolution as {x,y} or [x,y]." },
                     scaleMode = new { type = "string", description = "CanvasScaler scale mode: scale_with_screen_size, constant_pixel_size, or constant_physical_size." },
-                    nodes = new { type = "array", description = "Named UI node specs to create/update under the prefab root." }
+                    nodes = new { type = "array", description = "Named UI node specs to create/update under the prefab root.", items = new { type = "object" } }
                 },
                 required = new[] { "prefabPath" }
             };
@@ -473,8 +473,8 @@ Use this to prove UI points are blocked by the expected element and to combine h
                             required = new[] { "width", "height" }
                         }
                     },
-                    targets = new { type = "array", description = "Keyed UI layout targets, same shape as Unity.UI.VerifyScreenLayout." },
-                    assertions = new { type = "array", description = "Layout assertions, same shape as Unity.UI.VerifyScreenLayout." },
+                    targets = new { type = "array", description = "Keyed UI layout targets, same shape as Unity.UI.VerifyScreenLayout.", items = new { type = "object" } },
+                    assertions = new { type = "array", description = "Layout assertions, same shape as Unity.UI.VerifyScreenLayout.", items = new { type = "object" } },
                     restoreOriginal = new { type = "boolean", description = "Restore the original selected Game view size after verification." },
                     warmupMs = new { type = "integer", description = "Delay after selecting each Game view size before measuring." }
                 },
@@ -511,8 +511,8 @@ Use this to prove UI points are blocked by the expected element and to combine h
                             required = new[] { "key", "screenX", "screenY" }
                         }
                     },
-                    targets = new { type = "array", description = "Optional keyed UI layout targets, same shape as Unity.UI.VerifyScreenLayout." },
-                    assertions = new { type = "array", description = "Optional layout assertions, same shape as Unity.UI.VerifyScreenLayout." }
+                    targets = new { type = "array", description = "Optional keyed UI layout targets, same shape as Unity.UI.VerifyScreenLayout.", items = new { type = "object" } },
+                    assertions = new { type = "array", description = "Optional layout assertions, same shape as Unity.UI.VerifyScreenLayout.", items = new { type = "object" } }
                 },
                 required = new[] { "points" }
             };

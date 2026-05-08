@@ -8,7 +8,8 @@ param(
     [int]$ForceRefreshTimeoutSeconds = 30,
     [int]$IdleStablePollCount = 3,
     [double]$PollIntervalSeconds = 0.5,
-    [double]$PostIdleDelaySeconds = 1.0
+    [double]$PostIdleDelaySeconds = 1.0,
+    [switch]$Force
 )
 
 $nodePath = (Get-Command node -ErrorAction Stop).Source
@@ -30,6 +31,10 @@ foreach ($changedPath in $ChangedPaths) {
     if (-not [string]::IsNullOrWhiteSpace($changedPath)) {
         $scriptArgs += @("--ChangedPaths", $changedPath)
     }
+}
+
+if ($Force) {
+    $scriptArgs += @("--Force", "true")
 }
 
 & $nodePath @scriptArgs

@@ -169,12 +169,12 @@ sealed class BenchmarkOptions
 
 sealed class MetadataAudit(BenchmarkOptions options)
 {
-    const int ExpectedFoundationToolCount = 13;
-    const int ExpectedSceneToolCount = 36;
-    const int ExpectedUiToolCount = 27;
-    const int ExpectedRuntimeToolCount = 16;
-    const int ExpectedProjectToolCount = 22;
-    const int ExpectedAssetsToolCount = 24;
+    const int ExpectedFoundationToolCount = 15;
+    const int ExpectedSceneToolCount = 38;
+    const int ExpectedUiToolCount = 29;
+    const int ExpectedRuntimeToolCount = 19;
+    const int ExpectedProjectToolCount = 24;
+    const int ExpectedAssetsToolCount = 27;
 
     static readonly string[] k_RequiredFoundationTools =
     [
@@ -182,6 +182,8 @@ sealed class MetadataAudit(BenchmarkOptions options)
         "Unity_ListToolPacks",
         "Unity_SetToolPacks",
         "Unity_ReadDetailRef",
+        "Unity_Tools_Describe",
+        "Unity_Tools_ActivateAndVerify",
         "Unity_ReadConsole",
         "Unity_ListResources",
         "Unity_ReadResource",
@@ -247,7 +249,8 @@ sealed class MetadataAudit(BenchmarkOptions options)
     [
         "Unity_Runtime_GetVisualBoundsSnapshot",
         "Unity_PlayMode_PointerInputSmoke",
-        "Unity_Editor_ExitPlayMode"
+        "Unity_Editor_ExitPlayMode",
+        "Unity_Editor_SetPlayMode"
     ];
 
     static readonly string[] k_RequiredProjectTools =
@@ -346,6 +349,8 @@ sealed class MetadataAudit(BenchmarkOptions options)
         ValidateToolSet("foundation+project", projectTools, ExpectedProjectToolCount, k_RequiredProjectTools, failures);
         ValidateToolSet("foundation+assets", assetsTools, ExpectedAssetsToolCount, k_RequiredAssetsTools, failures);
         ValidateToolSet("foundation+debug", debugTools, null, k_RequiredDebugTools, failures);
+        ValidateReadOnlyHint(foundationTools, "Unity_Tools_Describe", expected: true, failures);
+        ValidateReadOnlyHint(foundationTools, "Unity_Tools_ActivateAndVerify", expected: false, failures);
         ValidateReadOnlyHint(foundationTools, "Unity_Editor_ScriptUpdatingConsentModal", expected: false, failures);
         ValidateReadOnlyHint(sceneTools, "Unity_GameObject_Inspect", expected: true, failures);
         ValidateReadOnlyHint(sceneTools, "Unity_GameObject_ListComponents", expected: true, failures);
@@ -375,6 +380,7 @@ sealed class MetadataAudit(BenchmarkOptions options)
         ValidateReadOnlyHint(sceneTools, "Unity_Scene_ApplyInstantiatePrefabAndBind", expected: false, failures);
         ValidateReadOnlyHint(runtimeTools, "Unity_PlayMode_PointerInputSmoke", expected: false, failures);
         ValidateReadOnlyHint(runtimeTools, "Unity_Editor_ExitPlayMode", expected: false, failures);
+        ValidateReadOnlyHint(runtimeTools, "Unity_Editor_SetPlayMode", expected: false, failures);
         ValidateReadOnlyHint(projectTools, "Unity_InputSystem_Diagnostics", expected: true, failures);
         ValidateReadOnlyHint(projectTools, "Unity_Project_PackageCompatibility", expected: true, failures);
         ValidateReadOnlyHint(projectTools, "Unity_InputActions_InspectAsset", expected: true, failures);
@@ -800,6 +806,18 @@ sealed class MetadataAudit(BenchmarkOptions options)
             tools,
             "Unity_Editor_ExitPlayMode",
             ["waitForStableEditor", "timeoutMs", "pollIntervalMs", "stablePollCount", "postStableDelayMs", "unpauseBeforeExit"],
+            [],
+            failures);
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_Editor_SetPlayMode",
+            ["mode", "stopFirst", "waitForRuntimeAdvance", "warmupSeconds", "timeoutSeconds", "unpauseBeforeExit"],
+            ["mode"],
+            failures);
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_Tools_ActivateAndVerify",
+            ["packs", "expectedTools"],
             [],
             failures);
     }

@@ -111,13 +111,13 @@ Pack-specific TSAM work is used to keep the MCP surface small:
 
 Current metadata baselines are:
 
-- `foundation`: `13` exported tools.
-- `foundation + scene`: `36` exported tools.
-- `foundation + ui`: `27` exported tools.
-- `foundation + runtime`: `16` exported tools.
-- `project`: `22` exported tools.
-- `foundation + assets`: `24` exported tools.
-- `debug`: `24` exported tools.
+- `foundation`: `15` exported tools.
+- `foundation + scene`: `38` exported tools.
+- `foundation + ui`: `29` exported tools.
+- `foundation + runtime`: `19` exported tools.
+- `project`: `24` exported tools.
+- `foundation + assets`: `27` exported tools.
+- `debug`: `26` exported tools.
 
 Pack membership changes should update metadata audit expectations and workflow
 docs in the same change.

@@ -15,13 +15,10 @@ $exitResult = $null
 $exitError = $null
 
 try {
-    $exitResponse = Invoke-UnityMcpToolJson -ProjectPath $resolvedProjectPath -ToolName "Unity_Editor_ExitPlayMode" -Arguments @{
-        WaitForStableEditor = $false
-        TimeoutMs           = [Math]::Max(1000, $ExitRequestTimeoutSeconds * 1000)
-        PollIntervalMs      = [Math]::Max(50, [int][Math]::Round($PollIntervalSeconds * 1000))
-        StablePollCount     = [Math]::Max(1, $StablePollCount)
-        PostStableDelayMs   = [Math]::Max(0, [int][Math]::Round($PostIdleDelaySeconds * 1000))
-        UnpauseBeforeExit   = $true
+    $exitResponse = Invoke-UnityMcpToolJson -ProjectPath $resolvedProjectPath -ToolName "Unity_Editor_SetPlayMode" -Arguments @{
+        Mode              = "exit"
+        TimeoutSeconds    = [Math]::Max(1, $ExitRequestTimeoutSeconds)
+        UnpauseBeforeExit = $true
     } -TimeoutSeconds $ExitRequestTimeoutSeconds
     $exitResult = Get-UnityToolObject -Response $exitResponse
 }

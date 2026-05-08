@@ -6,9 +6,41 @@ latest dogfood findings.
 
 ---
 
+## Latest BeeSurvivors Dynamic Surface Dogfood Finding
+
+Date: 2026-05-08
+
+Host project:
+
+- `D:\BeeSurvivors`
+- Active scene `RoachWars`
+
+Finding:
+
+- Lens was usable end-to-end for health, pack listing, console reads, project info, script validation, script sync, play entry, runtime advancement, play exit, and final readiness.
+- Codex dynamic tool exposure remained unreliable after pack switches: `Unity.Tools.Describe` proved tools such as `Unity.Editor.SetPlayMode` and `Unity.Editor.SyncScripts` existed, but Codex did not expose them as callable in the active thread.
+- The previous `0.1.1` installed skill path was stale after plugin cache cleanup; the active plugin cache was `0.1.2`.
+- `Unity.Editor.SyncScripts` could report failure when refresh was scheduled and old console errors were already present, even when no new compile/import errors were proven.
+- Play entry recovered from a transient `Pipe is broken` pack-restore/readiness poll, but helper output still included too much nested recovery state for routine dogfood reports.
+
+Implemented response in this branch:
+
+- `Unity.Editor.SyncScripts` now separates initial/final/new console error counts. Stale pre-existing console errors are warnings, while only newly counted console errors set `consoleErrorsDetected=true`.
+- `Unity.Editor.SyncScripts` now emits an explicit `adapter` TSAM stage to close the observed `n/s/a/r` coverage gap for script sync.
+- `Unity.SetToolPacks` responses now include `clientSurface` guidance and whether the native host emitted `notifications/tools/list_changed`, making client-side dynamic-indexing failures easier to classify.
+- `Sync-UnityScriptChanges.js` now surfaces the new/stale console-error fields from `Unity.Editor.SyncScripts`.
+- `Enter-UnityPlayMode.js` and `Enter-UnityPlayMode.ps1` now default successful runs to compact play-request/readiness summaries, with full nested detail available via `--IncludeDetails` / `-IncludeDetails` or automatically on failure.
+
+Still needed:
+
+- Codex Desktop still needs client-side verification/fix for dynamic tool indexing after `notifications/tools/list_changed`; Lens can emit the notification and provide manifest evidence, but cannot force Codex to update the current thread's callable tool table.
+- Add a focused smoke that activates `runtime`, checks `Unity.Tools.Describe(Unity.Editor.SetPlayMode)`, captures whether Codex/tool_search exposes the callable, and records the client-side result separately from raw host correctness.
+
+---
+
 ## Latest BeeSurvivors Dogfood Finding
 
-Date: 2026-05-06
+Date: 2026-05-07
 
 Host project:
 
@@ -25,6 +57,16 @@ Finding:
 - `Sync-UnityScriptChanges.ps1` could succeed after recovery while burying forced-cycle pipe/beacon failures in a large payload.
 
 Implemented response in this branch:
+
+- Added `Unity.Tools.Describe` as a foundation read-only live manifest/schema/pack-requirement description tool.
+- Added `Unity.Tools.ActivateAndVerify` as a foundation mutating fallback that activates packs and reports host-visible expected-tool verification for client dynamic-indexing drift.
+- Added `Unity.Editor.SyncScripts` as the scripting-pack deterministic script refresh/compile wait path; no changed paths with no force is a fast no-op.
+- Added `Unity.Editor.SetPlayMode` as the runtime-pack high-level enter/exit workflow with transition, runtime-advance, reconnect, console-error, and elapsed-time evidence.
+- Updated helper wrappers so script sync and play-mode enter/exit use the new tools and rely on per-session pack auto-priming.
+- Reduced routine `detailRef` noise through an opt-in compactor threshold for `Unity.ReadConsole` and `Unity.RunCommand`; default compactor behavior remains unchanged.
+- Documented that the old editor-status beacon may be retired/missing, helper pack state is per session/process, and stale Codex dynamic indexing should fall back to helper calls or `Unity.Tools.Describe`.
+
+Earlier implemented response:
 
 - Native Lens host now treats stale bridge pipe failures on safe/read-only direct tools as reconnectable and retries once.
 - Direct host bridge discovery now excludes stale ready status files, quarantines just-failed pipes/status files for 30 seconds, restores active packs after reconnect, and reports host/bridge diagnostics in structured transport errors.
@@ -75,12 +117,12 @@ Still needed:
 
 ## Current Baselines
 
-- `foundation` exports `13` tools, including the host-local Script Updating Consent modal recovery tool.
-- `foundation + scene` now targets `36` tools.
-- `foundation + ui` now targets `27` tools.
-- `foundation + runtime` now targets `16` tools.
-- Latest expected metadata audit baseline keeps `project=22` and observes `debug=24`; the TintPaint Brush HUD dogfood pass raises the expected `scene`, `ui`, and `runtime` counts.
-- Phase 18 adds the `foundation+assets=24` metadata audit baseline for asset/resource workflows and sprite-sheet binding tools.
+- `foundation` exports `15` tools, including `Unity.Tools.Describe`, `Unity.Tools.ActivateAndVerify`, and the host-local Script Updating Consent modal recovery tool.
+- `foundation + scene` now targets `38` tools.
+- `foundation + ui` now targets `29` tools.
+- `foundation + runtime` now targets `19` tools, including `Unity.Editor.SetPlayMode`.
+- Latest expected metadata audit baseline keeps `project=24` and observes `debug=26`; the BeeSurvivors reliability follow-up raises all always-on pack counts.
+- Phase 18 plus the BeeSurvivors reliability follow-up set the `foundation+assets=27` metadata audit baseline for asset/resource workflows and sprite-sheet binding tools.
 - Phase 8 split GameObject tools are in the `scene` pack.
 - Phase 12 scene serialized-reference preview/apply binding tools are in the `scene` pack.
 - Phase 12 UI hierarchy/layout preview/apply tools and `Unity.UI.VerifyScreenLayout` are in the `ui` pack.

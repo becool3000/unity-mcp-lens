@@ -70,6 +70,10 @@ namespace Becool.UnityMcpLens.Editor.Lens
         public const string ListToolPacksToolName = "Unity.ListToolPacks";
         public const string SetToolPacksToolName = "Unity.SetToolPacks";
         public const string ReadDetailRefToolName = "Unity.ReadDetailRef";
+        public const string ToolsDescribeToolName = "Unity.Tools.Describe";
+        public const string ToolsActivateAndVerifyToolName = "Unity.Tools.ActivateAndVerify";
+        public const string EditorSyncScriptsToolName = "Unity.Editor.SyncScripts";
+        public const string EditorSetPlayModeToolName = "Unity.Editor.SetPlayMode";
 
         static string NormalizeToolName(string toolName) => McpToolRegistry.NormalizeToolName(toolName) ?? string.Empty;
 
@@ -79,6 +83,8 @@ namespace Becool.UnityMcpLens.Editor.Lens
             NormalizeToolName(ListToolPacksToolName),
             NormalizeToolName(SetToolPacksToolName),
             NormalizeToolName(ReadDetailRefToolName),
+            NormalizeToolName(ToolsDescribeToolName),
+            NormalizeToolName(ToolsActivateAndVerifyToolName),
             NormalizeToolName("Unity.ReadConsole"),
             NormalizeToolName("Unity.ListResources"),
             NormalizeToolName("Unity.ReadResource"),
@@ -129,12 +135,14 @@ namespace Becool.UnityMcpLens.Editor.Lens
                 "Runtime Verification",
                 "Play-mode runtime probes, visual bounds snapshots, and input smoke checks.",
                 includeGroups: new[] { "runtime" },
+                includeTools: new[] { NormalizeToolName(EditorSetPlayModeToolName) },
                 recommendedNextPacks: new[] { ScenePackId, UiPackId, DebugPackId }),
             [ScriptingPackId] = new(
                 ScriptingPackId,
                 "Scripting",
                 "Script/resource reads, edits, and validation workflows.",
                 includeGroups: new[] { "scripting", "resources" },
+                includeTools: new[] { NormalizeToolName(EditorSyncScriptsToolName) },
                 recommendedNextPacks: new[] { ProjectPackId, AssetsPackId }),
             [AssetsPackId] = new(
                 AssetsPackId,

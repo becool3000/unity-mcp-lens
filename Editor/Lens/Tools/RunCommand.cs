@@ -560,7 +560,8 @@ internal class CommandScript : IRunCommand
                         failureStage = failureStage ?? "none",
                         errorKind
                     },
-                    "run_command_result");
+                    "run_command_result",
+                    detailRefMinBytes: PayloadBudgetPolicy.MaxToolResultBytes);
             }
 
             return Task.FromResult(BuildResponse(responseSuccess, responseMessage, responseData));
@@ -568,7 +569,7 @@ internal class CommandScript : IRunCommand
 
         static object CreateLocalFixedCodeDetailRef(string localFixedCode, string originalCode, string mode)
         {
-            if (string.IsNullOrEmpty(localFixedCode))
+            if (string.IsNullOrEmpty(localFixedCode) || string.Equals(localFixedCode, originalCode, StringComparison.Ordinal))
                 return null;
 
             int rawBytes = PayloadBudgeting.GetUtf8ByteCount(localFixedCode);
@@ -595,7 +596,7 @@ internal class CommandScript : IRunCommand
             text ??= string.Empty;
             bytes = PayloadBudgeting.GetUtf8ByteCount(text);
             string preview = PayloadBudgeting.CreateTextPreview(text, LogPreviewMaxLines, LogPreviewMaxBytes, out truncated);
-            detailRef = string.IsNullOrEmpty(text)
+            detailRef = string.IsNullOrEmpty(text) || !truncated
                 ? null
                 : ToolResultCompactor.CreateStoredDetailRef(
                     ToolName,

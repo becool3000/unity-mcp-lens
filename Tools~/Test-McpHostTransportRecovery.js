@@ -389,7 +389,7 @@ async function assertFullTools(client) {
   const names = response.tools.map((tool) => tool.name);
   assert(names.includes("Unity_GetLensHealth"), "tools/list should include dynamic health tool");
   assert(names.includes("Unity_ListToolPacks"), "tools/list should include dynamic pack tool");
-  assert(names.includes("Unity_RunCommand"), "tools/list should include dynamic mutating tool");
+  assert(names.includes("Unity_RunCommand"), `tools/list should include dynamic mutating tool; got ${names.join(", ")}`);
   assert(response.tools.length >= 4, "tools/list should include dynamic tools plus local bootstrap helpers");
 }
 

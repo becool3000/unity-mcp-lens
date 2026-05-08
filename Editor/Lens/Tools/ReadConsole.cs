@@ -564,7 +564,8 @@ Returns:
                             entryCount = formattedEntries.Count,
                             groupCount = grouped.Count
                         },
-                        "read_console_summary")
+                        "read_console_summary",
+                        detailRefMinBytes: PayloadBudgetPolicy.MaxToolResultBytes)
                 );
             }
 

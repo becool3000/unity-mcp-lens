@@ -67,11 +67,15 @@ namespace Becool.UnityMcpLens.Editor.Lens
             object rawData,
             object compactData,
             object detailRefMeta = null,
-            string payloadClass = "structured_tool_result")
+            string payloadClass = "structured_tool_result",
+            int? detailRefMinBytes = null)
         {
             var rawJson = JsonConvert.SerializeObject(rawData, Formatting.None);
             var rawBytes = PayloadBudgeting.GetUtf8ByteCount(rawJson);
-            var detailRef = CreateStoredDetailRef(toolName, rawData, rawBytes, detailRefMeta);
+            bool shouldCreateDetailRef = !detailRefMinBytes.HasValue || rawBytes > detailRefMinBytes.Value;
+            var detailRef = shouldCreateDetailRef
+                ? CreateStoredDetailRef(toolName, rawData, rawBytes, detailRefMeta)
+                : null;
             var shaped = ToObject(compactData);
             shaped["detailAvailable"] = detailRef != null;
             if (detailRef != null)

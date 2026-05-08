@@ -17,6 +17,7 @@ sealed class UnityMcpLensHost
         "Unity_GetLensHealth",
         "Unity_ListToolPacks",
         "Unity_ReadDetailRef",
+        "Unity_Tools_Describe",
         "Unity_ReadConsole",
         "Unity_ListResources",
         "Unity_ReadResource",
@@ -63,6 +64,7 @@ sealed class UnityMcpLensHost
         "Unity_Resource_Write",
         "Unity_Resource_Delete",
         "Unity_Project_ManagePackages",
+        "Unity_Tools_ActivateAndVerify",
         "Unity_Asset_ConfigureSpriteImport",
         "Unity_Asset_ImportSpriteSheetAndBind",
         "Unity_Asset_ApplyImportSpriteSheetAndBind",
@@ -70,6 +72,8 @@ sealed class UnityMcpLensHost
         "Unity_Scene_SetSerializedProperties",
         "Unity_Scene_ApplyBindSerializedReferences",
         "Unity_Editor_ScriptUpdatingConsentModal",
+        "Unity_Editor_SyncScripts",
+        "Unity_Editor_SetPlayMode",
         "Unity_Tile_BuildSet",
         "Unity_Tilemap_Setup",
         "Unity_Tilemap_Paint",
@@ -314,10 +318,9 @@ sealed class UnityMcpLensHost
 
     void EnsureBootstrapToolsAvailable()
     {
-        bool needsBridgeBootstrap = m_ToolCache.Count == 0;
-        if (needsBridgeBootstrap)
+        foreach (var tool in BuildBootstrapTools())
         {
-            foreach (var tool in BuildBootstrapTools())
+            if (!m_ToolCache.ContainsKey(tool.Name))
                 m_ToolCache[tool.Name] = tool;
         }
 
@@ -361,6 +364,59 @@ sealed class UnityMcpLensHost
             required = new[] { "refId" }
         }, m_JsonOptions);
 
+        JsonElement toolsDescribeInputSchema = JsonSerializer.SerializeToElement(new
+        {
+            type = "object",
+            properties = new
+            {
+                toolName = new
+                {
+                    type = "string",
+                    description = "Optional tool name to describe. Dot and underscore forms are equivalent."
+                },
+                includeSchemas = new
+                {
+                    type = "boolean",
+                    description = "Include input/output schemas and annotations."
+                },
+                includePackRequirements = new
+                {
+                    type = "boolean",
+                    description = "Include non-foundation pack requirements."
+                },
+                includeExamples = new
+                {
+                    type = "boolean",
+                    description = "Include compact example call metadata."
+                },
+                maxTools = new
+                {
+                    type = "integer",
+                    description = "Maximum matching tools to return."
+                }
+            }
+        }, m_JsonOptions);
+
+        JsonElement activateAndVerifyInputSchema = JsonSerializer.SerializeToElement(new
+        {
+            type = "object",
+            properties = new
+            {
+                packs = new
+                {
+                    type = "array",
+                    items = new { type = "string" },
+                    description = "The non-foundation tool packs to activate for this connection."
+                },
+                expectedTools = new
+                {
+                    type = "array",
+                    items = new { type = "string" },
+                    description = "Expected tools that should be present after activation. Dot and underscore forms are equivalent."
+                }
+            }
+        }, m_JsonOptions);
+
         return
         [
             BuildBootstrapTool(
@@ -386,7 +442,19 @@ sealed class UnityMcpLensHost
                 "Read Unity Detail Ref",
                 "Reads a stored detail ref payload previously returned by a compact Unity MCP tool result.",
                 readDetailRefInputSchema,
-                readOnlyHint: true)
+                readOnlyHint: true),
+            BuildBootstrapTool(
+                "Unity_Tools_Describe",
+                "Describe Unity Tools",
+                "Describes live Unity MCP Lens tools, including current active packs, manifest version, required packs, and schemas when requested.",
+                toolsDescribeInputSchema,
+                readOnlyHint: true),
+            BuildBootstrapTool(
+                "Unity_Tools_ActivateAndVerify",
+                "Activate And Verify Unity Tools",
+                "Activates Unity MCP Lens tool packs and verifies expected tools against the MCP host-visible tool surface.",
+                activateAndVerifyInputSchema,
+                readOnlyHint: false)
         ];
     }
 
@@ -530,8 +598,12 @@ sealed class UnityMcpLensHost
 
             bool unchanged = string.Equals(manifestEnvelope.Result.Kind, "unchanged", StringComparison.OrdinalIgnoreCase);
             await ApplyManifestAsync(manifestEnvelope.Result, shouldFetchSchemas: true, cancellationToken).ConfigureAwait(false);
+            bool toolsListChangedNotificationSent = false;
             if (!unchanged && m_ClientInitialized)
+            {
                 await SendToolsListChangedNotificationAsync(cancellationToken).ConfigureAwait(false);
+                toolsListChangedNotificationSent = true;
+            }
 
             return BuildToolCallResult(JsonSerializer.SerializeToElement(new
             {
@@ -544,9 +616,83 @@ sealed class UnityMcpLensHost
                     bridgeSessionId = manifestEnvelope.Result.BridgeSessionId,
                     unchanged,
                     manifestKind = manifestEnvelope.Result.Kind,
-                    toolCount = m_ToolCache.Count
+                    toolCount = m_ToolCache.Count,
+                    toolsListChangedNotificationSent,
+                    clientSurface = new
+                    {
+                        expectedRefresh = toolsListChangedNotificationSent,
+                        note = toolsListChangedNotificationSent
+                            ? "Lens emitted notifications/tools/list_changed after applying the new pack surface. If the MCP client still cannot call described tools, use Unity.Tools.Describe or helper scripts and refresh the client session."
+                            : "No tools/list_changed notification was emitted because the active tool packs were unchanged or the client has not completed initialize yet."
+                    }
                 }
             }, m_JsonOptions));
+        }
+
+        if (ToolNamesMatch(canonicalToolName, "Unity.Tools.ActivateAndVerify"))
+        {
+            string[] requestedPacks = ExtractPacks(argumentsElement);
+            string[] expectedTools = NormalizeToolNames(ExtractExpectedTools(argumentsElement));
+            var manifestEnvelope = await m_BridgeClient!.SetToolPacksAsync(requestedPacks, includeSchemas: false, cancellationToken).ConfigureAwait(false);
+            if (!string.Equals(manifestEnvelope.Status, "success", StringComparison.OrdinalIgnoreCase) || manifestEnvelope.Result == null)
+            {
+                return BuildToolCallResult(CreateErrorPayload(manifestEnvelope.Error ?? "Failed to activate Unity tool packs."), isError: true);
+            }
+
+            bool unchanged = string.Equals(manifestEnvelope.Result.Kind, "unchanged", StringComparison.OrdinalIgnoreCase);
+            await ApplyManifestAsync(manifestEnvelope.Result, shouldFetchSchemas: true, cancellationToken).ConfigureAwait(false);
+            bool toolsListChangedNotificationSent = false;
+            if (!unchanged && m_ClientInitialized)
+            {
+                await SendToolsListChangedNotificationAsync(cancellationToken).ConfigureAwait(false);
+                toolsListChangedNotificationSent = true;
+            }
+
+            string[] hostToolNames = m_ToolCache.Keys
+                .OrderBy(name => name, StringComparer.Ordinal)
+                .ToArray();
+            string[] matchedExpectedTools = expectedTools
+                .Where(expected => hostToolNames.Any(actual => ToolNamesMatch(actual, expected)))
+                .ToArray();
+            string[] missingExpectedTools = expectedTools
+                .Where(expected => !hostToolNames.Any(actual => ToolNamesMatch(actual, expected)))
+                .ToArray();
+            bool verificationSucceeded = missingExpectedTools.Length == 0;
+
+            return BuildToolCallResult(JsonSerializer.SerializeToElement(new
+            {
+                success = verificationSucceeded,
+                message = verificationSucceeded
+                    ? "Activated Unity MCP tool packs and verified expected host-visible tools."
+                    : "Activated Unity MCP tool packs, but expected tools were missing from the host-visible surface.",
+                data = new
+                {
+                    activeToolPacks = manifestEnvelope.Result.ActiveToolPacks,
+                    manifestVersion = manifestEnvelope.Result.ManifestVersion,
+                    bridgeSessionId = manifestEnvelope.Result.BridgeSessionId,
+                    profileCatalogVersion = manifestEnvelope.Result.ProfileCatalogVersion,
+                    unchanged,
+                    manifestKind = manifestEnvelope.Result.Kind,
+                    exportedToolCount = m_ToolCache.Count,
+                    expectedTools,
+                    matchedExpectedTools,
+                    missingFromServerSurface = missingExpectedTools,
+                    missingFromClient = missingExpectedTools,
+                    toolsListChangedNotificationSent,
+                    clientSurface = new
+                    {
+                        serverSurfaceVerified = verificationSucceeded,
+                        clientCallableState = "not_observable_from_mcp_server",
+                        expectedRefresh = toolsListChangedNotificationSent,
+                        note = verificationSucceeded
+                            ? "Expected tools are present in the MCP host tool cache. If Codex still cannot call them directly, classify that as client dynamic-indexing drift and use this tool or Invoke-UnityMcpBatch as the fallback."
+                            : "One or more expected tools were not present in the MCP host tool cache after activation."
+                    },
+                    workaroundHint = verificationSucceeded
+                        ? "If the MCP client callable list remains stale, keep using the foundation fallback or batch helper and record dynamic-indexing drift."
+                        : "Activate only packs that contain the missing tools, then rerun verification."
+                }
+            }, m_JsonOptions), isError: !verificationSucceeded);
         }
 
         if (ToolNamesMatch(canonicalToolName, "Unity.ReadDetailRef"))
@@ -1007,6 +1153,31 @@ sealed class UnityMcpLensHost
         }
 
         return [];
+    }
+
+    static string[] ExtractExpectedTools(JsonElement argumentsElement)
+    {
+        if (argumentsElement.ValueKind != JsonValueKind.Object)
+            return [];
+
+        if (argumentsElement.TryGetProperty("expectedTools", out var expectedToolsElement) || argumentsElement.TryGetProperty("ExpectedTools", out expectedToolsElement))
+        {
+            return expectedToolsElement.ValueKind == JsonValueKind.Array
+                ? expectedToolsElement.EnumerateArray().Select(value => value.GetString()).Where(value => !string.IsNullOrWhiteSpace(value)).Cast<string>().ToArray()
+                : [];
+        }
+
+        return [];
+    }
+
+    static string[] NormalizeToolNames(IEnumerable<string> toolNames)
+    {
+        return (toolNames ?? [])
+            .Select(CanonicalizeToolName)
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(name => name, StringComparer.Ordinal)
+            .ToArray();
     }
 
     static string ExtractRefId(JsonElement argumentsElement)

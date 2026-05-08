@@ -21,6 +21,36 @@ namespace Becool.UnityMcpLens.Editor.Tools
         public string RefId { get; set; }
     }
 
+    class ToolsDescribeParams
+    {
+        [McpDescription("Optional tool name to describe. Dot and underscore forms are equivalent.", Required = false)]
+        public string ToolName { get; set; }
+
+        [McpDescription("Include input/output schemas and annotations in the result.", Required = false, Default = true)]
+        public bool IncludeSchemas { get; set; } = true;
+
+        [McpDescription("Include the non-foundation packs that must be activated before calling each tool.", Required = false, Default = true)]
+        public bool IncludePackRequirements { get; set; } = true;
+
+        [McpDescription("Include compact example call metadata.", Required = false, Default = false)]
+        public bool IncludeExamples { get; set; } = false;
+
+        [McpDescription("Maximum number of matching tools to return.", Required = false, Default = 100)]
+        public int MaxTools { get; set; } = 100;
+    }
+
+    class ToolsActivateAndVerifyParams
+    {
+        [McpDescription("The non-foundation tool packs to activate for this connection. Foundation remains active automatically.")]
+        public string[] Packs { get; set; } = Array.Empty<string>();
+
+        [McpDescription("Expected tools that should be present after activation. Dot and underscore forms are equivalent.", Required = false)]
+        public string[] ExpectedTools { get; set; } = Array.Empty<string>();
+
+        [McpDescription("Include schemas in the verification manifest.", Required = false, Default = false)]
+        public bool IncludeSchemas { get; set; } = false;
+    }
+
     [McpTool(ToolPackCatalog.GetLensHealthToolName,
         "Returns a compact Lens health summary for the current Unity bridge connection, including active packs, exported tool count, bridge status, editor stability, and the recommended next action.",
         "Get Unity Lens Health",
@@ -191,8 +221,131 @@ namespace Becool.UnityMcpLens.Editor.Tools
                     unchanged,
                     manifestKind = manifest.kind,
                     toolCount = manifest.tools?.Length ?? BridgeManifestBroker.GetExportedToolCount(manifest.activeToolPacks),
-                    recommendedNextPacks = ToolPackCatalog.GetRecommendedNextPacks(manifest.activeToolPacks)
+                    recommendedNextPacks = ToolPackCatalog.GetRecommendedNextPacks(manifest.activeToolPacks),
+                    clientSurface = new
+                    {
+                        expectedRefresh = !unchanged,
+                        note = unchanged
+                            ? "Active packs are unchanged, so no client tool-surface refresh is expected."
+                            : "The Lens bridge manifest changed. MCP clients should refresh their callable tool surface after notifications/tools/list_changed; if Codex still cannot call described tools, use Unity.Tools.Describe or helper scripts until the client session refreshes."
+                    }
                 }));
+        }
+    }
+
+    [McpTool(ToolPackCatalog.ToolsDescribeToolName,
+        "Describes live Unity MCP Lens tools, including current active packs, manifest version, required packs, and schemas when requested.",
+        "Describe Unity Tools",
+        Groups = new[] { "core", "assistant" },
+        EnabledByDefault = true)]
+    class ToolsDescribeTool : IUnityMcpTool<ToolsDescribeParams>
+    {
+        public Task<object> ExecuteAsync(ToolsDescribeParams parameters)
+        {
+            parameters ??= new ToolsDescribeParams();
+            var connectionId = McpToolExecutionScope.Current?.ConnectionId;
+            var rawData = BridgeManifestBroker.DescribeTools(
+                connectionId,
+                parameters.ToolName,
+                parameters.IncludeSchemas,
+                parameters.IncludePackRequirements,
+                parameters.IncludeExamples,
+                parameters.MaxTools <= 0 ? 100 : parameters.MaxTools);
+
+            return Task.FromResult<object>(Response.Success(
+                string.IsNullOrWhiteSpace(parameters.ToolName)
+                    ? "Described live Unity MCP Lens tools."
+                    : $"Described live Unity MCP Lens tool metadata for '{parameters.ToolName}'.",
+                rawData));
+        }
+    }
+
+    [McpTool(ToolPackCatalog.ToolsActivateAndVerifyToolName,
+        "Activates Unity MCP Lens tool packs and verifies expected tools against the Lens bridge-visible tool surface.",
+        "Activate And Verify Unity Tools",
+        Groups = new[] { "core", "assistant" },
+        EnabledByDefault = true)]
+    class ToolsActivateAndVerifyTool : IUnityMcpTool<ToolsActivateAndVerifyParams>
+    {
+        public Task<object> ExecuteAsync(ToolsActivateAndVerifyParams parameters)
+        {
+            parameters ??= new ToolsActivateAndVerifyParams();
+            var connectionId = McpToolExecutionScope.Current?.ConnectionId;
+            if (string.IsNullOrWhiteSpace(connectionId))
+                return Task.FromResult<object>(Response.Error("Unity.Tools.ActivateAndVerify requires an active Lens MCP bridge connection."));
+
+            var manifest = BridgeManifestBroker.SetToolPacks(connectionId, parameters.Packs, includeSchemas: false, out var error);
+            if (!string.IsNullOrWhiteSpace(error) || manifest == null)
+                return Task.FromResult<object>(Response.Error(error ?? "Failed to activate Unity MCP tool packs."));
+
+            var verificationManifest = BridgeManifestBroker.GetManifest(
+                connectionId,
+                knownBridgeSessionId: null,
+                knownManifestVersion: null,
+                includeSchemas: parameters.IncludeSchemas);
+            var exportedToolNames = (verificationManifest.tools ?? Array.Empty<BridgeToolDescriptor>())
+                .Select(tool => tool.name)
+                .Where(name => !string.IsNullOrWhiteSpace(name))
+                .OrderBy(name => name, StringComparer.Ordinal)
+                .ToArray();
+            var expectedTools = NormalizeToolNames(parameters.ExpectedTools);
+            var matchedExpectedTools = expectedTools
+                .Where(expected => exportedToolNames.Any(actual => ToolNamesMatch(actual, expected)))
+                .ToArray();
+            var missingExpectedTools = expectedTools
+                .Where(expected => !exportedToolNames.Any(actual => ToolNamesMatch(actual, expected)))
+                .ToArray();
+            bool success = missingExpectedTools.Length == 0;
+            bool unchanged = string.Equals(manifest.kind, "unchanged", StringComparison.OrdinalIgnoreCase);
+            var rawData = new
+            {
+                success,
+                activeToolPacks = verificationManifest.activeToolPacks,
+                manifestVersion = verificationManifest.manifestVersion,
+                bridgeSessionId = verificationManifest.bridgeSessionId,
+                profileCatalogVersion = verificationManifest.profileCatalogVersion,
+                manifestKind = manifest.kind,
+                unchanged,
+                exportedToolCount = exportedToolNames.Length,
+                expectedTools,
+                matchedExpectedTools,
+                missingFromServerSurface = missingExpectedTools,
+                missingFromClient = missingExpectedTools,
+                toolsListChangedNotificationSent = (bool?)null,
+                clientSurface = new
+                {
+                    serverSurfaceVerified = success,
+                    clientCallableState = "not_observable_from_unity_bridge",
+                    note = success
+                        ? "Expected tools are active in the Lens bridge surface. If Codex still cannot call them directly, classify that as client dynamic-indexing drift and use the MCP host or batch helper fallback."
+                        : "One or more expected tools were not active in the Lens bridge surface after pack activation."
+                },
+                workaroundHint = success
+                    ? "Use described tool metadata or Invoke-UnityMcpBatch if the MCP client callable list remains stale after activation."
+                    : "Activate only packs that contain the missing tools, then rerun verification."
+            };
+
+            return Task.FromResult<object>(success
+                ? Response.Success("Activated Unity MCP tool packs and verified expected bridge-visible tools.", rawData)
+                : Response.Error("Activated Unity MCP tool packs, but expected tools were missing from the bridge-visible surface.", rawData));
+        }
+
+        static string[] NormalizeToolNames(string[] toolNames)
+        {
+            return (toolNames ?? Array.Empty<string>())
+                .Select(McpToolRegistry.NormalizeToolName)
+                .Where(name => !string.IsNullOrWhiteSpace(name))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(name => name, StringComparer.Ordinal)
+                .ToArray();
+        }
+
+        static bool ToolNamesMatch(string actualToolName, string expectedToolName)
+        {
+            return string.Equals(
+                McpToolRegistry.NormalizeToolName(actualToolName),
+                McpToolRegistry.NormalizeToolName(expectedToolName),
+                StringComparison.OrdinalIgnoreCase);
         }
     }
 

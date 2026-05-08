@@ -563,6 +563,8 @@ async function main() {
     const foundationList = await client.listTools();
     const foundationNames = foundationList.tools.map((tool) => tool.name);
     assert(foundationNames.includes("Unity_SetToolPacks"), "foundation tools/list should expose Unity_SetToolPacks");
+    assert(foundationNames.includes("Unity_Tools_Describe"), "foundation tools/list should expose Unity_Tools_Describe");
+    assert(foundationNames.includes("Unity_Tools_ActivateAndVerify"), "foundation tools/list should expose Unity_Tools_ActivateAndVerify");
     for (const assetToolName of requiredAssetTools) {
       assert(!foundationNames.includes(assetToolName), `foundation tools/list should not expose ${assetToolName}`);
     }
@@ -577,6 +579,14 @@ async function main() {
     const assetNames = assetsList.tools.map((tool) => tool.name);
     assertNamesInclude(assetNames, requiredAssetTools, "foundation+assets tools/list");
     assertArraySchemasHaveItems(assetsList.tools);
+
+    const verifyResult = await client.callTool("Unity_Tools_ActivateAndVerify", {
+      Packs: ["assets"],
+      ExpectedTools: ["Unity.Asset.VerifySpriteArrayBinding"],
+    });
+    assert.strictEqual(verifyResult.structuredContent.success, true, "Unity_Tools_ActivateAndVerify should succeed");
+    assert.deepStrictEqual(verifyResult.structuredContent.data.missingFromClient, []);
+    assert.strictEqual(verifyResult.structuredContent.data.clientSurface.serverSurfaceVerified, true);
   } finally {
     if (client) await client.dispose().catch(() => {});
     await context.dispose();

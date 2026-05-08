@@ -1,13 +1,16 @@
 #nullable disable
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Becool.UnityMcpLens.Editor.Helpers;
+using Becool.UnityMcpLens.Editor.Lens;
 using Becool.UnityMcpLens.Editor.Services;
 using Becool.UnityMcpLens.Editor.ToolRegistry;
 using Becool.UnityMcpLens.Editor.Tools.Parameters;
+using Becool.UnityMcpLens.Editor.Utils;
 using UnityEditor;
 using UnityEngine;
 
@@ -18,6 +21,9 @@ namespace Becool.UnityMcpLens.Editor.Tools
         public const string ExitPlayModeDescription = @"Requests play-mode exit and optionally waits for Unity to settle.
 
 Use this instead of Unity.RunCommand for cleanup after play-mode smoke tests. The tool marks play exit as an expected recoverable transition and returns compact final editor state.";
+        public const string SetPlayModeDescription = @"Requests a high-level play-mode transition and reports compact transition, runtime-advance, and console-error evidence.
+
+Use this instead of Unity.ManageEditor Play/Stop or Unity.RunCommand play-mode snippets for smoke workflows.";
 
         [McpSchema("Unity.Editor.ExitPlayMode")]
         public static object GetExitPlayModeSchema()
@@ -83,6 +89,360 @@ Use this instead of Unity.RunCommand for cleanup after play-mode smoke tests. Th
             return response;
         }
 
+        [McpSchema(ToolPackCatalog.EditorSetPlayModeToolName)]
+        public static object GetSetPlayModeSchema()
+        {
+            return new
+            {
+                type = "object",
+                properties = new
+                {
+                    mode = new { type = "string", description = "Requested mode: enter or exit." },
+                    stopFirst = new { type = "boolean", description = "Exit play mode first before entering play mode." },
+                    waitForRuntimeAdvance = new { type = "boolean", description = "Wait for runtime probe advancement when play mode can be observed in the current domain." },
+                    warmupSeconds = new { type = "number", description = "Additional warmup seconds after runtime advancement is observed." },
+                    timeoutSeconds = new { type = "integer", description = "Timeout in seconds for wait-based transition checks." },
+                    unpauseBeforeExit = new { type = "boolean", description = "Clear EditorApplication.isPaused before requesting play-mode exit." }
+                },
+                required = new[] { "mode" }
+            };
+        }
+
+        [McpTool(ToolPackCatalog.EditorSetPlayModeToolName, SetPlayModeDescription, "Set Play Mode", Groups = new[] { "runtime", "editor" }, EnabledByDefault = true)]
+        public static async Task<object> SetPlayMode(JObject @params)
+        {
+            var parameters = NormalizeSetPlayModeParams(@params);
+            var timing = new ToolOperationTiming(ToolPackCatalog.EditorSetPlayModeToolName, parameters.Mode, 0);
+            object data;
+            bool success = true;
+            string errorKind = null;
+
+            try
+            {
+                using (timing.Measure("normalization"))
+                {
+                    parameters.TimeoutSeconds = Math.Max(1, parameters.TimeoutSeconds);
+                    parameters.WarmupSeconds = Math.Max(0d, parameters.WarmupSeconds);
+                }
+
+                using (timing.Measure("service"))
+                {
+                    data = await RequestSetPlayModeAsync(parameters);
+                    string serialized = JsonConvert.SerializeObject(data, Formatting.None);
+                    success = serialized.IndexOf("\"refused\":true", StringComparison.OrdinalIgnoreCase) < 0 &&
+                        serialized.IndexOf("\"timedOut\":true", StringComparison.OrdinalIgnoreCase) < 0 &&
+                        serialized.IndexOf("\"consoleErrorsDetected\":true", StringComparison.OrdinalIgnoreCase) < 0;
+                    errorKind = success ? null : "set_play_mode_failed";
+                }
+            }
+            catch (Exception ex)
+            {
+                success = false;
+                errorKind = ex.GetType().Name;
+                data = new
+                {
+                    errorKind,
+                    error = ex.Message,
+                    finalState = EditorToolStateHelpers.BuildEditorState(),
+                    consoleErrorCount = EditorToolStateHelpers.CountConsoleErrors()
+                };
+            }
+
+            object response;
+            using (timing.Measure("result_shaping"))
+            {
+                response = success
+                    ? Response.Success("Play-mode transition completed.", data)
+                    : Response.Error("Play-mode transition did not complete cleanly.", data);
+                timing.SetResponseBytes(GetUtf8ByteCount(JsonConvert.SerializeObject(response, Formatting.None)));
+            }
+
+            timing.Record(success, errorKind);
+            return response;
+        }
+
+        sealed class SetPlayModeParams
+        {
+            public string Mode { get; set; }
+            public bool StopFirst { get; set; }
+            public bool WaitForRuntimeAdvance { get; set; }
+            public double WarmupSeconds { get; set; }
+            public int TimeoutSeconds { get; set; }
+            public bool UnpauseBeforeExit { get; set; }
+        }
+
+        static SetPlayModeParams NormalizeSetPlayModeParams(JObject parameters)
+        {
+            parameters ??= new JObject();
+            string mode = (GetToken(parameters, "mode", "Mode")?.Value<string>() ?? "enter").Trim().ToLowerInvariant();
+            return new SetPlayModeParams
+            {
+                Mode = mode,
+                StopFirst = GetBool(parameters, false, "stopFirst", "StopFirst"),
+                WaitForRuntimeAdvance = GetBool(parameters, true, "waitForRuntimeAdvance", "WaitForRuntimeAdvance"),
+                WarmupSeconds = GetDouble(parameters, 1.0d, "warmupSeconds", "WarmupSeconds"),
+                TimeoutSeconds = GetInt(parameters, 60, "timeoutSeconds", "TimeoutSeconds"),
+                UnpauseBeforeExit = GetBool(parameters, true, "unpauseBeforeExit", "UnpauseBeforeExit")
+            };
+        }
+
+        static async Task<object> RequestSetPlayModeAsync(SetPlayModeParams parameters)
+        {
+            if (parameters.Mode != "enter" && parameters.Mode != "exit")
+            {
+                return BuildSetPlayModeResult(
+                    parameters,
+                    refused: true,
+                    requested: false,
+                    reconnectExpected: false,
+                    transitionState: "invalid_mode",
+                    transitionRecoveryNotes: "mode must be 'enter' or 'exit'.",
+                    runtimeAdvance: null,
+                    exitResult: null,
+                    attempts: Array.Empty<object>());
+            }
+
+            if (BuildPipeline.isBuildingPlayer || EditorApplication.isCompiling || EditorApplication.isUpdating)
+            {
+                return BuildSetPlayModeResult(
+                    parameters,
+                    refused: true,
+                    requested: false,
+                    reconnectExpected: false,
+                    transitionState: BuildPipeline.isBuildingPlayer ? "building_player" : EditorApplication.isCompiling ? "compiling" : "updating",
+                    transitionRecoveryNotes: "Unity is busy; play-mode transitions are refused while building, compiling, or importing.",
+                    runtimeAdvance: null,
+                    exitResult: null,
+                    attempts: Array.Empty<object>());
+            }
+
+            object exitResult = null;
+            bool requested = false;
+            bool reconnectExpected = false;
+            string transitionState;
+            string transitionRecoveryNotes = null;
+            object runtimeAdvance = null;
+            var attempts = new List<object>();
+
+            if (parameters.Mode == "exit")
+            {
+                var exitParams = new ExitPlayModeParams
+                {
+                    WaitForStableEditor = true,
+                    TimeoutMs = parameters.TimeoutSeconds * 1000,
+                    PollIntervalMs = 250,
+                    StablePollCount = 2,
+                    PostStableDelayMs = 250,
+                    UnpauseBeforeExit = parameters.UnpauseBeforeExit
+                };
+                exitResult = await RequestExitAsync(exitParams);
+                requested = JsonConvert.SerializeObject(exitResult).IndexOf("\"requested\":true", StringComparison.OrdinalIgnoreCase) >= 0;
+                transitionState = JsonConvert.SerializeObject(exitResult).IndexOf("\"waitTimedOut\":true", StringComparison.OrdinalIgnoreCase) >= 0
+                    ? "exit_timed_out"
+                    : "exited_play_mode";
+                return BuildSetPlayModeResult(parameters, false, requested, requested, transitionState, transitionRecoveryNotes, runtimeAdvance, exitResult, attempts);
+            }
+
+            if (parameters.StopFirst && (EditorApplication.isPlaying || EditorApplication.isPlayingOrWillChangePlaymode))
+            {
+                var exitParams = new ExitPlayModeParams
+                {
+                    WaitForStableEditor = true,
+                    TimeoutMs = parameters.TimeoutSeconds * 1000,
+                    PollIntervalMs = 250,
+                    StablePollCount = 2,
+                    PostStableDelayMs = 250,
+                    UnpauseBeforeExit = parameters.UnpauseBeforeExit
+                };
+                exitResult = await RequestExitAsync(exitParams);
+            }
+
+            if (EditorApplication.isPlaying)
+            {
+                transitionState = "already_playing";
+                runtimeAdvance = parameters.WaitForRuntimeAdvance
+                    ? await WaitForRuntimeAdvanceAsync(parameters.TimeoutSeconds, parameters.WarmupSeconds, attempts)
+                    : null;
+                return BuildSetPlayModeResult(parameters, false, false, false, transitionState, transitionRecoveryNotes, runtimeAdvance, exitResult, attempts);
+            }
+
+            BridgeStatusTracker.MarkTransition("entering_play_mode", "set_play_mode_enter", Math.Max(5.0, parameters.TimeoutSeconds));
+            requested = true;
+
+            if (CanWaitForPlayTransitionInCurrentDomain())
+            {
+                EditorApplication.isPlaying = true;
+                runtimeAdvance = parameters.WaitForRuntimeAdvance
+                    ? await WaitForRuntimeAdvanceAsync(parameters.TimeoutSeconds, parameters.WarmupSeconds, attempts)
+                    : null;
+                transitionState = RuntimeAdvanceSucceeded(runtimeAdvance) ? "entered_play_mode" : "enter_requested";
+                reconnectExpected = false;
+            }
+            else
+            {
+                RequestPlayModeAfterResponse();
+                transitionState = "enter_requested_after_response";
+                reconnectExpected = true;
+                transitionRecoveryNotes = "Play mode is scheduled after this response; a reconnect and follow-up readiness poll may be needed.";
+            }
+
+            return BuildSetPlayModeResult(parameters, false, requested, reconnectExpected, transitionState, transitionRecoveryNotes, runtimeAdvance, exitResult, attempts);
+        }
+
+        static object BuildSetPlayModeResult(
+            SetPlayModeParams parameters,
+            bool refused,
+            bool requested,
+            bool reconnectExpected,
+            string transitionState,
+            string transitionRecoveryNotes,
+            object runtimeAdvance,
+            object exitResult,
+            IReadOnlyCollection<object> attempts)
+        {
+            int consoleErrorCount = EditorToolStateHelpers.CountConsoleErrors();
+            bool consoleErrorsDetected = consoleErrorCount > 0;
+            bool timedOut = JsonConvert.SerializeObject(runtimeAdvance ?? new { }).IndexOf("\"timedOut\":true", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                transitionState?.IndexOf("timed_out", StringComparison.OrdinalIgnoreCase) >= 0;
+            var rawData = new
+            {
+                requestedMode = parameters.Mode,
+                refused,
+                requested,
+                stopFirst = parameters.StopFirst,
+                waitForRuntimeAdvance = parameters.WaitForRuntimeAdvance,
+                warmupSeconds = parameters.WarmupSeconds,
+                timeoutSeconds = parameters.TimeoutSeconds,
+                reconnectExpected,
+                transitionState,
+                transitionRecoveryNotes,
+                runtimeAdvanced = RuntimeAdvanceSucceeded(runtimeAdvance),
+                runtimeAdvance,
+                exitResult,
+                timedOut,
+                consoleErrorCount,
+                consoleErrorsDetected,
+                finalState = EditorToolStateHelpers.BuildEditorState(),
+                attempts = attempts?.ToArray() ?? Array.Empty<object>()
+            };
+            var compactData = new
+            {
+                rawData.requestedMode,
+                rawData.refused,
+                rawData.requested,
+                rawData.stopFirst,
+                rawData.waitForRuntimeAdvance,
+                rawData.warmupSeconds,
+                rawData.timeoutSeconds,
+                rawData.reconnectExpected,
+                rawData.transitionState,
+                rawData.transitionRecoveryNotes,
+                rawData.runtimeAdvanced,
+                rawData.runtimeAdvance,
+                rawData.timedOut,
+                rawData.consoleErrorCount,
+                rawData.consoleErrorsDetected,
+                rawData.finalState,
+                attemptCount = attempts?.Count ?? 0
+            };
+
+            return ToolResultCompactor.ShapeStructuredPayload(
+                ToolPackCatalog.EditorSetPlayModeToolName,
+                rawData,
+                compactData,
+                new
+                {
+                    kind = "set_play_mode_attempts",
+                    requestedMode = parameters.Mode,
+                    transitionState,
+                    attemptCount = attempts?.Count ?? 0
+                },
+                "editor_set_play_mode_result",
+                detailRefMinBytes: PayloadBudgetPolicy.MaxToolResultBytes);
+        }
+
+        static async Task<object> WaitForRuntimeAdvanceAsync(int timeoutSeconds, double warmupSeconds, IList<object> attempts)
+        {
+            DateTime deadline = DateTime.UtcNow.AddSeconds(Math.Max(1, timeoutSeconds));
+            double previousUnscaledTime = -1d;
+            while (DateTime.UtcNow < deadline)
+            {
+                var probe = EditorToolStateHelpers.BuildRuntimeProbeData();
+                bool timeAdvanced = previousUnscaledTime >= 0d && probe.UnscaledTime > previousUnscaledTime;
+                bool advanced = EditorApplication.isPlaying &&
+                    probe.IsAvailable &&
+                    (probe.HasAdvancedFrames || probe.UpdateCount >= 10 || timeAdvanced);
+                attempts.Add(new
+                {
+                    utc = DateTime.UtcNow.ToString("O"),
+                    isPlaying = EditorApplication.isPlaying,
+                    runtimeProbeAvailable = probe.IsAvailable,
+                    runtimeProbeHasAdvancedFrames = probe.HasAdvancedFrames,
+                    runtimeProbeUpdateCount = probe.UpdateCount,
+                    runtimeProbeUnscaledTime = probe.UnscaledTime,
+                    runtimeAdvancedByTime = timeAdvanced,
+                    advanced
+                });
+
+                if (advanced)
+                {
+                    if (warmupSeconds > 0d)
+                        await Task.Delay((int)Math.Round(warmupSeconds * 1000d));
+                    BridgeStatusTracker.MarkReady();
+                    return new
+                    {
+                        success = true,
+                        timedOut = false,
+                        warmupSeconds,
+                        finalProbe = EditorToolStateHelpers.BuildRuntimeProbeData()
+                    };
+                }
+
+                previousUnscaledTime = probe.UnscaledTime;
+                await Task.Delay(250);
+            }
+
+            return new
+            {
+                success = false,
+                timedOut = true,
+                warmupSeconds,
+                finalProbe = EditorToolStateHelpers.BuildRuntimeProbeData()
+            };
+        }
+
+        static bool RuntimeAdvanceSucceeded(object runtimeAdvance)
+        {
+            return runtimeAdvance != null &&
+                JsonConvert.SerializeObject(runtimeAdvance, Formatting.None).IndexOf("\"success\":true", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        static bool CanWaitForPlayTransitionInCurrentDomain()
+        {
+#if UNITY_2019_3_OR_NEWER
+            return EditorSettings.enterPlayModeOptionsEnabled &&
+                (EditorSettings.enterPlayModeOptions & EnterPlayModeOptions.DisableDomainReload) != 0;
+#else
+            return false;
+#endif
+        }
+
+        static void RequestPlayModeAfterResponse()
+        {
+            EditorApplication.CallbackFunction requestPlay = null;
+            double playRequestAfter = EditorApplication.timeSinceStartup + 0.25d;
+            requestPlay = () =>
+            {
+                if (EditorApplication.timeSinceStartup < playRequestAfter)
+                    return;
+
+                EditorApplication.update -= requestPlay;
+                if (!EditorApplication.isPlaying && !EditorApplication.isPlayingOrWillChangePlaymode)
+                    EditorApplication.isPlaying = true;
+            };
+            EditorApplication.update += requestPlay;
+        }
+
         static ExitPlayModeParams NormalizeExitPlayModeParams(JObject parameters)
         {
             parameters ??= new JObject();
@@ -115,6 +475,12 @@ Use this instead of Unity.RunCommand for cleanup after play-mode smoke tests. Th
         {
             JToken token = GetToken(parameters, names);
             return token == null || token.Type == JTokenType.Null ? fallback : token.Value<int>();
+        }
+
+        static double GetDouble(JObject parameters, double fallback, params string[] names)
+        {
+            JToken token = GetToken(parameters, names);
+            return token == null || token.Type == JTokenType.Null ? fallback : token.Value<double>();
         }
 
         static bool GetBool(JObject parameters, bool fallback, params string[] names)

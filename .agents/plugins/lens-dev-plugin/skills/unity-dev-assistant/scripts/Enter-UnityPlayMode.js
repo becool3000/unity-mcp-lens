@@ -10,6 +10,38 @@ async function testUnityPlayReadyDegradedFallback(projectPath, options) {
   }).then((result) => ({ ...result, degradedFallback: true }));
 }
 
+function summarizeToolResult(toolResult) {
+  if (!toolResult) {
+    return null;
+  }
+
+  const data = toolResult.data || {};
+  return {
+    success: toolResult.success === true,
+    message: toolResult.message || toolResult.error || null,
+    transitionState: data.transitionState || data.TransitionState || null,
+    reconnectExpected: data.reconnectExpected === true || data.ReconnectExpected === true,
+    runtimeAdvanced: data.runtimeAdvanced === true || data.RuntimeAdvanced === true,
+    timedOut: data.timedOut === true || data.TimedOut === true,
+    consoleErrorCount: data.consoleErrorCount ?? data.ConsoleErrorCount ?? null,
+  };
+}
+
+function summarizePlayReady(result) {
+  if (!result) {
+    return null;
+  }
+
+  return {
+    success: result.success === true,
+    message: result.message || result.error || null,
+    degradedFallback: result.degradedFallback === true,
+    editorIdle: result.editorIdle ?? result.isEditorIdle ?? null,
+    isPlaying: result.isPlaying ?? result.finalState?.isPlaying ?? null,
+    runtimeAdvanced: result.runtimeAdvanced ?? result.runtimeProbe?.hasAdvancedFrames ?? null,
+  };
+}
+
 async function main() {
   const args = common.parseCliArgs(process.argv.slice(2));
   const projectPath = common.resolveProjectPath(common.getArgString(args, ["ProjectPath"], process.cwd()));
@@ -17,6 +49,7 @@ async function main() {
   const pollIntervalSeconds = common.getArgNumber(args, ["PollIntervalSeconds"], 1.0);
   const warmupSeconds = common.getArgNumber(args, ["WarmupSeconds"], 1.0);
   const playRequestTimeoutSeconds = common.getArgNumber(args, ["PlayRequestTimeoutSeconds"], 180);
+  const includeDetails = common.getArgBool(args, ["IncludeDetails"], false);
   const sourceIntegrity = common.getUnitySourceFileIntegrity(projectPath);
 
   if (!sourceIntegrity.success) {
@@ -32,7 +65,17 @@ async function main() {
 
   if (common.getArgBool(args, ["StopFirst"], false)) {
     try {
-      await common.invokeUnityMcpToolJson(projectPath, "Unity_ManageEditor", { Action: "Stop" }, { timeoutSeconds: 15 });
+      await common.invokeUnityMcpToolJson(
+        projectPath,
+        "Unity_Editor_SetPlayMode",
+        {
+          mode: "exit",
+          timeoutSeconds: common.getArgNumber(args, ["IdleTimeoutSeconds"], 60),
+          waitForRuntimeAdvance: false,
+          unpauseBeforeExit: true,
+        },
+        { timeoutSeconds: Math.max(15, common.getArgNumber(args, ["IdleTimeoutSeconds"], 60) + 10) }
+      );
     } catch (_error) {
     }
   }
@@ -56,8 +99,15 @@ async function main() {
   try {
     playResponse = await common.invokeUnityMcpToolJson(
       projectPath,
-      "Unity_ManageEditor",
-      { Action: "Play" },
+      "Unity_Editor_SetPlayMode",
+      {
+        mode: "enter",
+        stopFirst: common.getArgBool(args, ["StopFirst"], false),
+        waitForRuntimeAdvance: true,
+        warmupSeconds,
+        timeoutSeconds,
+        unpauseBeforeExit: true,
+      },
       { timeoutSeconds: playRequestTimeoutSeconds }
     );
   } catch (error) {
@@ -71,10 +121,14 @@ async function main() {
   });
   const playResponseObject = playResponse ? common.getToolObject(playResponse) : null;
   const playRequestErrorMessage = playError || playResponseObject?.error || "";
+  const playData = playResponseObject?.data || {};
+  const reconnectExpected = playData.reconnectExpected === true || playData.ReconnectExpected === true;
+  const transitionState = playData.transitionState || playData.TransitionState || "";
   const playRequestWasReconnectProne =
     playRequestErrorMessage.toLowerCase().includes("connection disconnected") ||
-    playResponseObject?.data?.ReconnectExpected === true ||
-    playResponseObject?.data?.TransitionState === "transitioning_to_play";
+    reconnectExpected ||
+    transitionState === "transitioning_to_play" ||
+    transitionState === "enter_requested_after_response";
   let degradedPath = false;
   let finalMessage = playReady.message;
   let degradedFallback = null;
@@ -117,14 +171,15 @@ async function main() {
     message: finalMessage,
     sourceIntegrity,
     idleWait,
+    detailMode: includeDetails || !playReady.success ? "full" : "compact",
     degradedPath,
     playRequestTimeoutSeconds,
     playRequestWasReconnectProne,
     playRequestErrorMessage: playRequestErrorMessage || null,
-    playResponse: playResponseObject,
+    playResponse: includeDetails || !playReady.success ? playResponseObject : summarizeToolResult(playResponseObject),
     playError,
-    playReady,
-    degradedFallback,
+    playReady: includeDetails || !playReady.success ? playReady : summarizePlayReady(playReady),
+    degradedFallback: includeDetails || !playReady.success ? degradedFallback : summarizePlayReady(degradedFallback),
     consoleErrors,
   };
 

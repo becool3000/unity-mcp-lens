@@ -51,6 +51,7 @@ or YAML edits.
 1. Read the repo-local `docs/unity-mcp-backlog.md` if it exists.
 2. Run `scripts/Check-UnityDevSession.js` on macOS/Linux or `scripts/Check-UnityDevSession.ps1` on Windows as the mandatory first command for Unity work in a fresh chat or after context loss.
    - Treat the editor-status beacon as the first source of truth for compile/import/play/build transitions when it exists.
+   - `BeaconMissing` is not a blocker by itself on projects where the old beacon is retired; continue to MCP health before escalating.
    - Do not start with broad tool discovery or ad hoc MCP status probes when the beacon is fresh.
    - Only confirm MCP authority after the session check reports `BeaconIdle`, `BeaconStale`, or `BeaconMissing`.
    - Treat MCP as the authority for editor mutations and tool execution once the editor is idle enough to act.
@@ -65,6 +66,7 @@ or YAML edits.
    - use `Unity.ListToolPacks` to inspect available packs
    - use `Unity.SetToolPacks` only when the task truly needs a wider tool surface
    - keep at most two additional non-foundation packs active
+   - If `Unity.SetToolPacks` succeeds and `Unity.Tools.Describe` shows an active-pack tool but Codex still cannot call it, treat that as Codex client dynamic-indexing drift. Use the repo helper scripts or `Invoke-UnityMcpBatch` and report active packs, manifest/profile version, and the missing callable tool.
 5. Suggested pack mapping:
    - console investigation: `console`
    - project scans and validation: `project`
@@ -80,8 +82,9 @@ or YAML edits.
    - `1.0s` post-idle settle
    `Unity_RunCommand` is the exception in healthy play mode: use the helper, let it prove direct Lens health plus compact play-state health, and allow it to bypass helper-side idle wait when safe.
 7. After external edits to compile-affecting files (`*.cs`, `*.asmdef`, `*.asmref`, `*.rsp`, package manifest changes), run `scripts/Sync-UnityScriptChanges.js` on macOS/Linux or `scripts/Sync-UnityScriptChanges.ps1` on Windows before the next Unity-side action.
-   - Let it observe the natural compile/reload cycle first.
+   - The helper calls `Unity.Editor.SyncScripts`; empty `changedPaths` with no force should be a fast no-op.
    - Treat transient pack-restore or compact-state failures during an expected reload window as recoverable unless direct Lens health also fails.
+   - Treat `newConsoleErrorsDetected=true` as the sync failure signal. Treat `staleConsoleErrorsPresent=true` as old console state unless new errors are also reported.
    - If compile/play behavior looks wrong after file edits, run `scripts/Test-UnitySourceFileIntegrity.ps1` on Windows to check for NUL-byte or invalid UTF-8 source corruption before interpreting bridge failures.
 8. Prefer direct MCP tools through the Lens path by default.
    - Use helper scripts for orchestration-heavy flows such as long builds, autoplay, or deterministic screenshot capture.
@@ -99,15 +102,15 @@ or YAML edits.
    - `export_krita_state_to_unity.py`
    - `Import-UnitySpriteState.ps1`
 12. For long custom builds or exports, validate the exact enabled build-scene list first with `scripts/Test-UnityBuildSceneList.js --ExpectedScenes ...` on macOS/Linux, or `scripts/Test-UnityBuildSceneList.ps1 -ExpectedScenes ...` on Windows.
-13. For play mode, use `scripts/Enter-UnityPlayMode.js` on macOS/Linux or `scripts/Enter-UnityPlayMode.ps1` on Windows, require source-integrity preflight plus runtime advancement and a short warmup, read its inline `consoleErrors` summary on failure, exit with `scripts/Exit-UnityPlayMode.ps1` on Windows or `Unity.Editor.ExitPlayMode`, and treat transient disconnects during play/exit transition as recoverable until the runtime probe proves success or failure.
+13. For play mode, prefer `Unity.Editor.SetPlayMode` through `scripts/Enter-UnityPlayMode.js` on macOS/Linux or `scripts/Enter-UnityPlayMode.ps1` on Windows. Require source-integrity preflight plus runtime advancement and a short warmup, read inline console-error counts on failure, exit with `scripts/Exit-UnityPlayMode.ps1` or `Unity.Editor.SetPlayMode(mode=exit)`, and treat transient disconnects during play/exit transition as recoverable until the runtime probe proves success or failure. Successful helper output is compact by default; use `--IncludeDetails` / `-IncludeDetails` only when raw nested readiness attempts are needed.
 14. For `Unity_RunCommand`, use `scripts/Invoke-UnityRunCommand.js` on macOS/Linux or `scripts/Invoke-UnityRunCommand.ps1` on Windows instead of hand-escaping JSON, and prefer small focused probes over one large validation script.
    - In healthy play mode, the helper should skip its own idle-wait gate and run directly.
    - Prefer `result.ReturnResult(...)` for structured probe output; do not promote probe data to warning logs just to make it visible.
    - Treat `compilationLogs`, `executionLogs`, and `consoleLogs` as compact previews. Use `logSummary` first, then `Unity.ReadDetailRef` only when full log text is needed.
 15. For console reads, prefer direct `Unity.ReadConsole` through MCP.
    - Default to summary/small reads.
-   - Treat summary output as the decision surface: counts, grouped rows, cursor, and `detailRef`.
-   - Use `Unity.ReadDetailRef` if the result was compacted and the full payload matters.
+   - Treat summary output as the decision surface: counts, grouped rows, cursor, and any compacting `detailRef`.
+   - Use `Unity.ReadDetailRef` only if the result was compacted and the full payload matters.
    - Reach for `scripts/Get-UnityConsole.js` on macOS/Linux or `scripts/Get-UnityConsole.ps1` on Windows only when the task explicitly needs the helper path or Lens is unavailable.
 16. For menu operations, prefer the direct Unity tool surface when available. Use `scripts/Invoke-UnityMenuItem.ps1` only when there is no direct tool or when a script is operationally safer for the specific task.
 17. For art swaps and prefab binding, split the work into two steps:
@@ -173,9 +176,10 @@ Prefer a scene-owned debugger component when a project needs fast UI or state it
 - Mandatory first step for Unity work in a fresh chat: `scripts/Check-UnityDevSession.js` on macOS/Linux or `scripts/Check-UnityDevSession.ps1` on Windows
 - Preferred transport: `unity-mcp-lens`
 - Default exported tool surface: `foundation`
-- Current `foundation` + `scene` surface: `36` tools
-- Current `foundation` + `ui` surface: `27` tools
-- Current `foundation` + `runtime` surface: `16` tools
+- Current `foundation` surface: `15` tools
+- Current `foundation` + `scene` surface: `38` tools
+- Current `foundation` + `ui` surface: `29` tools
+- Current `foundation` + `runtime` surface: `19` tools
 - Prefer split GameObject TSAM tools before legacy `Unity.ManageGameObject`
 - Prefer Phase 11 `project` tools for package/import/Input System diagnostics and active input handler changes
 - Prefer Phase 12 `ui` and scene-binding tools for persistent HUD authoring, scene reference binding, and screen-layout verification before custom editor-side `Unity_RunCommand`
@@ -186,10 +190,11 @@ Prefer a scene-owned debugger component when a project needs fast UI or state it
 - `ProceedWithDirectLensTools` means the bridge status and fresh direct health probe are healthy even if the helper wrapper path is not
 - `RepairBridge` with `DirectHealthProbe.TransportFailure=true` means the bridge status file may be ready, but direct Lens tool transport is not usable
 - Status from the local editor-status beacon first when available; MCP remains the authority for mutations
+- The repo-local `.agents/plugins/lens-dev-plugin` path is the helper source of truth. Installed Codex cache versions can move after plugin refresh; if a cache path is missing, locate the active `lens-dev-plugin` cache version instead of reusing a stale versioned path.
 - Unity editor compile/import is the authority; do not run `dotnet build` as a Unity compile preflight
 - Editor idle gating before all Unity-facing work except helper-driven `Unity_RunCommand` in healthy play mode
 - Exact build-scene preflight before long custom builds when the intended scene list is known
-- External script edits should be synced through `Sync-UnityScriptChanges.js` on macOS/Linux or `Sync-UnityScriptChanges.ps1` on Windows before follow-up Unity actions
+- External script edits should be synced through `Unity.Editor.SyncScripts` via `Sync-UnityScriptChanges.js` on macOS/Linux or `Sync-UnityScriptChanges.ps1` on Windows before follow-up Unity actions
 - When `rg.exe` is blocked in the Codex desktop app context, prefer the shared PowerShell search fallback instead of retrying `rg`
 - Hybrid snapshots for playtesting: Unity-aware first, desktop fallback second
 - Prefer relative project paths for Unity-side screenshots and state captures

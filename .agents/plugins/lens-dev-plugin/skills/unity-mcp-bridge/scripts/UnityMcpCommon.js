@@ -359,6 +359,8 @@ const foundationToolNames = new Set(
     "Unity.ListToolPacks",
     "Unity.SetToolPacks",
     "Unity.ReadDetailRef",
+    "Unity.Tools.Describe",
+    "Unity.Tools.ActivateAndVerify",
     "Unity.GetLensHealth",
     "Unity.ReadConsole",
     "Unity.ListResources",
@@ -394,6 +396,8 @@ const exactPackMap = new Map(
     Unity_Runtime_GetVisualBoundsSnapshot: ["runtime"],
     Unity_PlayMode_PointerInputSmoke: ["runtime"],
     Unity_Editor_ExitPlayMode: ["runtime"],
+    Unity_Editor_SetPlayMode: ["runtime"],
+    Unity_Editor_SyncScripts: ["scripting"],
     Unity_GetLensUsageReport: ["debug"],
   })
 );

@@ -30,12 +30,13 @@ All notable Unity MCP Lens package changes are documented here.
 - Added a fake-bridge direct-host transport recovery regression test for stale status files, setup-path reconnects, read-only retry, and mutating no-retry behavior.
 - Added a fake-bridge dynamic tool exposure regression test for initialize, foundation `tools/list`, `Unity.SetToolPacks(["assets"])`, `notifications/tools/list_changed`, and the follow-up `tools/list` asset surface.
 - Added `Export-McpDynamicToolIndexingEvidence.ps1` plus a Codex dynamic-tool indexing evidence note for comparing raw installed-host `tools/list` results against Codex `tool_search` exposure after pack switches.
+- Added `Unity.Tools.Describe` and `Unity.Tools.ActivateAndVerify` foundation tools for live Lens tool metadata and pack activation verification when MCP client tool indexing lags pack switches.
 
 ### Changed
 
-- Kept `foundation` as the narrow default export surface with a `13` tool baseline.
+- Kept `foundation` as the narrow default export surface with a `15` tool baseline.
 - Raised the `foundation + scene` baseline from `30` to `32` tools and added a `foundation + ui` baseline of `22` tools.
-- Raised the current `foundation + scene` baseline to `36`, `foundation + ui` baseline to `27`, and `foundation + runtime=16`.
+- Raised the current `foundation + scene` baseline to `38`, `foundation + ui` baseline to `29`, and `foundation + runtime=19`.
 - Raised the `project` pack smoke baseline from `19` to `21` tools while keeping `foundation` and `scene` unchanged.
 - Replaced the public `Unity.UI.EnsureNamedHierarchy` and `Unity.UI.SetLayoutProperties` registrations with split preview/apply tool pairs.
 - Extended `Unity.InputSystem.Diagnostics` with compatibility signals and concrete `.inputactions` wrapper metadata.
@@ -89,7 +90,7 @@ All notable Unity MCP Lens package changes are documented here.
 - Post-Unity/Codex-restart raw installed-host validation confirmed `Unity.SetToolPacks(["assets"])` emits `notifications/tools/list_changed`, follow-up `tools/list` exposes all Phase 18 asset tools, and `Unity_Asset_VerifySpriteArrayBinding.expectedSpriteNames` includes string `items`; Codex `tool_search` still did not expose the verifier in the current client thread.
 - Phase 20 evidence exporter passed against `D:\BeeSurvivors`, confirming the installed Lens host contract independently of Codex's dynamic tool index.
 - Post-Codex-reload direct BeeSurvivors validation passed for `Unity.GetLensHealth`, `Unity.ListToolPacks`, `Unity.SetToolPacks` to `foundation+assets`, and `Unity.ListResources` against RoachWars assets.
-- Earlier Phase 16 metadata audit passed with `foundation=12`, `foundation+scene=32`, `foundation+ui=22`, `project=21`, and `debug=22`; the current expected baselines are `foundation=13`, `foundation+scene=36`, `foundation+ui=27`, `foundation+runtime=16`, `project=22`, and live `debug=24`.
+- Earlier Phase 16 metadata audit passed with `foundation=12`, `foundation+scene=32`, `foundation+ui=22`, `project=21`, and `debug=22`; the current expected baselines are `foundation=15`, `foundation+scene=38`, `foundation+ui=29`, `foundation+runtime=19`, `project=24`, and live `debug=26`.
 - Phase 11 package compatibility, input-actions inspection, diagnostics, preview, and set calls emitted complete TSAM stage coverage with no failure classes.
 - Phase 12 UI hierarchy, scene binding, layout, and verify calls emitted complete TSAM stage coverage with no tool failure rows in the focused helper-driven scope.
 - Phase 13 focused smoke emitted complete TSAM stage coverage with no failure rows for Input System diagnostics, UI hierarchy preview/apply, scene binding preview/apply, UI layout preview/apply, and UI verify.

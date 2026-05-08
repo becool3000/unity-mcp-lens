@@ -8,10 +8,69 @@ param(
     [int]$IdleStablePollCount = 3,
     [double]$IdlePollIntervalSeconds = 0.5,
     [double]$PostIdleDelaySeconds = 1.0,
-    [int]$PlayRequestTimeoutSeconds = 180
+    [int]$PlayRequestTimeoutSeconds = 180,
+    [switch]$IncludeDetails
 )
 
 . "$PSScriptRoot\UnityDevCommon.ps1"
+
+function Get-ObjectPropertyValue {
+    param(
+        [Parameter()][object]$InputObject,
+        [Parameter(Mandatory = $true)][string[]]$Names
+    )
+
+    if ($null -eq $InputObject) {
+        return $null
+    }
+
+    foreach ($name in $Names) {
+        $property = $InputObject.PSObject.Properties[$name]
+        if ($null -ne $property) {
+            return $property.Value
+        }
+    }
+
+    return $null
+}
+
+function ConvertTo-UnityToolResultSummary {
+    param([Parameter()][object]$ToolResult)
+
+    if ($null -eq $ToolResult) {
+        return $null
+    }
+
+    $data = Get-ObjectPropertyValue -InputObject $ToolResult -Names @("data", "Data")
+    [ordered]@{
+        success           = (Get-ObjectPropertyValue -InputObject $ToolResult -Names @("success", "Success")) -eq $true
+        message           = (Get-ObjectPropertyValue -InputObject $ToolResult -Names @("message", "Message", "error", "Error"))
+        transitionState   = Get-ObjectPropertyValue -InputObject $data -Names @("transitionState", "TransitionState")
+        reconnectExpected = (Get-ObjectPropertyValue -InputObject $data -Names @("reconnectExpected", "ReconnectExpected")) -eq $true
+        runtimeAdvanced   = (Get-ObjectPropertyValue -InputObject $data -Names @("runtimeAdvanced", "RuntimeAdvanced")) -eq $true
+        timedOut          = (Get-ObjectPropertyValue -InputObject $data -Names @("timedOut", "TimedOut")) -eq $true
+        consoleErrorCount = Get-ObjectPropertyValue -InputObject $data -Names @("consoleErrorCount", "ConsoleErrorCount")
+    }
+}
+
+function ConvertTo-UnityPlayReadySummary {
+    param([Parameter()][object]$Result)
+
+    if ($null -eq $Result) {
+        return $null
+    }
+
+    $finalState = Get-ObjectPropertyValue -InputObject $Result -Names @("finalState", "FinalState")
+    [ordered]@{
+        success          = (Get-ObjectPropertyValue -InputObject $Result -Names @("success", "Success")) -eq $true
+        message          = Get-ObjectPropertyValue -InputObject $Result -Names @("message", "Message", "error", "Error")
+        degradedFallback = (Get-ObjectPropertyValue -InputObject $Result -Names @("degradedFallback", "DegradedFallback")) -eq $true
+        editorIdle       = Get-ObjectPropertyValue -InputObject $Result -Names @("editorIdle", "EditorIdle", "isEditorIdle", "IsEditorIdle")
+        isPlaying        = Get-ObjectPropertyValue -InputObject $Result -Names @("isPlaying", "IsPlaying")
+        finalIsPlaying   = Get-ObjectPropertyValue -InputObject $finalState -Names @("isPlaying", "IsPlaying")
+        runtimeAdvanced  = Get-ObjectPropertyValue -InputObject $Result -Names @("runtimeAdvanced", "RuntimeAdvanced")
+    }
+}
 
 function Test-UnityPlayReadyDegradedFallback {
     param(
@@ -101,7 +160,12 @@ if (-not $sourceIntegrity.success) {
 
 if ($StopFirst) {
     try {
-        Invoke-UnityMcpToolJson -ProjectPath $resolvedProjectPath -ToolName "Unity_ManageEditor" -Arguments @{ Action = "Stop" } -TimeoutSeconds 15 | Out-Null
+        Invoke-UnityMcpToolJson -ProjectPath $resolvedProjectPath -ToolName "Unity_Editor_SetPlayMode" -Arguments @{
+            Mode                  = "exit"
+            TimeoutSeconds        = [Math]::Max(1, $IdleTimeoutSeconds)
+            WaitForRuntimeAdvance = $false
+            UnpauseBeforeExit     = $true
+        } -TimeoutSeconds ([Math]::Max(15, $IdleTimeoutSeconds + 10)) | Out-Null
     }
     catch {
     }
@@ -122,7 +186,14 @@ $playResponse = $null
 $playError = $null
 
 try {
-    $playResponse = Invoke-UnityMcpToolJson -ProjectPath $resolvedProjectPath -ToolName "Unity_ManageEditor" -Arguments @{ Action = "Play" } -TimeoutSeconds $PlayRequestTimeoutSeconds
+    $playResponse = Invoke-UnityMcpToolJson -ProjectPath $resolvedProjectPath -ToolName "Unity_Editor_SetPlayMode" -Arguments @{
+        Mode                  = "enter"
+        StopFirst             = $StopFirst.IsPresent
+        WaitForRuntimeAdvance = $true
+        WarmupSeconds         = $WarmupSeconds
+        TimeoutSeconds        = $TimeoutSeconds
+        UnpauseBeforeExit     = $true
+    } -TimeoutSeconds $PlayRequestTimeoutSeconds
 }
 catch {
     $playError = $_.Exception.Message
@@ -131,7 +202,7 @@ catch {
 $playReady = Wait-UnityPlayReady -ProjectPath $resolvedProjectPath -TimeoutSeconds $TimeoutSeconds -PollIntervalSeconds $PollIntervalSeconds -WarmupSeconds $WarmupSeconds
 $playResponseObject = if ($null -ne $playResponse) { Get-UnityToolObject -Response $playResponse } else { $null }
 $playRequestErrorMessage = if (-not [string]::IsNullOrWhiteSpace($playError)) { $playError } elseif ($playResponseObject -and -not [string]::IsNullOrWhiteSpace($playResponseObject.error)) { [string]$playResponseObject.error } else { $null }
-$playRequestWasReconnectProne = (-not [string]::IsNullOrWhiteSpace($playRequestErrorMessage) -and $playRequestErrorMessage.IndexOf("Connection disconnected", [System.StringComparison]::OrdinalIgnoreCase) -ge 0) -or ($playResponseObject -and $playResponseObject.data -and ($playResponseObject.data.ReconnectExpected -eq $true -or $playResponseObject.data.TransitionState -eq "transitioning_to_play"))
+$playRequestWasReconnectProne = (-not [string]::IsNullOrWhiteSpace($playRequestErrorMessage) -and $playRequestErrorMessage.IndexOf("Connection disconnected", [System.StringComparison]::OrdinalIgnoreCase) -ge 0) -or ($playResponseObject -and $playResponseObject.data -and ($playResponseObject.data.ReconnectExpected -eq $true -or $playResponseObject.data.TransitionState -eq "transitioning_to_play" -or $playResponseObject.data.TransitionState -eq "enter_requested_after_response"))
 $degradedPath = $false
 $finalMessage = $playReady.message
 $degradedFallback = $null
@@ -176,19 +247,26 @@ if (-not $playReady.success) {
     }
 }
 
+$includeFullDetails = $IncludeDetails.IsPresent -or (-not $playReady.success)
+$detailMode = if ($includeFullDetails) { "full" } else { "compact" }
+$playResponseOutput = if ($includeFullDetails) { $playResponseObject } else { ConvertTo-UnityToolResultSummary -ToolResult $playResponseObject }
+$playReadyOutput = if ($includeFullDetails) { $playReady } else { ConvertTo-UnityPlayReadySummary -Result $playReady }
+$degradedFallbackOutput = if ($includeFullDetails) { $degradedFallback } else { ConvertTo-UnityPlayReadySummary -Result $degradedFallback }
+
 [ordered]@{
     success      = $playReady.success
     message      = $finalMessage
     sourceIntegrity = $sourceIntegrity
     idleWait     = $idleWait
+    detailMode   = $detailMode
     degradedPath = $degradedPath
     playRequestTimeoutSeconds = $PlayRequestTimeoutSeconds
     playRequestWasReconnectProne = $playRequestWasReconnectProne
     playRequestErrorMessage = $playRequestErrorMessage
-    playResponse = $playResponseObject
+    playResponse = $playResponseOutput
     playError    = $playError
-    playReady    = $playReady
-    degradedFallback = $degradedFallback
+    playReady    = $playReadyOutput
+    degradedFallback = $degradedFallbackOutput
     consoleErrors = $consoleErrors
 } | ConvertTo-Json -Depth 30
 
