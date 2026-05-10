@@ -8,6 +8,7 @@ param(
     [string]$SnapshotMode = "Hybrid",
     [ValidateSet("Hybrid", "UnityOnly", "DesktopOnly")]
     [string]$CapturePathMode = "Hybrid",
+    [Alias("OutputDirectory")]
     [string]$OutputDir,
     [switch]$StopOnFinish,
     [object]$PausePlaymodeForCapture = $true,

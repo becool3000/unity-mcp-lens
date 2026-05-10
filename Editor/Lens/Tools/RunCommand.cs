@@ -60,9 +60,11 @@ internal class CommandScript : IRunCommand
    - **Modification**: Use `result.RegisterObjectModification(obj)` BEFORE changing properties.
    - **Deletion**: Use `result.DestroyObject(obj)` instead of `Object.DestroyImmediate`.
    - **Logging**:
-     - `result.Log(""Created {0}"", obj)` - Log with object references using `{0}`, `{1}`, etc.
-     - `result.LogWarning(""Warning message"")` - Log warnings
-     - `result.LogError(""Error message"")` - Log errors
+      - `result.Log(""Created {0}"", obj)` - Log with object references using `{0}`, `{1}`, etc.
+      - `result.LogWarning(""Warning message"")` - Log warnings
+      - `result.LogError(""Error message"")` - Log errors
+   - **Structured Data**: Use `result.ReturnResult(new { ... })` to return machine-readable probe data.
+   - **Failure Signaling**: There is no `result.Fail(...)` method. Use `result.LogError(""message"")` and return, or throw an exception when execution should fail.
 4. **Avoid Top-Level Statements**: Always wrap your code in the class structure above.
 
 ";
@@ -106,12 +108,14 @@ internal class CommandScript : IRunCommand
                             validationSummary = new { type = "object", description = "Structured validation summary for the command" },
                             playStateRestored = new { type = "boolean", description = "Whether the tool restored the pre-execution play pause state" },
                             localFixedCodeChanged = new { type = "boolean", description = "Whether Lens locally rewrote the submitted command before compilation" },
+                            localFixedCodeChangeKind = new { type = "string", description = "Classification for localFixedCodeChanged: none, command_namespace_wrapping, or syntax_normalization." },
                             localFixedCodeDetailRef = new { type = "object", description = "Detail ref for the locally rewritten command when omitted from the inline response" },
                             localFixedCodeIncluded = new { type = "boolean", description = "Whether localFixedCode is included inline" },
                             returnedData = new { description = "Structured result returned from ExecutionResult.ReturnResult when included inline." },
                             returnedDataIncluded = new { type = "boolean", description = "Whether returnedData is included inline." },
                             returnedDataBytes = new { type = "integer", description = "UTF-8 byte count of the serialized returnedData payload." },
                             returnedDataDetailRef = new { type = "object", description = "Detail ref for structured returnedData when omitted from the inline response." },
+                            authoringHints = new { type = "array", description = "Actionable hints for common Unity.RunCommand authoring mistakes such as unsupported ExecutionResult methods." },
                             logSummary = new { type = "object", description = "Compact per-log-block counts, first warning/error lines, truncation flags, and detail refs." },
                             detailAvailable = new { type = "boolean", description = "Whether a full structured result detail ref is available." },
                             detailRef = new { type = "object", description = "Detail ref for the full unshaped result payload when available." },
@@ -186,12 +190,14 @@ internal class CommandScript : IRunCommand
             string errorKind = null;
             string exceptionType = null;
             string exceptionMessage = null;
+            object[] authoringHints = Array.Empty<object>();
 
             try
             {
                 // Step 1: Validate the code using MCP-owned Lens command support.
                 validationResult = LensRunCommandValidator.Validate(code);
                 validationCompleted = true;
+                authoringHints = BuildAuthoringHints(code, validationResult.CompilationLogs);
 
                 if (!validationResult.IsCompilationSuccessful)
                 {
@@ -214,6 +220,7 @@ internal class CommandScript : IRunCommand
                         consoleLogs = string.Empty,
                         localFixedCode = includeLocalFixedCode ? validationResult.LocalFixedCode : null,
                         localFixedCodeChanged = !string.Equals(validationResult.LocalFixedCode, code, StringComparison.Ordinal),
+                        localFixedCodeChangeKind = GetLocalFixedCodeChangeKind(code, validationResult.LocalFixedCode),
                         localFixedCodeIncluded = includeLocalFixedCode,
                         localFixedCodeDetailRef = localFixedCodeDetailRef,
                         returnedData = (object)null,
@@ -225,14 +232,17 @@ internal class CommandScript : IRunCommand
                         errorKind,
                         exceptionType = (string)null,
                         exceptionMessage = (string)null,
+                        authoringHints,
                         logCounts = new { execution = 0, warnings = 0, errors = 0 },
                         validationSummary = new
                         {
                             isCompilationSuccessful = false,
                             localFixedCodeChanged = !string.Equals(validationResult.LocalFixedCode, code, StringComparison.Ordinal),
+                            localFixedCodeChangeKind = GetLocalFixedCodeChangeKind(code, validationResult.LocalFixedCode),
                             compilationLogLength = validationResult.CompilationLogs?.Length ?? 0,
                             compilationLogBytes,
-                            hasUnauthorizedNamespaceUsage = validationResult.HasUnauthorizedNamespaceUsage
+                            hasUnauthorizedNamespaceUsage = validationResult.HasUnauthorizedNamespaceUsage,
+                            authoringHints
                         }
                     };
                     goto ReturnResponse;
@@ -261,6 +271,7 @@ internal class CommandScript : IRunCommand
                         consoleLogs = string.Empty,
                         localFixedCode = includeLocalFixedCode ? validationResult.LocalFixedCode : null,
                         localFixedCodeChanged = !string.Equals(validationResult.LocalFixedCode, code, StringComparison.Ordinal),
+                        localFixedCodeChangeKind = GetLocalFixedCodeChangeKind(code, validationResult.LocalFixedCode),
                         localFixedCodeIncluded = includeLocalFixedCode,
                         localFixedCodeDetailRef,
                         returnedData = (object)null,
@@ -272,14 +283,17 @@ internal class CommandScript : IRunCommand
                         errorKind = (string)null,
                         exceptionType = (string)null,
                         exceptionMessage = (string)null,
+                        authoringHints,
                         logCounts = new { execution = 0, warnings = 0, errors = 0 },
                         validationSummary = new
                         {
                             isCompilationSuccessful = true,
                             localFixedCodeChanged = !string.Equals(validationResult.LocalFixedCode, code, StringComparison.Ordinal),
+                            localFixedCodeChangeKind = GetLocalFixedCodeChangeKind(code, validationResult.LocalFixedCode),
                             compilationLogLength = validationResult.CompilationLogs?.Length ?? 0,
                             compilationLogBytes,
-                            hasUnauthorizedNamespaceUsage = false
+                            hasUnauthorizedNamespaceUsage = false,
+                            authoringHints
                         }
                     };
                     goto ReturnResponse;
@@ -357,6 +371,7 @@ internal class CommandScript : IRunCommand
                         consoleLogsBytes,
                         localFixedCode = includeLocalFixedCode ? validationResult.LocalFixedCode : null,
                         localFixedCodeChanged = !string.Equals(validationResult.LocalFixedCode, code, StringComparison.Ordinal),
+                        localFixedCodeChangeKind = GetLocalFixedCodeChangeKind(code, validationResult.LocalFixedCode),
                         localFixedCodeIncluded = includeLocalFixedCode,
                         localFixedCodeDetailRef = includeLocalFixedCode
                             ? null
@@ -370,6 +385,7 @@ internal class CommandScript : IRunCommand
                         errorKind,
                         exceptionType,
                         exceptionMessage,
+                        authoringHints,
                         logCounts = new
                         {
                             execution = executionResult.LogCount,
@@ -380,9 +396,11 @@ internal class CommandScript : IRunCommand
                         {
                             isCompilationSuccessful = true,
                             localFixedCodeChanged = !string.Equals(validationResult.LocalFixedCode, code, StringComparison.Ordinal),
+                            localFixedCodeChangeKind = GetLocalFixedCodeChangeKind(code, validationResult.LocalFixedCode),
                             compilationLogLength = validationResult.CompilationLogs?.Length ?? 0,
                             compilationLogBytes = compilationLogsBytes,
-                            hasUnauthorizedNamespaceUsage = false
+                            hasUnauthorizedNamespaceUsage = false,
+                            authoringHints
                         }
                     };
                     goto ReturnResponse;
@@ -409,6 +427,7 @@ internal class CommandScript : IRunCommand
                     consoleLogsBytes,
                     localFixedCode = includeLocalFixedCode ? validationResult.LocalFixedCode : null,
                     localFixedCodeChanged = !string.Equals(validationResult.LocalFixedCode, code, StringComparison.Ordinal),
+                    localFixedCodeChangeKind = GetLocalFixedCodeChangeKind(code, validationResult.LocalFixedCode),
                     localFixedCodeIncluded = includeLocalFixedCode,
                     localFixedCodeDetailRef = includeLocalFixedCode
                         ? null
@@ -422,6 +441,7 @@ internal class CommandScript : IRunCommand
                     errorKind,
                     exceptionType,
                     exceptionMessage,
+                    authoringHints,
                     logCounts = new
                     {
                         execution = executionResult.LogCount,
@@ -432,9 +452,11 @@ internal class CommandScript : IRunCommand
                     {
                         isCompilationSuccessful = true,
                         localFixedCodeChanged = !string.Equals(validationResult.LocalFixedCode, code, StringComparison.Ordinal),
+                        localFixedCodeChangeKind = GetLocalFixedCodeChangeKind(code, validationResult.LocalFixedCode),
                         compilationLogLength = validationResult.CompilationLogs?.Length ?? 0,
                         compilationLogBytes = compilationLogsBytes,
-                        hasUnauthorizedNamespaceUsage = false
+                        hasUnauthorizedNamespaceUsage = false,
+                        authoringHints
                     }
                 };
             }
@@ -467,6 +489,7 @@ internal class CommandScript : IRunCommand
                     consoleLogsBytes,
                     localFixedCode = includeLocalFixedCode && validationCompleted ? validationResult.LocalFixedCode : null,
                     localFixedCodeChanged = validationCompleted && !string.Equals(validationResult.LocalFixedCode, code, StringComparison.Ordinal),
+                    localFixedCodeChangeKind = validationCompleted ? GetLocalFixedCodeChangeKind(code, validationResult.LocalFixedCode) : "none",
                     localFixedCodeIncluded = includeLocalFixedCode && validationCompleted,
                     localFixedCodeDetailRef = validationCompleted && !includeLocalFixedCode
                         ? CreateLocalFixedCodeDetailRef(validationResult.LocalFixedCode, code, mode)
@@ -480,6 +503,7 @@ internal class CommandScript : IRunCommand
                     errorKind,
                     exceptionType,
                     exceptionMessage,
+                    authoringHints,
                     logCounts = new
                     {
                         execution = executionResult.LogCount,
@@ -490,9 +514,11 @@ internal class CommandScript : IRunCommand
                     {
                         isCompilationSuccessful = validationCompleted && validationResult.IsCompilationSuccessful,
                         localFixedCodeChanged = validationCompleted && !string.Equals(validationResult.LocalFixedCode, code, StringComparison.Ordinal),
+                        localFixedCodeChangeKind = validationCompleted ? GetLocalFixedCodeChangeKind(code, validationResult.LocalFixedCode) : "none",
                         compilationLogLength = validationCompleted ? (validationResult.CompilationLogs?.Length ?? 0) : 0,
                         compilationLogBytes = compilationLogsBytes,
-                        hasUnauthorizedNamespaceUsage = validationCompleted && validationResult.HasUnauthorizedNamespaceUsage
+                        hasUnauthorizedNamespaceUsage = validationCompleted && validationResult.HasUnauthorizedNamespaceUsage,
+                        authoringHints
                     }
                 };
             }
@@ -565,6 +591,51 @@ internal class CommandScript : IRunCommand
             }
 
             return Task.FromResult(BuildResponse(responseSuccess, responseMessage, responseData));
+        }
+
+        static object[] BuildAuthoringHints(string code, string compilationLogs)
+        {
+            var hints = new List<object>();
+            bool mentionsUnsupportedFail =
+                (code?.IndexOf("result.Fail(", StringComparison.OrdinalIgnoreCase) ?? -1) >= 0 ||
+                (compilationLogs?.IndexOf("ExecutionResult", StringComparison.OrdinalIgnoreCase) ?? -1) >= 0 &&
+                (compilationLogs?.IndexOf("Fail", StringComparison.OrdinalIgnoreCase) ?? -1) >= 0 &&
+                (compilationLogs?.IndexOf("does not contain", StringComparison.OrdinalIgnoreCase) ?? -1) >= 0;
+
+            if (mentionsUnsupportedFail)
+            {
+                hints.Add(new
+                {
+                    code = "unsupported_execution_result_fail",
+                    message = "ExecutionResult does not provide result.Fail(...). Use result.LogError(\"message\") and return, throw an exception to fail execution, or result.ReturnResult(...) for structured probe data.",
+                    supportedResultMethods = new[]
+                    {
+                        "RegisterObjectCreation",
+                        "RegisterObjectModification",
+                        "DestroyObject",
+                        "Log",
+                        "LogWarning",
+                        "LogError",
+                        "ReturnResult"
+                    }
+                });
+            }
+
+            return hints.ToArray();
+        }
+
+        static string GetLocalFixedCodeChangeKind(string originalCode, string localFixedCode)
+        {
+            if (string.Equals(originalCode, localFixedCode, StringComparison.Ordinal))
+                return "none";
+
+            if (!string.IsNullOrEmpty(localFixedCode) &&
+                localFixedCode.IndexOf("namespace " + LensRunCommandCompiler.DynamicCommandNamespace, StringComparison.Ordinal) >= 0)
+            {
+                return "command_namespace_wrapping";
+            }
+
+            return "syntax_normalization";
         }
 
         static object CreateLocalFixedCodeDetailRef(string localFixedCode, string originalCode, string mode)

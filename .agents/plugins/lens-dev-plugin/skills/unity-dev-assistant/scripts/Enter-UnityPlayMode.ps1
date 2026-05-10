@@ -24,11 +24,46 @@ function Get-ObjectPropertyValue {
         return $null
     }
 
+    if ($InputObject -is [System.Collections.IDictionary]) {
+        foreach ($name in $Names) {
+            if ($InputObject.Contains($name)) {
+                return $InputObject[$name]
+            }
+        }
+
+        foreach ($name in $Names) {
+            foreach ($key in $InputObject.Keys) {
+                if ([string]::Equals([string]$key, $name, [System.StringComparison]::OrdinalIgnoreCase)) {
+                    return $InputObject[$key]
+                }
+            }
+        }
+    }
+
     foreach ($name in $Names) {
         $property = $InputObject.PSObject.Properties[$name]
         if ($null -ne $property) {
             return $property.Value
         }
+    }
+
+    return $null
+}
+
+function Get-LastCollectionItem {
+    param([Parameter()][object]$InputObject)
+
+    if ($null -eq $InputObject -or $InputObject -is [string]) {
+        return $null
+    }
+
+    if ($InputObject -is [System.Collections.IEnumerable]) {
+        $last = $null
+        foreach ($item in $InputObject) {
+            $last = $item
+        }
+
+        return $last
     }
 
     return $null
@@ -61,14 +96,41 @@ function ConvertTo-UnityPlayReadySummary {
     }
 
     $finalState = Get-ObjectPropertyValue -InputObject $Result -Names @("finalState", "FinalState")
+    $lastState = Get-ObjectPropertyValue -InputObject $Result -Names @("lastState", "LastState")
+    $lastStateData = Get-ObjectPropertyValue -InputObject $lastState -Names @("data", "Data")
+    $attempts = Get-ObjectPropertyValue -InputObject $Result -Names @("attempts", "Attempts")
+    $lastAttempt = Get-LastCollectionItem -InputObject $attempts
+    $editorIdle = Get-ObjectPropertyValue -InputObject $Result -Names @("editorIdle", "EditorIdle", "isEditorIdle", "IsEditorIdle")
+    if ($null -eq $editorIdle) {
+        $editorIdle = Get-ObjectPropertyValue -InputObject $lastAttempt -Names @("IdleReady", "idleReady")
+    }
+
+    $isPlaying = Get-ObjectPropertyValue -InputObject $Result -Names @("isPlaying", "IsPlaying")
+    if ($null -eq $isPlaying) {
+        $isPlaying = Get-ObjectPropertyValue -InputObject $lastStateData -Names @("IsPlaying", "isPlaying")
+    }
+    if ($null -eq $isPlaying) {
+        $isPlaying = Get-ObjectPropertyValue -InputObject $lastAttempt -Names @("IsPlaying", "isPlaying")
+    }
+
+    $finalIsPlaying = Get-ObjectPropertyValue -InputObject $finalState -Names @("isPlaying", "IsPlaying")
+    if ($null -eq $finalIsPlaying) {
+        $finalIsPlaying = Get-ObjectPropertyValue -InputObject $lastStateData -Names @("IsPlaying", "isPlaying")
+    }
+
+    $runtimeAdvanced = Get-ObjectPropertyValue -InputObject $Result -Names @("runtimeAdvanced", "RuntimeAdvanced")
+    if ($null -eq $runtimeAdvanced) {
+        $runtimeAdvanced = Get-ObjectPropertyValue -InputObject $lastAttempt -Names @("PlayReady", "playReady", "RuntimeProbeHasAdvancedFrames", "runtimeProbeHasAdvancedFrames")
+    }
+
     [ordered]@{
         success          = (Get-ObjectPropertyValue -InputObject $Result -Names @("success", "Success")) -eq $true
         message          = Get-ObjectPropertyValue -InputObject $Result -Names @("message", "Message", "error", "Error")
         degradedFallback = (Get-ObjectPropertyValue -InputObject $Result -Names @("degradedFallback", "DegradedFallback")) -eq $true
-        editorIdle       = Get-ObjectPropertyValue -InputObject $Result -Names @("editorIdle", "EditorIdle", "isEditorIdle", "IsEditorIdle")
-        isPlaying        = Get-ObjectPropertyValue -InputObject $Result -Names @("isPlaying", "IsPlaying")
-        finalIsPlaying   = Get-ObjectPropertyValue -InputObject $finalState -Names @("isPlaying", "IsPlaying")
-        runtimeAdvanced  = Get-ObjectPropertyValue -InputObject $Result -Names @("runtimeAdvanced", "RuntimeAdvanced")
+        editorIdle       = $editorIdle
+        isPlaying        = $isPlaying
+        finalIsPlaying   = $finalIsPlaying
+        runtimeAdvanced  = $runtimeAdvanced
     }
 }
 

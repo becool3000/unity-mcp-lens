@@ -377,6 +377,70 @@ namespace Becool.UnityMcpLens.Editor.Lens
             }
         }
 
+        public static object GetToolMenu(string connectionId, int maxToolsPerPack)
+        {
+            lock (s_Lock)
+            {
+                EnsureCurrentSnapshotLocked();
+
+                maxToolsPerPack = Math.Max(1, Math.Min(100, maxToolsPerPack));
+                var activeToolPacks = BridgeLensSessionRegistry.GetActiveToolPacks(connectionId);
+                bool fullSurface = activeToolPacks.Contains(ToolPackCatalog.FullPackId, StringComparer.OrdinalIgnoreCase);
+                var allTools = s_CurrentTools ?? Array.Empty<BridgeToolDescriptor>();
+                var packs = ToolPackCatalog.GetPackSummaries(activeToolPacks)
+                    .Where(pack => !string.Equals(pack.packId, ToolPackCatalog.FullPackId, StringComparison.OrdinalIgnoreCase))
+                    .OrderBy(pack => GetMenuPackOrder(pack.packId))
+                    .ThenBy(pack => pack.packId, StringComparer.Ordinal)
+                    .Select(pack =>
+                    {
+                        var packTools = allTools
+                            .Where(tool => (tool.packs ?? Array.Empty<string>()).Contains(pack.packId, StringComparer.OrdinalIgnoreCase))
+                            .OrderBy(tool => tool.name, StringComparer.Ordinal)
+                            .ToArray();
+                        var returnedTools = packTools
+                            .Take(maxToolsPerPack)
+                            .Select(tool => new
+                            {
+                                tool.name,
+                                tool.title,
+                                readOnlyHint = tool.readOnlyHint,
+                                mutationHint = tool.readOnlyHint ? "read_only" : "mutating"
+                            })
+                            .ToArray();
+
+                        return new
+                        {
+                            pack.packId,
+                            pack.title,
+                            pack.description,
+                            pack.alwaysOn,
+                            pack.adminOnly,
+                            isActive = fullSurface || pack.isActive,
+                            toolCount = packTools.Length,
+                            readOnlyToolCount = packTools.Count(tool => tool.readOnlyHint),
+                            mutatingToolCount = packTools.Count(tool => !tool.readOnlyHint),
+                            truncated = packTools.Length > returnedTools.Length,
+                            tools = returnedTools
+                        };
+                    })
+                    .ToArray();
+
+                BridgeLensSessionRegistry.UpdateAcknowledgedManifest(connectionId, s_BridgeSessionId, s_ManifestVersion);
+                return new
+                {
+                    toolSurfaceMode = fullSurface ? "static_all" : "dynamic_packs",
+                    bridgeSessionId = s_BridgeSessionId,
+                    manifestVersion = s_ManifestVersion,
+                    profileCatalogVersion = ToolPackCatalog.ProfileCatalogVersion,
+                    activeToolPacks,
+                    totalToolCount = allTools.Length,
+                    maxToolsPerPack,
+                    packs,
+                    workflowRecommendations = BuildToolMenuRecommendations(fullSurface, activeToolPacks)
+                };
+            }
+        }
+
         static BridgeManifestResult CreateFullResult(
             BridgeToolDescriptor[] tools,
             string[] activeToolPacks,
@@ -597,6 +661,55 @@ namespace Becool.UnityMcpLens.Editor.Lens
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .OrderBy(pack => pack, StringComparer.Ordinal)
                 .ToArray();
+        }
+
+        static int GetMenuPackOrder(string packId)
+        {
+            if (string.Equals(packId, ToolPackCatalog.FoundationPackId, StringComparison.OrdinalIgnoreCase))
+                return 0;
+            if (string.Equals(packId, ToolPackCatalog.ConsolePackId, StringComparison.OrdinalIgnoreCase))
+                return 10;
+            if (string.Equals(packId, ToolPackCatalog.ProjectPackId, StringComparison.OrdinalIgnoreCase))
+                return 20;
+            if (string.Equals(packId, ToolPackCatalog.ScriptingPackId, StringComparison.OrdinalIgnoreCase))
+                return 30;
+            if (string.Equals(packId, ToolPackCatalog.ScenePackId, StringComparison.OrdinalIgnoreCase))
+                return 40;
+            if (string.Equals(packId, ToolPackCatalog.UiPackId, StringComparison.OrdinalIgnoreCase))
+                return 50;
+            if (string.Equals(packId, ToolPackCatalog.RuntimePackId, StringComparison.OrdinalIgnoreCase))
+                return 60;
+            if (string.Equals(packId, ToolPackCatalog.AssetsPackId, StringComparison.OrdinalIgnoreCase))
+                return 70;
+            if (string.Equals(packId, ToolPackCatalog.DebugPackId, StringComparison.OrdinalIgnoreCase))
+                return 80;
+
+            return 100;
+        }
+
+        static string[] BuildToolMenuRecommendations(bool fullSurface, string[] activeToolPacks)
+        {
+            if (fullSurface)
+            {
+                return new[]
+                {
+                    "Call real native tools directly; no Unity.SetToolPacks step is required in static_all mode.",
+                    "Use Unity.Tools.Describe when a named tool needs exact schema or pack metadata.",
+                    "Prefer read-only, preview, or verify tools before mutating apply tools."
+                };
+            }
+
+            var nextPacks = ToolPackCatalog.GetRecommendedNextPacks(activeToolPacks);
+            var activationHint = nextPacks.Length > 0
+                ? $"Use Unity.SetToolPacks to activate one or two needed packs. Recommended next packs: {string.Join(", ", nextPacks)}."
+                : "Use Unity.SetToolPacks to activate one or two needed packs before calling pack-gated tools.";
+
+            return new[]
+            {
+                activationHint,
+                "Use Unity.Tools.Describe when a named tool needs exact schema or pack metadata.",
+                "Prefer read-only, preview, or verify tools before mutating apply tools."
+            };
         }
 
         static BridgeToolDescriptor[] CloneTools(BridgeToolDescriptor[] tools, bool includeSchemas)

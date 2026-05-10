@@ -140,14 +140,21 @@ sealed class UnityBridgeClient : IAsyncDisposable
             cancellationToken);
     }
 
-    public Task<BridgeEnvelope<BridgeManifestResult>> SetToolPacksAsync(string[] packs, bool includeSchemas, CancellationToken cancellationToken)
+    public Task<BridgeEnvelope<BridgeManifestResult>> SetToolPacksAsync(
+        string[] packs,
+        bool includeSchemas,
+        CancellationToken cancellationToken,
+        string? reason = null,
+        string? toolSurfaceMode = null)
     {
         return SendCommandAsync<BridgeManifestResult>(
             "set_tool_packs",
             new
             {
                 packs,
-                includeSchemas
+                includeSchemas,
+                reason,
+                toolSurfaceMode
             },
             TimeSpan.FromSeconds(10),
             cancellationToken);

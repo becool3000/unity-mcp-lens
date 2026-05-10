@@ -10,14 +10,15 @@ when Unity reloads, recompiles, or changes project/package state.
 
 - Standalone package id: `com.becool3000.unity-mcp-lens`.
 - Preferred MCP transport: the owned `unity-mcp-lens` stdio server.
-- Default model-facing tool surface: `foundation`.
-- Current `foundation` baseline: `15` exported tools.
-- Current `foundation + scene` baseline: `38` exported tools.
-- Current `foundation + ui` baseline: `29` exported tools.
-- Current `foundation + runtime` baseline: `19` exported tools.
+- Default Codex model-facing tool surface: `static_all` (`foundation+full`); raw host default remains dynamic packs.
+- Current `foundation` baseline: `17` exported tools.
+- Current `foundation + scene` baseline: `40` exported tools.
+- Current `foundation + ui` baseline: `33` exported tools.
+- Current `foundation + runtime` baseline: `22` exported tools.
+- Static-all host surface: `UNITY_MCP_LENS_TOOL_SURFACE_MODE=static_all` exposes `foundation+full` at startup while agents navigate through `Unity.Tools.Menu`.
 - Current Phase 8 surface: split GameObject TSAM tools for inspect, component reads, preview/apply mutation, create, and delete.
 - Current Phase 12 surface: split UI hierarchy/layout preview/apply, scene serialized-reference preview/apply binding, UI screen-layout verification, center-based UI verify relations, and structured `Unity.RunCommand` return values.
-- Current Phase 17+ surface: UI canvas prefab preview/apply, scene prefab instantiate/bind preview/apply, UI raycast/layout verification, Game view resolution-matrix layout verification, scene serialized-reference verification, play-mode pointer/scroll smoke verification, explicit play-mode exit, and compact usage-report pack-transition summaries.
+- Current Phase 17+ surface: UI canvas prefab preview/apply, runtime UI query/invoke tools, scene prefab instantiate/bind preview/apply, UI raycast/layout verification, Game view resolution-matrix layout verification, scene serialized-reference verification, play-mode pointer/scroll smoke verification, explicit play-mode exit, and compact usage-report pack-transition summaries.
 - Current Phase 11 surface: project/Input System diagnostics, package compatibility, input-action asset inspection, and active input handler preview/apply.
 - Current validation surface: static package checks plus a metadata audit in the pack-switch helper app.
 - Current telemetry surface: payload stats, bridge request/response rows, compact `tool_result` savings rows, tool snapshot rows, pack transition rows, detail-ref rows, and TSAM stage rows.

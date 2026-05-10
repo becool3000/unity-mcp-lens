@@ -55,4 +55,5 @@ Capture knobs:
 - `StepFramesBeforeCapture` (default: `0`): advance a deterministic number of frames before rendering.
 - `CapturePauseAndStepOnly` (default: `$false`): pause/step without writing a Unity-aware PNG.
 - `UnityCaptureTimeoutSeconds` (default: `45`): timeout for the Unity-aware capture command.
+- `OutputDir` / `OutputDirectory`: explicit artifact directory. When supplied, manifests and final capture images must be written there; temp-root paths are only staging locations.
 - Unity-aware PNG writes may land up to about `1-2s` after the run-command response, so the capture script polls briefly before marking them missing.

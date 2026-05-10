@@ -16,6 +16,34 @@ sealed class BridgeDiscoveryResult
     public int EditorPid => StatusFile.EditorPid;
 }
 
+sealed class BridgeDiscoveryCandidate
+{
+    public required string StatusPath { get; init; }
+    public string? ConnectionPath { get; init; }
+    public string? Status { get; init; }
+    public string ProjectRoot { get; init; } = string.Empty;
+    public required DateTime LastHeartbeatUtc { get; init; }
+    public required TimeSpan HeartbeatAge { get; init; }
+    public required bool IsFresh { get; init; }
+    public required bool IsProjectMatch { get; init; }
+    public required bool EditorPidAlive { get; init; }
+    public required bool SupportsToolSyncLens { get; init; }
+    public required bool IsQuarantined { get; init; }
+    public required bool IsSelectable { get; init; }
+    public int EditorPid { get; init; }
+    public string? Error { get; init; }
+    public string[] ExclusionReasons { get; init; } = [];
+}
+
+sealed class BridgeDiscoverySnapshot
+{
+    public required string StatusDirectory { get; init; }
+    public required string ProjectPathHint { get; init; }
+    public required bool RequireProjectMatch { get; init; }
+    public BridgeDiscoveryResult? Selected { get; init; }
+    public required BridgeDiscoveryCandidate[] Candidates { get; init; }
+}
+
 static class BridgeDiscovery
 {
     public static readonly TimeSpan FreshHeartbeatThreshold = TimeSpan.FromSeconds(30);
@@ -25,68 +53,171 @@ static class BridgeDiscovery
         IReadOnlyCollection<string>? quarantinedBridgeIds = null,
         bool requireProjectMatch = false)
     {
-        string statusDirectory = ResolveStatusDirectory();
-        if (!Directory.Exists(statusDirectory))
-            return null;
+        return FindBridgeSnapshot(currentWorkingDirectory, quarantinedBridgeIds, requireProjectMatch).Selected;
+    }
 
+    public static BridgeDiscoverySnapshot FindBridgeSnapshot(
+        string currentWorkingDirectory,
+        IReadOnlyCollection<string>? quarantinedBridgeIds = null,
+        bool requireProjectMatch = false)
+    {
+        string statusDirectory = ResolveStatusDirectory();
         string normalizedCwd = NormalizePath(currentWorkingDirectory);
+        if (!Directory.Exists(statusDirectory))
+        {
+            return new BridgeDiscoverySnapshot
+            {
+                StatusDirectory = statusDirectory,
+                ProjectPathHint = normalizedCwd,
+                RequireProjectMatch = requireProjectMatch,
+                Selected = null,
+                Candidates = []
+            };
+        }
+
         HashSet<string> quarantine = NormalizeQuarantine(quarantinedBridgeIds);
         DateTime nowUtc = DateTime.UtcNow;
-        var candidates = new List<BridgeDiscoveryResult>();
+        var candidates = new List<(BridgeDiscoveryCandidate Candidate, BridgeDiscoveryResult? Result)>();
 
         foreach (string statusPath in Directory.GetFiles(statusDirectory, "bridge-status-*.json"))
         {
-            try
-            {
-                var status = JsonSerializer.Deserialize<BridgeStatusFile>(File.ReadAllText(statusPath));
-                if (status?.ConnectionPath == null || (status.ProjectRoot == null && status.ProjectPath == null))
-                    continue;
-
-                string connectionPath = status.ConnectionPath;
-                if (IsQuarantined(statusPath, connectionPath, quarantine))
-                    continue;
-
-                string projectRoot = NormalizeProjectRoot(status.ProjectRoot, status.ProjectPath);
-                bool isProjectMatch = IsPathMatch(projectRoot, normalizedCwd);
-                if (requireProjectMatch && !isProjectMatch)
-                    continue;
-
-                DateTime heartbeatUtc = ParseUtc(status.LastHeartbeat);
-                TimeSpan heartbeatAge = heartbeatUtc == DateTime.MinValue ? TimeSpan.MaxValue : nowUtc - heartbeatUtc;
-                bool editorPidAlive = IsEditorPidAlive(status.EditorPid);
-                bool isFresh = heartbeatAge <= FreshHeartbeatThreshold && editorPidAlive;
-                if (IsHealthyStatus(status.Status) && !isFresh)
-                    continue;
-
-                candidates.Add(new BridgeDiscoveryResult
-                {
-                    StatusFile = status,
-                    StatusPath = statusPath,
-                    ProjectRoot = projectRoot,
-                    ConnectionPath = connectionPath,
-                    LastHeartbeatUtc = heartbeatUtc,
-                    HeartbeatAge = heartbeatAge < TimeSpan.Zero ? TimeSpan.Zero : heartbeatAge,
-                    IsFresh = isFresh,
-                    IsProjectMatch = isProjectMatch,
-                    EditorPidAlive = editorPidAlive
-                });
-            }
-            catch
-            {
-                // Ignore malformed status files.
-            }
+            candidates.Add(CreateCandidate(statusPath, normalizedCwd, requireProjectMatch, quarantine, nowUtc));
         }
 
-        if (candidates.Count == 0)
-            return null;
+        BridgeDiscoveryResult? selected = candidates
+            .Where(candidate => candidate.Candidate.IsSelectable && candidate.Result != null)
+            .OrderByDescending(candidate => candidate.Candidate.IsProjectMatch)
+            .ThenByDescending(candidate => IsHealthyStatus(candidate.Candidate.Status))
+            .ThenByDescending(candidate => candidate.Candidate.SupportsToolSyncLens)
+            .ThenByDescending(candidate => candidate.Candidate.IsFresh)
+            .ThenByDescending(candidate => candidate.Candidate.LastHeartbeatUtc)
+            .Select(candidate => candidate.Result)
+            .FirstOrDefault();
 
-        return candidates
-            .OrderByDescending(candidate => candidate.IsProjectMatch)
-            .ThenByDescending(candidate => IsHealthyStatus(candidate.StatusFile.Status))
-            .ThenByDescending(candidate => candidate.StatusFile.SupportsToolSyncLens)
+        BridgeDiscoveryCandidate[] orderedCandidates = candidates
+            .Select(candidate => candidate.Candidate)
+            .OrderByDescending(candidate => selected != null && string.Equals(candidate.StatusPath, selected.StatusPath, StringComparison.OrdinalIgnoreCase))
+            .ThenByDescending(candidate => candidate.IsSelectable)
+            .ThenByDescending(candidate => candidate.IsProjectMatch)
+            .ThenByDescending(candidate => IsHealthyStatus(candidate.Status))
+            .ThenByDescending(candidate => candidate.SupportsToolSyncLens)
             .ThenByDescending(candidate => candidate.IsFresh)
             .ThenByDescending(candidate => candidate.LastHeartbeatUtc)
-            .FirstOrDefault();
+            .ToArray();
+
+        return new BridgeDiscoverySnapshot
+        {
+            StatusDirectory = statusDirectory,
+            ProjectPathHint = normalizedCwd,
+            RequireProjectMatch = requireProjectMatch,
+            Selected = selected,
+            Candidates = orderedCandidates
+        };
+    }
+
+    static (BridgeDiscoveryCandidate Candidate, BridgeDiscoveryResult? Result) CreateCandidate(
+        string statusPath,
+        string normalizedProjectPathHint,
+        bool requireProjectMatch,
+        HashSet<string> quarantine,
+        DateTime nowUtc)
+    {
+        try
+        {
+            var status = JsonSerializer.Deserialize<BridgeStatusFile>(File.ReadAllText(statusPath));
+            if (status?.ConnectionPath == null || (status.ProjectRoot == null && status.ProjectPath == null))
+            {
+                return (new BridgeDiscoveryCandidate
+                {
+                    StatusPath = statusPath,
+                    ConnectionPath = status?.ConnectionPath,
+                    Status = status?.Status,
+                    ProjectRoot = NormalizeProjectRoot(status?.ProjectRoot, status?.ProjectPath),
+                    LastHeartbeatUtc = DateTime.MinValue,
+                    HeartbeatAge = TimeSpan.MaxValue,
+                    IsFresh = false,
+                    IsProjectMatch = false,
+                    EditorPidAlive = false,
+                    SupportsToolSyncLens = status?.SupportsToolSyncLens == true,
+                    IsQuarantined = false,
+                    IsSelectable = false,
+                    EditorPid = status?.EditorPid ?? 0,
+                    Error = "Status file is missing connection_path or project_root/project_path.",
+                    ExclusionReasons = ["missing_connection_or_project"]
+                }, null);
+            }
+
+            string connectionPath = status.ConnectionPath;
+            string projectRoot = NormalizeProjectRoot(status.ProjectRoot, status.ProjectPath);
+            bool isQuarantined = IsQuarantined(statusPath, connectionPath, quarantine);
+            bool isProjectMatch = IsPathMatch(projectRoot, normalizedProjectPathHint);
+            DateTime heartbeatUtc = ParseUtc(status.LastHeartbeat);
+            TimeSpan heartbeatAge = heartbeatUtc == DateTime.MinValue ? TimeSpan.MaxValue : nowUtc - heartbeatUtc;
+            if (heartbeatAge < TimeSpan.Zero)
+                heartbeatAge = TimeSpan.Zero;
+            bool editorPidAlive = IsEditorPidAlive(status.EditorPid);
+            bool isFresh = heartbeatAge <= FreshHeartbeatThreshold && editorPidAlive;
+
+            var exclusionReasons = new List<string>();
+            if (isQuarantined)
+                exclusionReasons.Add("quarantined");
+            if (requireProjectMatch && !isProjectMatch)
+                exclusionReasons.Add("project_mismatch");
+            if (IsHealthyStatus(status.Status) && !isFresh)
+                exclusionReasons.Add(editorPidAlive ? "stale_heartbeat" : "editor_pid_not_alive");
+
+            bool isSelectable = exclusionReasons.Count == 0;
+            var candidate = new BridgeDiscoveryCandidate
+            {
+                StatusPath = statusPath,
+                ConnectionPath = connectionPath,
+                Status = status.Status,
+                ProjectRoot = projectRoot,
+                LastHeartbeatUtc = heartbeatUtc,
+                HeartbeatAge = heartbeatAge,
+                IsFresh = isFresh,
+                IsProjectMatch = isProjectMatch,
+                EditorPidAlive = editorPidAlive,
+                SupportsToolSyncLens = status.SupportsToolSyncLens,
+                IsQuarantined = isQuarantined,
+                IsSelectable = isSelectable,
+                EditorPid = status.EditorPid,
+                ExclusionReasons = exclusionReasons.ToArray()
+            };
+
+            if (!isSelectable)
+                return (candidate, null);
+
+            return (candidate, new BridgeDiscoveryResult
+            {
+                StatusFile = status,
+                StatusPath = statusPath,
+                ProjectRoot = projectRoot,
+                ConnectionPath = connectionPath,
+                LastHeartbeatUtc = heartbeatUtc,
+                HeartbeatAge = heartbeatAge,
+                IsFresh = isFresh,
+                IsProjectMatch = isProjectMatch,
+                EditorPidAlive = editorPidAlive
+            });
+        }
+        catch (Exception ex)
+        {
+            return (new BridgeDiscoveryCandidate
+            {
+                StatusPath = statusPath,
+                LastHeartbeatUtc = DateTime.MinValue,
+                HeartbeatAge = TimeSpan.MaxValue,
+                IsFresh = false,
+                IsProjectMatch = false,
+                EditorPidAlive = false,
+                SupportsToolSyncLens = false,
+                IsQuarantined = false,
+                IsSelectable = false,
+                Error = ex.Message,
+                ExclusionReasons = ["malformed_status_file"]
+            }, null);
+        }
     }
 
     static string ResolveStatusDirectory()

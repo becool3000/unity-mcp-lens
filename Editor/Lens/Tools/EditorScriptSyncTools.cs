@@ -65,10 +65,14 @@ namespace Becool.UnityMcpLens.Editor.Tools
                 {
                     data = await SyncAsync(parameters, stopwatch);
                     var serialized = JsonConvert.SerializeObject(data, Formatting.None);
-                    success = serialized.IndexOf("\"timedOut\":true", StringComparison.OrdinalIgnoreCase) < 0 &&
+                    bool pendingRefresh = serialized.IndexOf("\"status\":\"pending_refresh\"", StringComparison.OrdinalIgnoreCase) >= 0;
+                    bool readyForFollowUp = serialized.IndexOf("\"readyForFollowUp\":true", StringComparison.OrdinalIgnoreCase) >= 0;
+                    success = readyForFollowUp &&
+                        !pendingRefresh &&
+                        serialized.IndexOf("\"timedOut\":true", StringComparison.OrdinalIgnoreCase) < 0 &&
                         serialized.IndexOf("\"refused\":true", StringComparison.OrdinalIgnoreCase) < 0 &&
                         serialized.IndexOf("\"consoleErrorsDetected\":true", StringComparison.OrdinalIgnoreCase) < 0;
-                    errorKind = success ? null : "sync_scripts_failed";
+                    errorKind = success || pendingRefresh ? null : "sync_scripts_failed";
                 }
 
                 using (timing.Measure("adapter"))
@@ -90,15 +94,19 @@ namespace Becool.UnityMcpLens.Editor.Tools
             }
 
             object response;
+            string responseDataJson = JsonConvert.SerializeObject(data, Formatting.None);
+            bool pendingRefreshResponse = responseDataJson.IndexOf("\"status\":\"pending_refresh\"", StringComparison.OrdinalIgnoreCase) >= 0;
             using (timing.Measure("result_shaping"))
             {
                 response = success
                     ? Response.Success("Unity script sync completed.", data)
-                    : Response.Error("Unity script sync did not complete cleanly.", data);
+                    : pendingRefreshResponse
+                        ? Response.Error("PENDING_REFRESH", data)
+                        : Response.Error("Unity script sync did not complete cleanly.", data);
                 timing.SetResponseBytes(PayloadBudgeting.GetUtf8ByteCount(JsonConvert.SerializeObject(response, Formatting.None)));
             }
 
-            timing.Record(success, errorKind);
+            timing.Record(success || pendingRefreshResponse, pendingRefreshResponse ? null : errorKind);
             return response;
         }
 
@@ -136,6 +144,8 @@ namespace Becool.UnityMcpLens.Editor.Tools
                 var noChangeConsoleWarnings = BuildConsoleWarnings(initialConsoleErrorCount, initialConsoleErrorCount);
                 return new
                 {
+                    status = editorIdle ? "ready" : "busy",
+                    readyForFollowUp = editorIdle,
                     noChangesDetected = true,
                     changedPaths,
                     relevantChangedPaths,
@@ -225,9 +235,13 @@ namespace Becool.UnityMcpLens.Editor.Tools
             bool newConsoleErrorsDetected = newConsoleErrorCount > 0;
             bool staleConsoleErrorsPresent = finalConsoleErrorCount > 0 && !newConsoleErrorsDetected;
             warnings.AddRange(BuildConsoleWarnings(initialConsoleErrorCount, finalConsoleErrorCount));
+            string status = ResolveStatus(refreshScheduledAfterResponse, timedOut, newConsoleErrorsDetected, editorIdle);
+            bool readyForFollowUp = string.Equals(status, "ready", StringComparison.Ordinal);
 
             var rawData = new
             {
+                status,
+                readyForFollowUp,
                 noChangesDetected,
                 changedPaths,
                 relevantChangedPaths,
@@ -255,6 +269,8 @@ namespace Becool.UnityMcpLens.Editor.Tools
 
             var compactData = new
             {
+                rawData.status,
+                rawData.readyForFollowUp,
                 rawData.noChangesDetected,
                 rawData.changedPaths,
                 rawData.relevantChangedPaths,
@@ -301,6 +317,8 @@ namespace Becool.UnityMcpLens.Editor.Tools
                 int newConsoleErrorCount = CountNewConsoleErrors(initialConsoleErrorCount, finalConsoleErrorCount);
                 return new
                 {
+                    status = "refused",
+                    readyForFollowUp = false,
                     refused = true,
                     noChangesDetected,
                     changedPaths,
@@ -327,6 +345,17 @@ namespace Becool.UnityMcpLens.Editor.Tools
                     finalState = EditorToolStateHelpers.BuildEditorState()
                 };
             }
+        }
+
+        static string ResolveStatus(bool refreshScheduledAfterResponse, bool timedOut, bool newConsoleErrorsDetected, bool editorIdle)
+        {
+            if (refreshScheduledAfterResponse)
+                return "pending_refresh";
+            if (timedOut)
+                return "timed_out";
+            if (newConsoleErrorsDetected)
+                return "console_errors";
+            return editorIdle ? "ready" : "busy";
         }
 
         static int CountNewConsoleErrors(int initialConsoleErrorCount, int finalConsoleErrorCount)

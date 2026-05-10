@@ -169,19 +169,21 @@ sealed class BenchmarkOptions
 
 sealed class MetadataAudit(BenchmarkOptions options)
 {
-    const int ExpectedFoundationToolCount = 15;
-    const int ExpectedSceneToolCount = 38;
-    const int ExpectedUiToolCount = 29;
-    const int ExpectedRuntimeToolCount = 19;
-    const int ExpectedProjectToolCount = 24;
-    const int ExpectedAssetsToolCount = 27;
+    const int ExpectedFoundationToolCount = 17;
+    const int ExpectedSceneToolCount = 40;
+    const int ExpectedUiToolCount = 33;
+    const int ExpectedRuntimeToolCount = 22;
+    const int ExpectedProjectToolCount = 26;
+    const int ExpectedAssetsToolCount = 30;
 
     static readonly string[] k_RequiredFoundationTools =
     [
         "Unity_GetLensHealth",
         "Unity_ListToolPacks",
+        "Unity_Bridge_ListConnections",
         "Unity_SetToolPacks",
         "Unity_ReadDetailRef",
+        "Unity_Tools_Menu",
         "Unity_Tools_Describe",
         "Unity_Tools_ActivateAndVerify",
         "Unity_ReadConsole",
@@ -236,6 +238,8 @@ sealed class MetadataAudit(BenchmarkOptions options)
         "Unity_UI_GetLayoutSnapshot",
         "Unity_UI_Raycast",
         "Unity_UI_GetInteractiveRegions",
+        "Unity_UI_QueryRuntimeLayout",
+        "Unity_UI_InvokeControl",
         "Unity_UI_CaptureGameView",
         "Unity_UI_Toolkit"
     ];
@@ -248,6 +252,7 @@ sealed class MetadataAudit(BenchmarkOptions options)
     static readonly string[] k_RequiredRuntimeTools =
     [
         "Unity_Runtime_GetVisualBoundsSnapshot",
+        "Unity_Runtime_QueryObjects",
         "Unity_PlayMode_PointerInputSmoke",
         "Unity_Editor_ExitPlayMode",
         "Unity_Editor_SetPlayMode"
@@ -268,6 +273,7 @@ sealed class MetadataAudit(BenchmarkOptions options)
     [
         "Unity_Asset_Search",
         "Unity_Asset_ConfigureSpriteImport",
+        "Unity_Asset_SetSerializedProperties",
         "Unity_Asset_ImportSpriteSheetAndBind",
         "Unity_Asset_PreviewImportSpriteSheetAndBind",
         "Unity_Asset_ApplyImportSpriteSheetAndBind",
@@ -349,9 +355,11 @@ sealed class MetadataAudit(BenchmarkOptions options)
         ValidateToolSet("foundation+project", projectTools, ExpectedProjectToolCount, k_RequiredProjectTools, failures);
         ValidateToolSet("foundation+assets", assetsTools, ExpectedAssetsToolCount, k_RequiredAssetsTools, failures);
         ValidateToolSet("foundation+debug", debugTools, null, k_RequiredDebugTools, failures);
+        ValidateReadOnlyHint(foundationTools, "Unity_Tools_Menu", expected: true, failures);
         ValidateReadOnlyHint(foundationTools, "Unity_Tools_Describe", expected: true, failures);
         ValidateReadOnlyHint(foundationTools, "Unity_Tools_ActivateAndVerify", expected: false, failures);
         ValidateReadOnlyHint(foundationTools, "Unity_Editor_ScriptUpdatingConsentModal", expected: false, failures);
+        ValidateSplitGameObjectSchema(foundationTools, "Unity_Tools_Menu", ["maxToolsPerPack"], [], failures);
         ValidateReadOnlyHint(sceneTools, "Unity_GameObject_Inspect", expected: true, failures);
         ValidateReadOnlyHint(sceneTools, "Unity_GameObject_ListComponents", expected: true, failures);
         ValidateReadOnlyHint(sceneTools, "Unity_GameObject_GetComponent", expected: true, failures);
@@ -376,6 +384,8 @@ sealed class MetadataAudit(BenchmarkOptions options)
         ValidateReadOnlyHint(uiTools, "Unity_UI_PreviewCreateCanvasPrefab", expected: true, failures);
         ValidateReadOnlyHint(uiTools, "Unity_UI_ApplyCreateCanvasPrefab", expected: false, failures);
         ValidateReadOnlyHint(uiTools, "Unity_UI_VerifyRaycastAndLayout", expected: true, failures);
+        ValidateReadOnlyHint(uiTools, "Unity_UI_QueryRuntimeLayout", expected: true, failures);
+        ValidateReadOnlyHint(uiTools, "Unity_UI_InvokeControl", expected: false, failures);
         ValidateReadOnlyHint(sceneTools, "Unity_Scene_PreviewInstantiatePrefabAndBind", expected: true, failures);
         ValidateReadOnlyHint(sceneTools, "Unity_Scene_ApplyInstantiatePrefabAndBind", expected: false, failures);
         ValidateReadOnlyHint(runtimeTools, "Unity_PlayMode_PointerInputSmoke", expected: false, failures);
@@ -752,6 +762,18 @@ sealed class MetadataAudit(BenchmarkOptions options)
             "Unity_UI_VerifyRaycastAndLayout",
             ["points", "targets", "assertions"],
             ["points"],
+            failures);
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_UI_QueryRuntimeLayout",
+            ["target", "searchMethod", "includeChildren", "includeInactive", "elementTypes", "textFilter", "maxElements", "includeScreenBounds"],
+            [],
+            failures);
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_UI_InvokeControl",
+            ["target", "searchMethod", "includeInactive", "action", "value", "waitFrames", "captureConsoleDelta", "allowEditMode"],
+            ["target"],
             failures);
 
         if (FindTool(tools, "Unity_UI_EnsureNamedHierarchy") != null)

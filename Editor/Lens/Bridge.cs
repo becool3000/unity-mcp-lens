@@ -1825,6 +1825,11 @@ namespace Becool.UnityMcpLens.Editor
             return merged;
         }
 
+        static string GetCommandParamString(Command command, string name)
+        {
+            return string.IsNullOrWhiteSpace(name) ? null : command?.@params?.Value<string>(name);
+        }
+
         static string BuildToolsSnapshotJson(McpToolInfo[] tools, bool includeExtendedFields)
         {
             if (tools == null || tools.Length == 0)
@@ -1968,6 +1973,8 @@ namespace Becool.UnityMcpLens.Editor
                         {
                             commandType = command?.type ?? "(null)",
                             requestBytes,
+                            setToolPacksReason = GetCommandParamString(command, "reason"),
+                            toolSurfaceMode = GetCommandParamString(command, "toolSurfaceMode"),
                             discoveryMode = s_ToolSnapshotMode,
                             snapshotReason = s_ToolSnapshotReason,
                             snapshotHashMinimal = s_CurrentToolsHash,
@@ -2065,6 +2072,8 @@ namespace Becool.UnityMcpLens.Editor
                 {
                     var requestedPacks = (command.@params?["packs"] as JArray)?.Values<string>().ToArray() ?? Array.Empty<string>();
                     bool includeSchemas = command.@params?.Value<bool?>("includeSchemas") ?? false;
+                    string setToolPacksReason = GetCommandParamString(command, "reason");
+                    string toolSurfaceMode = GetCommandParamString(command, "toolSurfaceMode");
                     var manifest = BridgeManifestBroker.SetToolPacks(client.ConnectionId, requestedPacks, includeSchemas, out var error);
                     UpdateBridgeToolSyncStatus();
 
@@ -2090,6 +2099,8 @@ namespace Becool.UnityMcpLens.Editor
                         ExtraFields = new
                         {
                             commandType = command.type,
+                            setToolPacksReason,
+                            toolSurfaceMode,
                             manifestKind = manifest.kind,
                             manifestReason = manifest.reason,
                             bridgeSessionId = manifest.bridgeSessionId,

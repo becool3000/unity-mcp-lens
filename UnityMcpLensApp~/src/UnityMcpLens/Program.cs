@@ -8,7 +8,13 @@ namespace UnityMcpLens;
 sealed class UnityMcpLensHost
 {
     static readonly TimeSpan s_BridgeQuarantineTtl = TimeSpan.FromSeconds(30);
+    static readonly TimeSpan s_BridgeDiscoveryReloadRetryWindow = TimeSpan.FromSeconds(4);
+    static readonly TimeSpan s_BridgeDiscoveryReloadRetryPollInterval = TimeSpan.FromMilliseconds(250);
     static readonly string s_HostVersion = ResolveHostVersion();
+    const string ToolSurfaceModeEnvVar = "UNITY_MCP_LENS_TOOL_SURFACE_MODE";
+    const string DynamicPacksToolSurfaceMode = "dynamic_packs";
+    const string StaticAllToolSurfaceMode = "static_all";
+    static readonly string s_ToolSurfaceMode = ResolveToolSurfaceMode();
 
     static readonly HashSet<string> s_ReadOnlyTools = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -16,7 +22,9 @@ sealed class UnityMcpLensHost
         "Unity_GameObject_PreviewChanges",
         "Unity_GetLensHealth",
         "Unity_ListToolPacks",
+        "Unity_Bridge_ListConnections",
         "Unity_ReadDetailRef",
+        "Unity_Tools_Menu",
         "Unity_Tools_Describe",
         "Unity_ReadConsole",
         "Unity_ListResources",
@@ -35,6 +43,7 @@ sealed class UnityMcpLensHost
         "Unity_Scene_VerifySerializedReferences",
         "Unity_Asset_PreviewImportSpriteSheetAndBind",
         "Unity_Asset_VerifySpriteArrayBinding",
+        "Unity_Runtime_QueryObjects",
         "Unity_UI_Raycast",
         "Unity_Asset_Search",
         "Unity_Object_ValidateReferences",
@@ -66,6 +75,7 @@ sealed class UnityMcpLensHost
         "Unity_Project_ManagePackages",
         "Unity_Tools_ActivateAndVerify",
         "Unity_Asset_ConfigureSpriteImport",
+        "Unity_Asset_SetSerializedProperties",
         "Unity_Asset_ImportSpriteSheetAndBind",
         "Unity_Asset_ApplyImportSpriteSheetAndBind",
         "Unity_Prefab_SetSerializedProperties",
@@ -153,6 +163,17 @@ sealed class UnityMcpLensHost
         public string? FailedStatusPath { get; set; }
     }
 
+    sealed class BridgeDiscoveryException : InvalidOperationException
+    {
+        public BridgeDiscoveryException(string message, BridgeDiscoverySnapshot snapshot)
+            : base(message)
+        {
+            Snapshot = snapshot;
+        }
+
+        public BridgeDiscoverySnapshot Snapshot { get; }
+    }
+
     readonly JsonSerializerOptions m_JsonOptions = new(JsonSerializerDefaults.Web)
     {
         DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
@@ -164,10 +185,11 @@ sealed class UnityMcpLensHost
 
     UnityBridgeClient? m_BridgeClient;
     BridgeConnectionSnapshot? m_BridgeConnection;
+    BridgeDiscoverySnapshot? m_LastBridgeDiscoverySnapshot;
     BridgeRecoveryState? m_LastRecoveryState;
     string? m_BridgeSessionId;
     long m_ManifestVersion;
-    string[] m_ActiveToolPacks = ["foundation"];
+    string[] m_ActiveToolPacks = GetDefaultActivePacksForSurfaceMode();
     bool m_ClientInitialized;
     readonly Dictionary<string, DateTime> m_BridgeQuarantine = new(StringComparer.OrdinalIgnoreCase);
 
@@ -397,6 +419,42 @@ sealed class UnityMcpLensHost
             }
         }, m_JsonOptions);
 
+        JsonElement toolsMenuInputSchema = JsonSerializer.SerializeToElement(new
+        {
+            type = "object",
+            properties = new
+            {
+                maxToolsPerPack = new
+                {
+                    type = "integer",
+                    description = "Maximum number of tool names to return per pack."
+                }
+            }
+        }, m_JsonOptions);
+
+        JsonElement bridgeListConnectionsInputSchema = JsonSerializer.SerializeToElement(new
+        {
+            type = "object",
+            properties = new
+            {
+                projectPath = new
+                {
+                    type = "string",
+                    description = "Optional Unity project root filter. Defaults to UNITY_MCP_PROJECT_PATH or the current Unity project root if discoverable."
+                },
+                includeStale = new
+                {
+                    type = "boolean",
+                    description = "Include stale/dead/mismatched candidates. Defaults to true."
+                },
+                maxEntries = new
+                {
+                    type = "integer",
+                    description = "Maximum candidate rows to return. Defaults to 12."
+                }
+            }
+        }, m_JsonOptions);
+
         JsonElement activateAndVerifyInputSchema = JsonSerializer.SerializeToElement(new
         {
             type = "object",
@@ -432,6 +490,12 @@ sealed class UnityMcpLensHost
                 emptyInputSchema,
                 readOnlyHint: true),
             BuildBootstrapTool(
+                "Unity_Bridge_ListConnections",
+                "List Unity Bridge Connections",
+                "Lists Unity MCP bridge connection candidates, project-root match state, heartbeat age, editor PID liveness, quarantine state, and exclusion reasons without touching the bridge.",
+                bridgeListConnectionsInputSchema,
+                readOnlyHint: true),
+            BuildBootstrapTool(
                 "Unity_SetToolPacks",
                 "Set Unity Tool Packs",
                 "Sets the active Unity MCP tool packs for this connection. Foundation stays active automatically and at most two additional packs may be selected.",
@@ -448,6 +512,12 @@ sealed class UnityMcpLensHost
                 "Describe Unity Tools",
                 "Describes live Unity MCP Lens tools, including current active packs, manifest version, required packs, and schemas when requested.",
                 toolsDescribeInputSchema,
+                readOnlyHint: true),
+            BuildBootstrapTool(
+                "Unity_Tools_Menu",
+                "Unity Tools Menu",
+                "Returns a compact pack-grouped menu of Unity MCP Lens tools and workflow recommendations.",
+                toolsMenuInputSchema,
                 readOnlyHint: true),
             BuildBootstrapTool(
                 "Unity_Tools_ActivateAndVerify",
@@ -569,7 +639,9 @@ sealed class UnityMcpLensHost
                 }
                 else
                 {
-                    payload = CreateErrorPayload(ex.Message);
+                    payload = ex is BridgeDiscoveryException discoveryException
+                        ? CreateBridgeDiscoveryErrorPayload(discoveryException)
+                        : CreateErrorPayload(ex.Message);
                 }
 
                 await WriteRpcAsync(new
@@ -585,12 +657,28 @@ sealed class UnityMcpLensHost
 
     async Task<object> InvokeToolCallAsync(string toolName, string canonicalToolName, JsonElement argumentsElement, CancellationToken cancellationToken)
     {
+        if (ToolNamesMatch(canonicalToolName, "Unity.SetToolPacks") && IsStaticAllToolSurface)
+            return BuildToolCallResult(CreateStaticAllSetToolPacksNoopPayload(argumentsElement));
+
+        if (ToolNamesMatch(canonicalToolName, "Unity.Bridge.ListConnections"))
+            return BuildToolCallResult(CreateBridgeListConnectionsPayload(argumentsElement));
+
         await EnsureBridgeReadyAsync(cancellationToken).ConfigureAwait(false);
 
         if (ToolNamesMatch(canonicalToolName, "Unity.SetToolPacks"))
         {
             string[] requestedPacks = ExtractPacks(argumentsElement);
-            var manifestEnvelope = await m_BridgeClient!.SetToolPacksAsync(requestedPacks, includeSchemas: false, cancellationToken).ConfigureAwait(false);
+            if (IsStaticAllToolSurface)
+            {
+                return BuildToolCallResult(CreateStaticAllSetToolPacksNoopPayload(argumentsElement));
+            }
+
+            var manifestEnvelope = await m_BridgeClient!.SetToolPacksAsync(
+                requestedPacks,
+                includeSchemas: false,
+                cancellationToken,
+                reason: "dynamic_pack_update",
+                toolSurfaceMode: s_ToolSurfaceMode).ConfigureAwait(false);
             if (!string.Equals(manifestEnvelope.Status, "success", StringComparison.OrdinalIgnoreCase) || manifestEnvelope.Result == null)
             {
                 return BuildToolCallResult(CreateErrorPayload(manifestEnvelope.Error ?? "Failed to update Unity tool packs."), isError: true);
@@ -612,6 +700,7 @@ sealed class UnityMcpLensHost
                 data = new
                 {
                     activeToolPacks = manifestEnvelope.Result.ActiveToolPacks,
+                    toolSurfaceMode = s_ToolSurfaceMode,
                     manifestVersion = manifestEnvelope.Result.ManifestVersion,
                     bridgeSessionId = manifestEnvelope.Result.BridgeSessionId,
                     unchanged,
@@ -633,7 +722,60 @@ sealed class UnityMcpLensHost
         {
             string[] requestedPacks = ExtractPacks(argumentsElement);
             string[] expectedTools = NormalizeToolNames(ExtractExpectedTools(argumentsElement));
-            var manifestEnvelope = await m_BridgeClient!.SetToolPacksAsync(requestedPacks, includeSchemas: false, cancellationToken).ConfigureAwait(false);
+            if (IsStaticAllToolSurface)
+            {
+                string[] staticHostToolNames = m_ToolCache.Keys
+                    .OrderBy(name => name, StringComparer.Ordinal)
+                    .ToArray();
+                string[] staticMatchedExpectedTools = expectedTools
+                    .Where(expected => staticHostToolNames.Any(actual => ToolNamesMatch(actual, expected)))
+                    .ToArray();
+                string[] staticMissingExpectedTools = expectedTools
+                    .Where(expected => !staticHostToolNames.Any(actual => ToolNamesMatch(actual, expected)))
+                    .ToArray();
+                bool staticVerificationSucceeded = staticMissingExpectedTools.Length == 0;
+
+                return BuildToolCallResult(JsonSerializer.SerializeToElement(new
+                {
+                    success = staticVerificationSucceeded,
+                    message = staticVerificationSucceeded
+                        ? "Verified expected host-visible tools in static_all tool surface mode."
+                        : "Expected tools were missing from the static_all host-visible surface.",
+                    data = new
+                    {
+                        toolSurfaceMode = s_ToolSurfaceMode,
+                        activeToolPacks = m_ActiveToolPacks,
+                        requestedPacks,
+                        unchanged = true,
+                        manifestKind = "static_all_noop",
+                        exportedToolCount = m_ToolCache.Count,
+                        expectedTools,
+                        matchedExpectedTools = staticMatchedExpectedTools,
+                        missingFromServerSurface = staticMissingExpectedTools,
+                        missingFromClient = staticMissingExpectedTools,
+                        toolsListChangedNotificationSent = false,
+                        clientSurface = new
+                        {
+                            serverSurfaceVerified = staticVerificationSucceeded,
+                            clientCallableState = "not_observable_from_mcp_server",
+                            expectedRefresh = false,
+                            note = staticVerificationSucceeded
+                                ? "The MCP host is already exposing the full enabled Lens tool surface. No dynamic pack activation or client refresh is expected."
+                                : "One or more expected tools were not present in the MCP host tool cache while static_all mode was active."
+                        },
+                        workaroundHint = staticVerificationSucceeded
+                            ? "Call the real native tools directly; use Unity.Tools.Menu for compact navigation."
+                            : "Use Unity.Tools.Describe to inspect the missing tool names and confirm they are enabled in Lens."
+                    }
+                }, m_JsonOptions), isError: !staticVerificationSucceeded);
+            }
+
+            var manifestEnvelope = await m_BridgeClient!.SetToolPacksAsync(
+                requestedPacks,
+                includeSchemas: false,
+                cancellationToken,
+                reason: "activate_and_verify",
+                toolSurfaceMode: s_ToolSurfaceMode).ConfigureAwait(false);
             if (!string.Equals(manifestEnvelope.Status, "success", StringComparison.OrdinalIgnoreCase) || manifestEnvelope.Result == null)
             {
                 return BuildToolCallResult(CreateErrorPayload(manifestEnvelope.Error ?? "Failed to activate Unity tool packs."), isError: true);
@@ -668,6 +810,7 @@ sealed class UnityMcpLensHost
                 data = new
                 {
                     activeToolPacks = manifestEnvelope.Result.ActiveToolPacks,
+                    toolSurfaceMode = s_ToolSurfaceMode,
                     manifestVersion = manifestEnvelope.Result.ManifestVersion,
                     bridgeSessionId = manifestEnvelope.Result.BridgeSessionId,
                     profileCatalogVersion = manifestEnvelope.Result.ProfileCatalogVersion,
@@ -744,18 +887,23 @@ sealed class UnityMcpLensHost
         if (m_BridgeClient is { IsConnected: true } &&
             m_BridgeConnection != null &&
             currentDiscovery != null &&
-            IsSameBridgeGeneration(m_BridgeConnection, currentDiscovery))
+            IsSameBridgeGeneration(m_BridgeConnection, currentDiscovery) &&
+            (!IsStaticAllToolSurface || ActivePacksAreStaticAll(m_ActiveToolPacks)))
         {
             return;
         }
 
-        string[] desiredActivePacks = m_ActiveToolPacks.Length > 0 ? m_ActiveToolPacks : ["foundation"];
+        string[] desiredActivePacks = IsStaticAllToolSurface
+            ? GetDefaultActivePacksForSurfaceMode()
+            : (m_ActiveToolPacks.Length > 0 ? m_ActiveToolPacks : GetDefaultActivePacksForSurfaceMode());
         if (m_BridgeClient != null)
             await ResetBridgeClientAsync(preserveActivePacks: true, clearToolCache: true).ConfigureAwait(false);
 
         BridgeDiscoveryResult? discoveryResult = currentDiscovery ?? FindCurrentBridge();
         if (discoveryResult == null)
-            throw new InvalidOperationException("No fresh active Unity MCP bridge status file was found.");
+            discoveryResult = await WaitForMatchingBridgeAfterReloadAsync(cancellationToken).ConfigureAwait(false);
+        if (discoveryResult == null)
+            throw CreateNoMatchingBridgeException();
 
         m_BridgeConnection = BridgeConnectionSnapshot.From(discoveryResult);
         m_BridgeClient = new UnityBridgeClient(m_JsonOptions);
@@ -783,6 +931,26 @@ sealed class UnityMcpLensHost
         await RestoreActiveToolPacksAsync(desiredActivePacks, cancellationToken).ConfigureAwait(false);
     }
 
+    async Task<BridgeDiscoveryResult?> WaitForMatchingBridgeAfterReloadAsync(CancellationToken cancellationToken)
+    {
+        if (m_LastBridgeDiscoverySnapshot?.RequireProjectMatch != true)
+            return null;
+
+        DateTime deadlineUtc = DateTime.UtcNow.Add(s_BridgeDiscoveryReloadRetryWindow);
+        while (DateTime.UtcNow < deadlineUtc)
+        {
+            await Task.Delay(s_BridgeDiscoveryReloadRetryPollInterval, cancellationToken).ConfigureAwait(false);
+            BridgeDiscoveryResult? retryDiscovery = FindCurrentBridge();
+            if (retryDiscovery != null)
+                return retryDiscovery;
+
+            if (m_LastBridgeDiscoverySnapshot?.RequireProjectMatch != true)
+                return null;
+        }
+
+        return null;
+    }
+
     async Task RecoverBridgeAfterTransportFailureAsync(
         Exception exception,
         string operationName,
@@ -805,7 +973,7 @@ sealed class UnityMcpLensHost
         m_BridgeSessionId = null;
         m_ManifestVersion = 0;
         if (!preserveActivePacks)
-            m_ActiveToolPacks = ["foundation"];
+            m_ActiveToolPacks = GetDefaultActivePacksForSurfaceMode();
         if (clearToolCache)
             m_ToolCache.Clear();
 
@@ -819,14 +987,105 @@ sealed class UnityMcpLensHost
     BridgeDiscoveryResult? FindCurrentBridge()
     {
         string projectPathHint = ResolveProjectPathHint(out bool requireProjectMatch);
-        return BridgeDiscovery.FindBestBridge(projectPathHint, GetActiveQuarantineIds(), requireProjectMatch);
+        m_LastBridgeDiscoverySnapshot = BridgeDiscovery.FindBridgeSnapshot(projectPathHint, GetActiveQuarantineIds(), requireProjectMatch);
+        return m_LastBridgeDiscoverySnapshot.Selected;
     }
 
     string ResolveProjectPathHint(out bool requireProjectMatch)
     {
         string? projectPath = Environment.GetEnvironmentVariable("UNITY_MCP_PROJECT_PATH");
-        requireProjectMatch = !string.IsNullOrWhiteSpace(projectPath);
-        return requireProjectMatch ? projectPath! : Directory.GetCurrentDirectory();
+        if (!string.IsNullOrWhiteSpace(projectPath))
+        {
+            requireProjectMatch = true;
+            return NormalizeProjectPathHint(projectPath);
+        }
+
+        if (TryFindUnityProjectRoot(Directory.GetCurrentDirectory(), out string discoveredProjectRoot))
+        {
+            requireProjectMatch = true;
+            return discoveredProjectRoot;
+        }
+
+        requireProjectMatch = false;
+        return NormalizeProjectPathHint(Directory.GetCurrentDirectory());
+    }
+
+    static bool TryFindUnityProjectRoot(string startDirectory, out string projectRoot)
+    {
+        projectRoot = string.Empty;
+        if (string.IsNullOrWhiteSpace(startDirectory))
+            return false;
+
+        DirectoryInfo? directory;
+        try
+        {
+            directory = new DirectoryInfo(Path.GetFullPath(startDirectory));
+        }
+        catch
+        {
+            return false;
+        }
+
+        while (directory != null)
+        {
+            string assetsPath = Path.Combine(directory.FullName, "Assets");
+            string projectSettingsPath = Path.Combine(directory.FullName, "ProjectSettings");
+            string manifestPath = Path.Combine(directory.FullName, "Packages", "manifest.json");
+            if (Directory.Exists(assetsPath) &&
+                Directory.Exists(projectSettingsPath) &&
+                File.Exists(manifestPath))
+            {
+                projectRoot = NormalizeProjectPathHint(directory.FullName);
+                return true;
+            }
+
+            directory = directory.Parent;
+        }
+
+        return false;
+    }
+
+    static string NormalizeProjectPathHint(string path)
+    {
+        try
+        {
+            string normalized = Path.GetFullPath(path)
+                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            if (string.Equals(Path.GetFileName(normalized), "Assets", StringComparison.OrdinalIgnoreCase))
+                return Path.GetFullPath(Path.GetDirectoryName(normalized) ?? normalized)
+                    .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+            return normalized;
+        }
+        catch
+        {
+            return path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        }
+    }
+
+    BridgeDiscoveryException CreateNoMatchingBridgeException()
+    {
+        BridgeDiscoverySnapshot? snapshot = m_LastBridgeDiscoverySnapshot;
+        if (snapshot == null)
+        {
+            string projectPathHint = ResolveProjectPathHint(out bool requireProjectMatch);
+            snapshot = BridgeDiscovery.FindBridgeSnapshot(projectPathHint, GetActiveQuarantineIds(), requireProjectMatch);
+        }
+
+        string message = DescribeBridgeDiscoveryFailure(snapshot);
+        return new BridgeDiscoveryException(message, snapshot);
+    }
+
+    static string DescribeBridgeDiscoveryFailure(BridgeDiscoverySnapshot snapshot)
+    {
+        if (snapshot.RequireProjectMatch)
+        {
+            return $"No matching Unity MCP bridge was found for project '{snapshot.ProjectPathHint}'. " +
+                $"Refusing to select a mismatched bridge; {snapshot.Candidates.Length} candidate status file(s) were inspected.";
+        }
+
+        return $"No fresh active Unity MCP bridge status file was found in '{snapshot.StatusDirectory}'. " +
+            $"{snapshot.Candidates.Length} candidate status file(s) were inspected.";
     }
 
     bool IsSameBridgeGeneration(BridgeConnectionSnapshot connection, BridgeDiscoveryResult discoveryResult)
@@ -847,7 +1106,12 @@ sealed class UnityMcpLensHost
         if (desiredAdditionalPacks.SequenceEqual(currentAdditionalPacks, StringComparer.OrdinalIgnoreCase))
             return;
 
-        var restoreEnvelope = await m_BridgeClient.SetToolPacksAsync(desiredAdditionalPacks, includeSchemas: false, cancellationToken).ConfigureAwait(false);
+        var restoreEnvelope = await m_BridgeClient.SetToolPacksAsync(
+            desiredAdditionalPacks,
+            includeSchemas: false,
+            cancellationToken,
+            reason: IsStaticAllToolSurface ? "static_all_restore" : "dynamic_pack_restore",
+            toolSurfaceMode: s_ToolSurfaceMode).ConfigureAwait(false);
         if (!string.Equals(restoreEnvelope.Status, "success", StringComparison.OrdinalIgnoreCase) || restoreEnvelope.Result == null)
             throw new InvalidOperationException(restoreEnvelope.Error ?? "Unity bridge did not restore active tool packs after reconnect.");
 
@@ -1140,6 +1404,75 @@ sealed class UnityMcpLensHost
         }
     }
 
+    JsonElement CreateStaticAllSetToolPacksNoopPayload(JsonElement argumentsElement)
+    {
+        string[] requestedPacks = ExtractPacks(argumentsElement);
+        return JsonSerializer.SerializeToElement(new
+        {
+            success = true,
+            message = "Unity.SetToolPacks is a host-local compatibility no-op in static_all tool surface mode.",
+            data = new
+            {
+                toolSurfaceMode = s_ToolSurfaceMode,
+                activeToolPacks = GetDefaultActivePacksForSurfaceMode(),
+                requestedPacks,
+                unchanged = true,
+                toolsListChangedNotificationSent = false,
+                clientSurface = new
+                {
+                    expectedRefresh = false
+                },
+                bridgeTouched = false
+            }
+        }, m_JsonOptions);
+    }
+
+    JsonElement CreateBridgeListConnectionsPayload(JsonElement argumentsElement)
+    {
+        string? explicitProjectPath = ExtractString(argumentsElement, "projectPath", "ProjectPath");
+        string projectPathHint;
+        bool requireProjectMatch;
+        if (!string.IsNullOrWhiteSpace(explicitProjectPath))
+        {
+            projectPathHint = NormalizeProjectPathHint(explicitProjectPath);
+            requireProjectMatch = true;
+        }
+        else
+        {
+            projectPathHint = ResolveProjectPathHint(out requireProjectMatch);
+        }
+
+        bool includeStale = ExtractBool(argumentsElement, true, "includeStale", "IncludeStale");
+        int maxEntries = Math.Clamp(ExtractInt(argumentsElement, 12, "maxEntries", "MaxEntries"), 1, 100);
+        BridgeDiscoverySnapshot snapshot = BridgeDiscovery.FindBridgeSnapshot(projectPathHint, GetActiveQuarantineIds(), requireProjectMatch);
+        m_LastBridgeDiscoverySnapshot = snapshot;
+
+        BridgeDiscoveryCandidate[] visibleCandidates = (includeStale
+                ? snapshot.Candidates
+                : snapshot.Candidates.Where(candidate => candidate.IsSelectable).ToArray())
+            .Take(maxEntries)
+            .ToArray();
+
+        return JsonSerializer.SerializeToElement(new
+        {
+            success = true,
+            message = snapshot.Selected == null
+                ? "No matching Unity MCP bridge connection was selected."
+                : "Unity MCP bridge connection candidates listed.",
+            data = new
+            {
+                projectPathHint = snapshot.ProjectPathHint,
+                requireProjectMatch = snapshot.RequireProjectMatch,
+                statusDirectory = snapshot.StatusDirectory,
+                selected = snapshot.Selected == null ? null : CreateBridgeDiscoveryResultDiagnostics(snapshot.Selected),
+                candidateCount = snapshot.Candidates.Length,
+                returnedCandidateCount = visibleCandidates.Length,
+                includeStale,
+                candidates = visibleCandidates.Select(CreateBridgeCandidateDiagnostics).ToArray()
+            }
+        }, m_JsonOptions);
+    }
+
     static string[] ExtractPacks(JsonElement argumentsElement)
     {
         if (argumentsElement.ValueKind != JsonValueKind.Object)
@@ -1153,6 +1486,53 @@ sealed class UnityMcpLensHost
         }
 
         return [];
+    }
+
+    static string? ExtractString(JsonElement argumentsElement, params string[] names)
+    {
+        if (argumentsElement.ValueKind != JsonValueKind.Object)
+            return null;
+
+        foreach (string name in names)
+        {
+            if (argumentsElement.TryGetProperty(name, out var element) && element.ValueKind == JsonValueKind.String)
+                return element.GetString();
+        }
+
+        return null;
+    }
+
+    static bool ExtractBool(JsonElement argumentsElement, bool fallback, params string[] names)
+    {
+        if (argumentsElement.ValueKind != JsonValueKind.Object)
+            return fallback;
+
+        foreach (string name in names)
+        {
+            if (!argumentsElement.TryGetProperty(name, out var element))
+                continue;
+
+            if (element.ValueKind == JsonValueKind.True)
+                return true;
+            if (element.ValueKind == JsonValueKind.False)
+                return false;
+        }
+
+        return fallback;
+    }
+
+    static int ExtractInt(JsonElement argumentsElement, int fallback, params string[] names)
+    {
+        if (argumentsElement.ValueKind != JsonValueKind.Object)
+            return fallback;
+
+        foreach (string name in names)
+        {
+            if (argumentsElement.TryGetProperty(name, out var element) && element.ValueKind == JsonValueKind.Number && element.TryGetInt32(out int value))
+                return value;
+        }
+
+        return fallback;
     }
 
     static string[] ExtractExpectedTools(JsonElement argumentsElement)
@@ -1309,6 +1689,18 @@ sealed class UnityMcpLensHost
         };
     }
 
+    JsonElement CreateBridgeDiscoveryErrorPayload(BridgeDiscoveryException exception)
+    {
+        return CreateErrorPayload(
+            exception.Message,
+            "UNITY_MCP_NO_MATCHING_BRIDGE",
+            new
+            {
+                host = CreateHostDiagnostics(),
+                discovery = BuildBridgeDiscoveryDiagnostics(exception.Snapshot, maxCandidates: 12)
+            });
+    }
+
     object CreateBridgeDiagnostics(BridgeRecoveryState recoveryState)
     {
         return new
@@ -1324,7 +1716,67 @@ sealed class UnityMcpLensHost
             bridgeSessionId = m_BridgeConnection?.BridgeSessionId,
             manifestVersion = m_BridgeConnection?.ManifestVersion,
             failedStatusPath = recoveryState.FailedStatusPath,
-            failedConnectionPath = recoveryState.FailedConnectionPath
+            failedConnectionPath = recoveryState.FailedConnectionPath,
+            discovery = m_LastBridgeDiscoverySnapshot == null
+                ? null
+                : BuildBridgeDiscoveryDiagnostics(m_LastBridgeDiscoverySnapshot, maxCandidates: 8)
+        };
+    }
+
+    static object BuildBridgeDiscoveryDiagnostics(BridgeDiscoverySnapshot snapshot, int maxCandidates)
+    {
+        BridgeDiscoveryCandidate[] candidates = snapshot.Candidates.Take(Math.Max(1, maxCandidates)).ToArray();
+        return new
+        {
+            projectPathHint = snapshot.ProjectPathHint,
+            requireProjectMatch = snapshot.RequireProjectMatch,
+            statusDirectory = snapshot.StatusDirectory,
+            selected = snapshot.Selected == null ? null : CreateBridgeDiscoveryResultDiagnostics(snapshot.Selected),
+            candidateCount = snapshot.Candidates.Length,
+            returnedCandidateCount = candidates.Length,
+            candidates = candidates.Select(CreateBridgeCandidateDiagnostics).ToArray()
+        };
+    }
+
+    static object CreateBridgeDiscoveryResultDiagnostics(BridgeDiscoveryResult result)
+    {
+        return new
+        {
+            statusPath = result.StatusPath,
+            connectionPath = result.ConnectionPath,
+            projectRoot = result.ProjectRoot,
+            projectRootMatch = result.IsProjectMatch,
+            status = result.StatusFile.Status,
+            heartbeatAgeSeconds = result.HeartbeatAge == TimeSpan.MaxValue ? (double?)null : Math.Round(result.HeartbeatAge.TotalSeconds, 3),
+            lastHeartbeatUtc = result.LastHeartbeatUtc == DateTime.MinValue ? null : result.LastHeartbeatUtc.ToString("O"),
+            editorPid = result.EditorPid,
+            editorPidAlive = result.EditorPidAlive,
+            fresh = result.IsFresh,
+            supportsToolSyncLens = result.StatusFile.SupportsToolSyncLens,
+            bridgeSessionId = result.StatusFile.BridgeSessionId,
+            manifestVersion = result.StatusFile.ManifestVersion
+        };
+    }
+
+    static object CreateBridgeCandidateDiagnostics(BridgeDiscoveryCandidate candidate)
+    {
+        return new
+        {
+            statusPath = candidate.StatusPath,
+            connectionPath = candidate.ConnectionPath,
+            projectRoot = candidate.ProjectRoot,
+            projectRootMatch = candidate.IsProjectMatch,
+            status = candidate.Status,
+            heartbeatAgeSeconds = candidate.HeartbeatAge == TimeSpan.MaxValue ? (double?)null : Math.Round(candidate.HeartbeatAge.TotalSeconds, 3),
+            lastHeartbeatUtc = candidate.LastHeartbeatUtc == DateTime.MinValue ? null : candidate.LastHeartbeatUtc.ToString("O"),
+            editorPid = candidate.EditorPid,
+            editorPidAlive = candidate.EditorPidAlive,
+            fresh = candidate.IsFresh,
+            supportsToolSyncLens = candidate.SupportsToolSyncLens,
+            quarantined = candidate.IsQuarantined,
+            selectable = candidate.IsSelectable,
+            exclusionReasons = candidate.ExclusionReasons,
+            error = candidate.Error
         };
     }
 
@@ -1389,6 +1841,37 @@ sealed class UnityMcpLensHost
         }
 
         return false;
+    }
+
+    static bool IsStaticAllToolSurface =>
+        string.Equals(s_ToolSurfaceMode, StaticAllToolSurfaceMode, StringComparison.OrdinalIgnoreCase);
+
+    static string[] GetDefaultActivePacksForSurfaceMode()
+    {
+        return IsStaticAllToolSurface
+            ? ["foundation", "full"]
+            : ["foundation"];
+    }
+
+    static bool ActivePacksAreStaticAll(IEnumerable<string> packs)
+    {
+        return (packs ?? Array.Empty<string>()).Any(pack => string.Equals(pack, "full", StringComparison.OrdinalIgnoreCase));
+    }
+
+    static string ResolveToolSurfaceMode()
+    {
+        string? rawMode = Environment.GetEnvironmentVariable(ToolSurfaceModeEnvVar);
+        if (string.IsNullOrWhiteSpace(rawMode))
+            return DynamicPacksToolSurfaceMode;
+
+        string mode = rawMode.Trim();
+        if (string.Equals(mode, DynamicPacksToolSurfaceMode, StringComparison.OrdinalIgnoreCase))
+            return DynamicPacksToolSurfaceMode;
+        if (string.Equals(mode, StaticAllToolSurfaceMode, StringComparison.OrdinalIgnoreCase))
+            return StaticAllToolSurfaceMode;
+
+        Console.Error.WriteLine($"[unity-mcp-lens] Unknown {ToolSurfaceModeEnvVar} value '{rawMode}'. Falling back to {DynamicPacksToolSurfaceMode}.");
+        return DynamicPacksToolSurfaceMode;
     }
 
     static string ResolveHostVersion()

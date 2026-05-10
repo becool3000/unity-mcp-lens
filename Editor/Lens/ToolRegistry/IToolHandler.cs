@@ -139,15 +139,17 @@ namespace Becool.UnityMcpLens.Editor.ToolRegistry
         readonly Type m_ParameterType;
         readonly Type m_ReturnType;
         readonly ParameterInfo m_ParameterInfo;
+        readonly MethodInfo m_OutputSchemaMethod;
 
         public McpToolAttribute Attribute { get; }
 
-        public TypedToolHandler(MethodInfo method, McpToolAttribute attribute, Type parameterType)
+        public TypedToolHandler(MethodInfo method, McpToolAttribute attribute, Type parameterType, MethodInfo outputSchemaMethod = null)
         {
             m_Method = method ?? throw new ArgumentNullException(nameof(method));
             Attribute = attribute ?? throw new ArgumentNullException(nameof(attribute));
             m_ParameterType = parameterType ?? throw new ArgumentNullException(nameof(parameterType));
             m_ReturnType = method.ReturnType;
+            m_OutputSchemaMethod = outputSchemaMethod;
 
             // Store parameter info for default value support
             var parameters = method.GetParameters();
@@ -203,7 +205,22 @@ namespace Becool.UnityMcpLens.Editor.ToolRegistry
             return SchemaGenerator.GenerateSchema(m_ParameterType);
         }
 
-        public object GetOutputSchema() => SchemaGenerator.GenerateSchema(m_ReturnType);
+        public object GetOutputSchema()
+        {
+            if (m_OutputSchemaMethod != null)
+            {
+                try
+                {
+                    return m_OutputSchemaMethod.Invoke(null, null);
+                }
+                catch (Exception)
+                {
+                    // Fall back to auto-generation if custom method fails.
+                }
+            }
+
+            return SchemaGenerator.GenerateSchema(m_ReturnType);
+        }
 
         static string GetJsonTypeForPrimitive(Type type)
         {

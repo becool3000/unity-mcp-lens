@@ -104,20 +104,20 @@ Pack-specific TSAM work is used to keep the MCP surface small:
 
 - `scene`: split GameObject tools, scene serialized-reference binding, prefab instantiate/bind workflows, and read-only serialized-reference verification.
 - `project`: package/import diagnostics, Input System diagnostics, input-action asset inspection, and active input handler tools.
-- `ui`: uGUI hierarchy/layout preview/apply authoring, canvas prefab authoring, raycast/layout verification, and screen-layout or resolution-matrix verification.
+- `ui`: uGUI hierarchy/layout preview/apply authoring, canvas prefab authoring, raycast/layout verification, runtime UI query/invoke tools, and screen-layout or resolution-matrix verification.
 - `runtime`: play-mode runtime probes, visual bounds snapshots, pointer/scroll input smoke verification, and explicit play-mode exit.
 - `assets`: asset/resource workflows, sprite-sheet import/slicing/binding preview/apply, and Sprite-array binding verification.
 - `debug`: usage reports, payload analysis, and TSAM stage coverage inspection.
 
 Current metadata baselines are:
 
-- `foundation`: `15` exported tools.
-- `foundation + scene`: `38` exported tools.
-- `foundation + ui`: `29` exported tools.
-- `foundation + runtime`: `19` exported tools.
-- `project`: `24` exported tools.
-- `foundation + assets`: `27` exported tools.
-- `debug`: `26` exported tools.
+- `foundation`: `17` exported tools.
+- `foundation + scene`: `40` exported tools.
+- `foundation + ui`: `33` exported tools.
+- `foundation + runtime`: `22` exported tools.
+- `project`: `26` exported tools.
+- `foundation + assets`: `30` exported tools.
+- `debug`: `28` exported tools.
 
 Pack membership changes should update metadata audit expectations and workflow
 docs in the same change.

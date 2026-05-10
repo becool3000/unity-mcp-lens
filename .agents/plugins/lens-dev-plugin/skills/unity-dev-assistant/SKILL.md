@@ -44,6 +44,7 @@ or YAML edits.
 - Preview backend changes: `Unity.ProjectSettings.PreviewActiveInputHandler`
 - Apply backend changes: `Unity.ProjectSettings.SetActiveInputHandler`
 - Use `Unity.RunCommand` only for project-specific probes not covered by Lens tools.
+- For play-mode UI state and interaction, prefer `Unity.UI.QueryRuntimeLayout` and `Unity.UI.InvokeControl` before project-specific `Unity.RunCommand` snippets.
 - Treat active input handler changes as editor-authored ProjectSettings mutations that may need script reload or editor restart before defines and devices settle.
 
 ## Quick Flow
@@ -64,9 +65,11 @@ or YAML edits.
 4. Before real Unity work, keep the exported tool surface narrow:
    - start in `foundation`
    - use `Unity.ListToolPacks` to inspect available packs
+   - use `Unity.Tools.Menu` for compact pack-oriented navigation when it is available
    - use `Unity.SetToolPacks` only when the task truly needs a wider tool surface
    - keep at most two additional non-foundation packs active
    - If `Unity.SetToolPacks` succeeds and `Unity.Tools.Describe` shows an active-pack tool but Codex still cannot call it, treat that as Codex client dynamic-indexing drift. Use the repo helper scripts or `Invoke-UnityMcpBatch` and report active packs, manifest/profile version, and the missing callable tool.
+   - If the host is launched with `UNITY_MCP_LENS_TOOL_SURFACE_MODE=static_all`, all enabled Lens tools are exposed natively up front; `Unity.SetToolPacks` is a compatibility no-op, so use `Unity.Tools.Menu` plus direct real tool calls instead of dynamic pack switching.
 5. Suggested pack mapping:
    - console investigation: `console`
    - project scans and validation: `project`
@@ -175,16 +178,18 @@ Prefer a scene-owned debugger component when a project needs fast UI or state it
 - Platform-native helpers first
 - Mandatory first step for Unity work in a fresh chat: `scripts/Check-UnityDevSession.js` on macOS/Linux or `scripts/Check-UnityDevSession.ps1` on Windows
 - Preferred transport: `unity-mcp-lens`
-- Default exported tool surface: `foundation`
-- Current `foundation` surface: `15` tools
-- Current `foundation` + `scene` surface: `38` tools
-- Current `foundation` + `ui` surface: `29` tools
-- Current `foundation` + `runtime` surface: `19` tools
+- Default Codex exported tool surface: `static_all` (`foundation+full`); raw host default remains `dynamic_packs`
+- Current `foundation` surface: `17` tools
+- Current `foundation` + `scene` surface: `40` tools
+- Current `foundation` + `ui` surface: `33` tools
+- Current `foundation` + `runtime` surface: `22` tools
+- Current `foundation` + `project` surface: `26` tools
+- Current `foundation` + `assets` surface: `30` tools
 - Prefer split GameObject TSAM tools before legacy `Unity.ManageGameObject`
 - Prefer Phase 11 `project` tools for package/import/Input System diagnostics and active input handler changes
 - Prefer Phase 12 `ui` and scene-binding tools for persistent HUD authoring, scene reference binding, and screen-layout verification before custom editor-side `Unity_RunCommand`
 - Prefer `Invoke-UnityMcpBatch` for repeated multi-step smoke/workflow checks that span packs
-- Expand packs explicitly, not heuristically
+- In `static_all`, start with `Unity.Tools.Menu` and call real native tools directly; `Unity.SetToolPacks` is a compatibility no-op, not a required step
 - Use `Unity.GetLensUsageReport` in `debug` for telemetry baselines, appended smoke rows, and TSAM stage coverage
 - Session and bridge checks are compact by default; use `-IncludeDiagnostics` only for explicit maintenance
 - `ProceedWithDirectLensTools` means the bridge status and fresh direct health probe are healthy even if the helper wrapper path is not
@@ -195,6 +200,10 @@ Prefer a scene-owned debugger component when a project needs fast UI or state it
 - Editor idle gating before all Unity-facing work except helper-driven `Unity_RunCommand` in healthy play mode
 - Exact build-scene preflight before long custom builds when the intended scene list is known
 - External script edits should be synced through `Unity.Editor.SyncScripts` via `Sync-UnityScriptChanges.js` on macOS/Linux or `Sync-UnityScriptChanges.ps1` on Windows before follow-up Unity actions
+- `Unity.Editor.SyncScripts` with `status=pending_refresh` / `code=PENDING_REFRESH` is not a clean follow-up point; wait for editor idle before parallel reads or mutations
+- Prefer `Unity.Bridge.ListConnections` for wrong-project or stale-status diagnosis before retrying project-wide reads
+- Prefer `Unity.Asset.SetSerializedProperties` for ScriptableObject/data asset scalar and object-reference binding
+- Prefer `Unity.Runtime.QueryObjects` for play-mode component counts and sample paths
 - When `rg.exe` is blocked in the Codex desktop app context, prefer the shared PowerShell search fallback instead of retrying `rg`
 - Hybrid snapshots for playtesting: Unity-aware first, desktop fallback second
 - Prefer relative project paths for Unity-side screenshots and state captures

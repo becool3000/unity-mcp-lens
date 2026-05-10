@@ -1,0 +1,1632 @@
+{
+  "schemaVersion": "tool-surface-mode-evidence.v1",
+  "capturedAtUtc": "2026-05-08T16:59:21.643Z",
+  "hostPath": "D:\\unity-mcp-lens\\UnityMcpLensApp~\\src\\UnityMcpLens\\bin\\Debug\\net8.0\\UnityMcpLens.exe",
+  "fakeFullToolCount": 80,
+  "scenarios": {
+    "dynamic_packs": {
+      "toolSurfaceMode": "dynamic_packs",
+      "initialize": {
+        "method": "initialize",
+        "requestBodyBytes": 175,
+        "responseBodyBytes": 215,
+        "responseBodyApproxTokens": 54
+      },
+      "startupToolsList": {
+        "method": "tools/list",
+        "requestBodyBytes": 58,
+        "responseBodyBytes": 12181,
+        "responseBodyApproxTokens": 3046,
+        "toolCount": 16,
+        "descriptorBytes": 12122,
+        "descriptorApproxTokens": 3031,
+        "schemaBytes": 8537,
+        "schemaApproxTokens": 2135,
+        "representativePresence": {
+          "Unity_Project_PackageCompatibility": false,
+          "Unity_Editor_SetPlayMode": false,
+          "Unity_Asset_Search": false,
+          "Unity_GameObject_Inspect": false,
+          "Unity_UI_VerifyScreenLayout": false,
+          "Unity_GetLensUsageReport": false
+        },
+        "toolNames": [
+          "Unity_Editor_ScriptUpdatingConsentModal",
+          "Unity_FindInFile",
+          "Unity_GetLensHealth",
+          "Unity_GetSha",
+          "Unity_ListResources",
+          "Unity_ListToolPacks",
+          "Unity_ManageScript_capabilities",
+          "Unity_Project_GetInfo",
+          "Unity_ReadConsole",
+          "Unity_ReadDetailRef",
+          "Unity_ReadResource",
+          "Unity_SetToolPacks",
+          "Unity_Tools_ActivateAndVerify",
+          "Unity_Tools_Describe",
+          "Unity_Tools_Menu",
+          "Unity_ValidateScript"
+        ]
+      },
+      "setAssets": {
+        "method": "tools/call",
+        "requestBodyBytes": 118,
+        "responseBodyBytes": 718,
+        "responseBodyApproxTokens": 180,
+        "success": true,
+        "message": "Updated active Unity MCP tool packs.",
+        "data": {
+          "activeToolPacks": [
+            "foundation",
+            "assets"
+          ],
+          "toolSurfaceMode": "dynamic_packs",
+          "manifestVersion": 1,
+          "bridgeSessionId": "fake-surface-mode-session",
+          "unchanged": false,
+          "manifestKind": "full",
+          "toolCount": 24,
+          "toolsListChangedNotificationSent": true,
+          "clientSurface": {
+            "expectedRefresh": true,
+            "note": "Lens emitted notifications/tools/list_changed after applying the new pack surface. If the MCP client still cannot call described tools, use Unity.Tools.Describe or helper scripts and refresh the client session."
+          }
+        }
+      },
+      "sawListChanged": true,
+      "afterSetToolsList": {
+        "method": "tools/list",
+        "requestBodyBytes": 58,
+        "responseBodyBytes": 18199,
+        "responseBodyApproxTokens": 4550,
+        "toolCount": 24,
+        "descriptorBytes": 18140,
+        "descriptorApproxTokens": 4535,
+        "schemaBytes": 12852,
+        "schemaApproxTokens": 3213,
+        "representativePresence": {
+          "Unity_Project_PackageCompatibility": false,
+          "Unity_Editor_SetPlayMode": false,
+          "Unity_Asset_Search": true,
+          "Unity_GameObject_Inspect": false,
+          "Unity_UI_VerifyScreenLayout": false,
+          "Unity_GetLensUsageReport": false
+        },
+        "toolNames": [
+          "Unity_Asset_Search",
+          "Unity_Assets_Apply006",
+          "Unity_Assets_Apply030",
+          "Unity_Assets_Apply054",
+          "Unity_Assets_Inspect014",
+          "Unity_Assets_Inspect022",
+          "Unity_Assets_Inspect038",
+          "Unity_Assets_Inspect046",
+          "Unity_Editor_ScriptUpdatingConsentModal",
+          "Unity_FindInFile",
+          "Unity_GetLensHealth",
+          "Unity_GetSha",
+          "Unity_ListResources",
+          "Unity_ListToolPacks",
+          "Unity_ManageScript_capabilities",
+          "Unity_Project_GetInfo",
+          "Unity_ReadConsole",
+          "Unity_ReadDetailRef",
+          "Unity_ReadResource",
+          "Unity_SetToolPacks",
+          "Unity_Tools_ActivateAndVerify",
+          "Unity_Tools_Describe",
+          "Unity_Tools_Menu",
+          "Unity_ValidateScript"
+        ]
+      },
+      "menu": {
+        "method": "tools/call",
+        "requestBodyBytes": 98,
+        "responseBodyBytes": 12183,
+        "responseBodyApproxTokens": 3046,
+        "success": true,
+        "message": "Fake tool menu.",
+        "data": {
+          "toolSurfaceMode": "dynamic_packs",
+          "activeToolPacks": [
+            "foundation",
+            "assets"
+          ],
+          "totalToolCount": 80,
+          "packs": [
+            {
+              "packId": "foundation",
+              "title": "Foundation",
+              "description": "Foundation tools",
+              "alwaysOn": true,
+              "adminOnly": false,
+              "isActive": true,
+              "toolCount": 16,
+              "readOnlyToolCount": 13,
+              "mutatingToolCount": 3,
+              "truncated": false,
+              "tools": [
+                {
+                  "name": "Unity_GetLensHealth",
+                  "title": "Unity GetLensHealth",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_ListToolPacks",
+                  "title": "Unity ListToolPacks",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_SetToolPacks",
+                  "title": "Unity SetToolPacks",
+                  "readOnlyHint": false,
+                  "mutationHint": "mutating"
+                },
+                {
+                  "name": "Unity_ReadDetailRef",
+                  "title": "Unity ReadDetailRef",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_Tools_Menu",
+                  "title": "Unity Tools Menu",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_Tools_Describe",
+                  "title": "Unity Tools Describe",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_Tools_ActivateAndVerify",
+                  "title": "Unity Tools ActivateAndVerify",
+                  "readOnlyHint": false,
+                  "mutationHint": "mutating"
+                },
+                {
+                  "name": "Unity_ReadConsole",
+                  "title": "Unity ReadConsole",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_ListResources",
+                  "title": "Unity ListResources",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_ReadResource",
+                  "title": "Unity ReadResource",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_FindInFile",
+                  "title": "Unity FindInFile",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_GetSha",
+                  "title": "Unity GetSha",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_ValidateScript",
+                  "title": "Unity ValidateScript",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_ManageScript_capabilities",
+                  "title": "Unity ManageScript capabilities",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_Project_GetInfo",
+                  "title": "Unity Project GetInfo",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_Editor_ScriptUpdatingConsentModal",
+                  "title": "Unity Editor ScriptUpdatingConsentModal",
+                  "readOnlyHint": false,
+                  "mutationHint": "mutating"
+                }
+              ]
+            },
+            {
+              "packId": "console",
+              "title": "Console Diagnostics",
+              "description": "Console Diagnostics tools",
+              "alwaysOn": false,
+              "adminOnly": false,
+              "isActive": false,
+              "toolCount": 8,
+              "readOnlyToolCount": 5,
+              "mutatingToolCount": 3,
+              "truncated": false,
+              "tools": [
+                {
+                  "name": "Unity_ManageEditor",
+                  "title": "Unity ManageEditor",
+                  "readOnlyHint": false,
+                  "mutationHint": "mutating"
+                },
+                {
+                  "name": "Unity_ConsoleDiagnostics_Inspect008",
+                  "title": "Unity ConsoleDiagnostics Inspect008",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_ConsoleDiagnostics_Inspect016",
+                  "title": "Unity ConsoleDiagnostics Inspect016",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_ConsoleDiagnostics_Apply024",
+                  "title": "Unity ConsoleDiagnostics Apply024",
+                  "readOnlyHint": false,
+                  "mutationHint": "mutating"
+                },
+                {
+                  "name": "Unity_ConsoleDiagnostics_Inspect032",
+                  "title": "Unity ConsoleDiagnostics Inspect032",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_ConsoleDiagnostics_Inspect040",
+                  "title": "Unity ConsoleDiagnostics Inspect040",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_ConsoleDiagnostics_Apply048",
+                  "title": "Unity ConsoleDiagnostics Apply048",
+                  "readOnlyHint": false,
+                  "mutationHint": "mutating"
+                },
+                {
+                  "name": "Unity_ConsoleDiagnostics_Inspect056",
+                  "title": "Unity ConsoleDiagnostics Inspect056",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                }
+              ]
+            },
+            {
+              "packId": "project",
+              "title": "Project Diagnostics",
+              "description": "Project Diagnostics tools",
+              "alwaysOn": false,
+              "adminOnly": false,
+              "isActive": false,
+              "toolCount": 8,
+              "readOnlyToolCount": 6,
+              "mutatingToolCount": 2,
+              "truncated": false,
+              "tools": [
+                {
+                  "name": "Unity_Project_PackageCompatibility",
+                  "title": "Unity Project PackageCompatibility",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_ProjectDiagnostics_Inspect001",
+                  "title": "Unity ProjectDiagnostics Inspect001",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_ProjectDiagnostics_Apply009",
+                  "title": "Unity ProjectDiagnostics Apply009",
+                  "readOnlyHint": false,
+                  "mutationHint": "mutating"
+                },
+                {
+                  "name": "Unity_ProjectDiagnostics_Inspect017",
+                  "title": "Unity ProjectDiagnostics Inspect017",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_ProjectDiagnostics_Inspect025",
+                  "title": "Unity ProjectDiagnostics Inspect025",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_ProjectDiagnostics_Apply033",
+                  "title": "Unity ProjectDiagnostics Apply033",
+                  "readOnlyHint": false,
+                  "mutationHint": "mutating"
+                },
+                {
+                  "name": "Unity_ProjectDiagnostics_Inspect041",
+                  "title": "Unity ProjectDiagnostics Inspect041",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_ProjectDiagnostics_Inspect049",
+                  "title": "Unity ProjectDiagnostics Inspect049",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                }
+              ]
+            },
+            {
+              "packId": "scripting",
+              "title": "Scripting",
+              "description": "Scripting tools",
+              "alwaysOn": false,
+              "adminOnly": false,
+              "isActive": false,
+              "toolCount": 8,
+              "readOnlyToolCount": 5,
+              "mutatingToolCount": 3,
+              "truncated": false,
+              "tools": [
+                {
+                  "name": "Unity_Editor_SyncScripts",
+                  "title": "Unity Editor SyncScripts",
+                  "readOnlyHint": false,
+                  "mutationHint": "mutating"
+                },
+                {
+                  "name": "Unity_Scripting_Inspect002",
+                  "title": "Unity Scripting Inspect002",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_Scripting_Inspect010",
+                  "title": "Unity Scripting Inspect010",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_Scripting_Apply018",
+                  "title": "Unity Scripting Apply018",
+                  "readOnlyHint": false,
+                  "mutationHint": "mutating"
+                },
+                {
+                  "name": "Unity_Scripting_Inspect026",
+                  "title": "Unity Scripting Inspect026",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_Scripting_Inspect034",
+                  "title": "Unity Scripting Inspect034",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_Scripting_Apply042",
+                  "title": "Unity Scripting Apply042",
+                  "readOnlyHint": false,
+                  "mutationHint": "mutating"
+                },
+                {
+                  "name": "Unity_Scripting_Inspect050",
+                  "title": "Unity Scripting Inspect050",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                }
+              ]
+            },
+            {
+              "packId": "scene",
+              "title": "Scene Editing",
+              "description": "Scene Editing tools",
+              "alwaysOn": false,
+              "adminOnly": false,
+              "isActive": false,
+              "toolCount": 8,
+              "readOnlyToolCount": 5,
+              "mutatingToolCount": 3,
+              "truncated": false,
+              "tools": [
+                {
+                  "name": "Unity_GameObject_Inspect",
+                  "title": "Unity GameObject Inspect",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_SceneEditing_Apply003",
+                  "title": "Unity SceneEditing Apply003",
+                  "readOnlyHint": false,
+                  "mutationHint": "mutating"
+                },
+                {
+                  "name": "Unity_SceneEditing_Inspect011",
+                  "title": "Unity SceneEditing Inspect011",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_SceneEditing_Inspect019",
+                  "title": "Unity SceneEditing Inspect019",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_SceneEditing_Apply027",
+                  "title": "Unity SceneEditing Apply027",
+                  "readOnlyHint": false,
+                  "mutationHint": "mutating"
+                },
+                {
+                  "name": "Unity_SceneEditing_Inspect035",
+                  "title": "Unity SceneEditing Inspect035",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_SceneEditing_Inspect043",
+                  "title": "Unity SceneEditing Inspect043",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_SceneEditing_Apply051",
+                  "title": "Unity SceneEditing Apply051",
+                  "readOnlyHint": false,
+                  "mutationHint": "mutating"
+                }
+              ]
+            },
+            {
+              "packId": "ui",
+              "title": "UI Authoring",
+              "description": "UI Authoring tools",
+              "alwaysOn": false,
+              "adminOnly": false,
+              "isActive": false,
+              "toolCount": 8,
+              "readOnlyToolCount": 6,
+              "mutatingToolCount": 2,
+              "truncated": false,
+              "tools": [
+                {
+                  "name": "Unity_UI_VerifyScreenLayout",
+                  "title": "Unity UI VerifyScreenLayout",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_UIAuthoring_Inspect004",
+                  "title": "Unity UIAuthoring Inspect004",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_UIAuthoring_Apply012",
+                  "title": "Unity UIAuthoring Apply012",
+                  "readOnlyHint": false,
+                  "mutationHint": "mutating"
+                },
+                {
+                  "name": "Unity_UIAuthoring_Inspect020",
+                  "title": "Unity UIAuthoring Inspect020",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_UIAuthoring_Inspect028",
+                  "title": "Unity UIAuthoring Inspect028",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_UIAuthoring_Apply036",
+                  "title": "Unity UIAuthoring Apply036",
+                  "readOnlyHint": false,
+                  "mutationHint": "mutating"
+                },
+                {
+                  "name": "Unity_UIAuthoring_Inspect044",
+                  "title": "Unity UIAuthoring Inspect044",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_UIAuthoring_Inspect052",
+                  "title": "Unity UIAuthoring Inspect052",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                }
+              ]
+            },
+            {
+              "packId": "runtime",
+              "title": "Runtime Verification",
+              "description": "Runtime Verification tools",
+              "alwaysOn": false,
+              "adminOnly": false,
+              "isActive": false,
+              "toolCount": 8,
+              "readOnlyToolCount": 5,
+              "mutatingToolCount": 3,
+              "truncated": false,
+              "tools": [
+                {
+                  "name": "Unity_Editor_SetPlayMode",
+                  "title": "Unity Editor SetPlayMode",
+                  "readOnlyHint": false,
+                  "mutationHint": "mutating"
+                },
+                {
+                  "name": "Unity_RuntimeVerification_Inspect005",
+                  "title": "Unity RuntimeVerification Inspect005",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_RuntimeVerification_Inspect013",
+                  "title": "Unity RuntimeVerification Inspect013",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_RuntimeVerification_Apply021",
+                  "title": "Unity RuntimeVerification Apply021",
+                  "readOnlyHint": false,
+                  "mutationHint": "mutating"
+                },
+                {
+                  "name": "Unity_RuntimeVerification_Inspect029",
+                  "title": "Unity RuntimeVerification Inspect029",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_RuntimeVerification_Inspect037",
+                  "title": "Unity RuntimeVerification Inspect037",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_RuntimeVerification_Apply045",
+                  "title": "Unity RuntimeVerification Apply045",
+                  "readOnlyHint": false,
+                  "mutationHint": "mutating"
+                },
+                {
+                  "name": "Unity_RuntimeVerification_Inspect053",
+                  "title": "Unity RuntimeVerification Inspect053",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                }
+              ]
+            },
+            {
+              "packId": "assets",
+              "title": "Assets",
+              "description": "Assets tools",
+              "alwaysOn": false,
+              "adminOnly": false,
+              "isActive": true,
+              "toolCount": 8,
+              "readOnlyToolCount": 5,
+              "mutatingToolCount": 3,
+              "truncated": false,
+              "tools": [
+                {
+                  "name": "Unity_Asset_Search",
+                  "title": "Unity Asset Search",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_Assets_Apply006",
+                  "title": "Unity Assets Apply006",
+                  "readOnlyHint": false,
+                  "mutationHint": "mutating"
+                },
+                {
+                  "name": "Unity_Assets_Inspect014",
+                  "title": "Unity Assets Inspect014",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_Assets_Inspect022",
+                  "title": "Unity Assets Inspect022",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_Assets_Apply030",
+                  "title": "Unity Assets Apply030",
+                  "readOnlyHint": false,
+                  "mutationHint": "mutating"
+                },
+                {
+                  "name": "Unity_Assets_Inspect038",
+                  "title": "Unity Assets Inspect038",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_Assets_Inspect046",
+                  "title": "Unity Assets Inspect046",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_Assets_Apply054",
+                  "title": "Unity Assets Apply054",
+                  "readOnlyHint": false,
+                  "mutationHint": "mutating"
+                }
+              ]
+            },
+            {
+              "packId": "debug",
+              "title": "Debug",
+              "description": "Debug tools",
+              "alwaysOn": false,
+              "adminOnly": false,
+              "isActive": false,
+              "toolCount": 8,
+              "readOnlyToolCount": 6,
+              "mutatingToolCount": 2,
+              "truncated": false,
+              "tools": [
+                {
+                  "name": "Unity_GetLensUsageReport",
+                  "title": "Unity GetLensUsageReport",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_Debug_Inspect007",
+                  "title": "Unity Debug Inspect007",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_Debug_Apply015",
+                  "title": "Unity Debug Apply015",
+                  "readOnlyHint": false,
+                  "mutationHint": "mutating"
+                },
+                {
+                  "name": "Unity_Debug_Inspect023",
+                  "title": "Unity Debug Inspect023",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_Debug_Inspect031",
+                  "title": "Unity Debug Inspect031",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_Debug_Apply039",
+                  "title": "Unity Debug Apply039",
+                  "readOnlyHint": false,
+                  "mutationHint": "mutating"
+                },
+                {
+                  "name": "Unity_Debug_Inspect047",
+                  "title": "Unity Debug Inspect047",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_Debug_Inspect055",
+                  "title": "Unity Debug Inspect055",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                }
+              ]
+            }
+          ],
+          "workflowRecommendations": [
+            "Use Unity.SetToolPacks before calling pack-gated tools."
+          ]
+        }
+      },
+      "stderr": ""
+    },
+    "static_all": {
+      "toolSurfaceMode": "static_all",
+      "initialize": {
+        "method": "initialize",
+        "requestBodyBytes": 175,
+        "responseBodyBytes": 215,
+        "responseBodyApproxTokens": 54
+      },
+      "startupToolsList": {
+        "method": "tools/list",
+        "requestBodyBytes": 58,
+        "responseBodyBytes": 61555,
+        "responseBodyApproxTokens": 15389,
+        "toolCount": 80,
+        "descriptorBytes": 61496,
+        "descriptorApproxTokens": 15374,
+        "schemaBytes": 43054,
+        "schemaApproxTokens": 10764,
+        "representativePresence": {
+          "Unity_Project_PackageCompatibility": true,
+          "Unity_Editor_SetPlayMode": true,
+          "Unity_Asset_Search": true,
+          "Unity_GameObject_Inspect": true,
+          "Unity_UI_VerifyScreenLayout": true,
+          "Unity_GetLensUsageReport": true
+        },
+        "toolNames": [
+          "Unity_Asset_Search",
+          "Unity_Assets_Apply006",
+          "Unity_Assets_Apply030",
+          "Unity_Assets_Apply054",
+          "Unity_Assets_Inspect014",
+          "Unity_Assets_Inspect022",
+          "Unity_Assets_Inspect038",
+          "Unity_Assets_Inspect046",
+          "Unity_ConsoleDiagnostics_Apply024",
+          "Unity_ConsoleDiagnostics_Apply048",
+          "Unity_ConsoleDiagnostics_Inspect008",
+          "Unity_ConsoleDiagnostics_Inspect016",
+          "Unity_ConsoleDiagnostics_Inspect032",
+          "Unity_ConsoleDiagnostics_Inspect040",
+          "Unity_ConsoleDiagnostics_Inspect056",
+          "Unity_Debug_Apply015",
+          "Unity_Debug_Apply039",
+          "Unity_Debug_Inspect007",
+          "Unity_Debug_Inspect023",
+          "Unity_Debug_Inspect031",
+          "Unity_Debug_Inspect047",
+          "Unity_Debug_Inspect055",
+          "Unity_Editor_ScriptUpdatingConsentModal",
+          "Unity_Editor_SetPlayMode",
+          "Unity_Editor_SyncScripts",
+          "Unity_FindInFile",
+          "Unity_GameObject_Inspect",
+          "Unity_GetLensHealth",
+          "Unity_GetLensUsageReport",
+          "Unity_GetSha",
+          "Unity_ListResources",
+          "Unity_ListToolPacks",
+          "Unity_ManageEditor",
+          "Unity_ManageScript_capabilities",
+          "Unity_Project_GetInfo",
+          "Unity_Project_PackageCompatibility",
+          "Unity_ProjectDiagnostics_Apply009",
+          "Unity_ProjectDiagnostics_Apply033",
+          "Unity_ProjectDiagnostics_Inspect001",
+          "Unity_ProjectDiagnostics_Inspect017",
+          "Unity_ProjectDiagnostics_Inspect025",
+          "Unity_ProjectDiagnostics_Inspect041",
+          "Unity_ProjectDiagnostics_Inspect049",
+          "Unity_ReadConsole",
+          "Unity_ReadDetailRef",
+          "Unity_ReadResource",
+          "Unity_RuntimeVerification_Apply021",
+          "Unity_RuntimeVerification_Apply045",
+          "Unity_RuntimeVerification_Inspect005",
+          "Unity_RuntimeVerification_Inspect013",
+          "Unity_RuntimeVerification_Inspect029",
+          "Unity_RuntimeVerification_Inspect037",
+          "Unity_RuntimeVerification_Inspect053",
+          "Unity_SceneEditing_Apply003",
+          "Unity_SceneEditing_Apply027",
+          "Unity_SceneEditing_Apply051",
+          "Unity_SceneEditing_Inspect011",
+          "Unity_SceneEditing_Inspect019",
+          "Unity_SceneEditing_Inspect035",
+          "Unity_SceneEditing_Inspect043",
+          "Unity_Scripting_Apply018",
+          "Unity_Scripting_Apply042",
+          "Unity_Scripting_Inspect002",
+          "Unity_Scripting_Inspect010",
+          "Unity_Scripting_Inspect026",
+          "Unity_Scripting_Inspect034",
+          "Unity_Scripting_Inspect050",
+          "Unity_SetToolPacks",
+          "Unity_Tools_ActivateAndVerify",
+          "Unity_Tools_Describe",
+          "Unity_Tools_Menu",
+          "Unity_UI_VerifyScreenLayout",
+          "Unity_UIAuthoring_Apply012",
+          "Unity_UIAuthoring_Apply036",
+          "Unity_UIAuthoring_Inspect004",
+          "Unity_UIAuthoring_Inspect020",
+          "Unity_UIAuthoring_Inspect028",
+          "Unity_UIAuthoring_Inspect044",
+          "Unity_UIAuthoring_Inspect052",
+          "Unity_ValidateScript"
+        ]
+      },
+      "setAssets": {
+        "method": "tools/call",
+        "requestBodyBytes": 118,
+        "responseBodyBytes": 696,
+        "responseBodyApproxTokens": 174,
+        "success": true,
+        "message": "Tool pack changes are ignored in static_all tool surface mode.",
+        "data": {
+          "toolSurfaceMode": "static_all",
+          "activeToolPacks": [
+            "foundation",
+            "full"
+          ],
+          "requestedPacks": [
+            "assets"
+          ],
+          "unchanged": true,
+          "manifestKind": "static_all_noop",
+          "toolCount": 80,
+          "toolsListChangedNotificationSent": false,
+          "clientSurface": {
+            "expectedRefresh": false,
+            "note": "The MCP host is already exposing the full enabled Lens tool surface, so Unity.SetToolPacks is a compatibility no-op and no tools/list_changed notification is expected."
+          }
+        }
+      },
+      "sawListChanged": false,
+      "afterSetToolsList": {
+        "method": "tools/list",
+        "requestBodyBytes": 58,
+        "responseBodyBytes": 61555,
+        "responseBodyApproxTokens": 15389,
+        "toolCount": 80,
+        "descriptorBytes": 61496,
+        "descriptorApproxTokens": 15374,
+        "schemaBytes": 43054,
+        "schemaApproxTokens": 10764,
+        "representativePresence": {
+          "Unity_Project_PackageCompatibility": true,
+          "Unity_Editor_SetPlayMode": true,
+          "Unity_Asset_Search": true,
+          "Unity_GameObject_Inspect": true,
+          "Unity_UI_VerifyScreenLayout": true,
+          "Unity_GetLensUsageReport": true
+        },
+        "toolNames": [
+          "Unity_Asset_Search",
+          "Unity_Assets_Apply006",
+          "Unity_Assets_Apply030",
+          "Unity_Assets_Apply054",
+          "Unity_Assets_Inspect014",
+          "Unity_Assets_Inspect022",
+          "Unity_Assets_Inspect038",
+          "Unity_Assets_Inspect046",
+          "Unity_ConsoleDiagnostics_Apply024",
+          "Unity_ConsoleDiagnostics_Apply048",
+          "Unity_ConsoleDiagnostics_Inspect008",
+          "Unity_ConsoleDiagnostics_Inspect016",
+          "Unity_ConsoleDiagnostics_Inspect032",
+          "Unity_ConsoleDiagnostics_Inspect040",
+          "Unity_ConsoleDiagnostics_Inspect056",
+          "Unity_Debug_Apply015",
+          "Unity_Debug_Apply039",
+          "Unity_Debug_Inspect007",
+          "Unity_Debug_Inspect023",
+          "Unity_Debug_Inspect031",
+          "Unity_Debug_Inspect047",
+          "Unity_Debug_Inspect055",
+          "Unity_Editor_ScriptUpdatingConsentModal",
+          "Unity_Editor_SetPlayMode",
+          "Unity_Editor_SyncScripts",
+          "Unity_FindInFile",
+          "Unity_GameObject_Inspect",
+          "Unity_GetLensHealth",
+          "Unity_GetLensUsageReport",
+          "Unity_GetSha",
+          "Unity_ListResources",
+          "Unity_ListToolPacks",
+          "Unity_ManageEditor",
+          "Unity_ManageScript_capabilities",
+          "Unity_Project_GetInfo",
+          "Unity_Project_PackageCompatibility",
+          "Unity_ProjectDiagnostics_Apply009",
+          "Unity_ProjectDiagnostics_Apply033",
+          "Unity_ProjectDiagnostics_Inspect001",
+          "Unity_ProjectDiagnostics_Inspect017",
+          "Unity_ProjectDiagnostics_Inspect025",
+          "Unity_ProjectDiagnostics_Inspect041",
+          "Unity_ProjectDiagnostics_Inspect049",
+          "Unity_ReadConsole",
+          "Unity_ReadDetailRef",
+          "Unity_ReadResource",
+          "Unity_RuntimeVerification_Apply021",
+          "Unity_RuntimeVerification_Apply045",
+          "Unity_RuntimeVerification_Inspect005",
+          "Unity_RuntimeVerification_Inspect013",
+          "Unity_RuntimeVerification_Inspect029",
+          "Unity_RuntimeVerification_Inspect037",
+          "Unity_RuntimeVerification_Inspect053",
+          "Unity_SceneEditing_Apply003",
+          "Unity_SceneEditing_Apply027",
+          "Unity_SceneEditing_Apply051",
+          "Unity_SceneEditing_Inspect011",
+          "Unity_SceneEditing_Inspect019",
+          "Unity_SceneEditing_Inspect035",
+          "Unity_SceneEditing_Inspect043",
+          "Unity_Scripting_Apply018",
+          "Unity_Scripting_Apply042",
+          "Unity_Scripting_Inspect002",
+          "Unity_Scripting_Inspect010",
+          "Unity_Scripting_Inspect026",
+          "Unity_Scripting_Inspect034",
+          "Unity_Scripting_Inspect050",
+          "Unity_SetToolPacks",
+          "Unity_Tools_ActivateAndVerify",
+          "Unity_Tools_Describe",
+          "Unity_Tools_Menu",
+          "Unity_UI_VerifyScreenLayout",
+          "Unity_UIAuthoring_Apply012",
+          "Unity_UIAuthoring_Apply036",
+          "Unity_UIAuthoring_Inspect004",
+          "Unity_UIAuthoring_Inspect020",
+          "Unity_UIAuthoring_Inspect028",
+          "Unity_UIAuthoring_Inspect044",
+          "Unity_UIAuthoring_Inspect052",
+          "Unity_ValidateScript"
+        ]
+      },
+      "menu": {
+        "method": "tools/call",
+        "requestBodyBytes": 98,
+        "responseBodyBytes": 12207,
+        "responseBodyApproxTokens": 3052,
+        "success": true,
+        "message": "Fake tool menu.",
+        "data": {
+          "toolSurfaceMode": "static_all",
+          "activeToolPacks": [
+            "foundation",
+            "full"
+          ],
+          "totalToolCount": 80,
+          "packs": [
+            {
+              "packId": "foundation",
+              "title": "Foundation",
+              "description": "Foundation tools",
+              "alwaysOn": true,
+              "adminOnly": false,
+              "isActive": true,
+              "toolCount": 16,
+              "readOnlyToolCount": 13,
+              "mutatingToolCount": 3,
+              "truncated": false,
+              "tools": [
+                {
+                  "name": "Unity_GetLensHealth",
+                  "title": "Unity GetLensHealth",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_ListToolPacks",
+                  "title": "Unity ListToolPacks",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_SetToolPacks",
+                  "title": "Unity SetToolPacks",
+                  "readOnlyHint": false,
+                  "mutationHint": "mutating"
+                },
+                {
+                  "name": "Unity_ReadDetailRef",
+                  "title": "Unity ReadDetailRef",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_Tools_Menu",
+                  "title": "Unity Tools Menu",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_Tools_Describe",
+                  "title": "Unity Tools Describe",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_Tools_ActivateAndVerify",
+                  "title": "Unity Tools ActivateAndVerify",
+                  "readOnlyHint": false,
+                  "mutationHint": "mutating"
+                },
+                {
+                  "name": "Unity_ReadConsole",
+                  "title": "Unity ReadConsole",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_ListResources",
+                  "title": "Unity ListResources",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_ReadResource",
+                  "title": "Unity ReadResource",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_FindInFile",
+                  "title": "Unity FindInFile",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_GetSha",
+                  "title": "Unity GetSha",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_ValidateScript",
+                  "title": "Unity ValidateScript",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_ManageScript_capabilities",
+                  "title": "Unity ManageScript capabilities",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_Project_GetInfo",
+                  "title": "Unity Project GetInfo",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_Editor_ScriptUpdatingConsentModal",
+                  "title": "Unity Editor ScriptUpdatingConsentModal",
+                  "readOnlyHint": false,
+                  "mutationHint": "mutating"
+                }
+              ]
+            },
+            {
+              "packId": "console",
+              "title": "Console Diagnostics",
+              "description": "Console Diagnostics tools",
+              "alwaysOn": false,
+              "adminOnly": false,
+              "isActive": true,
+              "toolCount": 8,
+              "readOnlyToolCount": 5,
+              "mutatingToolCount": 3,
+              "truncated": false,
+              "tools": [
+                {
+                  "name": "Unity_ManageEditor",
+                  "title": "Unity ManageEditor",
+                  "readOnlyHint": false,
+                  "mutationHint": "mutating"
+                },
+                {
+                  "name": "Unity_ConsoleDiagnostics_Inspect008",
+                  "title": "Unity ConsoleDiagnostics Inspect008",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_ConsoleDiagnostics_Inspect016",
+                  "title": "Unity ConsoleDiagnostics Inspect016",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_ConsoleDiagnostics_Apply024",
+                  "title": "Unity ConsoleDiagnostics Apply024",
+                  "readOnlyHint": false,
+                  "mutationHint": "mutating"
+                },
+                {
+                  "name": "Unity_ConsoleDiagnostics_Inspect032",
+                  "title": "Unity ConsoleDiagnostics Inspect032",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_ConsoleDiagnostics_Inspect040",
+                  "title": "Unity ConsoleDiagnostics Inspect040",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_ConsoleDiagnostics_Apply048",
+                  "title": "Unity ConsoleDiagnostics Apply048",
+                  "readOnlyHint": false,
+                  "mutationHint": "mutating"
+                },
+                {
+                  "name": "Unity_ConsoleDiagnostics_Inspect056",
+                  "title": "Unity ConsoleDiagnostics Inspect056",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                }
+              ]
+            },
+            {
+              "packId": "project",
+              "title": "Project Diagnostics",
+              "description": "Project Diagnostics tools",
+              "alwaysOn": false,
+              "adminOnly": false,
+              "isActive": true,
+              "toolCount": 8,
+              "readOnlyToolCount": 6,
+              "mutatingToolCount": 2,
+              "truncated": false,
+              "tools": [
+                {
+                  "name": "Unity_Project_PackageCompatibility",
+                  "title": "Unity Project PackageCompatibility",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_ProjectDiagnostics_Inspect001",
+                  "title": "Unity ProjectDiagnostics Inspect001",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_ProjectDiagnostics_Apply009",
+                  "title": "Unity ProjectDiagnostics Apply009",
+                  "readOnlyHint": false,
+                  "mutationHint": "mutating"
+                },
+                {
+                  "name": "Unity_ProjectDiagnostics_Inspect017",
+                  "title": "Unity ProjectDiagnostics Inspect017",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_ProjectDiagnostics_Inspect025",
+                  "title": "Unity ProjectDiagnostics Inspect025",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_ProjectDiagnostics_Apply033",
+                  "title": "Unity ProjectDiagnostics Apply033",
+                  "readOnlyHint": false,
+                  "mutationHint": "mutating"
+                },
+                {
+                  "name": "Unity_ProjectDiagnostics_Inspect041",
+                  "title": "Unity ProjectDiagnostics Inspect041",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_ProjectDiagnostics_Inspect049",
+                  "title": "Unity ProjectDiagnostics Inspect049",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                }
+              ]
+            },
+            {
+              "packId": "scripting",
+              "title": "Scripting",
+              "description": "Scripting tools",
+              "alwaysOn": false,
+              "adminOnly": false,
+              "isActive": true,
+              "toolCount": 8,
+              "readOnlyToolCount": 5,
+              "mutatingToolCount": 3,
+              "truncated": false,
+              "tools": [
+                {
+                  "name": "Unity_Editor_SyncScripts",
+                  "title": "Unity Editor SyncScripts",
+                  "readOnlyHint": false,
+                  "mutationHint": "mutating"
+                },
+                {
+                  "name": "Unity_Scripting_Inspect002",
+                  "title": "Unity Scripting Inspect002",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_Scripting_Inspect010",
+                  "title": "Unity Scripting Inspect010",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_Scripting_Apply018",
+                  "title": "Unity Scripting Apply018",
+                  "readOnlyHint": false,
+                  "mutationHint": "mutating"
+                },
+                {
+                  "name": "Unity_Scripting_Inspect026",
+                  "title": "Unity Scripting Inspect026",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_Scripting_Inspect034",
+                  "title": "Unity Scripting Inspect034",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_Scripting_Apply042",
+                  "title": "Unity Scripting Apply042",
+                  "readOnlyHint": false,
+                  "mutationHint": "mutating"
+                },
+                {
+                  "name": "Unity_Scripting_Inspect050",
+                  "title": "Unity Scripting Inspect050",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                }
+              ]
+            },
+            {
+              "packId": "scene",
+              "title": "Scene Editing",
+              "description": "Scene Editing tools",
+              "alwaysOn": false,
+              "adminOnly": false,
+              "isActive": true,
+              "toolCount": 8,
+              "readOnlyToolCount": 5,
+              "mutatingToolCount": 3,
+              "truncated": false,
+              "tools": [
+                {
+                  "name": "Unity_GameObject_Inspect",
+                  "title": "Unity GameObject Inspect",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_SceneEditing_Apply003",
+                  "title": "Unity SceneEditing Apply003",
+                  "readOnlyHint": false,
+                  "mutationHint": "mutating"
+                },
+                {
+                  "name": "Unity_SceneEditing_Inspect011",
+                  "title": "Unity SceneEditing Inspect011",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_SceneEditing_Inspect019",
+                  "title": "Unity SceneEditing Inspect019",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_SceneEditing_Apply027",
+                  "title": "Unity SceneEditing Apply027",
+                  "readOnlyHint": false,
+                  "mutationHint": "mutating"
+                },
+                {
+                  "name": "Unity_SceneEditing_Inspect035",
+                  "title": "Unity SceneEditing Inspect035",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_SceneEditing_Inspect043",
+                  "title": "Unity SceneEditing Inspect043",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_SceneEditing_Apply051",
+                  "title": "Unity SceneEditing Apply051",
+                  "readOnlyHint": false,
+                  "mutationHint": "mutating"
+                }
+              ]
+            },
+            {
+              "packId": "ui",
+              "title": "UI Authoring",
+              "description": "UI Authoring tools",
+              "alwaysOn": false,
+              "adminOnly": false,
+              "isActive": true,
+              "toolCount": 8,
+              "readOnlyToolCount": 6,
+              "mutatingToolCount": 2,
+              "truncated": false,
+              "tools": [
+                {
+                  "name": "Unity_UI_VerifyScreenLayout",
+                  "title": "Unity UI VerifyScreenLayout",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_UIAuthoring_Inspect004",
+                  "title": "Unity UIAuthoring Inspect004",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_UIAuthoring_Apply012",
+                  "title": "Unity UIAuthoring Apply012",
+                  "readOnlyHint": false,
+                  "mutationHint": "mutating"
+                },
+                {
+                  "name": "Unity_UIAuthoring_Inspect020",
+                  "title": "Unity UIAuthoring Inspect020",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_UIAuthoring_Inspect028",
+                  "title": "Unity UIAuthoring Inspect028",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_UIAuthoring_Apply036",
+                  "title": "Unity UIAuthoring Apply036",
+                  "readOnlyHint": false,
+                  "mutationHint": "mutating"
+                },
+                {
+                  "name": "Unity_UIAuthoring_Inspect044",
+                  "title": "Unity UIAuthoring Inspect044",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_UIAuthoring_Inspect052",
+                  "title": "Unity UIAuthoring Inspect052",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                }
+              ]
+            },
+            {
+              "packId": "runtime",
+              "title": "Runtime Verification",
+              "description": "Runtime Verification tools",
+              "alwaysOn": false,
+              "adminOnly": false,
+              "isActive": true,
+              "toolCount": 8,
+              "readOnlyToolCount": 5,
+              "mutatingToolCount": 3,
+              "truncated": false,
+              "tools": [
+                {
+                  "name": "Unity_Editor_SetPlayMode",
+                  "title": "Unity Editor SetPlayMode",
+                  "readOnlyHint": false,
+                  "mutationHint": "mutating"
+                },
+                {
+                  "name": "Unity_RuntimeVerification_Inspect005",
+                  "title": "Unity RuntimeVerification Inspect005",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_RuntimeVerification_Inspect013",
+                  "title": "Unity RuntimeVerification Inspect013",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_RuntimeVerification_Apply021",
+                  "title": "Unity RuntimeVerification Apply021",
+                  "readOnlyHint": false,
+                  "mutationHint": "mutating"
+                },
+                {
+                  "name": "Unity_RuntimeVerification_Inspect029",
+                  "title": "Unity RuntimeVerification Inspect029",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_RuntimeVerification_Inspect037",
+                  "title": "Unity RuntimeVerification Inspect037",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_RuntimeVerification_Apply045",
+                  "title": "Unity RuntimeVerification Apply045",
+                  "readOnlyHint": false,
+                  "mutationHint": "mutating"
+                },
+                {
+                  "name": "Unity_RuntimeVerification_Inspect053",
+                  "title": "Unity RuntimeVerification Inspect053",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                }
+              ]
+            },
+            {
+              "packId": "assets",
+              "title": "Assets",
+              "description": "Assets tools",
+              "alwaysOn": false,
+              "adminOnly": false,
+              "isActive": true,
+              "toolCount": 8,
+              "readOnlyToolCount": 5,
+              "mutatingToolCount": 3,
+              "truncated": false,
+              "tools": [
+                {
+                  "name": "Unity_Asset_Search",
+                  "title": "Unity Asset Search",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_Assets_Apply006",
+                  "title": "Unity Assets Apply006",
+                  "readOnlyHint": false,
+                  "mutationHint": "mutating"
+                },
+                {
+                  "name": "Unity_Assets_Inspect014",
+                  "title": "Unity Assets Inspect014",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_Assets_Inspect022",
+                  "title": "Unity Assets Inspect022",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_Assets_Apply030",
+                  "title": "Unity Assets Apply030",
+                  "readOnlyHint": false,
+                  "mutationHint": "mutating"
+                },
+                {
+                  "name": "Unity_Assets_Inspect038",
+                  "title": "Unity Assets Inspect038",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_Assets_Inspect046",
+                  "title": "Unity Assets Inspect046",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_Assets_Apply054",
+                  "title": "Unity Assets Apply054",
+                  "readOnlyHint": false,
+                  "mutationHint": "mutating"
+                }
+              ]
+            },
+            {
+              "packId": "debug",
+              "title": "Debug",
+              "description": "Debug tools",
+              "alwaysOn": false,
+              "adminOnly": false,
+              "isActive": true,
+              "toolCount": 8,
+              "readOnlyToolCount": 6,
+              "mutatingToolCount": 2,
+              "truncated": false,
+              "tools": [
+                {
+                  "name": "Unity_GetLensUsageReport",
+                  "title": "Unity GetLensUsageReport",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_Debug_Inspect007",
+                  "title": "Unity Debug Inspect007",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_Debug_Apply015",
+                  "title": "Unity Debug Apply015",
+                  "readOnlyHint": false,
+                  "mutationHint": "mutating"
+                },
+                {
+                  "name": "Unity_Debug_Inspect023",
+                  "title": "Unity Debug Inspect023",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_Debug_Inspect031",
+                  "title": "Unity Debug Inspect031",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_Debug_Apply039",
+                  "title": "Unity Debug Apply039",
+                  "readOnlyHint": false,
+                  "mutationHint": "mutating"
+                },
+                {
+                  "name": "Unity_Debug_Inspect047",
+                  "title": "Unity Debug Inspect047",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                },
+                {
+                  "name": "Unity_Debug_Inspect055",
+                  "title": "Unity Debug Inspect055",
+                  "readOnlyHint": true,
+                  "mutationHint": "read_only"
+                }
+              ]
+            }
+          ],
+          "workflowRecommendations": [
+            "Call real native tools directly; no Unity.SetToolPacks step is required in static_all mode."
+          ]
+        }
+      },
+      "stderr": ""
+    }
+  },
+  "conclusion": {
+    "protocolLevelStaticAllHandsClientFullToolList": true,
+    "staticAllStartupToolCount": 80,
+    "dynamicStartupToolCount": 16,
+    "staticAllStartupResponseBytes": 61555,
+    "dynamicStartupResponseBytes": 12181,
+    "staticAllApproxResponseTokens": 15389,
+    "dynamicApproxResponseTokens": 3046,
+    "staticAllSchemaApproxTokens": 10764,
+    "setToolPacksNoopKeptStaticToolCount": true,
+    "canDirectlyObserveCodexPromptInjection": false,
+    "promptInjectionLimit": "This artifact proves what the MCP host sends to a client over tools/list. It cannot prove whether Codex injects every received tool schema into model context without a Codex-side prompt/tool-snapshot trace."
+  }
+}

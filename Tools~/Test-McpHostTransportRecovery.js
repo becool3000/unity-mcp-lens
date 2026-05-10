@@ -45,17 +45,19 @@ function createFrameParser(onMessage) {
 }
 
 class McpHostClient {
-  constructor(projectRoot, statusDir) {
+  constructor(projectRoot, statusDir, options = {}) {
     this.nextId = 1;
     this.pending = new Map();
     this.stderr = "";
+    const env = {
+      ...process.env,
+      UNITY_MCP_STATUS_DIR: statusDir,
+    };
+    if (!options.omitProjectEnv) env.UNITY_MCP_PROJECT_PATH = projectRoot;
+
     this.child = childProcess.spawn(hostPath, [], {
       cwd: projectRoot,
-      env: {
-        ...process.env,
-        UNITY_MCP_STATUS_DIR: statusDir,
-        UNITY_MCP_PROJECT_PATH: projectRoot,
-      },
+      env,
       stdio: ["pipe", "pipe", "pipe"],
       windowsHide: true,
     });
@@ -210,6 +212,10 @@ class ScenarioContext {
     this.bridge = null;
     fs.mkdirSync(this.statusDir, { recursive: true });
     fs.mkdirSync(this.projectRoot, { recursive: true });
+    fs.mkdirSync(path.join(this.projectRoot, "Assets"), { recursive: true });
+    fs.mkdirSync(path.join(this.projectRoot, "ProjectSettings"), { recursive: true });
+    fs.mkdirSync(path.join(this.projectRoot, "Packages"), { recursive: true });
+    fs.writeFileSync(path.join(this.projectRoot, "Packages", "manifest.json"), "{}");
   }
 
   shouldFail(type) {
@@ -236,6 +242,20 @@ class ScenarioContext {
       heartbeat: new Date(Date.now() - 120000),
       toolCount: 999,
     });
+  }
+
+  writeForeignStatus(options = {}) {
+    const foreignRoot = options.projectRoot || path.join(this.root, "ForeignProject");
+    fs.mkdirSync(foreignRoot, { recursive: true });
+    const foreignPipe = makePipePath();
+    const foreignStatus = path.join(this.statusDir, `bridge-status-foreign-${nextPipeId++}.json`);
+    writeStatus(foreignStatus, foreignPipe, foreignRoot, {
+      status: "ready",
+      heartbeat: options.stale ? new Date(Date.now() - 120000) : new Date(),
+      toolCount: 999,
+      editorPid: options.deadPid ? 99999999 : process.pid,
+    });
+    return { foreignRoot, foreignPipe, foreignStatus };
   }
 
   async dispose() {
@@ -278,7 +298,7 @@ function writeStatus(statusPath, connectionPath, projectRoot, options) {
     project_root: projectRoot,
     last_heartbeat: options.heartbeat.toISOString(),
     protocol_version: "2.0",
-    editor_pid: process.pid,
+    editor_pid: options.editorPid || process.pid,
   }, null, 2));
 }
 
@@ -389,7 +409,7 @@ async function assertFullTools(client) {
   const names = response.tools.map((tool) => tool.name);
   assert(names.includes("Unity_GetLensHealth"), "tools/list should include dynamic health tool");
   assert(names.includes("Unity_ListToolPacks"), "tools/list should include dynamic pack tool");
-  assert(names.includes("Unity_RunCommand"), `tools/list should include dynamic mutating tool; got ${names.join(", ")}`);
+  assert(names.includes("Unity_RunCommand"), `tools/list should include dynamic mutating tool; got ${names.join(", ")}; stderr=${client.stderr}`);
   assert(response.tools.length >= 4, "tools/list should include dynamic tools plus local bootstrap helpers");
 }
 
@@ -404,6 +424,46 @@ async function main() {
     context.writeStaleStatus();
     await assertFullTools(client);
   });
+
+  await withScenario("matching-project-beats-foreign", null, async (context, client) => {
+    const foreign = context.writeForeignStatus();
+    const diagnostic = await client.callTool("Unity_Bridge_ListConnections", {});
+    assert.strictEqual(diagnostic.structuredContent.success, true, "bridge diagnostics should succeed");
+    assert.strictEqual(diagnostic.structuredContent.data.selected.projectRoot, context.projectRoot);
+    const foreignCandidate = diagnostic.structuredContent.data.candidates.find((candidate) => candidate.statusPath === foreign.foreignStatus);
+    assert(foreignCandidate, "foreign bridge candidate should be listed");
+    assert.strictEqual(foreignCandidate.projectRootMatch, false);
+    assert(foreignCandidate.exclusionReasons.includes("project_mismatch"));
+    await assertFullTools(client);
+  });
+
+  await withScenario("stale-dead-foreign-never-selected", null, async (context, client) => {
+    context.writeForeignStatus({ stale: true, deadPid: true });
+    await assertFullTools(client);
+    const diagnostic = await client.callTool("Unity_Bridge_ListConnections", {});
+    assert.strictEqual(diagnostic.structuredContent.data.selected.projectRoot, context.projectRoot);
+  });
+
+  {
+    const context = new ScenarioContext("no-matching-bridge");
+    let client = null;
+    try {
+      context.writeForeignStatus();
+      client = new McpHostClient(context.projectRoot, context.statusDir, { omitProjectEnv: true });
+      await client.initialize();
+      const diagnostic = await client.callTool("Unity_Bridge_ListConnections", {});
+      assert.strictEqual(diagnostic.structuredContent.success, true, "bridge diagnostics should work without a selected bridge");
+      assert.strictEqual(diagnostic.structuredContent.data.selected ?? null, null);
+
+      const result = await client.callTool("Unity_ListToolPacks", {});
+      assert.strictEqual(result.isError, true, "mismatched bridge must not be selected when project root is known");
+      assert.strictEqual(result.structuredContent.code, "UNITY_MCP_NO_MATCHING_BRIDGE");
+      assert(result.structuredContent.data.discovery.candidates.some((candidate) => candidate.exclusionReasons.includes("project_mismatch")));
+    } finally {
+      if (client) await client.dispose().catch(() => {});
+      await context.dispose();
+    }
+  }
 
   await withScenario("register-recovery", "register_client", async (_context, client) => {
     await assertFullTools(client);

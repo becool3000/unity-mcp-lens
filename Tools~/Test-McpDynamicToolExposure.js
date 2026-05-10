@@ -20,8 +20,12 @@ const requiredAssetTools = [
 const foundationToolNames = [
   "Unity_GetLensHealth",
   "Unity_ListToolPacks",
+  "Unity_Bridge_ListConnections",
   "Unity_SetToolPacks",
   "Unity_ReadDetailRef",
+  "Unity_Tools_Menu",
+  "Unity_Tools_Describe",
+  "Unity_Tools_ActivateAndVerify",
   "Unity_ReadConsole",
   "Unity_ListResources",
   "Unity_ReadResource",
@@ -30,9 +34,35 @@ const foundationToolNames = [
   "Unity_RunCommand",
 ];
 
+const projectToolNames = [
+  "Unity_Project_GetInfo",
+  "Unity_Project_PackageCompatibility",
+];
+
+const runtimeToolNames = [
+  "Unity_Editor_SetPlayMode",
+  "Unity_PlayMode_PointerInputSmoke",
+  "Unity_Runtime_QueryObjects",
+];
+
+const sceneToolNames = [
+  "Unity_GameObject_Inspect",
+  "Unity_GameObject_ApplyChanges",
+];
+
+const uiToolNames = [
+  "Unity_UI_VerifyScreenLayout",
+  "Unity_UI_ApplyEnsureHierarchy",
+];
+
+const debugToolNames = [
+  "Unity_GetLensUsageReport",
+];
+
 const assetToolNames = [
   "Unity_Asset_Search",
   "Unity_Asset_ConfigureSpriteImport",
+  "Unity_Asset_SetSerializedProperties",
   "Unity_Asset_ImportSpriteSheetAndBind",
   "Unity_Asset_PreviewImportSpriteSheetAndBind",
   "Unity_Asset_ApplyImportSpriteSheetAndBind",
@@ -79,7 +109,7 @@ function createFrameParser(onMessage) {
 }
 
 class McpHostClient {
-  constructor(projectRoot, statusDir) {
+  constructor(projectRoot, statusDir, options = {}) {
     this.nextId = 1;
     this.pending = new Map();
     this.notifications = [];
@@ -91,6 +121,7 @@ class McpHostClient {
         ...process.env,
         UNITY_MCP_STATUS_DIR: statusDir,
         UNITY_MCP_PROJECT_PATH: projectRoot,
+        UNITY_MCP_LENS_TOOL_SURFACE_MODE: options.toolSurfaceMode || process.env.UNITY_MCP_LENS_TOOL_SURFACE_MODE || "dynamic_packs",
       },
       stdio: ["pipe", "pipe", "pipe"],
       windowsHide: true,
@@ -260,6 +291,7 @@ class FakeBridge {
 
   async handleCommand(socket, command) {
     const type = command.type;
+    this.context.commandCounts[type] = (this.context.commandCounts[type] || 0) + 1;
     if (type === "set_tool_packs") {
       this.context.setActivePacks(command.params && command.params.packs);
       this.writeStatus();
@@ -281,6 +313,7 @@ class ScenarioContext {
     this.statusDir = path.join(this.root, "connections");
     this.projectRoot = path.join(this.root, "Project");
     this.activePacks = ["foundation"];
+    this.commandCounts = {};
     this.bridge = null;
     fs.mkdirSync(this.statusDir, { recursive: true });
     fs.mkdirSync(this.projectRoot, { recursive: true });
@@ -368,8 +401,9 @@ function resultFor(type, _params, context) {
         message: "Fake Lens health ready.",
         data: {
           activeToolPacks: context.activePacks,
+          toolSurfaceMode: context.activePacks.some((pack) => pack.toLowerCase() === "full") ? "static_all" : "dynamic_packs",
           bridgeStatus: { status: "ready", toolDiscoveryMode: "live" },
-          internalRegistryToolCount: fakeTools(["foundation", "assets"], false).length,
+          internalRegistryToolCount: fakeTools(["foundation", "full"], false).length,
           editorStability: { isStable: true },
           expectedRecovery: { isActive: false },
         },
@@ -380,9 +414,11 @@ function resultFor(type, _params, context) {
         message: "Fake tool packs listed.",
         data: {
           activeToolPacks: context.activePacks,
-          availableToolPacks: ["foundation", "assets"],
+          availableToolPacks: ["foundation", "project", "runtime", "assets", "scene", "ui", "debug", "full"],
         },
       };
+    case "Unity_Tools_Menu":
+      return menuResult(context.activePacks);
     default:
       return { success: true, message: `${type} ok`, data: {} };
   }
@@ -405,10 +441,78 @@ function manifestResult(activeToolPacks, withSchemas) {
 
 function fakeTools(activeToolPacks, withSchemas) {
   const tools = foundationToolNames.map((name) => toolDescriptor(name, ["foundation"], isReadOnlyFoundationTool(name), withSchemas));
-  if (activeToolPacks.some((pack) => pack.toLowerCase() === "assets")) {
+  const active = new Set((activeToolPacks || []).map((pack) => String(pack).toLowerCase()));
+  const hasFull = active.has("full");
+  if (hasFull || active.has("project")) {
+    tools.push(...projectToolNames.map((name) => toolDescriptor(name, ["project"], isReadOnlyTool(name), withSchemas)));
+  }
+  if (hasFull || active.has("runtime")) {
+    tools.push(...runtimeToolNames.map((name) => toolDescriptor(name, ["runtime"], isReadOnlyTool(name), withSchemas)));
+  }
+  if (hasFull || active.has("scene")) {
+    tools.push(...sceneToolNames.map((name) => toolDescriptor(name, ["scene"], isReadOnlyTool(name), withSchemas)));
+  }
+  if (hasFull || active.has("ui")) {
+    tools.push(...uiToolNames.map((name) => toolDescriptor(name, ["ui"], isReadOnlyTool(name), withSchemas)));
+  }
+  if (hasFull || active.has("debug")) {
+    tools.push(...debugToolNames.map((name) => toolDescriptor(name, ["debug"], isReadOnlyTool(name), withSchemas)));
+  }
+  if (hasFull || active.has("assets")) {
     tools.push(...assetToolNames.map((name) => toolDescriptor(name, ["assets"], isReadOnlyTool(name), withSchemas)));
   }
   return tools;
+}
+
+function menuResult(activeToolPacks) {
+  const fullSurface = activeToolPacks.some((pack) => pack.toLowerCase() === "full");
+  const packs = [
+    ["foundation", "Foundation"],
+    ["project", "Project Diagnostics"],
+    ["runtime", "Runtime Verification"],
+    ["assets", "Assets"],
+    ["scene", "Scene Editing"],
+    ["ui", "UI Authoring"],
+    ["debug", "Debug"],
+  ].map(([packId, title]) => {
+    const packTools = fakeTools(["foundation", packId], false)
+      .filter((tool) => (tool.packs || []).includes(packId))
+      .map((tool) => ({
+        name: tool.name,
+        title: tool.title,
+        readOnlyHint: tool.readOnlyHint,
+        mutationHint: tool.readOnlyHint ? "read_only" : "mutating",
+      }));
+    return {
+      packId,
+      title,
+      description: `${title} tools`,
+      alwaysOn: packId === "foundation",
+      adminOnly: false,
+      isActive: fullSurface || activeToolPacks.some((pack) => pack.toLowerCase() === packId),
+      toolCount: packTools.length,
+      readOnlyToolCount: packTools.filter((tool) => tool.readOnlyHint).length,
+      mutatingToolCount: packTools.filter((tool) => !tool.readOnlyHint).length,
+      truncated: false,
+      tools: packTools,
+    };
+  });
+
+  return {
+    success: true,
+    message: "Fake tool menu.",
+    data: {
+      toolSurfaceMode: fullSurface ? "static_all" : "dynamic_packs",
+      activeToolPacks,
+      totalToolCount: fakeTools(["foundation", "full"], false).length,
+      packs,
+      workflowRecommendations: [
+        fullSurface
+          ? "Call real native tools directly; no Unity.SetToolPacks step is required in static_all mode."
+          : "Use Unity.SetToolPacks before calling pack-gated tools.",
+      ],
+    },
+  };
 }
 
 function toolDescriptor(name, packs, readOnlyHint, withSchemas) {
@@ -430,13 +534,21 @@ function toolDescriptor(name, packs, readOnlyHint, withSchemas) {
 }
 
 function isReadOnlyTool(name) {
-  return name === "Unity_Asset_Search" ||
+  return name === "Unity_Project_GetInfo" ||
+    name === "Unity_Project_PackageCompatibility" ||
+    name === "Unity_GameObject_Inspect" ||
+    name === "Unity_UI_VerifyScreenLayout" ||
+    name === "Unity_GetLensUsageReport" ||
+    name === "Unity_Runtime_QueryObjects" ||
+    name === "Unity_Asset_Search" ||
     name === "Unity_Asset_PreviewImportSpriteSheetAndBind" ||
     name === "Unity_Asset_VerifySpriteArrayBinding";
 }
 
 function isReadOnlyFoundationTool(name) {
-  return name !== "Unity_SetToolPacks" &&
+  return name === "Unity_Bridge_ListConnections" ||
+    name !== "Unity_SetToolPacks" &&
+    name !== "Unity_Tools_ActivateAndVerify" &&
     name !== "Unity_ManageEditor" &&
     name !== "Unity_RunCommand";
 }
@@ -451,6 +563,54 @@ function schemaFor(name) {
       type: "object",
       properties: {
         packs: { type: "array", items: { type: "string" } },
+      },
+    };
+  }
+  if (name === "Unity_Tools_Menu") {
+    return {
+      type: "object",
+      properties: {
+        maxToolsPerPack: { type: "integer" },
+      },
+    };
+  }
+  if (name === "Unity_Bridge_ListConnections") {
+    return {
+      type: "object",
+      properties: {
+        projectPath: { type: "string" },
+        includeStale: { type: "boolean" },
+        maxEntries: { type: "integer" },
+      },
+    };
+  }
+  if (name === "Unity_Runtime_QueryObjects") {
+    return {
+      type: "object",
+      properties: {
+        componentTypes: { type: "array", items: { type: "string" } },
+        includeInactive: { type: "boolean" },
+        maxSamplesPerType: { type: "integer" },
+      },
+    };
+  }
+  if (name === "Unity_Asset_SetSerializedProperties") {
+    return {
+      type: "object",
+      properties: {
+        assetPath: { type: "string" },
+        mode: { type: "string", enum: ["preview", "apply"] },
+        assignments: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              propertyPath: { type: "string" },
+              value: {},
+              objectReferencePath: { type: "string" },
+            },
+          },
+        },
       },
     };
   }
@@ -550,19 +710,18 @@ function walkSchema(schema, schemaPath) {
   }
 }
 
-async function main() {
-  assert(fs.existsSync(hostPath), `Host path does not exist: ${hostPath}`);
-
+async function runDynamicPacksScenario() {
   const context = new ScenarioContext();
   let client = null;
   try {
     await context.startBridge();
-    client = new McpHostClient(context.projectRoot, context.statusDir);
+    client = new McpHostClient(context.projectRoot, context.statusDir, { toolSurfaceMode: "dynamic_packs" });
     await client.initialize();
 
     const foundationList = await client.listTools();
     const foundationNames = foundationList.tools.map((tool) => tool.name);
     assert(foundationNames.includes("Unity_SetToolPacks"), "foundation tools/list should expose Unity_SetToolPacks");
+    assert(foundationNames.includes("Unity_Tools_Menu"), "foundation tools/list should expose Unity_Tools_Menu");
     assert(foundationNames.includes("Unity_Tools_Describe"), "foundation tools/list should expose Unity_Tools_Describe");
     assert(foundationNames.includes("Unity_Tools_ActivateAndVerify"), "foundation tools/list should expose Unity_Tools_ActivateAndVerify");
     for (const assetToolName of requiredAssetTools) {
@@ -591,8 +750,77 @@ async function main() {
     if (client) await client.dispose().catch(() => {});
     await context.dispose();
   }
+}
 
-  console.log("MCP dynamic tool exposure tests passed.");
+async function runStaticAllScenario() {
+  const context = new ScenarioContext();
+  let client = null;
+  try {
+    await context.startBridge();
+    client = new McpHostClient(context.projectRoot, context.statusDir, { toolSurfaceMode: "static_all" });
+    await client.initialize();
+
+    const staticList = await client.listTools();
+    const staticNames = staticList.tools.map((tool) => tool.name);
+    assertNamesInclude(staticNames, [
+      "Unity_Project_PackageCompatibility",
+      "Unity_Editor_SetPlayMode",
+      "Unity_Asset_Search",
+      "Unity_GameObject_Inspect",
+      "Unity_UI_VerifyScreenLayout",
+      "Unity_GetLensUsageReport",
+    ], "static_all startup tools/list");
+    assertArraySchemasHaveItems(staticList.tools);
+
+    const projectResult = await client.callTool("Unity_Project_PackageCompatibility", {});
+    assert.strictEqual(projectResult.structuredContent.success, true, "pack-gated project tool should succeed in static_all without pack switching");
+
+    const menuResultPayload = await client.callTool("Unity_Tools_Menu", {});
+    assert.strictEqual(menuResultPayload.structuredContent.success, true, "Unity_Tools_Menu should succeed");
+    assert.strictEqual(menuResultPayload.structuredContent.data.toolSurfaceMode, "static_all");
+    const menuPackIds = menuResultPayload.structuredContent.data.packs.map((pack) => pack.packId);
+    assertNamesInclude(menuPackIds, ["project", "runtime", "assets", "scene", "ui", "debug"], "Unity_Tools_Menu packs");
+
+    const notificationCount = client.notificationCount("notifications/tools/list_changed");
+    const setToolPacksCountBeforeNoop = context.commandCounts.set_tool_packs || 0;
+    const setResult = await client.callTool("Unity_SetToolPacks", { Packs: ["assets"] });
+    assert.strictEqual(setResult.structuredContent.success, true, "static_all Unity_SetToolPacks compatibility no-op should succeed");
+    assert.strictEqual(setResult.structuredContent.data.toolSurfaceMode, "static_all");
+    assert.deepStrictEqual(setResult.structuredContent.data.activeToolPacks, ["foundation", "full"]);
+    assert.strictEqual(setResult.structuredContent.data.toolsListChangedNotificationSent, false);
+    assert.strictEqual(setResult.structuredContent.data.bridgeTouched, false);
+    assert.strictEqual(context.commandCounts.set_tool_packs || 0, setToolPacksCountBeforeNoop, "static_all Unity_SetToolPacks no-op should not call bridge set_tool_packs");
+    assert.strictEqual(client.notificationCount("notifications/tools/list_changed"), notificationCount);
+
+    const afterNoopList = await client.listTools();
+    const afterNoopNames = afterNoopList.tools.map((tool) => tool.name);
+    assertNamesInclude(afterNoopNames, [
+      "Unity_Project_PackageCompatibility",
+      "Unity_Editor_SetPlayMode",
+      "Unity_Asset_Search",
+      "Unity_GameObject_Inspect",
+      "Unity_UI_VerifyScreenLayout",
+      "Unity_GetLensUsageReport",
+    ], "static_all tools/list after Unity_SetToolPacks no-op");
+  } finally {
+    if (client) await client.dispose().catch(() => {});
+    await context.dispose();
+  }
+}
+
+async function main() {
+  assert(fs.existsSync(hostPath), `Host path does not exist: ${hostPath}`);
+  const pluginConfig = JSON.parse(fs.readFileSync(path.join(repoRoot, ".agents", "plugins", "lens-dev-plugin", ".mcp.json"), "utf8"));
+  assert.strictEqual(
+    pluginConfig.mcpServers.unity_mcp_lens.env.UNITY_MCP_LENS_TOOL_SURFACE_MODE,
+    "static_all",
+    "Codex plugin config should default Lens to static_all",
+  );
+
+  await runDynamicPacksScenario();
+  await runStaticAllScenario();
+
+  console.log("MCP dynamic/static tool exposure tests passed.");
 }
 
 main().catch((error) => {

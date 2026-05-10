@@ -184,6 +184,8 @@ namespace Becool.UnityMcpLens.Editor.Lens.Usage
                         ManifestVersion = ReadLong(entry["manifestVersion"], ReadLong(entry.SelectToken("meta.manifestVersion"))),
                         ManifestKind = ReadString(entry["manifestKind"], ReadString(entry.SelectToken("meta.manifestKind"))),
                         ManifestReason = ReadString(entry["manifestReason"], ReadString(entry.SelectToken("meta.manifestReason"))),
+                        SetToolPacksReason = ReadString(entry["setToolPacksReason"], ReadString(entry.SelectToken("meta.setToolPacksReason"))),
+                        ToolSurfaceMode = ReadString(entry["toolSurfaceMode"], ReadString(entry.SelectToken("meta.toolSurfaceMode"))),
                         ActiveToolPacks = ReadPackList(entry["activeToolPacks"] ?? entry.SelectToken("meta.activeToolPacks")),
                         ResponseStatus = ReadString(entry["responseStatus"], ReadString(entry.SelectToken("meta.status")))
                     });
@@ -296,6 +298,8 @@ namespace Becool.UnityMcpLens.Editor.Lens.Usage
                     ActiveToolPacks = row.ActiveToolPacks,
                     ManifestKind = row.ManifestKind,
                     ManifestReason = row.ManifestReason,
+                    SetToolPacksReason = row.SetToolPacksReason,
+                    ToolSurfaceMode = row.ToolSurfaceMode,
                     Unchanged = row.Unchanged == true,
                     ResponseBytes = row.ResponseBytes
                 })
@@ -513,7 +517,14 @@ namespace Becool.UnityMcpLens.Editor.Lens.Usage
                 findings.Add(new UsageFindingRow("session_churn", "info", $"Scope contains {report.BridgeConnectionCount} connections and {report.SetupCycleCount} setup cycles."));
 
             if ((report.PackSetTransitions?.Count ?? 0) > 2)
+            {
                 findings.Add(new UsageFindingRow("pack_churn", "info", $"Scope contains {report.PackSetTransitions.Count} pack-set transitions."));
+                int staticRestoreCount = report.PackSetTransitions.Count(row =>
+                    string.Equals(row.ToolSurfaceMode, "static_all", StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(row.SetToolPacksReason, "static_all_restore", StringComparison.OrdinalIgnoreCase));
+                if (staticRestoreCount > 0)
+                    findings.Add(new UsageFindingRow("static_all_restore_churn", "info", $"{staticRestoreCount} pack-set transition row(s) are static_all startup restore, not Unity.SetToolPacks no-op calls."));
+            }
 
             if ((report.UnmatchedRequests?.Count ?? 0) > 0)
                 findings.Add(new UsageFindingRow("unmatched_requests", "warning", $"Scope contains {report.UnmatchedRequests.Count} unmatched bridge request(s)."));
@@ -934,7 +945,21 @@ namespace Becool.UnityMcpLens.Editor.Lens.Usage
                 omitted = Math.Max(0, rows.Count - k_TopCount),
                 changedCount = rows.Count(row => !row.Unchanged),
                 unchangedCount = rows.Count(row => row.Unchanged),
+                staticAllRestoreCount = rows.Count(row =>
+                    string.Equals(row.ToolSurfaceMode, "static_all", StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(row.SetToolPacksReason, "static_all_restore", StringComparison.OrdinalIgnoreCase)),
                 totalResponseBytes = rows.Sum(row => row.ResponseBytes),
+                byReason = rows
+                    .GroupBy(row => string.IsNullOrWhiteSpace(row.SetToolPacksReason) ? "(none)" : row.SetToolPacksReason)
+                    .OrderByDescending(group => group.Count())
+                    .Take(k_TopCount)
+                    .Select(group => new
+                    {
+                        reason = group.Key,
+                        count = group.Count(),
+                        responseBytes = group.Sum(row => row.ResponseBytes)
+                    })
+                    .ToArray(),
                 byConnection = rows
                     .GroupBy(row => string.IsNullOrWhiteSpace(row.ConnectionId) ? "(none)" : row.ConnectionId)
                     .OrderByDescending(group => group.Count())
@@ -1096,7 +1121,9 @@ namespace Becool.UnityMcpLens.Editor.Lens.Usage
             builder.AppendLine($"Pack-set transitions (showing {Math.Min(rows.Count, k_TopCount)} of {rows.Count}):");
             foreach (var row in rows.Take(k_TopCount))
             {
-                builder.AppendLine($"- {row.ConnectionId}: {row.ActiveToolPacks} -> {row.ManifestKind}, unchanged {row.Unchanged}, response {FormatBytes(row.ResponseBytes)}");
+                string reason = string.IsNullOrWhiteSpace(row.SetToolPacksReason) ? row.ManifestReason : row.SetToolPacksReason;
+                string mode = string.IsNullOrWhiteSpace(row.ToolSurfaceMode) ? string.Empty : $", mode {row.ToolSurfaceMode}";
+                builder.AppendLine($"- {row.ConnectionId}: {row.ActiveToolPacks} -> {row.ManifestKind}, unchanged {row.Unchanged}, reason {reason}{mode}, response {FormatBytes(row.ResponseBytes)}");
             }
 
             if (rows.Count > k_TopCount)
@@ -1277,6 +1304,8 @@ namespace Becool.UnityMcpLens.Editor.Lens.Usage
         public string ActiveToolPacks { get; set; }
         public string ManifestKind { get; set; }
         public string ManifestReason { get; set; }
+        public string SetToolPacksReason { get; set; }
+        public string ToolSurfaceMode { get; set; }
         public bool Unchanged { get; set; }
         public long ResponseBytes { get; set; }
     }
@@ -1401,6 +1430,8 @@ namespace Becool.UnityMcpLens.Editor.Lens.Usage
         public long ManifestVersion { get; set; }
         public string ManifestKind { get; set; }
         public string ManifestReason { get; set; }
+        public string SetToolPacksReason { get; set; }
+        public string ToolSurfaceMode { get; set; }
         public string ActiveToolPacks { get; set; }
         public string ResponseStatus { get; set; }
     }

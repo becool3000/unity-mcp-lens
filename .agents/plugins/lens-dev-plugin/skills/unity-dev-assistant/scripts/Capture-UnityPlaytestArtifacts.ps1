@@ -3,6 +3,7 @@ param(
     [string]$Label = "capture",
     [ValidateSet("Hybrid", "UnityOnly", "DesktopOnly")]
     [string]$CapturePathMode = "Hybrid",
+    [Alias("OutputDirectory")]
     [string]$OutputDir,
     [string]$StateCode,
     [string]$StateCodePath,

@@ -46,12 +46,12 @@ Current TSAM-covered surfaces include:
 
 Current baselines:
 
-- `foundation`: `15` exported tools.
-- `foundation + scene`: `38` exported tools.
-- `foundation + ui`: `29` exported tools.
-- `foundation + runtime`: `19` exported tools.
-- `project`: `24` exported tools.
-- `debug`: `26` exported tools.
+- `foundation`: `16` exported tools.
+- `foundation + scene`: `39` exported tools.
+- `foundation + ui`: `30` exported tools.
+- `foundation + runtime`: `20` exported tools.
+- `project`: `25` exported tools.
+- `debug`: `27` exported tools.
 
 Pack additions must not widen the default `foundation` surface. Any deliberate
 pack-surface change must update the metadata audit, smoke prompts, and package

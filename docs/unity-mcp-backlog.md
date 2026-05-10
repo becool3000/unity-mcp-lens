@@ -19,7 +19,7 @@ Finding:
 
 - Lens was usable end-to-end for health, pack listing, console reads, project info, script validation, script sync, play entry, runtime advancement, play exit, and final readiness.
 - Codex dynamic tool exposure remained unreliable after pack switches: `Unity.Tools.Describe` proved tools such as `Unity.Editor.SetPlayMode` and `Unity.Editor.SyncScripts` existed, but Codex did not expose them as callable in the active thread.
-- The previous `0.1.1` installed skill path was stale after plugin cache cleanup; the active plugin cache was `0.1.2`.
+- The previous `0.1.1` installed skill path was stale after plugin cache cleanup; plugin cache versions can move after source plugin refreshes, with `0.1.3` carrying the static-all/menu skill guidance.
 - `Unity.Editor.SyncScripts` could report failure when refresh was scheduled and old console errors were already present, even when no new compile/import errors were proven.
 - Play entry recovered from a transient `Pipe is broken` pack-restore/readiness poll, but helper output still included too much nested recovery state for routine dogfood reports.
 
@@ -117,12 +117,13 @@ Still needed:
 
 ## Current Baselines
 
-- `foundation` exports `15` tools, including `Unity.Tools.Describe`, `Unity.Tools.ActivateAndVerify`, and the host-local Script Updating Consent modal recovery tool.
-- `foundation + scene` now targets `38` tools.
-- `foundation + ui` now targets `29` tools.
-- `foundation + runtime` now targets `19` tools, including `Unity.Editor.SetPlayMode`.
-- Latest expected metadata audit baseline keeps `project=24` and observes `debug=26`; the BeeSurvivors reliability follow-up raises all always-on pack counts.
-- Phase 18 plus the BeeSurvivors reliability follow-up set the `foundation+assets=27` metadata audit baseline for asset/resource workflows and sprite-sheet binding tools.
+- `foundation` exports `17` tools, including `Unity.Tools.Menu`, `Unity.Tools.Describe`, `Unity.Tools.ActivateAndVerify`, and the host-local Script Updating Consent modal recovery tool.
+- `foundation + scene` now targets `40` tools.
+- `foundation + ui` now targets `33` tools, including `Unity.UI.QueryRuntimeLayout` and `Unity.UI.InvokeControl`.
+- `foundation + runtime` now targets `22` tools, including `Unity.Editor.SetPlayMode`.
+- Latest expected metadata audit baseline keeps `project=26` and observes `debug=28`.
+- Phase 18 plus the static-all menu work set the `foundation+assets=30` metadata audit baseline for asset/resource workflows and sprite-sheet binding tools.
+- `UNITY_MCP_LENS_TOOL_SURFACE_MODE=static_all` starts the host at `foundation+full`; `Unity.SetToolPacks` is then a no-op and agents should use `Unity.Tools.Menu` for compact navigation while calling real tools directly.
 - Phase 8 split GameObject tools are in the `scene` pack.
 - Phase 12 scene serialized-reference preview/apply binding tools are in the `scene` pack.
 - Phase 12 UI hierarchy/layout preview/apply tools and `Unity.UI.VerifyScreenLayout` are in the `ui` pack.
@@ -147,7 +148,7 @@ Finding:
 
 - Codex Desktop can launch plugin MCP servers from `C:\WINDOWS\system32`, so the repo plugin `.mcp.json` must not depend on `node ./skills/unity-mcp-bridge/scripts/Launch-UnityMcpLens.js`.
 - The installed plugin cache and repo source now point the plugin MCP server at the installed native Lens binary: `%USERPROFILE%\.unity\unity-mcp-lens\unity_mcp_lens_win.exe`.
-- The repo plugin MCP server key is now `unity_mcp_lens` instead of the legacy `codex_side_mcp_client_for_unity`, and the plugin version was bumped to `0.1.2` so Codex Desktop should refresh the cached plugin package.
+- The repo plugin MCP server key is now `unity_mcp_lens` instead of the legacy `codex_side_mcp_client_for_unity`, and plugin version bumps are used when Codex Desktop needs to refresh the cached plugin package.
 - The native MCP host now returns bootstrap foundation tool descriptors if the Unity bridge is not ready during initial `tools/list`, preventing Codex from indexing an empty tool surface.
 - The native MCP host now exposes `Unity.Editor.ScriptUpdatingConsentModal` as a host-local foundation recovery tool so Codex can detect Unity's `Script Updating Consent` popup and accept `Yes, just for these files` for an expected Codex-triggered script refresh while the Unity bridge is blocked.
 - Direct Lens MCP handshake succeeds and Unity bridge beacon is ready for `D:\BeeSurvivors`, but the current Codex thread's `thread_dynamic_tools` table still lacks Unity tools.

@@ -296,6 +296,8 @@ Get-Content -LiteralPath $resolvedStatsPath | ForEach-Object {
         $snapshotReason = if ($entry.snapshotReason) { Get-StringValue -Value $entry.snapshotReason } else { Get-StringValue -Value $entry.toolDiscoveryReason }
         $manifestKind = if ($entry.manifestKind) { Get-StringValue -Value $entry.manifestKind } else { Get-StringValue -Value $entry.meta.manifestKind }
         $manifestReason = if ($entry.manifestReason) { Get-StringValue -Value $entry.manifestReason } else { Get-StringValue -Value $entry.meta.manifestReason }
+        $setToolPacksReason = if ($entry.setToolPacksReason) { Get-StringValue -Value $entry.setToolPacksReason } else { Get-StringValue -Value $entry.meta.setToolPacksReason }
+        $toolSurfaceMode = if ($entry.toolSurfaceMode) { Get-StringValue -Value $entry.toolSurfaceMode } else { Get-StringValue -Value $entry.meta.toolSurfaceMode }
         $activeToolPacks = if ($entry.activeToolPacks) { Get-PackListString -Value $entry.activeToolPacks } else { Get-PackListString -Value $entry.meta.activeToolPacks }
         $bridgeSessionId = if ($entry.bridgeSessionId) { Get-StringValue -Value $entry.bridgeSessionId } else { Get-StringValue -Value $entry.meta.bridgeSessionId }
         $manifestVersion = if ($entry.manifestVersion) { Get-NumberValue -Value $entry.manifestVersion } else { Get-NumberValue -Value $entry.meta.manifestVersion }
@@ -347,6 +349,8 @@ Get-Content -LiteralPath $resolvedStatsPath | ForEach-Object {
             ManifestVersion     = $manifestVersion
             ManifestKind        = $manifestKind
             ManifestReason      = $manifestReason
+            SetToolPacksReason  = $setToolPacksReason
+            ToolSurfaceMode     = $toolSurfaceMode
             ActiveToolPacks     = $activeToolPacks
             ResponseStatus      = $responseStatus
             Meta                = $entry.meta
@@ -585,6 +589,8 @@ $packSetTransitions = @($bridgeResponseRows |
             ActiveToolPacks = $_.ActiveToolPacks
             ManifestKind = $_.ManifestKind
             ManifestReason = $_.ManifestReason
+            SetToolPacksReason = $_.SetToolPacksReason
+            ToolSurfaceMode = $_.ToolSurfaceMode
             Unchanged = $_.Unchanged
             ResponseBytes = [int64][math]::Round($_.ResponseBytes)
         }
@@ -792,7 +798,7 @@ if ($report.BridgeCoverage.ConnectionSummaries.Count -gt 0) {
 if ($report.BridgeCoverage.PackSetTransitions.Count -gt 0) {
     Write-Host "Pack-set transitions"
     $report.BridgeCoverage.PackSetTransitions |
-        Select-Object TimestampUtc, ConnectionId, ActiveToolPacks, ManifestKind, Unchanged, ResponseBytes |
+        Select-Object TimestampUtc, ConnectionId, ActiveToolPacks, ManifestKind, SetToolPacksReason, ToolSurfaceMode, Unchanged, ResponseBytes |
         Format-Table -AutoSize |
         Out-String |
         Write-Host

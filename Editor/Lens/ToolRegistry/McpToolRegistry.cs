@@ -704,8 +704,9 @@ namespace Becool.UnityMcpLens.Editor.ToolRegistry
                     }
                     else if (parameterType != null)
                     {
-                        // Typed parameter - auto-generate schema
-                        handler = new TypedToolHandler(method, toolAttribute, parameterType);
+                        // Typed parameter - auto-generate input schema and honor explicit output schema when present
+                        outputSchemaMethods.TryGetValue(toolAttribute.Name, out var outputSchemaMethod);
+                        handler = new TypedToolHandler(method, toolAttribute, parameterType, outputSchemaMethod);
                     }
                     else
                     {

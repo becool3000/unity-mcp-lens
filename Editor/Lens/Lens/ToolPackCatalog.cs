@@ -70,6 +70,8 @@ namespace Becool.UnityMcpLens.Editor.Lens
         public const string ListToolPacksToolName = "Unity.ListToolPacks";
         public const string SetToolPacksToolName = "Unity.SetToolPacks";
         public const string ReadDetailRefToolName = "Unity.ReadDetailRef";
+        public const string BridgeListConnectionsToolName = "Unity.Bridge.ListConnections";
+        public const string ToolsMenuToolName = "Unity.Tools.Menu";
         public const string ToolsDescribeToolName = "Unity.Tools.Describe";
         public const string ToolsActivateAndVerifyToolName = "Unity.Tools.ActivateAndVerify";
         public const string EditorSyncScriptsToolName = "Unity.Editor.SyncScripts";
@@ -83,6 +85,8 @@ namespace Becool.UnityMcpLens.Editor.Lens
             NormalizeToolName(ListToolPacksToolName),
             NormalizeToolName(SetToolPacksToolName),
             NormalizeToolName(ReadDetailRefToolName),
+            NormalizeToolName(BridgeListConnectionsToolName),
+            NormalizeToolName(ToolsMenuToolName),
             NormalizeToolName(ToolsDescribeToolName),
             NormalizeToolName(ToolsActivateAndVerifyToolName),
             NormalizeToolName("Unity.ReadConsole"),

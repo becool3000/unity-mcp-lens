@@ -32,13 +32,37 @@ function summarizePlayReady(result) {
     return null;
   }
 
+  const finalState = common.valueOf(result, "finalState", "FinalState") || {};
+  const lastState = common.valueOf(result, "lastState", "LastState") || {};
+  const lastStateData = common.valueOf(lastState, "data", "Data") || {};
+  const attempts = common.valueOf(result, "attempts", "Attempts") || [];
+  const lastAttempt = Array.isArray(attempts) && attempts.length > 0 ? attempts[attempts.length - 1] : {};
+  const editorIdle =
+    common.valueOf(result, "editorIdle", "EditorIdle", "isEditorIdle", "IsEditorIdle") ??
+    common.valueOf(lastAttempt, "IdleReady", "idleReady") ??
+    null;
+  const isPlaying =
+    common.valueOf(result, "isPlaying", "IsPlaying") ??
+    common.valueOf(lastStateData, "IsPlaying", "isPlaying") ??
+    common.valueOf(lastAttempt, "IsPlaying", "isPlaying") ??
+    null;
+  const finalIsPlaying =
+    common.valueOf(finalState, "isPlaying", "IsPlaying") ??
+    common.valueOf(lastStateData, "IsPlaying", "isPlaying") ??
+    null;
+  const runtimeAdvanced =
+    common.valueOf(result, "runtimeAdvanced", "RuntimeAdvanced") ??
+    common.valueOf(lastAttempt, "PlayReady", "playReady", "RuntimeProbeHasAdvancedFrames", "runtimeProbeHasAdvancedFrames") ??
+    null;
+
   return {
     success: result.success === true,
     message: result.message || result.error || null,
     degradedFallback: result.degradedFallback === true,
-    editorIdle: result.editorIdle ?? result.isEditorIdle ?? null,
-    isPlaying: result.isPlaying ?? result.finalState?.isPlaying ?? null,
-    runtimeAdvanced: result.runtimeAdvanced ?? result.runtimeProbe?.hasAdvancedFrames ?? null,
+    editorIdle,
+    isPlaying,
+    finalIsPlaying,
+    runtimeAdvanced,
   };
 }
 

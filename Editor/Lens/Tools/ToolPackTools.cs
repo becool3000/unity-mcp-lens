@@ -39,6 +39,12 @@ namespace Becool.UnityMcpLens.Editor.Tools
         public int MaxTools { get; set; } = 100;
     }
 
+    class ToolsMenuParams
+    {
+        [McpDescription("Maximum number of tool rows to include per pack.", Required = false, Default = 40)]
+        public int MaxToolsPerPack { get; set; } = 40;
+    }
+
     class ToolsActivateAndVerifyParams
     {
         [McpDescription("The non-foundation tool packs to activate for this connection. Foundation remains active automatically.")]
@@ -72,6 +78,7 @@ namespace Becool.UnityMcpLens.Editor.Tools
                 new
                 {
                     activeToolPacks,
+                    toolSurfaceMode = activeToolPacks.Contains(ToolPackCatalog.FullPackId, StringComparer.OrdinalIgnoreCase) ? "static_all" : "dynamic_packs",
                     exportedToolCount = BridgeManifestBroker.GetExportedToolCount(activeToolPacks),
                     internalRegistryToolCount = BridgeManifestBroker.GetBridgeFacingToolCount(),
                     bridgeStatus = new
@@ -256,6 +263,27 @@ namespace Becool.UnityMcpLens.Editor.Tools
                 string.IsNullOrWhiteSpace(parameters.ToolName)
                     ? "Described live Unity MCP Lens tools."
                     : $"Described live Unity MCP Lens tool metadata for '{parameters.ToolName}'.",
+                rawData));
+        }
+    }
+
+    [McpTool(ToolPackCatalog.ToolsMenuToolName,
+        "Returns a compact pack-grouped menu of real Unity MCP Lens tools, including read-only hints and workflow recommendations. It does not route calls; call the real native tools directly.",
+        "Unity Tools Menu",
+        Groups = new[] { "core", "assistant" },
+        EnabledByDefault = true)]
+    class ToolsMenuTool : IUnityMcpTool<ToolsMenuParams>
+    {
+        public Task<object> ExecuteAsync(ToolsMenuParams parameters)
+        {
+            parameters ??= new ToolsMenuParams();
+            var connectionId = McpToolExecutionScope.Current?.ConnectionId;
+            var rawData = BridgeManifestBroker.GetToolMenu(
+                connectionId,
+                parameters.MaxToolsPerPack <= 0 ? 40 : parameters.MaxToolsPerPack);
+
+            return Task.FromResult<object>(Response.Success(
+                "Retrieved Unity MCP Lens tool menu.",
                 rawData));
         }
     }

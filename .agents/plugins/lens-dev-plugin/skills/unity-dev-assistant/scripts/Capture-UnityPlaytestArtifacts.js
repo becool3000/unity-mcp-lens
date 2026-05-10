@@ -11,7 +11,7 @@ async function main() {
   const label = common.getArgString(args, ["Label"], "capture");
   const capturePathMode = common.getArgString(args, ["CapturePathMode"], "Hybrid");
   const safeLabel = label.replace(/[^A-Za-z0-9._-]/g, "-");
-  let outputDir = common.getArgString(args, ["OutputDir"], "");
+  let outputDir = common.getArgString(args, ["OutputDir", "OutputDirectory"], "");
   if (!outputDir) {
     outputDir = common.newUnityArtifactDirectory(projectPath, "unity-artifact");
   }

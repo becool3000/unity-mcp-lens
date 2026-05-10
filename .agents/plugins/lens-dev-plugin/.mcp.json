@@ -3,6 +3,9 @@
     "unity_mcp_lens": {
       "command": "C:\\Users\\kanaw\\.unity\\unity-mcp-lens\\unity_mcp_lens_win.exe",
       "args": [],
+      "env": {
+        "UNITY_MCP_LENS_TOOL_SURFACE_MODE": "static_all"
+      },
       "enabled": true
     }
   }

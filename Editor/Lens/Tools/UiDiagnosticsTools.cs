@@ -10,6 +10,7 @@ using Becool.UnityMcpLens.Editor.Tools.Parameters;
 using Becool.UnityMcpLens.Editor.Utils;
 using UnityEditor;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 namespace Becool.UnityMcpLens.Editor.Tools
@@ -51,6 +52,36 @@ Args:
 Returns:
     Dictionary with success/message/data. Data contains labeled screen-space regions suitable for click diagnostics and overlays.";
 
+        public const string QueryRuntimeLayoutDescription = @"Queries runtime UI layout and control state without requiring custom C# snippets.
+
+Args:
+    Target: Optional target GameObject, path, or canvas root. When omitted, all root canvases are scanned.
+    SearchMethod: How to find the optional target ('by_name', 'by_id', 'by_path').
+    IncludeChildren: Include children of the target.
+    IncludeInactive: Include inactive UI elements.
+    ElementTypes: Optional filters such as text, image, button, slider, toggle, selectable, graphic, or canvas.
+    TextFilter: Optional case-insensitive substring filter applied to visible text values.
+    MaxElements: Maximum number of matching elements returned inline.
+    IncludeScreenBounds: Include screen-space bounds for returned elements.
+
+Returns:
+    Compact counts plus matching elements with path, active state, screen rect, text, interactable state, sprite names, and layout warnings. Full element detail is available through detailRef when compacted.";
+
+        public const string InvokeControlDescription = @"Invokes a runtime UI control through Unity UI events or component value APIs.
+
+Args:
+    Target: Target UI GameObject path, name, or id.
+    SearchMethod: How to find the target ('by_name', 'by_id', 'by_path').
+    IncludeInactive: Include inactive UI objects while resolving the target.
+    Action: click, setSlider, or toggle.
+    Value: Value used by setSlider and toggle. Toggle treats values >= 0.5 as true.
+    WaitFrames: Frames to wait after sending the action.
+    CaptureConsoleDelta: Include console error count before/after the action.
+    AllowEditMode: Explicitly allow edit-mode invocation. Defaults to false.
+
+Returns:
+    Target resolution, event/control action result, selected object, changed values, and console error delta.";
+
         public const string CaptureGameViewDescription = @"Captures the current Game view to a relative path under the Unity project.
 
 Args:
@@ -63,6 +94,72 @@ Args:
 
 Returns:
     Dictionary with success/message/data. Data contains the relative and absolute output paths plus capture state.";
+
+        [McpOutputSchema("Unity.UI.QueryRuntimeLayout")]
+        public static object GetQueryRuntimeLayoutOutputSchema()
+        {
+            return new
+            {
+                type = "object",
+                properties = new
+                {
+                    success = new { type = "boolean", description = "Whether the runtime UI query succeeded." },
+                    message = new { type = "string", description = "Human-readable query summary." },
+                    data = new
+                    {
+                        type = "object",
+                        description = "Compact runtime UI layout and control-state query result.",
+                        properties = new
+                        {
+                            rootCount = new { type = "integer", description = "Number of UI roots scanned." },
+                            screen = new { type = "object", description = "Current Game view screen width and height." },
+                            filters = new { type = "object", description = "Normalized query filters used for this result." },
+                            totalElementCount = new { type = "integer", description = "Total matching UI elements found before inline truncation." },
+                            returnedElementCount = new { type = "integer", description = "Number of matching UI elements returned inline." },
+                            warningCount = new { type = "integer", description = "Total layout warning count." },
+                            warnings = new { type = "array", description = "First compact layout warnings such as offscreen or clipped elements." },
+                            elements = new { type = "array", description = "Matching elements with name, path, active state, rect, text, interactable state, sprite, control values, and warnings." },
+                            detailAvailable = new { type = "boolean", description = "Whether full element detail is available through detailRef." },
+                            detailRef = new { type = "object", description = "Detail ref for the full result when compacted." },
+                            rawBytes = new { type = "integer", description = "UTF-8 byte count of the full unshaped result payload." },
+                            shapedBytes = new { type = "integer", description = "UTF-8 byte count of the compact inline result payload." }
+                        }
+                    }
+                },
+                required = new[] { "success", "message" }
+            };
+        }
+
+        [McpOutputSchema("Unity.UI.InvokeControl")]
+        public static object GetInvokeControlOutputSchema()
+        {
+            return new
+            {
+                type = "object",
+                properties = new
+                {
+                    success = new { type = "boolean", description = "Whether the UI control action succeeded." },
+                    message = new { type = "string", description = "Human-readable action result." },
+                    data = new
+                    {
+                        type = "object",
+                        description = "Runtime UI control action result.",
+                        properties = new
+                        {
+                            target = new { type = "object", description = "Resolved target snapshot captured before dispatch." },
+                            targetDestroyedAfterAction = new { type = "boolean", description = "Whether the original target was destroyed or replaced by the action." },
+                            action = new { type = "string", description = "Normalized action: click, setslider, or toggle." },
+                            eventSystemPresent = new { type = "boolean", description = "Whether an EventSystem was present while invoking the control." },
+                            selectedObject = new { type = "object", description = "Selected object snapshot after dispatch, when available." },
+                            waitFrames = new { type = "integer", description = "Number of post-action frames requested by the caller." },
+                            actionResult = new { type = "object", description = "Action-specific dispatch result, changed values, event trace, or failure reason." },
+                            consoleDelta = new { type = "object", description = "Console error counts before and after the action when requested." }
+                        }
+                    }
+                },
+                required = new[] { "success", "message" }
+            };
+        }
 
         [McpTool("Unity.UI.GetLayoutSnapshot", GetLayoutSnapshotDescription, Groups = new[] { "ui", "diagnostics" }, EnabledByDefault = true)]
         public static object GetLayoutSnapshot(UiLayoutSnapshotParams parameters)
@@ -269,6 +366,189 @@ Returns:
                     }));
         }
 
+        [McpTool("Unity.UI.QueryRuntimeLayout", QueryRuntimeLayoutDescription, Groups = new[] { "ui", "diagnostics" }, EnabledByDefault = true)]
+        public static object QueryRuntimeLayout(UiRuntimeLayoutQueryParams parameters)
+        {
+            parameters ??= new UiRuntimeLayoutQueryParams();
+            var roots = UiDiagnosticsHelper.ResolveUiRoots(parameters.Target, parameters.SearchMethod, parameters.IncludeInactive).ToList();
+            if (roots.Count == 0)
+            {
+                return Response.Error("UI target not found.");
+            }
+
+            int maxElements = Math.Max(1, parameters.MaxElements);
+            var typeFilters = BuildTypeFilter(parameters.ElementTypes);
+            string textFilter = string.IsNullOrWhiteSpace(parameters.TextFilter) ? null : parameters.TextFilter.Trim();
+            int screenWidth = Math.Max(0, Screen.width);
+            int screenHeight = Math.Max(0, Screen.height);
+            var elements = new List<object>();
+            var warnings = new List<object>();
+
+            foreach (GameObject root in roots)
+            {
+                foreach (RectTransform rectTransform in UiDiagnosticsHelper.EnumerateRectTransforms(root, parameters.IncludeChildren, parameters.IncludeInactive))
+                {
+                    if (rectTransform == null)
+                    {
+                        continue;
+                    }
+
+                    string text = GetUiText(rectTransform);
+                    string[] elementTypes = GetRuntimeElementTypes(rectTransform);
+                    if (!MatchesTypeFilter(elementTypes, typeFilters))
+                    {
+                        continue;
+                    }
+
+                    if (!string.IsNullOrEmpty(textFilter) &&
+                        (text == null || text.IndexOf(textFilter, StringComparison.OrdinalIgnoreCase) < 0))
+                    {
+                        continue;
+                    }
+
+                    object element = BuildRuntimeLayoutElement(
+                        rectTransform,
+                        text,
+                        elementTypes,
+                        parameters.IncludeScreenBounds,
+                        screenWidth,
+                        screenHeight,
+                        out string[] elementWarnings);
+                    elements.Add(element);
+
+                    foreach (string warning in elementWarnings)
+                    {
+                        warnings.Add(new
+                        {
+                            path = UiDiagnosticsHelper.GetHierarchyPath(rectTransform),
+                            warning
+                        });
+                    }
+                }
+            }
+
+            var rawPayload = new
+            {
+                rootCount = roots.Count,
+                screen = new { width = screenWidth, height = screenHeight },
+                filters = new
+                {
+                    target = parameters.Target,
+                    parameters.SearchMethod,
+                    parameters.IncludeChildren,
+                    parameters.IncludeInactive,
+                    elementTypes = typeFilters.ToArray(),
+                    textFilter
+                },
+                totalElementCount = elements.Count,
+                warningCount = warnings.Count,
+                warnings,
+                elements
+            };
+            var compactPayload = new
+            {
+                rawPayload.rootCount,
+                rawPayload.screen,
+                rawPayload.filters,
+                rawPayload.totalElementCount,
+                returnedElementCount = Math.Min(maxElements, elements.Count),
+                rawPayload.warningCount,
+                warnings = warnings.Take(10).ToArray(),
+                elements = elements.Take(maxElements).ToArray()
+            };
+
+            return Response.Success(
+                $"Collected {elements.Count} runtime UI layout element(s).",
+                ToolResultCompactor.ShapeStructuredPayload(
+                    "Unity.UI.QueryRuntimeLayout",
+                    rawPayload,
+                    compactPayload,
+                    new
+                    {
+                        kind = "ui_runtime_layout",
+                        target = parameters.Target,
+                        rootCount = roots.Count,
+                        elementCount = elements.Count,
+                        warningCount = warnings.Count
+                    },
+                    "ui_runtime_layout_result",
+                    detailRefMinBytes: PayloadBudgetPolicy.MaxToolResultBytes));
+        }
+
+        [McpTool("Unity.UI.InvokeControl", InvokeControlDescription, Groups = new[] { "ui" }, EnabledByDefault = true)]
+        public static async Task<object> InvokeControl(UiInvokeControlParams parameters)
+        {
+            parameters ??= new UiInvokeControlParams();
+            if (string.IsNullOrWhiteSpace(parameters.Target))
+            {
+                return Response.Error("Target is required.");
+            }
+
+            if (!EditorApplication.isPlaying && !parameters.AllowEditMode)
+            {
+                return Response.Error("Unity.UI.InvokeControl is play-mode only by default. Pass allowEditMode=true to invoke edit-mode UI.");
+            }
+
+            GameObject target = UiDiagnosticsHelper.ResolveUiRoots(parameters.Target, parameters.SearchMethod, parameters.IncludeInactive).FirstOrDefault();
+            if (target == null)
+            {
+                return Response.Error("UI target not found.");
+            }
+
+            object targetSnapshot = BuildGameObjectSnapshot(target);
+            string action = NormalizeControlAction(parameters.Action);
+            int beforeConsoleErrors = parameters.CaptureConsoleDelta ? EditorToolStateHelpers.CountConsoleErrors() : 0;
+            object actionResult;
+            switch (action)
+            {
+                case "click":
+                    actionResult = InvokeClick(target);
+                    break;
+                case "setslider":
+                    actionResult = SetSliderValue(target, parameters.Value);
+                    break;
+                case "toggle":
+                    actionResult = SetToggleValue(target, parameters.Value >= 0.5f);
+                    break;
+                default:
+                    return Response.Error($"Unsupported UI control action '{parameters.Action}'. Use click, setSlider, or toggle.");
+            }
+
+            int waitFrames = Math.Max(0, parameters.WaitFrames);
+            for (int i = 0; i < waitFrames; i++)
+            {
+                await Task.Delay(20);
+            }
+
+            int afterConsoleErrors = parameters.CaptureConsoleDelta ? EditorToolStateHelpers.CountConsoleErrors() : beforeConsoleErrors;
+            bool actionSucceeded = GetActionSucceeded(actionResult);
+            object selectedObject = EventSystem.current != null
+                ? BuildGameObjectSnapshot(EventSystem.current.currentSelectedGameObject)
+                : null;
+            var payload = new
+            {
+                target = targetSnapshot,
+                targetDestroyedAfterAction = target == null,
+                action,
+                eventSystemPresent = EventSystem.current != null,
+                selectedObject,
+                waitFrames,
+                actionResult,
+                consoleDelta = parameters.CaptureConsoleDelta
+                    ? new
+                    {
+                        beforeErrors = beforeConsoleErrors,
+                        afterErrors = afterConsoleErrors,
+                        newErrorCount = Math.Max(0, afterConsoleErrors - beforeConsoleErrors)
+                    }
+                    : null
+            };
+
+            return actionSucceeded
+                ? Response.Success($"UI control action '{action}' completed.", payload)
+                : Response.Error($"UI control action '{action}' failed.", payload);
+        }
+
         [McpTool("Unity.UI.CaptureGameView", CaptureGameViewDescription, Groups = new[] { "ui", "diagnostics" }, EnabledByDefault = true)]
         public static async Task<object> CaptureGameView(CaptureGameViewParams parameters)
         {
@@ -386,6 +666,347 @@ Returns:
                     EditorApplication.isPaused = false;
                 }
             }
+        }
+
+        static object BuildRuntimeLayoutElement(
+            RectTransform rectTransform,
+            string text,
+            string[] elementTypes,
+            bool includeScreenBounds,
+            int screenWidth,
+            int screenHeight,
+            out string[] warnings)
+        {
+            UiDiagnosticsHelper.TryGetScreenRect(rectTransform, out Rect screenRect, out _, out _);
+            Canvas canvas = rectTransform.GetComponentInParent<Canvas>(true);
+            Graphic graphic = rectTransform.GetComponent<Graphic>();
+            Image image = rectTransform.GetComponent<Image>();
+            Selectable selectable = rectTransform.GetComponent<Selectable>();
+            Button button = rectTransform.GetComponent<Button>();
+            Slider slider = rectTransform.GetComponent<Slider>();
+            Toggle toggle = rectTransform.GetComponent<Toggle>();
+            warnings = GetRuntimeLayoutWarnings(rectTransform, screenRect, screenWidth, screenHeight);
+
+            return new
+            {
+                name = rectTransform.name,
+                path = UiDiagnosticsHelper.GetHierarchyPath(rectTransform),
+                activeSelf = rectTransform.gameObject.activeSelf,
+                activeInHierarchy = rectTransform.gameObject.activeInHierarchy,
+                canvasPath = canvas != null ? UiDiagnosticsHelper.GetHierarchyPath(canvas.transform) : string.Empty,
+                renderMode = canvas != null ? canvas.rootCanvas.renderMode.ToString() : null,
+                elementTypes,
+                rect = includeScreenBounds ? ToRectObject(screenRect) : null,
+                text,
+                interactable = selectable != null ? selectable.interactable : (bool?)null,
+                spriteName = image != null && image.sprite != null ? image.sprite.name : null,
+                raycastTarget = graphic != null ? graphic.raycastTarget : (bool?)null,
+                blocksRaycasts = graphic != null && graphic.raycastTarget,
+                hasButton = button != null,
+                sliderValue = slider != null ? slider.value : (float?)null,
+                sliderMinValue = slider != null ? slider.minValue : (float?)null,
+                sliderMaxValue = slider != null ? slider.maxValue : (float?)null,
+                toggleIsOn = toggle != null ? toggle.isOn : (bool?)null,
+                warnings
+            };
+        }
+
+        static string[] GetRuntimeLayoutWarnings(RectTransform rectTransform, Rect screenRect, int screenWidth, int screenHeight)
+        {
+            var warnings = new List<string>();
+            if (screenRect.width <= 0f || screenRect.height <= 0f)
+            {
+                warnings.Add("empty_screen_rect");
+            }
+
+            if (screenWidth > 0 && screenHeight > 0 &&
+                (screenRect.xMax < 0f || screenRect.xMin > screenWidth || screenRect.yMax < 0f || screenRect.yMin > screenHeight))
+            {
+                warnings.Add("offscreen");
+            }
+
+            RectMask2D mask = rectTransform.GetComponentInParent<RectMask2D>(true);
+            if (mask != null && mask.transform is RectTransform maskRectTransform &&
+                UiDiagnosticsHelper.TryGetScreenRect(maskRectTransform, out Rect maskRect, out _, out _))
+            {
+                if (!maskRect.Overlaps(screenRect))
+                {
+                    warnings.Add("outside_parent_rect_mask");
+                }
+                else if (!ContainsRect(maskRect, screenRect))
+                {
+                    warnings.Add("partially_clipped_by_parent_rect_mask");
+                }
+            }
+
+            return warnings.ToArray();
+        }
+
+        static object BuildGameObjectSnapshot(GameObject gameObject)
+        {
+            try
+            {
+                if (gameObject == null)
+                {
+                    return null;
+                }
+
+                return new
+                {
+                    name = gameObject.name,
+                    path = UiDiagnosticsHelper.GetHierarchyPath(gameObject.transform),
+                    activeSelf = gameObject.activeSelf,
+                    activeInHierarchy = gameObject.activeInHierarchy
+                };
+            }
+            catch (MissingReferenceException)
+            {
+                return new
+                {
+                    destroyed = true
+                };
+            }
+        }
+
+        static object InvokeClick(GameObject target)
+        {
+            Button button = GetComponentOnTargetOrParent<Button>(target);
+            GameObject dispatchTarget = button != null ? button.gameObject : target;
+            RectTransform rectTransform = dispatchTarget.transform as RectTransform;
+            Vector2 position = Vector2.zero;
+            Rect screenRect = default;
+            bool hasRect = rectTransform != null &&
+                UiDiagnosticsHelper.TryGetScreenRect(rectTransform, out screenRect, out _, out _);
+            if (hasRect)
+            {
+                position = screenRect.center;
+            }
+
+            var eventData = new PointerEventData(EventSystem.current)
+            {
+                button = PointerEventData.InputButton.Left,
+                clickCount = 1,
+                clickTime = Time.unscaledTime,
+                position = position,
+                pointerPressRaycast = new RaycastResult
+                {
+                    gameObject = dispatchTarget,
+                    screenPosition = position
+                }
+            };
+
+            bool pointerDown = ExecuteEvents.Execute(dispatchTarget, eventData, ExecuteEvents.pointerDownHandler);
+            bool pointerUp = ExecuteEvents.Execute(dispatchTarget, eventData, ExecuteEvents.pointerUpHandler);
+            bool pointerClick = ExecuteEvents.Execute(dispatchTarget, eventData, ExecuteEvents.pointerClickHandler);
+            bool onClickFallback = false;
+            if (!pointerClick && button != null && button.interactable)
+            {
+                button.onClick.Invoke();
+                onClickFallback = true;
+            }
+
+            if (EventSystem.current != null)
+            {
+                EventSystem.current.SetSelectedGameObject(dispatchTarget, eventData);
+            }
+
+            return new
+            {
+                dispatchTarget = UiDiagnosticsHelper.GetHierarchyPath(dispatchTarget.transform),
+                hasScreenRect = hasRect,
+                screenPosition = ToVector2Object(position),
+                buttonInteractable = button != null ? button.interactable : (bool?)null,
+                pointerDown,
+                pointerUp,
+                pointerClick,
+                onClickFallback,
+                eventSent = pointerClick || onClickFallback || pointerDown || pointerUp
+            };
+        }
+
+        static object SetSliderValue(GameObject target, float value)
+        {
+            Slider slider = GetComponentOnTargetOrParent<Slider>(target);
+            if (slider == null)
+            {
+                return new
+                {
+                    success = false,
+                    error = "Target does not have a Slider component."
+                };
+            }
+
+            float before = slider.value;
+            slider.value = Mathf.Clamp(value, slider.minValue, slider.maxValue);
+            return new
+            {
+                success = true,
+                control = UiDiagnosticsHelper.GetHierarchyPath(slider.transform),
+                before,
+                after = slider.value,
+                slider.minValue,
+                slider.maxValue,
+                changed = !Mathf.Approximately(before, slider.value)
+            };
+        }
+
+        static object SetToggleValue(GameObject target, bool value)
+        {
+            Toggle toggle = GetComponentOnTargetOrParent<Toggle>(target);
+            if (toggle == null)
+            {
+                return new
+                {
+                    success = false,
+                    error = "Target does not have a Toggle component."
+                };
+            }
+
+            bool before = toggle.isOn;
+            toggle.isOn = value;
+            return new
+            {
+                success = true,
+                control = UiDiagnosticsHelper.GetHierarchyPath(toggle.transform),
+                before,
+                after = toggle.isOn,
+                changed = before != toggle.isOn
+            };
+        }
+
+        static T GetComponentOnTargetOrParent<T>(GameObject target) where T : Component
+        {
+            if (target == null)
+            {
+                return null;
+            }
+
+            return target.GetComponent<T>() ?? target.GetComponentsInParent<T>(true).FirstOrDefault();
+        }
+
+        static bool GetActionSucceeded(object actionResult)
+        {
+            if (actionResult == null)
+            {
+                return false;
+            }
+
+            var successProperty = actionResult.GetType().GetProperty("success") ??
+                actionResult.GetType().GetProperty("Success");
+            return successProperty == null ||
+                successProperty.PropertyType != typeof(bool) ||
+                (bool)successProperty.GetValue(actionResult);
+        }
+
+        static HashSet<string> BuildTypeFilter(IEnumerable<string> elementTypes)
+        {
+            var filters = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (elementTypes == null)
+            {
+                return filters;
+            }
+
+            foreach (string elementType in elementTypes)
+            {
+                if (string.IsNullOrWhiteSpace(elementType))
+                {
+                    continue;
+                }
+
+                string normalized = elementType.Trim();
+                if (string.Equals(normalized, "all", StringComparison.OrdinalIgnoreCase))
+                {
+                    filters.Clear();
+                    return filters;
+                }
+
+                filters.Add(normalized);
+            }
+
+            return filters;
+        }
+
+        static bool MatchesTypeFilter(IEnumerable<string> elementTypes, HashSet<string> filters)
+        {
+            return filters == null ||
+                filters.Count == 0 ||
+                elementTypes.Any(type => filters.Contains(type));
+        }
+
+        static string[] GetRuntimeElementTypes(RectTransform rectTransform)
+        {
+            var types = new List<string> { "rectTransform" };
+            if (rectTransform.GetComponent<Canvas>() != null)
+                types.Add("canvas");
+            if (rectTransform.GetComponent<Graphic>() != null)
+                types.Add("graphic");
+            if (rectTransform.GetComponent<Image>() != null)
+                types.Add("image");
+            if (!string.IsNullOrEmpty(GetUiText(rectTransform)))
+                types.Add("text");
+            if (rectTransform.GetComponent<Selectable>() != null)
+                types.Add("selectable");
+            if (rectTransform.GetComponent<Button>() != null)
+                types.Add("button");
+            if (rectTransform.GetComponent<Slider>() != null)
+                types.Add("slider");
+            if (rectTransform.GetComponent<Toggle>() != null)
+                types.Add("toggle");
+            return types.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        }
+
+        static string GetUiText(RectTransform rectTransform)
+        {
+            if (rectTransform == null)
+            {
+                return null;
+            }
+
+            Text text = rectTransform.GetComponent<Text>();
+            if (text != null)
+            {
+                return text.text;
+            }
+
+            foreach (Component component in rectTransform.GetComponents<Component>())
+            {
+                if (component == null)
+                {
+                    continue;
+                }
+
+                Type type = component.GetType();
+                if (type.FullName == null || type.FullName.IndexOf("TMPro", StringComparison.OrdinalIgnoreCase) < 0)
+                {
+                    continue;
+                }
+
+                var textProperty = type.GetProperty("text");
+                if (textProperty != null && textProperty.PropertyType == typeof(string))
+                {
+                    return textProperty.GetValue(component)?.ToString();
+                }
+            }
+
+            return null;
+        }
+
+        static bool ContainsRect(Rect outer, Rect inner)
+        {
+            return outer.Contains(new Vector2(inner.xMin, inner.yMin)) &&
+                outer.Contains(new Vector2(inner.xMin, inner.yMax)) &&
+                outer.Contains(new Vector2(inner.xMax, inner.yMin)) &&
+                outer.Contains(new Vector2(inner.xMax, inner.yMax));
+        }
+
+        static string NormalizeControlAction(string action)
+        {
+            if (string.IsNullOrWhiteSpace(action))
+            {
+                return "click";
+            }
+
+            return action.Trim().Replace("_", string.Empty).Replace("-", string.Empty).ToLowerInvariant();
         }
 
         static object BuildHitResult(UiDiagnosticsHelper.UiElementHitInfo info)
