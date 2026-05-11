@@ -1019,7 +1019,8 @@ function Get-UnityEditorBuildSettingsScenes {
 function Test-UnityBuildSceneList {
     param(
         [Parameter(Mandatory = $true)][string]$ProjectPath,
-        [Parameter(Mandatory = $true)][string[]]$ExpectedScenes
+        [Parameter(Mandatory = $true)][string[]]$ExpectedScenes,
+        [Parameter()][bool]$Strict = $false
     )
 
     $projectRoot = Resolve-UnityProjectPath -ProjectPath $ProjectPath
@@ -1064,9 +1065,10 @@ function Test-UnityBuildSceneList {
 
     $orderMismatch = $orderDifferences.Count -gt 0
     $exactMatch = $sameMembership -and -not $orderMismatch
+    $success = (-not $Strict) -or $exactMatch
 
     return [pscustomobject]@{
-        success                = $true
+        success                = $success
         projectPath            = $projectRoot
         editorBuildSettingsPath = $settings.Path
         expectedScenes         = $expectedOrdered
@@ -1076,7 +1078,9 @@ function Test-UnityBuildSceneList {
         orderMismatch          = $orderMismatch
         orderDifferences       = $orderDifferences
         exactMatch             = $exactMatch
+        strict                 = $Strict
         buildSettingsReadError = $settings.Error
+        message                = if ($exactMatch) { "Enabled build scenes exactly match the expected list." } elseif ($Strict) { "Enabled build scenes do not exactly match the expected list." } else { "Enabled build scenes do not exactly match the expected list; rerun with -Strict to fail this helper on mismatch." }
     }
 }
 

@@ -112,7 +112,7 @@ namespace Becool.UnityMcpLens.Editor.Lens
                 ConsolePackId,
                 "Console Diagnostics",
                 "Console reads, health checks, and lightweight troubleshooting.",
-                includeTools: new[] { NormalizeToolName("Unity.ReadConsole"), NormalizeToolName("Unity.ManageEditor"), NormalizeToolName("Unity.ManageMenuItem") },
+                includeTools: new[] { NormalizeToolName("Unity.ReadConsole"), NormalizeToolName("Unity.ManageEditor"), NormalizeToolName("Unity.ManageMenuItem"), NormalizeToolName("Unity.Menu.InvokeAndWaitStable") },
                 recommendedNextPacks: new[] { ProjectPackId, DebugPackId }),
             [ProjectPackId] = new(
                 ProjectPackId,

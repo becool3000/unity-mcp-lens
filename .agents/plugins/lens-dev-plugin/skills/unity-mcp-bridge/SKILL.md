@@ -82,7 +82,7 @@ powershell -ExecutionPolicy Bypass -File $script -ProjectPath "$PWD"
 - Treat the legacy relay path as:
   - Windows command: `%USERPROFILE%\.unity\relay\relay_win.exe`
   - args: `--mcp`
-- Do not burn probe budget on repeated broad tool discovery. In Codex, the plugin defaults to `static_all` so real native tools are callable up front; use `Unity.Tools.Menu` as the compact facade for navigation.
+- Do not burn probe budget on repeated broad tool discovery. In Codex, the plugin defaults to `static_all`; use `Unity.Tools.Menu` as the compact facade for navigation, but remember host-visible tools may still be absent from the current client-callable table.
 - Prefer the bootstrap tools before asking for more surface area:
   - `Unity.ListToolPacks`
   - `Unity.ReadDetailRef`
@@ -92,7 +92,7 @@ powershell -ExecutionPolicy Bypass -File $script -ProjectPath "$PWD"
   - `Unity.Bridge.ListConnections`
 - `foundation` is the default pack and is always on.
 - At most two additional non-foundation packs should be active at once.
-- Recommended Codex host mode `UNITY_MCP_LENS_TOOL_SURFACE_MODE=static_all` starts with `foundation+full`, keeps all real native tools callable, and makes `Unity.SetToolPacks` a compatibility no-op. In that mode, use `Unity.Tools.Menu` for compact pack-oriented navigation and call real tools directly.
+- Recommended Codex host mode `UNITY_MCP_LENS_TOOL_SURFACE_MODE=static_all` starts with `foundation+full` and makes `Unity.SetToolPacks` a compatibility no-op. In that mode, use `Unity.Tools.Menu` for compact pack-oriented navigation and call real tools directly when the client exposes them; otherwise use helper scripts or `Invoke-UnityMcpBatch`.
 - Helper pack state is per Lens session/process. New helper invocations should auto-prime required packs through the exact map or `Unity.Tools.Describe`; do not assume a pack selected in a previous helper process is still active.
 - If Codex dynamic indexing is stale after `notifications/tools/list_changed`, use `Unity.Tools.ActivateAndVerify`, `Invoke-UnityMcpTool.js`, `Invoke-UnityMcpBatch`, or `Unity.Tools.Describe` to query the live manifest/schema/pack requirements until the client refreshes.
 - When `Unity.SetToolPacks` reports `clientSurface.expectedRefresh=true`, Lens has done the server-side part by emitting `notifications/tools/list_changed`. If Codex still cannot call a described tool, record it as client indexing drift rather than a bridge pack failure.

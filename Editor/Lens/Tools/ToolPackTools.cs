@@ -57,6 +57,47 @@ namespace Becool.UnityMcpLens.Editor.Tools
         public bool IncludeSchemas { get; set; } = false;
     }
 
+    static class ToolPackToolSchemas
+    {
+        [McpSchema(ToolPackCatalog.ToolsMenuToolName)]
+        public static object GetToolsMenuSchema()
+        {
+            return new
+            {
+                type = "object",
+                properties = new
+                {
+                    maxToolsPerPack = new { type = "integer", description = "Maximum number of tool rows to include per pack. Defaults to 40." }
+                }
+            };
+        }
+
+        [McpSchema(ToolPackCatalog.ToolsActivateAndVerifyToolName)]
+        public static object GetToolsActivateAndVerifySchema()
+        {
+            return new
+            {
+                type = "object",
+                properties = new
+                {
+                    packs = new
+                    {
+                        type = "array",
+                        description = "The non-foundation tool packs to activate for this connection. Foundation remains active automatically.",
+                        items = new { type = "string" }
+                    },
+                    expectedTools = new
+                    {
+                        type = "array",
+                        description = "Expected tools that should be present after activation. Dot and underscore forms are equivalent.",
+                        items = new { type = "string" }
+                    },
+                    includeSchemas = new { type = "boolean", description = "Include schemas in the verification manifest. Defaults to false." }
+                }
+            };
+        }
+    }
+
     [McpTool(ToolPackCatalog.GetLensHealthToolName,
         "Returns a compact Lens health summary for the current Unity bridge connection, including active packs, exported tool count, bridge status, editor stability, and the recommended next action.",
         "Get Unity Lens Health",
@@ -343,13 +384,14 @@ namespace Becool.UnityMcpLens.Editor.Tools
                 clientSurface = new
                 {
                     serverSurfaceVerified = success,
-                    clientCallableState = "not_observable_from_unity_bridge",
+                    clientCallableVerified = false,
+                    clientCallableState = "unknown",
                     note = success
-                        ? "Expected tools are active in the Lens bridge surface. If Codex still cannot call them directly, classify that as client dynamic-indexing drift and use the MCP host or batch helper fallback."
+                        ? "Expected tools are active in the Lens bridge surface. The Unity bridge cannot prove the current MCP client has indexed those tools as callable; if direct calls are missing, classify that as client dynamic-indexing drift and use the MCP host or batch helper fallback."
                         : "One or more expected tools were not active in the Lens bridge surface after pack activation."
                 },
                 workaroundHint = success
-                    ? "Use described tool metadata or Invoke-UnityMcpBatch if the MCP client callable list remains stale after activation."
+                    ? "Use Unity.Tools.Describe for host evidence and Invoke-UnityMcpBatch or helper scripts if the MCP client callable list remains stale after activation."
                     : "Activate only packs that contain the missing tools, then rerun verification."
             };
 

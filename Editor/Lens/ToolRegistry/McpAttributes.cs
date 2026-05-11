@@ -116,7 +116,7 @@ namespace Becool.UnityMcpLens.Editor.ToolRegistry
 
     /// <summary>
     /// Marks a static method as providing a custom input schema for an MCP tool.
-    /// Use this when a tool takes JObject parameters and needs a schema more specific than the default.
+    /// Use this when a tool needs a schema more specific than the default generated schema.
     /// </summary>
     /// <remarks>
     /// The schema method must:
@@ -125,8 +125,8 @@ namespace Becool.UnityMcpLens.Editor.ToolRegistry
     /// - Have no parameters
     ///
     /// The ToolName must match the name used in the [McpTool] attribute.
-    /// This attribute is only needed for tools using JObject parameters; typed parameter tools
-    /// automatically generate schemas from the parameter type.
+    /// This attribute is optional for typed parameter tools, which otherwise generate schemas
+    /// from the parameter type.
     /// </remarks>
     /// <example>
     /// <code>

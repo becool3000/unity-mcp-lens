@@ -58,6 +58,14 @@ namespace Becool.UnityMcpLens.Editor.Services.UI
                 }
             }
 
+            if (!ScreenLayoutPassed(data))
+            {
+                return UiOperationResult.Error(
+                    "UI screen layout assertions failed.",
+                    "layout_assertions_failed",
+                    data);
+            }
+
             return UiOperationResult.Ok("Verified UI screen layout.", data);
         }
 
@@ -105,6 +113,22 @@ namespace Becool.UnityMcpLens.Editor.Services.UI
             }
 
             return UiOperationResult.Ok("Verified UI raycast/layout.", data);
+        }
+
+        static bool ScreenLayoutPassed(object data)
+        {
+            if (data == null)
+                return false;
+
+            try
+            {
+                var token = Newtonsoft.Json.Linq.JObject.FromObject(data);
+                return token["passed"]?.ToObject<bool?>() == true;
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         UiOperationResult RunCreateCanvasPrefab(UiCanvasPrefabRequest request, bool previewOnly, ToolOperationTiming timing)

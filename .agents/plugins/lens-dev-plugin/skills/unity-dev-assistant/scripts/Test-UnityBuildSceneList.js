@@ -6,13 +6,14 @@ function main() {
   const args = common.parseCliArgs(process.argv.slice(2));
   const projectPath = common.resolveProjectPath(common.getArgString(args, ["ProjectPath"], process.cwd()));
   const expectedScenes = common.getArgArray(args, ["ExpectedScenes"], []);
+  const strict = common.getArgBool(args, ["Strict"], false);
   if (expectedScenes.length === 0) {
     throw new Error("Provide --ExpectedScenes.");
   }
 
-  const result = common.testUnityBuildSceneList(projectPath, expectedScenes);
+  const result = common.testUnityBuildSceneList(projectPath, expectedScenes, { strict });
   console.log(JSON.stringify(result, null, 2));
-  return result.exactMatch ? 0 : 1;
+  return result.success ? 0 : 1;
 }
 
 try {

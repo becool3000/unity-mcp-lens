@@ -1,6 +1,7 @@
 param(
     [string]$ProjectPath = (Get-Location).Path,
-    [string[]]$ExpectedScenes = @()
+    [string[]]$ExpectedScenes = @(),
+    [switch]$Strict
 )
 
 . "$PSScriptRoot\UnityDevCommon.ps1"
@@ -10,5 +11,11 @@ if ($ExpectedScenes.Count -eq 0) {
 }
 
 $resolvedProjectPath = Resolve-UnityProjectPath -ProjectPath $ProjectPath
-$result = Test-UnityBuildSceneList -ProjectPath $resolvedProjectPath -ExpectedScenes $ExpectedScenes
+$result = Test-UnityBuildSceneList -ProjectPath $resolvedProjectPath -ExpectedScenes $ExpectedScenes -Strict:$Strict.IsPresent
 $result | ConvertTo-Json -Depth 20
+
+if ($result.success -eq $true) {
+    exit 0
+}
+
+exit 1

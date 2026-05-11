@@ -67,12 +67,11 @@ namespace Becool.UnityMcpLens.Editor.Tools
                     var serialized = JsonConvert.SerializeObject(data, Formatting.None);
                     bool pendingRefresh = serialized.IndexOf("\"status\":\"pending_refresh\"", StringComparison.OrdinalIgnoreCase) >= 0;
                     bool readyForFollowUp = serialized.IndexOf("\"readyForFollowUp\":true", StringComparison.OrdinalIgnoreCase) >= 0;
-                    success = readyForFollowUp &&
-                        !pendingRefresh &&
+                    success = (readyForFollowUp || pendingRefresh) &&
                         serialized.IndexOf("\"timedOut\":true", StringComparison.OrdinalIgnoreCase) < 0 &&
                         serialized.IndexOf("\"refused\":true", StringComparison.OrdinalIgnoreCase) < 0 &&
                         serialized.IndexOf("\"consoleErrorsDetected\":true", StringComparison.OrdinalIgnoreCase) < 0;
-                    errorKind = success || pendingRefresh ? null : "sync_scripts_failed";
+                    errorKind = success ? null : "sync_scripts_failed";
                 }
 
                 using (timing.Measure("adapter"))
@@ -99,14 +98,16 @@ namespace Becool.UnityMcpLens.Editor.Tools
             using (timing.Measure("result_shaping"))
             {
                 response = success
-                    ? Response.Success("Unity script sync completed.", data)
-                    : pendingRefreshResponse
-                        ? Response.Error("PENDING_REFRESH", data)
-                        : Response.Error("Unity script sync did not complete cleanly.", data);
+                    ? Response.Success(
+                        pendingRefreshResponse
+                            ? "Unity script refresh was scheduled; wait for editor idle before follow-up Unity actions."
+                            : "Unity script sync completed.",
+                        data)
+                    : Response.Error("Unity script sync did not complete cleanly.", data);
                 timing.SetResponseBytes(PayloadBudgeting.GetUtf8ByteCount(JsonConvert.SerializeObject(response, Formatting.None)));
             }
 
-            timing.Record(success || pendingRefreshResponse, pendingRefreshResponse ? null : errorKind);
+            timing.Record(success, errorKind);
             return response;
         }
 
@@ -263,6 +264,13 @@ namespace Becool.UnityMcpLens.Editor.Tools
                 elapsedMs = stopwatch.ElapsedMilliseconds,
                 warningCount = warnings.Count,
                 warnings = warnings.ToArray(),
+                waitRecommendation = refreshScheduledAfterResponse
+                    ? new
+                    {
+                        action = "wait_for_editor_idle",
+                        message = "Wait for Unity to finish the scheduled refresh/import cycle, then check for new console errors before running follow-up reads or mutations."
+                    }
+                    : null,
                 finalState = EditorToolStateHelpers.BuildEditorState(),
                 attempts = attempts.ToArray()
             };
@@ -292,6 +300,7 @@ namespace Becool.UnityMcpLens.Editor.Tools
                 rawData.elapsedMs,
                 rawData.warningCount,
                 rawData.warnings,
+                rawData.waitRecommendation,
                 rawData.finalState,
                 pollAttemptCount = attempts.Count
             };

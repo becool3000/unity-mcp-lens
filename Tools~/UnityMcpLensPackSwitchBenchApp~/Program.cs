@@ -170,9 +170,9 @@ sealed class BenchmarkOptions
 sealed class MetadataAudit(BenchmarkOptions options)
 {
     const int ExpectedFoundationToolCount = 17;
-    const int ExpectedSceneToolCount = 40;
+    const int ExpectedSceneToolCount = 41;
     const int ExpectedUiToolCount = 33;
-    const int ExpectedRuntimeToolCount = 22;
+    const int ExpectedRuntimeToolCount = 23;
     const int ExpectedProjectToolCount = 26;
     const int ExpectedAssetsToolCount = 30;
 
@@ -218,6 +218,7 @@ sealed class MetadataAudit(BenchmarkOptions options)
         "Unity_Scene_PreviewInstantiatePrefabAndBind",
         "Unity_Scene_ApplyInstantiatePrefabAndBind",
         "Unity_Scene_VerifySerializedReferences",
+        "Unity_Scene_QueryObjects",
         "Unity_Scene_CaptureView",
         "Unity_Tilemap_Setup",
         "Unity_Tilemap_Paint",
@@ -253,6 +254,7 @@ sealed class MetadataAudit(BenchmarkOptions options)
     [
         "Unity_Runtime_GetVisualBoundsSnapshot",
         "Unity_Runtime_QueryObjects",
+        "Unity_Runtime_InvokeComponentMethod",
         "Unity_PlayMode_PointerInputSmoke",
         "Unity_Editor_ExitPlayMode",
         "Unity_Editor_SetPlayMode"
@@ -814,6 +816,12 @@ sealed class MetadataAudit(BenchmarkOptions options)
             ["target", "searchMethod", "includeInactive", "checks"],
             ["target", "checks"],
             failures);
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_Scene_QueryObjects",
+            ["namePrefix", "nameExact", "componentTypes", "componentMatch", "root", "rootSearchMethod", "scene", "includeInactive", "fields", "maxRows"],
+            [],
+            failures);
     }
 
     static void ValidateRuntimeToolSchemas(IReadOnlyList<ToolDescriptor> tools, List<string> failures)
@@ -835,6 +843,12 @@ sealed class MetadataAudit(BenchmarkOptions options)
             "Unity_Editor_SetPlayMode",
             ["mode", "stopFirst", "waitForRuntimeAdvance", "warmupSeconds", "timeoutSeconds", "unpauseBeforeExit"],
             ["mode"],
+            failures);
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_Runtime_InvokeComponentMethod",
+            ["target", "searchMethod", "componentType", "componentIndex", "methodName", "args", "includeInactive", "waitFrames", "captureConsoleDelta", "requirePlayMode"],
+            ["target", "componentType", "methodName"],
             failures);
         ValidateSplitGameObjectSchema(
             tools,

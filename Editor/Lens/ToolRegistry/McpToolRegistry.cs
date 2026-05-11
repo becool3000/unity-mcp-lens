@@ -704,9 +704,10 @@ namespace Becool.UnityMcpLens.Editor.ToolRegistry
                     }
                     else if (parameterType != null)
                     {
-                        // Typed parameter - auto-generate input schema and honor explicit output schema when present
+                        // Typed parameter - auto-generate input schema unless an explicit schema is present.
+                        schemaMethods.TryGetValue(toolAttribute.Name, out var schemaMethod);
                         outputSchemaMethods.TryGetValue(toolAttribute.Name, out var outputSchemaMethod);
-                        handler = new TypedToolHandler(method, toolAttribute, parameterType, outputSchemaMethod);
+                        handler = new TypedToolHandler(method, toolAttribute, parameterType, schemaMethod, outputSchemaMethod);
                     }
                     else
                     {
@@ -759,7 +760,8 @@ namespace Becool.UnityMcpLens.Editor.ToolRegistry
                         // Generic interface - create GenericClassToolHandler
                         var parameterType = genericInterface.GetGenericArguments()[0];
                         var instance = Activator.CreateInstance(type);
-                        handler = new GenericClassToolHandler(instance, toolAttribute, parameterType);
+                        schemaMethods.TryGetValue(toolAttribute.Name, out var schemaMethod);
+                        handler = new GenericClassToolHandler(instance, toolAttribute, parameterType, schemaMethod);
                     }
                     else if (typeof(IUnityMcpTool).IsAssignableFrom(type))
                     {

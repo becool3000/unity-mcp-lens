@@ -59,7 +59,7 @@ The current Phase 11 project surface includes package/import/Input System diagno
 - Prefer `Unity.InputSystem.Diagnostics` for one-call Input System package, assembly, device, `.inputactions`, define, compatibility, and editor-log signals.
 - Prefer `Unity.ProjectSettings.PreviewActiveInputHandler` before changing the active input backend.
 - Use `Unity.ProjectSettings.SetActiveInputHandler` for editor-authored active input backend changes; do not hand-edit `ProjectSettings.asset` as the first path.
-- `foundation` now targets `17` tools, `foundation + scene` now targets `40` tools, `foundation + ui` now targets `33`, `foundation + runtime` targets `22`, and the current `project` smoke baseline is `26` tools.
+- `foundation` now targets `17` tools, `foundation + scene` now targets `41` tools, `foundation + ui` now targets `33`, `foundation + runtime` targets `23`, and the current `project` smoke baseline is `26` tools.
 
 ## Phase 12 UI And Scene Binding Truth
 
@@ -78,7 +78,7 @@ Phase 14 keeps the public tool surface stable and makes high-volume TSAM results
 - Compact default results are expected for `Unity.InputSystem.Diagnostics`, UI hierarchy preview/apply, scene serialized-reference binding preview/apply, and `Unity.UI.VerifyScreenLayout`.
 - Full bulky data should remain available through `detailRef` when the bridge detail store is available.
 - Use `Invoke-UnityMcpBatch` for focused smoke/workflow sequences that need multiple project/ui/scene/debug calls in one Lens session.
-- Pack baselines after the static-all reliability push: `foundation=17`, `foundation+scene=40`, `foundation+ui=33`, `foundation+runtime=22`, `project=26`, `foundation+assets=30`, and live `debug=28`.
+- Pack baselines after the static-all reliability push: `foundation=17`, `foundation+scene=41`, `foundation+ui=33`, `foundation+runtime=23`, `project=26`, `foundation+assets=30`, and live `debug=28`.
 - Current Phase 14 smoke baseline: `NoShapingRecorded=false`, `7` saving rows, `50,566` raw bytes -> `24,025` shaped bytes, `3` connections, `6` schema requests, and `4` pack transitions.
 
 ## Phase 15 RunCommand And Console Truth
@@ -139,7 +139,7 @@ This batch addresses the BeeSurvivors Lens dogfood findings from 2026-05-07.
 - Prefer `Unity.Tools.Describe` for live tool schema and pack requirement discovery, especially when Codex dynamic indexing is stale.
 - Prefer `Unity.Tools.Menu` for compact pack-oriented navigation. In `UNITY_MCP_LENS_TOOL_SURFACE_MODE=static_all`, all enabled real tools are natively exposed up front and `Unity.SetToolPacks` is a compatibility no-op.
 - For Codex, prefer `static_all` as the reliability path; raw host binaries still default to `dynamic_packs` for clients that handle `tools/list_changed` correctly.
-- `Unity.Tools.Describe` proving a tool exists does not prove the current Codex thread has indexed it as callable. If a described active-pack tool is not callable after `Unity.SetToolPacks`, classify the issue as client dynamic-indexing drift and use helper scripts or `Invoke-UnityMcpBatch` while preserving the raw host evidence.
+- `Unity.Tools.Describe` or `Unity.Tools.ActivateAndVerify` proving a tool exists does not prove the current Codex thread has indexed it as callable. If a described active-pack tool is not callable after `Unity.SetToolPacks`, classify the issue as client dynamic-indexing drift and use helper scripts or `Invoke-UnityMcpBatch` while preserving the raw host evidence.
 - `Unity.SetToolPacks` should report whether `notifications/tools/list_changed` was emitted. If Codex still cannot call the described tool after that notification, do not keep widening packs; collect the active packs, manifest/profile version, and missing callable tool name.
 - Prefer `Unity.Editor.SyncScripts` via `Sync-UnityScriptChanges` for deterministic script refresh/compile waits; no changed paths plus no force must return quickly.
 - For script sync, treat `newConsoleErrorCount` / `newConsoleErrorsDetected` as the failure signal. `staleConsoleErrorsPresent` means old console errors were present before the sync and should be reported without turning the sync into a hard failure by itself.

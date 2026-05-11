@@ -757,14 +757,15 @@ sealed class UnityMcpLensHost
                         clientSurface = new
                         {
                             serverSurfaceVerified = staticVerificationSucceeded,
-                            clientCallableState = "not_observable_from_mcp_server",
+                            clientCallableVerified = false,
+                            clientCallableState = "unknown",
                             expectedRefresh = false,
                             note = staticVerificationSucceeded
-                                ? "The MCP host is already exposing the full enabled Lens tool surface. No dynamic pack activation or client refresh is expected."
+                                ? "The MCP host is already exposing the full enabled Lens tool surface. The host cannot prove the current client turn has indexed those tools as callable."
                                 : "One or more expected tools were not present in the MCP host tool cache while static_all mode was active."
                         },
                         workaroundHint = staticVerificationSucceeded
-                            ? "Call the real native tools directly; use Unity.Tools.Menu for compact navigation."
+                            ? "Call the real native tools directly when they are available; if the client tool table is stale, use Unity.Tools.Describe, Invoke-UnityMcpBatch, or helper scripts as the fallback."
                             : "Use Unity.Tools.Describe to inspect the missing tool names and confirm they are enabled in Lens."
                     }
                 }, m_JsonOptions), isError: !staticVerificationSucceeded);
@@ -825,14 +826,15 @@ sealed class UnityMcpLensHost
                     clientSurface = new
                     {
                         serverSurfaceVerified = verificationSucceeded,
-                        clientCallableState = "not_observable_from_mcp_server",
+                        clientCallableVerified = false,
+                        clientCallableState = "unknown",
                         expectedRefresh = toolsListChangedNotificationSent,
                         note = verificationSucceeded
-                            ? "Expected tools are present in the MCP host tool cache. If Codex still cannot call them directly, classify that as client dynamic-indexing drift and use this tool or Invoke-UnityMcpBatch as the fallback."
+                            ? "Expected tools are present in the MCP host tool cache. The host cannot prove the current client turn has indexed those tools as callable; if direct calls are missing, classify that as client dynamic-indexing drift and use this tool or Invoke-UnityMcpBatch as the fallback."
                             : "One or more expected tools were not present in the MCP host tool cache after activation."
                     },
                     workaroundHint = verificationSucceeded
-                        ? "If the MCP client callable list remains stale, keep using the foundation fallback or batch helper and record dynamic-indexing drift."
+                        ? "If the MCP client callable list remains stale, keep using Unity.Tools.Describe, foundation fallbacks, or the batch helper and record dynamic-indexing drift."
                         : "Activate only packs that contain the missing tools, then rerun verification."
                 }
             }, m_JsonOptions), isError: !verificationSucceeded);

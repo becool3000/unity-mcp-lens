@@ -143,6 +143,7 @@ async function main() {
     pollIntervalSeconds,
     warmupSeconds,
   });
+  const initialPlayReady = playReady;
   const playResponseObject = playResponse ? common.getToolObject(playResponse) : null;
   const playRequestErrorMessage = playError || playResponseObject?.error || "";
   const playData = playResponseObject?.data || {};
@@ -164,7 +165,7 @@ async function main() {
       warmupSeconds,
     });
     if (degradedFallback.success) {
-      playReady = degradedFallback;
+      playReady = { ...degradedFallback, success: true };
       degradedPath = true;
       finalMessage = degradedFallback.message || "Play mode entered after a reconnect-prone transition.";
     }
@@ -204,6 +205,7 @@ async function main() {
     playError,
     playReady: includeDetails || !playReady.success ? playReady : summarizePlayReady(playReady),
     degradedFallback: includeDetails || !playReady.success ? degradedFallback : summarizePlayReady(degradedFallback),
+    initialPlayReady: includeDetails && degradedPath ? initialPlayReady : undefined,
     consoleErrors,
   };
 

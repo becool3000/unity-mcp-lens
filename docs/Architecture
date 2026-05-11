@@ -47,9 +47,9 @@ Current TSAM-covered surfaces include:
 Current baselines:
 
 - `foundation`: `16` exported tools.
-- `foundation + scene`: `39` exported tools.
+- `foundation + scene`: `41` exported tools.
 - `foundation + ui`: `30` exported tools.
-- `foundation + runtime`: `20` exported tools.
+- `foundation + runtime`: `23` exported tools.
 - `project`: `25` exported tools.
 - `debug`: `27` exported tools.
 

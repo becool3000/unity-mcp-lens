@@ -180,9 +180,9 @@ Prefer a scene-owned debugger component when a project needs fast UI or state it
 - Preferred transport: `unity-mcp-lens`
 - Default Codex exported tool surface: `static_all` (`foundation+full`); raw host default remains `dynamic_packs`
 - Current `foundation` surface: `17` tools
-- Current `foundation` + `scene` surface: `40` tools
+- Current `foundation` + `scene` surface: `41` tools
 - Current `foundation` + `ui` surface: `33` tools
-- Current `foundation` + `runtime` surface: `22` tools
+- Current `foundation` + `runtime` surface: `23` tools
 - Current `foundation` + `project` surface: `26` tools
 - Current `foundation` + `assets` surface: `30` tools
 - Prefer split GameObject TSAM tools before legacy `Unity.ManageGameObject`
@@ -190,6 +190,7 @@ Prefer a scene-owned debugger component when a project needs fast UI or state it
 - Prefer Phase 12 `ui` and scene-binding tools for persistent HUD authoring, scene reference binding, and screen-layout verification before custom editor-side `Unity_RunCommand`
 - Prefer `Invoke-UnityMcpBatch` for repeated multi-step smoke/workflow checks that span packs
 - In `static_all`, start with `Unity.Tools.Menu` and call real native tools directly; `Unity.SetToolPacks` is a compatibility no-op, not a required step
+- `static_all` host-visible does not guarantee the current Codex turn exposes every native tool as directly callable. If a described tool is missing from the client tool table, use the helper fallback: scene/runtime reads via `Invoke-UnityMcpBatch`, script refresh via `Sync-UnityScriptChanges`, UI layout via `Verify-UnityUiScreenLayout`, menu calls via `Unity.Menu.InvokeAndWaitStable` or `Invoke-UnityMcpBatch`, and project checks via the matching `Test-*` helper.
 - Use `Unity.GetLensUsageReport` in `debug` for telemetry baselines, appended smoke rows, and TSAM stage coverage
 - Session and bridge checks are compact by default; use `-IncludeDiagnostics` only for explicit maintenance
 - `ProceedWithDirectLensTools` means the bridge status and fresh direct health probe are healthy even if the helper wrapper path is not
@@ -200,8 +201,10 @@ Prefer a scene-owned debugger component when a project needs fast UI or state it
 - Editor idle gating before all Unity-facing work except helper-driven `Unity_RunCommand` in healthy play mode
 - Exact build-scene preflight before long custom builds when the intended scene list is known
 - External script edits should be synced through `Unity.Editor.SyncScripts` via `Sync-UnityScriptChanges.js` on macOS/Linux or `Sync-UnityScriptChanges.ps1` on Windows before follow-up Unity actions
-- `Unity.Editor.SyncScripts` with `status=pending_refresh` / `code=PENDING_REFRESH` is not a clean follow-up point; wait for editor idle before parallel reads or mutations
+- `Unity.Editor.SyncScripts` with `status=pending_refresh` is an expected scheduled-refresh state, but it is not a clean follow-up point; wait for editor idle and verify no new console errors before parallel reads or mutations
+- `Verify-UnityUiScreenLayout.ps1` requires JSON arrays, for example: `-TargetsJson '[{"key":"hud","target":"HUD Canvas","searchMethod":"by_name"}]' -AssertionsJson '[{"type":"inside_screen","targetKey":"hud","margin":0}]'`
 - Prefer `Unity.Bridge.ListConnections` for wrong-project or stale-status diagnosis before retrying project-wide reads
+- If `Unity.Bridge.ListConnections` shows stale duplicate status files, trust the selected fresh connection/project/PID first and keep stale candidates only as recovery evidence.
 - Prefer `Unity.Asset.SetSerializedProperties` for ScriptableObject/data asset scalar and object-reference binding
 - Prefer `Unity.Runtime.QueryObjects` for play-mode component counts and sample paths
 - When `rg.exe` is blocked in the Codex desktop app context, prefer the shared PowerShell search fallback instead of retrying `rg`

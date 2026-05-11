@@ -124,7 +124,7 @@ function ConvertTo-UnityPlayReadySummary {
     }
 
     [ordered]@{
-        success          = (Get-ObjectPropertyValue -InputObject $Result -Names @("success", "Success")) -eq $true
+        success          = ConvertTo-UnityBool -Value (Get-ObjectPropertyValue -InputObject $Result -Names @("success", "Success")) -Default $false
         message          = Get-ObjectPropertyValue -InputObject $Result -Names @("message", "Message", "error", "Error")
         degradedFallback = (Get-ObjectPropertyValue -InputObject $Result -Names @("degradedFallback", "DegradedFallback")) -eq $true
         editorIdle       = $editorIdle
@@ -279,7 +279,9 @@ if (-not $playReady.success -and $playRequestWasReconnectProne) {
     }
 }
 
-if ($playReady.success) {
+$playReadySucceeded = ConvertTo-UnityBool -Value (Get-ObjectPropertyValue -InputObject $playReady -Names @("success", "Success")) -Default $false
+
+if ($playReadySucceeded) {
     if (-not $degradedPath -and -not [string]::IsNullOrWhiteSpace($playRequestErrorMessage) -and $playRequestErrorMessage.IndexOf("Connection disconnected", [System.StringComparison]::OrdinalIgnoreCase) -ge 0) {
         $degradedPath = $true
         $finalMessage = "Play mode entered and runtime advanced after the initial play request disconnected."
@@ -291,7 +293,7 @@ if ($playReady.success) {
 }
 
 $consoleErrors = $null
-if (-not $playReady.success) {
+if (-not $playReadySucceeded) {
     try {
         $consoleErrors = Get-UnityConsoleEntries `
             -ProjectPath $resolvedProjectPath `
@@ -309,14 +311,18 @@ if (-not $playReady.success) {
     }
 }
 
-$includeFullDetails = $IncludeDetails.IsPresent -or (-not $playReady.success)
+$includeFullDetails = $IncludeDetails.IsPresent -or (-not $playReadySucceeded)
 $detailMode = if ($includeFullDetails) { "full" } else { "compact" }
 $playResponseOutput = if ($includeFullDetails) { $playResponseObject } else { ConvertTo-UnityToolResultSummary -ToolResult $playResponseObject }
 $playReadyOutput = if ($includeFullDetails) { $playReady } else { ConvertTo-UnityPlayReadySummary -Result $playReady }
 $degradedFallbackOutput = if ($includeFullDetails) { $degradedFallback } else { ConvertTo-UnityPlayReadySummary -Result $degradedFallback }
 
+if ($playReadySucceeded -and $playReadyOutput -is [System.Collections.IDictionary]) {
+    $playReadyOutput["success"] = $true
+}
+
 [ordered]@{
-    success      = $playReady.success
+    success      = $playReadySucceeded
     message      = $finalMessage
     sourceIntegrity = $sourceIntegrity
     idleWait     = $idleWait
@@ -332,7 +338,7 @@ $degradedFallbackOutput = if ($includeFullDetails) { $degradedFallback } else { 
     consoleErrors = $consoleErrors
 } | ConvertTo-Json -Depth 30
 
-if ($playReady.success) {
+if ($playReadySucceeded) {
     exit 0
 }
 

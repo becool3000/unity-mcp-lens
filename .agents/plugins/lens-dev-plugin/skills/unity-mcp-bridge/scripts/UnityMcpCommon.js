@@ -378,6 +378,7 @@ const exactPackMap = new Map(
     Unity_ManageEditor: ["console"],
     Unity_GetConsoleLogs: ["console"],
     Unity_ManageMenuItem: ["console"],
+    Unity_Menu_InvokeAndWaitStable: ["console"],
     Unity_RunCommand: ["scripting"],
     Unity_ManageScript: ["scripting"],
     Unity_ManageShader: ["scripting"],
@@ -1326,9 +1327,10 @@ function getUnityEditorBuildSettingsScenes(projectPath) {
   };
 }
 
-function testUnityBuildSceneList(projectPath, expectedScenes = []) {
+function testUnityBuildSceneList(projectPath, expectedScenes = [], options = {}) {
   const projectRoot = resolveProjectPath(projectPath);
   const settings = getUnityEditorBuildSettingsScenes(projectRoot);
+  const strict = options.strict === true;
   const expectedOrdered = expectedScenes
     .map((scene) => String(scene || "").replace(/\\/g, "/").trim())
     .filter(Boolean);
@@ -1355,7 +1357,7 @@ function testUnityBuildSceneList(projectPath, expectedScenes = []) {
   const exactMatch = sameMembership && !orderMismatch;
 
   return {
-    success: true,
+    success: !strict || exactMatch,
     projectPath: projectRoot,
     editorBuildSettingsPath: settings.Path,
     expectedScenes: expectedOrdered,
@@ -1365,10 +1367,13 @@ function testUnityBuildSceneList(projectPath, expectedScenes = []) {
     orderMismatch,
     orderDifferences,
     exactMatch,
+    strict,
     buildSettingsReadError: settings.Error,
     message: exactMatch
       ? "Enabled build scenes exactly match the expected list."
-      : "Enabled build scenes do not exactly match the expected list.",
+      : strict
+        ? "Enabled build scenes do not exactly match the expected list."
+        : "Enabled build scenes do not exactly match the expected list; rerun with --Strict to fail this helper on mismatch.",
   };
 }
 

@@ -12,9 +12,9 @@ when Unity reloads, recompiles, or changes project/package state.
 - Preferred MCP transport: the owned `unity-mcp-lens` stdio server.
 - Default Codex model-facing tool surface: `static_all` (`foundation+full`); raw host default remains dynamic packs.
 - Current `foundation` baseline: `17` exported tools.
-- Current `foundation + scene` baseline: `40` exported tools.
+- Current `foundation + scene` baseline: `41` exported tools.
 - Current `foundation + ui` baseline: `33` exported tools.
-- Current `foundation + runtime` baseline: `22` exported tools.
+- Current `foundation + runtime` baseline: `23` exported tools.
 - Static-all host surface: `UNITY_MCP_LENS_TOOL_SURFACE_MODE=static_all` exposes `foundation+full` at startup while agents navigate through `Unity.Tools.Menu`.
 - Current Phase 8 surface: split GameObject TSAM tools for inspect, component reads, preview/apply mutation, create, and delete.
 - Current Phase 12 surface: split UI hierarchy/layout preview/apply, scene serialized-reference preview/apply binding, UI screen-layout verification, center-based UI verify relations, and structured `Unity.RunCommand` return values.

@@ -38,16 +38,23 @@ $payload = [ordered]@{
 
 $response = Invoke-UnityMcpToolJson -ProjectPath $resolvedProjectPath -ToolName "Unity_UI_VerifyScreenLayout" -Arguments $payload -TimeoutSeconds $TimeoutSeconds
 $toolResult = Get-UnityToolObject -Response $response
+$resultData = $toolResult.data
+$layoutPassed = $true
+if ($null -ne $resultData -and $null -ne $resultData.passed) {
+    $layoutPassed = $resultData.passed -eq $true
+}
+$assertionsPassed = ($toolResult.success -eq $true) -and $layoutPassed
 
 [ordered]@{
-    success    = $toolResult.success -eq $true
-    message    = if ($toolResult.success -eq $true) { "UI screen layout verification completed." } else { $toolResult.error }
-    payload    = $payload
-    editorIdle = $idleWait
-    result     = $toolResult
+    success          = $assertionsPassed
+    assertionsPassed = $assertionsPassed
+    message          = if ($assertionsPassed) { "UI screen layout verification completed." } elseif ($toolResult.success -eq $true) { "UI screen layout assertions failed." } else { $toolResult.error }
+    payload          = $payload
+    editorIdle       = $idleWait
+    result           = $toolResult
 } | ConvertTo-Json -Depth 30
 
-if ($toolResult.success -eq $true) {
+if ($assertionsPassed) {
     exit 0
 }
 

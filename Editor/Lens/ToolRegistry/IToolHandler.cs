@@ -139,16 +139,18 @@ namespace Becool.UnityMcpLens.Editor.ToolRegistry
         readonly Type m_ParameterType;
         readonly Type m_ReturnType;
         readonly ParameterInfo m_ParameterInfo;
+        readonly MethodInfo m_SchemaMethod;
         readonly MethodInfo m_OutputSchemaMethod;
 
         public McpToolAttribute Attribute { get; }
 
-        public TypedToolHandler(MethodInfo method, McpToolAttribute attribute, Type parameterType, MethodInfo outputSchemaMethod = null)
+        public TypedToolHandler(MethodInfo method, McpToolAttribute attribute, Type parameterType, MethodInfo schemaMethod = null, MethodInfo outputSchemaMethod = null)
         {
             m_Method = method ?? throw new ArgumentNullException(nameof(method));
             Attribute = attribute ?? throw new ArgumentNullException(nameof(attribute));
             m_ParameterType = parameterType ?? throw new ArgumentNullException(nameof(parameterType));
             m_ReturnType = method.ReturnType;
+            m_SchemaMethod = schemaMethod;
             m_OutputSchemaMethod = outputSchemaMethod;
 
             // Store parameter info for default value support
@@ -172,6 +174,18 @@ namespace Becool.UnityMcpLens.Editor.ToolRegistry
 
         public object GetInputSchema()
         {
+            if (m_SchemaMethod != null)
+            {
+                try
+                {
+                    return m_SchemaMethod.Invoke(null, null);
+                }
+                catch (Exception)
+                {
+                    // Fall back to generated schema if the custom method fails.
+                }
+            }
+
             // For primitive types and strings, we need to wrap them in an object schema
             // because MCP expects parameters to be objects
             if (!SchemaGenerationHelper.ShouldGenerateSchemaForType(m_ParameterType))
@@ -439,14 +453,16 @@ namespace Becool.UnityMcpLens.Editor.ToolRegistry
     {
         readonly object m_ToolInstance;
         readonly Type m_ParameterType;
+        readonly MethodInfo m_SchemaMethod;
 
         public McpToolAttribute Attribute { get; }
 
-        public GenericClassToolHandler(object toolInstance, McpToolAttribute attribute, Type parameterType)
+        public GenericClassToolHandler(object toolInstance, McpToolAttribute attribute, Type parameterType, MethodInfo schemaMethod = null)
         {
             m_ToolInstance = toolInstance ?? throw new ArgumentNullException(nameof(toolInstance));
             Attribute = attribute ?? throw new ArgumentNullException(nameof(attribute));
             m_ParameterType = parameterType ?? throw new ArgumentNullException(nameof(parameterType));
+            m_SchemaMethod = schemaMethod;
         }
 
         public Task<object> ExecuteAsync(JObject parameters)
@@ -467,7 +483,22 @@ namespace Becool.UnityMcpLens.Editor.ToolRegistry
             return Task.FromResult(result);
         }
 
-        public object GetInputSchema() => SchemaGenerator.GenerateSchema(m_ParameterType);
+        public object GetInputSchema()
+        {
+            if (m_SchemaMethod != null)
+            {
+                try
+                {
+                    return m_SchemaMethod.Invoke(null, null);
+                }
+                catch (Exception)
+                {
+                    // Fall back to generated schema if the custom method fails.
+                }
+            }
+
+            return SchemaGenerator.GenerateSchema(m_ParameterType);
+        }
 
         public object GetOutputSchema() =>
             SchemaGenerator.GenerateOutputSchemaFromMethod(m_ToolInstance, "Execute", new[] { m_ParameterType });

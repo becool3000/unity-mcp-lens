@@ -95,6 +95,52 @@ Args:
 Returns:
     Dictionary with success/message/data. Data contains the relative and absolute output paths plus capture state.";
 
+        [McpSchema("Unity.UI.QueryRuntimeLayout")]
+        public static object GetQueryRuntimeLayoutSchema()
+        {
+            return new
+            {
+                type = "object",
+                properties = new
+                {
+                    target = new { type = "string", description = "Optional target GameObject, path, or canvas root. When omitted, all root canvases are scanned." },
+                    searchMethod = new { type = "string", description = "How to find the optional target: by_name, by_id, or by_path. Defaults to by_name." },
+                    includeChildren = new { type = "boolean", description = "Include children of the target when querying runtime UI layout. Defaults to true." },
+                    includeInactive = new { type = "boolean", description = "Include inactive UI elements. Defaults to false." },
+                    elementTypes = new
+                    {
+                        type = "array",
+                        description = "Optional element type filters such as text, image, button, slider, toggle, selectable, graphic, or canvas.",
+                        items = new { type = "string" }
+                    },
+                    textFilter = new { type = "string", description = "Optional case-insensitive substring filter applied to visible text values." },
+                    maxElements = new { type = "integer", description = "Maximum number of matching elements to return inline." },
+                    includeScreenBounds = new { type = "boolean", description = "Include screen-space bounds for each returned element. Defaults to true." }
+                }
+            };
+        }
+
+        [McpSchema("Unity.UI.InvokeControl")]
+        public static object GetInvokeControlSchema()
+        {
+            return new
+            {
+                type = "object",
+                properties = new
+                {
+                    target = new { type = "string", description = "Target UI GameObject path, name, or id." },
+                    searchMethod = new { type = "string", description = "How to find the target: by_name, by_id, or by_path. Defaults to by_name." },
+                    includeInactive = new { type = "boolean", description = "Include inactive UI objects while resolving the target. Defaults to false." },
+                    action = new { type = "string", description = "Control action: click, setSlider, or toggle. Defaults to click." },
+                    value = new { type = "number", description = "Value used by setSlider and toggle. Toggle treats values >= 0.5 as true." },
+                    waitFrames = new { type = "integer", description = "Frames to wait after sending the UI action before returning. Defaults to 1." },
+                    captureConsoleDelta = new { type = "boolean", description = "Include console error count before and after the action. Defaults to true." },
+                    allowEditMode = new { type = "boolean", description = "Allow edit-mode invocation. Defaults to false because this tool is primarily for play-mode UI input." }
+                },
+                required = new[] { "target" }
+            };
+        }
+
         [McpOutputSchema("Unity.UI.QueryRuntimeLayout")]
         public static object GetQueryRuntimeLayoutOutputSchema()
         {

@@ -2,6 +2,15 @@
 
 const common = require("../../unity-mcp-bridge/scripts/UnityMcpCommon");
 
+function getConsoleErrorCount(consoleResult) {
+  const data = common.valueOf(consoleResult, "data", "Data") || {};
+  const typeCounts = common.valueOf(data, "typeCounts", "TypeCounts") || {};
+  const error = Number(common.valueOf(typeCounts, "error", "Error") || 0);
+  const exception = Number(common.valueOf(typeCounts, "exception", "Exception") || 0);
+  const assert = Number(common.valueOf(typeCounts, "assert", "Assert") || 0);
+  return error + exception + assert;
+}
+
 async function main() {
   const args = common.parseCliArgs(process.argv.slice(2));
   const projectPath = common.resolveProjectPath(common.getArgString(args, ["ProjectPath"], process.cwd()));
@@ -38,6 +47,10 @@ async function main() {
     const toolResult = common.getToolObject(response);
     const data = toolResult?.data || {};
     let postRefreshIdleWait = null;
+    let postRefreshConsole = null;
+    let postRefreshConsoleCheckSucceeded = true;
+    let postRefreshFinalConsoleErrorCount = data.finalConsoleErrorCount ?? data.consoleErrorCount ?? null;
+    let postRefreshNewConsoleErrorCount = data.newConsoleErrorCount ?? 0;
     if (toolResult?.success === true && data.refreshScheduledAfterResponse === true) {
       postRefreshIdleWait = await common.waitUnityEditorIdle(projectPath, {
         timeoutSeconds,
@@ -45,10 +58,32 @@ async function main() {
         pollIntervalSeconds: pollIntervalMs / 1000,
         postIdleDelaySeconds: common.getArgNumber(args, ["PostIdleDelaySeconds"], 1.0),
       });
+
+      if (postRefreshIdleWait.success === true) {
+        try {
+          postRefreshConsole = await common.getUnityConsoleEntries(projectPath, {
+            types: ["Error"],
+            count: 100,
+            format: "Summary",
+            includeStacktrace: false,
+            timeoutSeconds: 30,
+          });
+          postRefreshConsoleCheckSucceeded = postRefreshConsole?.success === true;
+          if (postRefreshConsoleCheckSucceeded) {
+            postRefreshFinalConsoleErrorCount = getConsoleErrorCount(postRefreshConsole);
+            const initial = Number(data.initialConsoleErrorCount ?? 0);
+            postRefreshNewConsoleErrorCount = Math.max(0, Number(postRefreshFinalConsoleErrorCount) - initial);
+          }
+        } catch (error) {
+          postRefreshConsoleCheckSucceeded = false;
+          postRefreshConsole = { success: false, error: error.message };
+        }
+      }
     }
     const postRefreshIdleSucceeded = postRefreshIdleWait ? postRefreshIdleWait.success === true : true;
+    const postRefreshConsoleClean = postRefreshConsoleCheckSucceeded && Number(postRefreshNewConsoleErrorCount || 0) === 0;
     const result = {
-      success: toolResult?.success === true && postRefreshIdleSucceeded,
+      success: toolResult?.success === true && postRefreshIdleSucceeded && postRefreshConsoleClean && data.newConsoleErrorsDetected !== true,
       message: toolResult?.message || toolResult?.error || "Unity.Editor.SyncScripts returned no message.",
       projectPath,
       changedPaths: data.changedPaths || normalizedChangedPaths,
@@ -61,10 +96,10 @@ async function main() {
       refreshScheduledAfterResponse: data.refreshScheduledAfterResponse === true,
       editorIdle: data.editorIdle === true || postRefreshIdleWait?.success === true,
       initialConsoleErrorCount: data.initialConsoleErrorCount,
-      finalConsoleErrorCount: data.finalConsoleErrorCount,
-      consoleErrorCount: data.consoleErrorCount,
-      newConsoleErrorCount: data.newConsoleErrorCount,
-      newConsoleErrorsDetected: data.newConsoleErrorsDetected === true,
+      finalConsoleErrorCount: postRefreshFinalConsoleErrorCount,
+      consoleErrorCount: postRefreshFinalConsoleErrorCount,
+      newConsoleErrorCount: postRefreshNewConsoleErrorCount,
+      newConsoleErrorsDetected: data.newConsoleErrorsDetected === true || postRefreshNewConsoleErrorCount > 0,
       staleConsoleErrorsPresent: data.staleConsoleErrorsPresent === true,
       durationSeconds: data.elapsedMs != null ? Math.round((Number(data.elapsedMs) / 1000) * 1000) / 1000 : null,
       warningCount: Number(data.warningCount || 0),
@@ -73,6 +108,8 @@ async function main() {
         ? data.warnings.map((warning) => warning.message || warning.kind || String(warning)).join(" ")
         : null,
       postRefreshIdleWait,
+      postRefreshConsoleCheckSucceeded,
+      postRefreshConsole,
       toolResult,
     };
 
