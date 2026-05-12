@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using Becool.UnityMcpLens.Editor.Adapters.Unity;
 using Becool.UnityMcpLens.Editor.Helpers;
 using Becool.UnityMcpLens.Editor.ToolRegistry;
 using Becool.UnityMcpLens.Editor.Lens;
@@ -11,6 +12,7 @@ using Becool.UnityMcpLens.Editor.Utils;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.EventSystems;
+using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
 namespace Becool.UnityMcpLens.Editor.Tools
@@ -88,12 +90,17 @@ Args:
     SceneName: Optional scene name for logging only.
     OutputPath: Relative output path under the Unity project, for example Temp/UiCapture/shot.png.
     WarmupMs: Optional warmup delay in milliseconds before capture.
+    WarmupFrames: Approximate rendered/runtime frames to wait or step before capture.
     PausePlayMode: Pause play mode before capture when Unity is already playing.
     StepFrames: Advance this many paused play-mode frames before capture.
+    RestorePauseState: Restore original pause state after capture.
+    RequirePlaying: Require Unity to be in Play Mode before capture.
+    CaptureConsoleDelta: Capture console error-count delta around capture.
+    FallbackSceneView: Try a camera/scene-view fallback if Game view capture times out.
     WaitForFileTimeoutMs: Timeout while waiting for the PNG to appear on disk.
 
 Returns:
-    Dictionary with success/message/data. Data contains the relative and absolute output paths plus capture state.";
+    Dictionary with success/message/data. Data contains capture path, file state, play/pause state, camera/canvas counts, Game view size, console delta, and failure reason when capture is not ready.";
 
         [McpSchema("Unity.UI.QueryRuntimeLayout")]
         public static object GetQueryRuntimeLayoutSchema()
@@ -623,9 +630,32 @@ Returns:
 
             bool wasPlaying = EditorApplication.isPlaying;
             bool wasPaused = EditorApplication.isPaused;
+            int beforeConsoleErrors = parameters.CaptureConsoleDelta ? EditorToolStateHelpers.CountConsoleErrors() : 0;
+            object initialDiagnostics = BuildCaptureDiagnostics("initial", null);
 
             try
             {
+                if (parameters.RequirePlaying && !EditorApplication.isPlaying)
+                {
+                    return Response.Error("GAME_VIEW_CAPTURE_NOT_PLAYING", BuildCaptureResult(
+                        relativeOutputPath,
+                        absoluteOutputPath,
+                        wasPlaying,
+                        wasPaused,
+                        pauseApplied: false,
+                        stepFrames: 0,
+                        warmupFrames: Math.Max(0, parameters.WarmupFrames),
+                        warmupFramesApplied: 0,
+                        failureReason: "not_in_play_mode",
+                        error: "RequirePlaying was true, but Unity was not in Play Mode.",
+                        focusInfo: null,
+                        initialDiagnostics: initialDiagnostics,
+                        captureDiagnostics: BuildCaptureDiagnostics("require_playing_failed", null),
+                        finalDiagnostics: null,
+                        consoleDelta: BuildConsoleDelta(parameters.CaptureConsoleDelta, beforeConsoleErrors),
+                        fallback: null));
+                }
+
                 if (parameters.WarmupMs > 0)
                 {
                     await Task.Delay(Math.Max(0, parameters.WarmupMs));
@@ -644,22 +674,37 @@ Returns:
                     await Task.Delay(50);
                 }
 
-                if (!TryFocusGameView(out string focusError))
+                int warmupFrames = Math.Max(0, parameters.WarmupFrames);
+                int warmupFramesApplied = await WaitForApproximateFramesAsync(warmupFrames);
+
+                if (!TryFocusGameView(out object focusInfo, out string focusError))
                 {
-                    return Response.Error("GAME_VIEW_UNAVAILABLE", new
-                    {
+                    return Response.Error("GAME_VIEW_UNAVAILABLE", BuildCaptureResult(
                         relativeOutputPath,
                         absoluteOutputPath,
-                        error = focusError
-                    });
+                        wasPlaying,
+                        wasPaused,
+                        pauseApplied: parameters.PausePlayMode && wasPlaying && !wasPaused,
+                        stepFrames: stepFrames,
+                        warmupFrames: warmupFrames,
+                        warmupFramesApplied: warmupFramesApplied,
+                        failureReason: "game_view_unavailable",
+                        error: focusError,
+                        focusInfo: focusInfo,
+                        initialDiagnostics: initialDiagnostics,
+                        captureDiagnostics: BuildCaptureDiagnostics("game_view_unavailable", focusInfo),
+                        finalDiagnostics: null,
+                        consoleDelta: BuildConsoleDelta(parameters.CaptureConsoleDelta, beforeConsoleErrors),
+                        fallback: null));
                 }
 
                 await Task.Delay(100);
 
+                object captureDiagnostics = BuildCaptureDiagnostics("before_capture", focusInfo);
                 ScreenCapture.CaptureScreenshot(absoluteOutputPath);
 
-                FileInfo writtenInfo = new(absoluteOutputPath);
-                if (writtenInfo.Exists && writtenInfo.Length > 0)
+                FileInfo writtenInfo = await WaitForCaptureOutputAsync(absoluteOutputPath, Math.Max(250, parameters.WaitForFileTimeoutMs));
+                if (writtenInfo != null && writtenInfo.Exists && writtenInfo.Length > 0)
                 {
                     return Response.Success("Game view captured successfully.", new
                     {
@@ -669,48 +714,321 @@ Returns:
                         wasPlaying,
                         wasPaused,
                         pauseApplied = parameters.PausePlayMode && wasPlaying && !wasPaused,
-                        stepFrames
+                        stepFrames,
+                        warmupFrames,
+                        warmupFramesApplied,
+                        requirePlaying = parameters.RequirePlaying,
+                        fallbackUsed = false,
+                        focusInfo,
+                        diagnostics = new
+                        {
+                            initial = initialDiagnostics,
+                            capture = captureDiagnostics,
+                            final = BuildCaptureDiagnostics("final", focusInfo)
+                        },
+                        consoleDelta = BuildConsoleDelta(parameters.CaptureConsoleDelta, beforeConsoleErrors)
                     });
                 }
 
-                DateTime deadline = DateTime.UtcNow.AddMilliseconds(Math.Max(250, parameters.WaitForFileTimeoutMs));
-                while (DateTime.UtcNow < deadline)
+                object fallback = null;
+                if (parameters.FallbackSceneView)
                 {
-                    if (File.Exists(absoluteOutputPath))
+                    bool fallbackSucceeded = TryCaptureFallbackSceneView(absoluteOutputPath, out long fallbackFileSize, out object fallbackDiagnostics, out string fallbackError);
+                    fallback = new
                     {
-                        FileInfo info = new(absoluteOutputPath);
-                        if (info.Length > 0)
-                        {
-                            return Response.Success("Game view captured successfully.", new
-                            {
-                                relativeOutputPath,
-                                absoluteOutputPath,
-                                fileSize = info.Length,
-                                wasPlaying,
-                                wasPaused,
-                                pauseApplied = parameters.PausePlayMode && wasPlaying && !wasPaused,
-                                stepFrames
-                            });
-                        }
-                    }
+                        attempted = true,
+                        succeeded = fallbackSucceeded,
+                        fileSize = fallbackFileSize,
+                        error = fallbackError,
+                        diagnostics = fallbackDiagnostics
+                    };
 
-                    await Task.Delay(100);
+                    if (fallbackSucceeded)
+                    {
+                        return Response.Success("Game view capture timed out; fallback scene/camera capture succeeded.", new
+                        {
+                            relativeOutputPath,
+                            absoluteOutputPath,
+                            fileSize = fallbackFileSize,
+                            wasPlaying,
+                            wasPaused,
+                            pauseApplied = parameters.PausePlayMode && wasPlaying && !wasPaused,
+                            stepFrames,
+                            warmupFrames,
+                            warmupFramesApplied,
+                            requirePlaying = parameters.RequirePlaying,
+                            fallbackUsed = true,
+                            focusInfo,
+                            diagnostics = new
+                            {
+                                initial = initialDiagnostics,
+                                capture = captureDiagnostics,
+                                final = BuildCaptureDiagnostics("final", focusInfo)
+                            },
+                            consoleDelta = BuildConsoleDelta(parameters.CaptureConsoleDelta, beforeConsoleErrors),
+                            fallback
+                        });
+                    }
                 }
 
-                return Response.Error("CAPTURE_TIMEOUT", new
-                {
+                return Response.Error("CAPTURE_TIMEOUT", BuildCaptureResult(
                     relativeOutputPath,
                     absoluteOutputPath,
                     wasPlaying,
-                    wasPaused
-                });
+                    wasPaused,
+                    pauseApplied: parameters.PausePlayMode && wasPlaying && !wasPaused,
+                    stepFrames: stepFrames,
+                    warmupFrames: warmupFrames,
+                    warmupFramesApplied: warmupFramesApplied,
+                    failureReason: "capture_timeout",
+                    focusInfo: focusInfo,
+                    initialDiagnostics: initialDiagnostics,
+                    captureDiagnostics: captureDiagnostics,
+                    finalDiagnostics: BuildCaptureDiagnostics("final", focusInfo),
+                    consoleDelta: BuildConsoleDelta(parameters.CaptureConsoleDelta, beforeConsoleErrors),
+                    fallback: fallback));
             }
             finally
             {
-                if (parameters.PausePlayMode && wasPlaying && !wasPaused && EditorApplication.isPaused)
+                if (parameters.RestorePauseState && parameters.PausePlayMode && wasPlaying && !wasPaused && EditorApplication.isPaused)
                 {
                     EditorApplication.isPaused = false;
                 }
+            }
+        }
+
+        static async Task<int> WaitForApproximateFramesAsync(int frameCount)
+        {
+            int applied = 0;
+            for (int i = 0; i < Math.Max(0, frameCount); i++)
+            {
+                if (EditorApplication.isPlaying && EditorApplication.isPaused)
+                {
+                    EditorApplication.Step();
+                    await Task.Delay(50);
+                }
+                else
+                {
+                    await Task.Delay(16);
+                }
+
+                applied++;
+            }
+
+            return applied;
+        }
+
+        static async Task<FileInfo> WaitForCaptureOutputAsync(string absoluteOutputPath, int timeoutMs)
+        {
+            DateTime deadline = DateTime.UtcNow.AddMilliseconds(Math.Max(250, timeoutMs));
+            do
+            {
+                if (File.Exists(absoluteOutputPath))
+                {
+                    FileInfo info = new(absoluteOutputPath);
+                    if (info.Length > 0)
+                        return info;
+                }
+
+                await Task.Delay(100);
+            }
+            while (DateTime.UtcNow < deadline);
+
+            return null;
+        }
+
+        static object BuildCaptureResult(
+            string relativeOutputPath,
+            string absoluteOutputPath,
+            bool wasPlaying,
+            bool wasPaused,
+            bool pauseApplied,
+            int stepFrames,
+            int warmupFrames,
+            int warmupFramesApplied,
+            string failureReason,
+            object focusInfo,
+            object initialDiagnostics,
+            object captureDiagnostics,
+            object finalDiagnostics,
+            object consoleDelta,
+            object fallback,
+            string error = null)
+        {
+            bool fileExists = File.Exists(absoluteOutputPath);
+            long fileSize = fileExists ? new FileInfo(absoluteOutputPath).Length : 0;
+            return new
+            {
+                relativeOutputPath,
+                absoluteOutputPath,
+                fileExists,
+                fileSize,
+                wasPlaying,
+                wasPaused,
+                isPlaying = EditorApplication.isPlaying,
+                isPaused = EditorApplication.isPaused,
+                pauseApplied,
+                stepFrames,
+                warmupFrames,
+                warmupFramesApplied,
+                failureReason,
+                error,
+                focusInfo,
+                diagnostics = new
+                {
+                    initial = initialDiagnostics,
+                    capture = captureDiagnostics,
+                    final = finalDiagnostics
+                },
+                consoleDelta,
+                fallback
+            };
+        }
+
+        static object BuildConsoleDelta(bool enabled, int beforeConsoleErrors)
+        {
+            if (!enabled)
+                return null;
+
+            int afterConsoleErrors = EditorToolStateHelpers.CountConsoleErrors();
+            return new
+            {
+                beforeErrors = beforeConsoleErrors,
+                afterErrors = afterConsoleErrors,
+                newErrorCount = Math.Max(0, afterConsoleErrors - beforeConsoleErrors),
+                consoleErrorsDetected = afterConsoleErrors > beforeConsoleErrors
+            };
+        }
+
+        static object BuildCaptureDiagnostics(string stage, object focusInfo)
+        {
+            Scene activeScene = SceneManager.GetActiveScene();
+            Camera[] cameras = UnityApiAdapter.FindObjectsByType<Camera>(FindObjectsInactive.Include);
+            Canvas[] canvases = UnityApiAdapter.FindObjectsByType<Canvas>(FindObjectsInactive.Include);
+            Vector2? gameViewSize = TryGetMainGameViewSize();
+            return new
+            {
+                stage,
+                activeScene = new
+                {
+                    name = activeScene.name,
+                    path = activeScene.path,
+                    isLoaded = activeScene.isLoaded
+                },
+                playState = new
+                {
+                    isPlaying = EditorApplication.isPlaying,
+                    isPaused = EditorApplication.isPaused,
+                    isPlayingOrWillChangePlaymode = EditorApplication.isPlayingOrWillChangePlaymode,
+                    isCompiling = EditorApplication.isCompiling,
+                    isUpdating = EditorApplication.isUpdating
+                },
+                screen = new
+                {
+                    width = Screen.width,
+                    height = Screen.height
+                },
+                gameViewSize = gameViewSize.HasValue ? ToVector2Object(gameViewSize.Value) : null,
+                cameraCount = cameras.Length,
+                enabledCameraCount = cameras.Count(camera => camera != null && camera.enabled && camera.gameObject.activeInHierarchy),
+                mainCameraPresent = Camera.main != null,
+                canvasCount = canvases.Length,
+                enabledCanvasCount = canvases.Count(canvas => canvas != null && canvas.enabled && canvas.gameObject.activeInHierarchy),
+                rootCanvasCount = canvases.Count(canvas => canvas != null && canvas.isRootCanvas),
+                focusInfo
+            };
+        }
+
+        static Vector2? TryGetMainGameViewSize()
+        {
+            try
+            {
+                return Handles.GetMainGameViewSize();
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        static bool TryCaptureFallbackSceneView(string absoluteOutputPath, out long fileSize, out object diagnostics, out string error)
+        {
+            fileSize = 0;
+            diagnostics = null;
+            error = null;
+
+            Camera camera = SceneView.lastActiveSceneView?.camera;
+            string source = camera != null ? "scene_view" : null;
+            if (camera == null)
+            {
+                camera = Camera.main;
+                source = camera != null ? "main_camera" : null;
+            }
+            if (camera == null)
+            {
+                camera = UnityApiAdapter.FindObjectsByType<Camera>(FindObjectsInactive.Include)
+                    .FirstOrDefault(candidate => candidate != null && candidate.enabled && candidate.gameObject.activeInHierarchy);
+                source = camera != null ? "first_enabled_camera" : null;
+            }
+            if (camera == null)
+            {
+                error = "No Scene view camera, main camera, or enabled camera could be resolved for fallback capture.";
+                diagnostics = new { source, cameraFound = false };
+                return false;
+            }
+
+            Vector2? gameViewSize = TryGetMainGameViewSize();
+            int width = gameViewSize.HasValue ? Math.Max(1, Mathf.RoundToInt(gameViewSize.Value.x)) : 1280;
+            int height = gameViewSize.HasValue ? Math.Max(1, Mathf.RoundToInt(gameViewSize.Value.y)) : 720;
+            RenderTexture previousTarget = camera.targetTexture;
+            RenderTexture previousActive = RenderTexture.active;
+            RenderTexture renderTexture = null;
+            Texture2D texture = null;
+
+            try
+            {
+                renderTexture = new RenderTexture(width, height, 24, RenderTextureFormat.ARGB32);
+                texture = new Texture2D(width, height, TextureFormat.RGBA32, false);
+                camera.targetTexture = renderTexture;
+                RenderTexture.active = renderTexture;
+                camera.Render();
+                texture.ReadPixels(new Rect(0, 0, width, height), 0, 0);
+                texture.Apply();
+                File.WriteAllBytes(absoluteOutputPath, texture.EncodeToPNG());
+                fileSize = new FileInfo(absoluteOutputPath).Length;
+                diagnostics = new
+                {
+                    source,
+                    cameraFound = true,
+                    cameraName = camera.name,
+                    cameraPath = UiDiagnosticsHelper.GetHierarchyPath(camera.transform),
+                    width,
+                    height,
+                    fileSize
+                };
+                return fileSize > 0;
+            }
+            catch (Exception ex)
+            {
+                error = ex.Message;
+                diagnostics = new
+                {
+                    source,
+                    cameraFound = true,
+                    cameraName = camera.name,
+                    errorKind = ex.GetType().Name,
+                    error
+                };
+                return false;
+            }
+            finally
+            {
+                camera.targetTexture = previousTarget;
+                RenderTexture.active = previousActive;
+                if (texture != null)
+                    UnityEngine.Object.DestroyImmediate(texture);
+                if (renderTexture != null)
+                    UnityEngine.Object.DestroyImmediate(renderTexture);
             }
         }
 
@@ -1100,13 +1418,19 @@ Returns:
             return true;
         }
 
-        static bool TryFocusGameView(out string error)
+        static bool TryFocusGameView(out object focusInfo, out string error)
         {
+            focusInfo = null;
             error = null;
             Type gameViewType = Type.GetType("UnityEditor.GameView,UnityEditor");
             if (gameViewType == null)
             {
                 error = "UnityEditor.GameView type could not be resolved.";
+                focusInfo = new
+                {
+                    available = false,
+                    error
+                };
                 return false;
             }
 
@@ -1114,11 +1438,27 @@ Returns:
             if (gameView == null)
             {
                 error = "Game view window could not be created or resolved.";
+                focusInfo = new
+                {
+                    available = false,
+                    gameViewType = gameViewType.FullName,
+                    error
+                };
                 return false;
             }
 
             gameView.Focus();
             gameView.Repaint();
+            Vector2? gameViewSize = TryGetMainGameViewSize();
+            focusInfo = new
+            {
+                available = true,
+                gameViewType = gameViewType.FullName,
+                title = gameView.titleContent?.text,
+                hasFocus = EditorWindow.focusedWindow == gameView,
+                position = ToRectObject(gameView.position),
+                gameViewSize = gameViewSize.HasValue ? ToVector2Object(gameViewSize.Value) : null
+            };
             return true;
         }
 

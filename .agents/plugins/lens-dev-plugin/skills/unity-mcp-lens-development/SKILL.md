@@ -120,6 +120,7 @@ Phase 17 addresses the highest TintPaint dogfood pain without widening `foundati
 - Prefer `Unity.Editor.ExitPlayMode` or `Exit-UnityPlayMode.ps1` for play-mode cleanup; avoid custom `Unity.RunCommand` stop snippets.
 - `Unity.GetLensUsageReport` compact output should summarize large pack-transition lists and report TSAM coverage summary data.
 - Prefer `Unity.UI.QueryRuntimeLayout` for runtime UI layout/state readback and `Unity.UI.InvokeControl` for play-mode button/slider/toggle actions before writing custom `Unity.RunCommand` snippets.
+- Prefer `Unity.UI.CaptureGameView` for Game view screenshots; its capture result should include readiness diagnostics, play/pause state, Game view size, camera/canvas counts, console delta, and fallback evidence when requested.
 
 ## Phase 18 Asset Sprite Pipeline Truth
 

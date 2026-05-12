@@ -20,11 +20,26 @@ namespace Becool.UnityMcpLens.Editor.Tools.Parameters
         [McpDescription("Optional warmup delay in milliseconds before capture", Required = false)]
         public int WarmupMs { get; set; } = 0;
 
+        [McpDescription("Approximate rendered/runtime frames to wait or step before capture", Required = false)]
+        public int WarmupFrames { get; set; } = 0;
+
         [McpDescription("Pause play mode before capture when Unity is already playing", Required = false)]
         public bool PausePlayMode { get; set; } = false;
 
         [McpDescription("Advance this many paused play-mode frames before capture", Required = false)]
         public int StepFrames { get; set; } = 0;
+
+        [McpDescription("Restore the original pause state after capture when PausePlayMode changed it", Required = false)]
+        public bool RestorePauseState { get; set; } = true;
+
+        [McpDescription("Require Unity to be in Play Mode before capturing", Required = false)]
+        public bool RequirePlaying { get; set; } = false;
+
+        [McpDescription("Capture console error-count delta around capture", Required = false)]
+        public bool CaptureConsoleDelta { get; set; } = true;
+
+        [McpDescription("If Game view capture times out, try a camera/scene-view fallback capture to the same path", Required = false)]
+        public bool FallbackSceneView { get; set; } = false;
 
         [McpDescription("Timeout in milliseconds while waiting for the PNG to appear on disk", Required = false)]
         public int WaitForFileTimeoutMs { get; set; } = 4000;

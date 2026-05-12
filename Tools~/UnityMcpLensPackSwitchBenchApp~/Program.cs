@@ -789,6 +789,12 @@ sealed class MetadataAudit(BenchmarkOptions options)
             ["target", "searchMethod", "includeInactive", "action", "value", "waitFrames", "captureConsoleDelta", "allowEditMode"],
             ["target"],
             failures);
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_UI_CaptureGameView",
+            ["SceneName", "OutputPath", "WarmupMs", "WarmupFrames", "PausePlayMode", "StepFrames", "RestorePauseState", "RequirePlaying", "CaptureConsoleDelta", "FallbackSceneView", "WaitForFileTimeoutMs"],
+            ["OutputPath"],
+            failures);
 
         if (FindTool(tools, "Unity_UI_EnsureNamedHierarchy") != null)
             failures.Add("foundation+ui should not expose legacy tool 'Unity_UI_EnsureNamedHierarchy'.");
