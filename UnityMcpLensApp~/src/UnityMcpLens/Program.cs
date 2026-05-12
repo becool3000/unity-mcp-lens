@@ -52,6 +52,7 @@ sealed class UnityMcpLensHost
         "Unity_Project_GetInfo",
         "Unity_Project_GetPackages",
         "Unity_Profiler_Query",
+        "Unity_Runtime_GetComponentSnapshot",
         "Unity_ManageScript_capabilities"
     };
 

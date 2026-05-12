@@ -1,6 +1,7 @@
 #nullable disable
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using Becool.UnityMcpLens.Editor.Adapters.Unity;
 using Becool.UnityMcpLens.Editor.Helpers;
@@ -214,7 +215,7 @@ namespace Becool.UnityMcpLens.Editor.Tools
                     path = UiDiagnosticsHelper.GetHierarchyPath(rootObject.transform),
                     activeSelf = rootObject.activeSelf,
                     activeInHierarchy = rootObject.activeInHierarchy,
-                    objectId = UnityApiAdapter.GetObjectIdOrZero(rootObject)
+                    objectId = GetStableObjectId(rootObject)
                 },
                 queryCount = componentTypes.Length,
                 missingTypeCount = missingTypes.Count,
@@ -272,8 +273,8 @@ namespace Becool.UnityMcpLens.Editor.Tools
                 activeInHierarchy = gameObject.activeInHierarchy,
                 componentType = component.GetType().FullName,
                 requestedType = requestedType.FullName,
-                gameObjectId = UnityApiAdapter.GetObjectIdOrZero(gameObject),
-                componentId = UnityApiAdapter.GetObjectIdOrZero(component)
+                gameObjectId = GetStableObjectId(gameObject),
+                componentId = GetStableObjectId(component)
             };
         }
 
@@ -300,7 +301,7 @@ namespace Becool.UnityMcpLens.Editor.Tools
             string method = (searchMethod ?? "by_name").Trim().ToLowerInvariant();
             foreach (GameObject candidate in objects)
             {
-                if (method == "by_id" && UnityApiAdapter.ObjectIdEquals(candidate, root))
+                if (method == "by_id" && ObjectIdEquals(candidate, root))
                     return candidate;
                 if (method == "by_path" && string.Equals(UiDiagnosticsHelper.GetHierarchyPath(candidate.transform), root, StringComparison.Ordinal))
                     return candidate;
@@ -309,6 +310,23 @@ namespace Becool.UnityMcpLens.Editor.Tools
             }
 
             return null;
+        }
+
+        static string GetStableObjectId(UnityEngine.Object obj)
+        {
+            if (obj == null)
+                return null;
+
+#pragma warning disable CS0618
+            return obj.GetInstanceID().ToString(CultureInfo.InvariantCulture);
+#pragma warning restore CS0618
+        }
+
+        static bool ObjectIdEquals(UnityEngine.Object obj, string id)
+        {
+            string trimmed = id?.Trim();
+            return string.Equals(GetStableObjectId(obj), trimmed, StringComparison.Ordinal) ||
+                UnityApiAdapter.ObjectIdEquals(obj, trimmed);
         }
 
         static JToken GetToken(JObject parameters, params string[] names)

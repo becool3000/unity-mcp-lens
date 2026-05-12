@@ -78,7 +78,7 @@ Phase 14 keeps the public tool surface stable and makes high-volume TSAM results
 - Compact default results are expected for `Unity.InputSystem.Diagnostics`, UI hierarchy preview/apply, scene serialized-reference binding preview/apply, and `Unity.UI.VerifyScreenLayout`.
 - Full bulky data should remain available through `detailRef` when the bridge detail store is available.
 - Use `Invoke-UnityMcpBatch` for focused smoke/workflow sequences that need multiple project/ui/scene/debug calls in one Lens session.
-- Pack baselines after the stable object-path resolver push: `foundation=18`, `foundation+scene=43`, `foundation+ui=35`, `foundation+runtime=26`, `project=27`, `foundation+assets=31`, and live `debug=33`.
+- Pack baselines after the runtime component snapshot push: `foundation=18`, `foundation+scene=43`, `foundation+ui=35`, `foundation+runtime=27`, `project=27`, `foundation+assets=31`, and live `debug=33`.
 - Current Phase 14 smoke baseline: `NoShapingRecorded=false`, `7` saving rows, `50,566` raw bytes -> `24,025` shaped bytes, `3` connections, `6` schema requests, and `4` pack transitions.
 
 ## Phase 15 RunCommand And Console Truth
@@ -147,6 +147,7 @@ This batch addresses the BeeSurvivors Lens dogfood findings from 2026-05-07.
 - Prefer `Unity.Bridge.ListConnections` when a bridge retry may have selected the wrong project or when stale status files are suspected.
 - Prefer `Unity.Asset.SetSerializedProperties` for ScriptableObject/data asset scalar and object-reference bindings before falling back to `Unity.RunCommand`.
 - Prefer `Unity.Runtime.QueryObjects` for play-mode component counts and sample paths before writing project-specific runtime count snippets.
+- Prefer `Unity.Runtime.GetComponentSnapshot` for read-only public/serialized runtime component state before writing project-specific runtime state snippets.
 - Prefer `Unity.Object.ResolveStablePath` when passing hierarchy paths between scene, runtime, and UI tools; it reports stable ids, indexed paths for duplicate siblings, component lists, and ambiguity counts.
 - Keep compactor behavior default-compatible. Quieter `detailRef` creation is opt-in at noisy callers such as `Unity.RunCommand` and `Unity.ReadConsole`.
 - Treat old `BeaconMissing` status as non-blocking when MCP health is ready, and remember helper pack state is per Lens helper session.

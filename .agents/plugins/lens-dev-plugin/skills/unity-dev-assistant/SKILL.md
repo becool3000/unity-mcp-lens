@@ -209,6 +209,7 @@ Prefer a scene-owned debugger component when a project needs fast UI or state it
 - Prefer `Unity.Object.ResolveStablePath` before reusing a hierarchy path across scene, runtime, and UI tools; use its `stableId` or `indexedPath` when duplicate sibling names make plain paths ambiguous.
 - Prefer `Unity.Asset.SetSerializedProperties` for ScriptableObject/data asset scalar and object-reference binding
 - Prefer `Unity.Runtime.QueryObjects` for play-mode component counts and sample paths
+- Prefer `Unity.Runtime.GetComponentSnapshot` for read-only public/serialized runtime component state before writing project-specific `Unity.RunCommand` snippets
 - When `rg.exe` is blocked in the Codex desktop app context, prefer the shared PowerShell search fallback instead of retrying `rg`
 - Hybrid snapshots for playtesting: Unity-aware first, desktop fallback second
 - Prefer relative project paths for Unity-side screenshots and state captures

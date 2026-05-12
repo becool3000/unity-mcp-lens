@@ -172,7 +172,7 @@ sealed class MetadataAudit(BenchmarkOptions options)
     const int ExpectedFoundationToolCount = 18;
     const int ExpectedSceneToolCount = 43;
     const int ExpectedUiToolCount = 35;
-    const int ExpectedRuntimeToolCount = 26;
+    const int ExpectedRuntimeToolCount = 27;
     const int ExpectedProjectToolCount = 27;
     const int ExpectedAssetsToolCount = 31;
 
@@ -256,6 +256,7 @@ sealed class MetadataAudit(BenchmarkOptions options)
     static readonly string[] k_RequiredRuntimeTools =
     [
         "Unity_Runtime_GetVisualBoundsSnapshot",
+        "Unity_Runtime_GetComponentSnapshot",
         "Unity_Runtime_QueryObjects",
         "Unity_Object_ResolveStablePath",
         "Unity_Runtime_InvokeComponentMethod",
@@ -402,6 +403,7 @@ sealed class MetadataAudit(BenchmarkOptions options)
         ValidateReadOnlyHint(runtimeTools, "Unity_PlayMode_EnterReady", expected: false, failures);
         ValidateReadOnlyHint(runtimeTools, "Unity_Editor_ExitPlayMode", expected: false, failures);
         ValidateReadOnlyHint(runtimeTools, "Unity_Editor_SetPlayMode", expected: false, failures);
+        ValidateReadOnlyHint(runtimeTools, "Unity_Runtime_GetComponentSnapshot", expected: true, failures);
         ValidateReadOnlyHint(projectTools, "Unity_InputSystem_Diagnostics", expected: true, failures);
         ValidateReadOnlyHint(projectTools, "Unity_Project_PackageCompatibility", expected: true, failures);
         ValidateReadOnlyHint(projectTools, "Unity_InputActions_InspectAsset", expected: true, failures);
@@ -866,6 +868,12 @@ sealed class MetadataAudit(BenchmarkOptions options)
             "Unity_Runtime_InvokeComponentMethod",
             ["target", "searchMethod", "componentType", "componentIndex", "methodName", "args", "includeInactive", "waitFrames", "captureConsoleDelta", "requirePlayMode"],
             ["target", "componentType", "methodName"],
+            failures);
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_Runtime_GetComponentSnapshot",
+            ["target", "searchMethod", "componentType", "componentIndex", "includePublicProperties", "includeSerializedFields", "maxDepth", "maxMembers", "includeInactive", "requirePlayMode"],
+            ["target", "componentType"],
             failures);
         ValidateObjectResolveStablePathSchema(tools, failures);
         ValidateSplitGameObjectSchema(

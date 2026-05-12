@@ -60,6 +60,7 @@ namespace Becool.UnityMcpLens.Editor.Lens
             NormalizeToolName("Unity.Project.GetInfo"),
             NormalizeToolName("Unity.Project.GetPackages"),
             NormalizeToolName("Unity.Profiler.Query"),
+            NormalizeToolName("Unity.Runtime.GetComponentSnapshot"),
             NormalizeToolName("Unity.ManageScript_capabilities")
         };
 
