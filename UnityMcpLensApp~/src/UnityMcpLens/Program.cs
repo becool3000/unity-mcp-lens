@@ -188,6 +188,8 @@ sealed class UnityMcpLensHost
     BridgeDiscoverySnapshot? m_LastBridgeDiscoverySnapshot;
     BridgeRecoveryState? m_LastRecoveryState;
     string? m_BridgeSessionId;
+    string? m_SelectedProjectPathHint;
+    bool m_SelectedProjectRequireFreshBridge = true;
     long m_ManifestVersion;
     string[] m_ActiveToolPacks = GetDefaultActivePacksForSurfaceMode();
     bool m_ClientInitialized;
@@ -455,6 +457,35 @@ sealed class UnityMcpLensHost
             }
         }, m_JsonOptions);
 
+        JsonElement selectProjectInputSchema = JsonSerializer.SerializeToElement(new
+        {
+            type = "object",
+            properties = new
+            {
+                projectPath = new
+                {
+                    type = "string",
+                    description = "Unity project root to bind this MCP host session to. An Assets folder path is normalized to its project root."
+                },
+                requireFreshBridge = new
+                {
+                    type = "boolean",
+                    description = "Require the selected bridge heartbeat to be fresh and editor PID alive. Defaults to true."
+                },
+                connect = new
+                {
+                    type = "boolean",
+                    description = "Connect or reconnect to the selected bridge immediately. Defaults to true."
+                },
+                maxCandidates = new
+                {
+                    type = "integer",
+                    description = "Maximum bridge candidates to include in diagnostics. Defaults to 12."
+                }
+            },
+            required = new[] { "projectPath" }
+        }, m_JsonOptions);
+
         JsonElement activateAndVerifyInputSchema = JsonSerializer.SerializeToElement(new
         {
             type = "object",
@@ -495,6 +526,12 @@ sealed class UnityMcpLensHost
                 "Lists Unity MCP bridge connection candidates, project-root match state, heartbeat age, editor PID liveness, quarantine state, and exclusion reasons without touching the bridge.",
                 bridgeListConnectionsInputSchema,
                 readOnlyHint: true),
+            BuildBootstrapTool(
+                "Unity_Session_SelectProject",
+                "Select Unity Project",
+                "Binds this MCP host session to an explicit Unity project root so subsequent direct Lens tool calls use the matching editor bridge instead of the host current working directory.",
+                selectProjectInputSchema,
+                readOnlyHint: false),
             BuildBootstrapTool(
                 "Unity_SetToolPacks",
                 "Set Unity Tool Packs",
@@ -662,6 +699,12 @@ sealed class UnityMcpLensHost
 
         if (ToolNamesMatch(canonicalToolName, "Unity.Bridge.ListConnections"))
             return BuildToolCallResult(CreateBridgeListConnectionsPayload(argumentsElement));
+
+        if (ToolNamesMatch(canonicalToolName, "Unity.Session.SelectProject"))
+        {
+            JsonElement payload = await CreateSelectProjectPayloadAsync(argumentsElement, cancellationToken).ConfigureAwait(false);
+            return BuildToolCallResult(payload, IsToolLevelError(payload));
+        }
 
         await EnsureBridgeReadyAsync(cancellationToken).ConfigureAwait(false);
 
@@ -990,11 +1033,25 @@ sealed class UnityMcpLensHost
     {
         string projectPathHint = ResolveProjectPathHint(out bool requireProjectMatch);
         m_LastBridgeDiscoverySnapshot = BridgeDiscovery.FindBridgeSnapshot(projectPathHint, GetActiveQuarantineIds(), requireProjectMatch);
-        return m_LastBridgeDiscoverySnapshot.Selected;
+        BridgeDiscoveryResult? selected = m_LastBridgeDiscoverySnapshot.Selected;
+        if (!string.IsNullOrWhiteSpace(m_SelectedProjectPathHint) &&
+            m_SelectedProjectRequireFreshBridge &&
+            selected?.IsFresh != true)
+        {
+            return null;
+        }
+
+        return selected;
     }
 
     string ResolveProjectPathHint(out bool requireProjectMatch)
     {
+        if (!string.IsNullOrWhiteSpace(m_SelectedProjectPathHint))
+        {
+            requireProjectMatch = true;
+            return m_SelectedProjectPathHint;
+        }
+
         string? projectPath = Environment.GetEnvironmentVariable("UNITY_MCP_PROJECT_PATH");
         if (!string.IsNullOrWhiteSpace(projectPath))
         {
@@ -1475,6 +1532,87 @@ sealed class UnityMcpLensHost
         }, m_JsonOptions);
     }
 
+    async Task<JsonElement> CreateSelectProjectPayloadAsync(JsonElement argumentsElement, CancellationToken cancellationToken)
+    {
+        string? explicitProjectPath = ExtractString(argumentsElement, "projectPath", "ProjectPath");
+        if (string.IsNullOrWhiteSpace(explicitProjectPath))
+            return CreateErrorPayload("projectPath is required.", "UNITY_MCP_PROJECT_PATH_REQUIRED");
+
+        string projectPathHint = NormalizeProjectPathHint(explicitProjectPath);
+        bool requireFreshBridge = ExtractBool(argumentsElement, true, "requireFreshBridge", "RequireFreshBridge");
+        bool connect = ExtractBool(argumentsElement, true, "connect", "Connect");
+        int maxCandidates = Math.Clamp(ExtractInt(argumentsElement, 12, "maxCandidates", "MaxCandidates"), 1, 100);
+
+        BridgeDiscoverySnapshot snapshot = BridgeDiscovery.FindBridgeSnapshot(projectPathHint, GetActiveQuarantineIds(), requireProjectMatch: true);
+        m_LastBridgeDiscoverySnapshot = snapshot;
+
+        BridgeDiscoveryResult? selected = snapshot.Selected;
+        bool freshEnough = selected != null && (!requireFreshBridge || selected.IsFresh);
+        if (!freshEnough)
+        {
+            return CreateErrorPayload(
+                selected == null
+                    ? $"No matching Unity MCP bridge was found for project '{projectPathHint}'."
+                    : $"A matching Unity MCP bridge was found for project '{projectPathHint}', but it is not fresh.",
+                "UNITY_MCP_NO_MATCHING_BRIDGE",
+                new
+                {
+                    requestedProjectPath = projectPathHint,
+                    requireFreshBridge,
+                    discovery = BuildBridgeDiscoveryDiagnostics(snapshot, maxCandidates)
+                });
+        }
+
+        string? previousSelectedProjectPath = m_SelectedProjectPathHint;
+        bool connectionChanged = m_BridgeConnection != null &&
+            !IsSameBridgeGeneration(m_BridgeConnection, selected!);
+
+        m_SelectedProjectPathHint = projectPathHint;
+        m_SelectedProjectRequireFreshBridge = requireFreshBridge;
+
+        if (connectionChanged)
+            await ResetBridgeClientAsync(preserveActivePacks: true, clearToolCache: true).ConfigureAwait(false);
+
+        string? connectError = null;
+        if (connect)
+        {
+            try
+            {
+                await EnsureBridgeReadyAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                connectError = ex.Message;
+            }
+        }
+
+        bool connected = m_BridgeConnection != null &&
+            string.Equals(m_BridgeConnection.ProjectRoot, selected!.ProjectRoot, StringComparison.OrdinalIgnoreCase);
+
+        return JsonSerializer.SerializeToElement(new
+        {
+            success = connectError == null,
+            message = connectError == null
+                ? "Selected Unity MCP project for this host session."
+                : "Selected Unity MCP project, but connecting to the bridge failed.",
+            data = new
+            {
+                selectedProjectPath = m_SelectedProjectPathHint,
+                previousSelectedProjectPath,
+                requireFreshBridge = m_SelectedProjectRequireFreshBridge,
+                connectRequested = connect,
+                connected,
+                connectError,
+                activeToolPacks = m_ActiveToolPacks,
+                toolSurfaceMode = s_ToolSurfaceMode,
+                exportedToolCount = m_ToolCache.Count,
+                host = CreateHostDiagnostics(),
+                selectedBridge = CreateBridgeDiscoveryResultDiagnostics(selected!),
+                discovery = BuildBridgeDiscoveryDiagnostics(snapshot, maxCandidates)
+            }
+        }, m_JsonOptions);
+    }
+
     static string[] ExtractPacks(JsonElement argumentsElement)
     {
         if (argumentsElement.ValueKind != JsonValueKind.Object)
@@ -1685,6 +1823,10 @@ sealed class UnityMcpLensHost
             processId = process.Id,
             executablePath = Environment.ProcessPath,
             currentDirectory = Directory.GetCurrentDirectory(),
+            selectedProjectPath = m_SelectedProjectPathHint,
+            selectedProjectRequiresFreshBridge = !string.IsNullOrWhiteSpace(m_SelectedProjectPathHint)
+                ? m_SelectedProjectRequireFreshBridge
+                : (bool?)null,
             assemblyVersion = typeof(UnityMcpLensHost).Assembly.GetName().Version?.ToString(),
             informationalVersion = s_HostVersion,
             fileVersion = ResolveFileVersion(Environment.ProcessPath)

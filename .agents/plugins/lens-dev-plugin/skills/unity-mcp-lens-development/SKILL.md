@@ -78,7 +78,7 @@ Phase 14 keeps the public tool surface stable and makes high-volume TSAM results
 - Compact default results are expected for `Unity.InputSystem.Diagnostics`, UI hierarchy preview/apply, scene serialized-reference binding preview/apply, and `Unity.UI.VerifyScreenLayout`.
 - Full bulky data should remain available through `detailRef` when the bridge detail store is available.
 - Use `Invoke-UnityMcpBatch` for focused smoke/workflow sequences that need multiple project/ui/scene/debug calls in one Lens session.
-- Pack baselines after the static-all reliability push: `foundation=17`, `foundation+scene=41`, `foundation+ui=33`, `foundation+runtime=23`, `project=26`, `foundation+assets=30`, and live `debug=28`.
+- Pack baselines after the explicit project-selection push: `foundation=18`, `foundation+scene=42`, `foundation+ui=34`, `foundation+runtime=24`, `project=27`, `foundation+assets=31`, and live `debug=33`.
 - Current Phase 14 smoke baseline: `NoShapingRecorded=false`, `7` saving rows, `50,566` raw bytes -> `24,025` shaped bytes, `3` connections, `6` schema requests, and `4` pack transitions.
 
 ## Phase 15 RunCommand And Console Truth

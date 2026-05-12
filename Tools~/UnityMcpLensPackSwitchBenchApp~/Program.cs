@@ -169,18 +169,19 @@ sealed class BenchmarkOptions
 
 sealed class MetadataAudit(BenchmarkOptions options)
 {
-    const int ExpectedFoundationToolCount = 17;
-    const int ExpectedSceneToolCount = 41;
-    const int ExpectedUiToolCount = 33;
-    const int ExpectedRuntimeToolCount = 23;
-    const int ExpectedProjectToolCount = 26;
-    const int ExpectedAssetsToolCount = 30;
+    const int ExpectedFoundationToolCount = 18;
+    const int ExpectedSceneToolCount = 42;
+    const int ExpectedUiToolCount = 34;
+    const int ExpectedRuntimeToolCount = 24;
+    const int ExpectedProjectToolCount = 27;
+    const int ExpectedAssetsToolCount = 31;
 
     static readonly string[] k_RequiredFoundationTools =
     [
         "Unity_GetLensHealth",
         "Unity_ListToolPacks",
         "Unity_Bridge_ListConnections",
+        "Unity_Session_SelectProject",
         "Unity_SetToolPacks",
         "Unity_ReadDetailRef",
         "Unity_Tools_Menu",
@@ -360,8 +361,10 @@ sealed class MetadataAudit(BenchmarkOptions options)
         ValidateReadOnlyHint(foundationTools, "Unity_Tools_Menu", expected: true, failures);
         ValidateReadOnlyHint(foundationTools, "Unity_Tools_Describe", expected: true, failures);
         ValidateReadOnlyHint(foundationTools, "Unity_Tools_ActivateAndVerify", expected: false, failures);
+        ValidateReadOnlyHint(foundationTools, "Unity_Session_SelectProject", expected: false, failures);
         ValidateReadOnlyHint(foundationTools, "Unity_Editor_ScriptUpdatingConsentModal", expected: false, failures);
         ValidateSplitGameObjectSchema(foundationTools, "Unity_Tools_Menu", ["maxToolsPerPack"], [], failures);
+        ValidateSplitGameObjectSchema(foundationTools, "Unity_Session_SelectProject", ["projectPath", "requireFreshBridge", "connect", "maxCandidates"], ["projectPath"], failures);
         ValidateReadOnlyHint(sceneTools, "Unity_GameObject_Inspect", expected: true, failures);
         ValidateReadOnlyHint(sceneTools, "Unity_GameObject_ListComponents", expected: true, failures);
         ValidateReadOnlyHint(sceneTools, "Unity_GameObject_GetComponent", expected: true, failures);
@@ -671,7 +674,7 @@ sealed class MetadataAudit(BenchmarkOptions options)
             tools,
             "Unity_ProjectSettings_PreviewActiveInputHandler",
             ["mode", "save", "requestScriptReload"],
-            ["mode"],
+            [],
             failures);
         ValidateSplitGameObjectSchema(
             tools,
