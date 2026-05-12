@@ -30,32 +30,32 @@ namespace Becool.UnityMcpLens.Editor.Tools.Parameters
         /// <summary>
         /// Regular log messages.
         /// </summary>
-        Log,
+        Log = 0,
 
         /// <summary>
         /// Warning messages.
         /// </summary>
-        Warning,
+        Warning = 1,
 
         /// <summary>
         /// Error messages.
         /// </summary>
-        Error,
+        Error = 2,
 
         /// <summary>
         /// Exception messages.
         /// </summary>
-        Exception,
+        Exception = 3,
 
         /// <summary>
         /// Assertion messages.
         /// </summary>
-        Assert,
+        Assert = 4,
 
         /// <summary>
         /// All message types.
         /// </summary>
-        All
+        All = 5
     }
 
     /// <summary>
