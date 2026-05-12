@@ -172,7 +172,7 @@ sealed class MetadataAudit(BenchmarkOptions options)
     const int ExpectedFoundationToolCount = 18;
     const int ExpectedSceneToolCount = 42;
     const int ExpectedUiToolCount = 34;
-    const int ExpectedRuntimeToolCount = 24;
+    const int ExpectedRuntimeToolCount = 25;
     const int ExpectedProjectToolCount = 27;
     const int ExpectedAssetsToolCount = 31;
 
@@ -257,6 +257,7 @@ sealed class MetadataAudit(BenchmarkOptions options)
         "Unity_Runtime_QueryObjects",
         "Unity_Runtime_InvokeComponentMethod",
         "Unity_PlayMode_PointerInputSmoke",
+        "Unity_PlayMode_EnterReady",
         "Unity_Editor_ExitPlayMode",
         "Unity_Editor_SetPlayMode"
     ];
@@ -394,6 +395,7 @@ sealed class MetadataAudit(BenchmarkOptions options)
         ValidateReadOnlyHint(sceneTools, "Unity_Scene_PreviewInstantiatePrefabAndBind", expected: true, failures);
         ValidateReadOnlyHint(sceneTools, "Unity_Scene_ApplyInstantiatePrefabAndBind", expected: false, failures);
         ValidateReadOnlyHint(runtimeTools, "Unity_PlayMode_PointerInputSmoke", expected: false, failures);
+        ValidateReadOnlyHint(runtimeTools, "Unity_PlayMode_EnterReady", expected: false, failures);
         ValidateReadOnlyHint(runtimeTools, "Unity_Editor_ExitPlayMode", expected: false, failures);
         ValidateReadOnlyHint(runtimeTools, "Unity_Editor_SetPlayMode", expected: false, failures);
         ValidateReadOnlyHint(projectTools, "Unity_InputSystem_Diagnostics", expected: true, failures);
@@ -839,6 +841,12 @@ sealed class MetadataAudit(BenchmarkOptions options)
             tools,
             "Unity_Editor_ExitPlayMode",
             ["waitForStableEditor", "timeoutMs", "pollIntervalMs", "stablePollCount", "postStableDelayMs", "unpauseBeforeExit"],
+            [],
+            failures);
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_PlayMode_EnterReady",
+            ["scenePath", "timeoutMs", "pollIntervalMs", "warmupFrames", "warmupSeconds", "stopFirst", "clearPause", "captureConsoleDelta"],
             [],
             failures);
         ValidateSplitGameObjectSchema(

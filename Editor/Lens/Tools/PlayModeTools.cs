@@ -24,6 +24,9 @@ Use this instead of Unity.RunCommand for cleanup after play-mode smoke tests. Th
         public const string SetPlayModeDescription = @"Requests a high-level play-mode transition and reports compact transition, runtime-advance, and console-error evidence.
 
 Use this instead of Unity.ManageEditor Play/Stop or Unity.RunCommand play-mode snippets for smoke workflows.";
+        public const string EnterReadyDescription = @"Requests Play Mode entry and waits until the runtime probe is ready for runtime tools.
+
+When called through the Lens host, this workflow survives reconnect-prone domain reloads and reports request, editor-stability, runtime-advance, and console-delta evidence.";
 
         [McpSchema("Unity.Editor.ExitPlayMode")]
         public static object GetExitPlayModeSchema()
@@ -108,6 +111,26 @@ Use this instead of Unity.ManageEditor Play/Stop or Unity.RunCommand play-mode s
             };
         }
 
+        [McpSchema("Unity.PlayMode.EnterReady")]
+        public static object GetEnterReadySchema()
+        {
+            return new
+            {
+                type = "object",
+                properties = new
+                {
+                    scenePath = new { type = "string", description = "Optional Assets-relative .unity scene path to load before entering play mode." },
+                    timeoutMs = new { type = "integer", description = "Timeout in milliseconds for play entry and runtime readiness." },
+                    pollIntervalMs = new { type = "integer", description = "Host polling interval in milliseconds while waiting for reconnect and runtime readiness." },
+                    warmupFrames = new { type = "integer", description = "Approximate additional warmup frames after runtime advancement is observed." },
+                    warmupSeconds = new { type = "number", description = "Additional warmup seconds after runtime advancement is observed." },
+                    stopFirst = new { type = "boolean", description = "Exit play mode first before entering play mode." },
+                    clearPause = new { type = "boolean", description = "Clear EditorApplication.isPaused before exit or enter cleanup checks." },
+                    captureConsoleDelta = new { type = "boolean", description = "Capture project console error-count delta around play entry." }
+                }
+            };
+        }
+
         [McpTool(ToolPackCatalog.EditorSetPlayModeToolName, SetPlayModeDescription, "Set Play Mode", Groups = new[] { "runtime", "editor" }, EnabledByDefault = true)]
         public static async Task<object> SetPlayMode(JObject @params)
         {
@@ -159,6 +182,13 @@ Use this instead of Unity.ManageEditor Play/Stop or Unity.RunCommand play-mode s
             return response;
         }
 
+        [McpTool("Unity.PlayMode.EnterReady", EnterReadyDescription, "Enter Play Mode Ready", Groups = new[] { "runtime", "editor" }, EnabledByDefault = true)]
+        public static async Task<object> EnterReady(JObject @params)
+        {
+            JObject setPlayModeParams = ConvertEnterReadyParams(@params);
+            return await SetPlayMode(setPlayModeParams);
+        }
+
         sealed class SetPlayModeParams
         {
             public string Mode { get; set; }
@@ -182,6 +212,30 @@ Use this instead of Unity.ManageEditor Play/Stop or Unity.RunCommand play-mode s
                 TimeoutSeconds = GetInt(parameters, 60, "timeoutSeconds", "TimeoutSeconds"),
                 UnpauseBeforeExit = GetBool(parameters, true, "unpauseBeforeExit", "UnpauseBeforeExit")
             };
+        }
+
+        static JObject ConvertEnterReadyParams(JObject parameters)
+        {
+            parameters ??= new JObject();
+            var setPlayModeParams = (JObject)parameters.DeepClone();
+            setPlayModeParams["mode"] = "enter";
+            setPlayModeParams["waitForRuntimeAdvance"] = true;
+
+            int timeoutMs = GetInt(parameters, 0, "timeoutMs", "TimeoutMs");
+            if (timeoutMs > 0)
+                setPlayModeParams["timeoutSeconds"] = Math.Max(1, (int)Math.Ceiling(timeoutMs / 1000.0d));
+
+            if (GetToken(parameters, "clearPause", "ClearPause") != null)
+                setPlayModeParams["unpauseBeforeExit"] = GetBool(parameters, true, "clearPause", "ClearPause");
+
+            int warmupFrames = GetInt(parameters, 0, "warmupFrames", "WarmupFrames");
+            double warmupSeconds = GetDouble(parameters, -1d, "warmupSeconds", "WarmupSeconds");
+            if (warmupFrames > 0)
+                warmupSeconds = Math.Max(0d, Math.Max(warmupSeconds, warmupFrames / 60.0d));
+            if (warmupSeconds >= 0d)
+                setPlayModeParams["warmupSeconds"] = warmupSeconds;
+
+            return setPlayModeParams;
         }
 
         static async Task<object> RequestSetPlayModeAsync(SetPlayModeParams parameters)

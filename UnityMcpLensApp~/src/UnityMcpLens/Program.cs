@@ -84,6 +84,7 @@ sealed class UnityMcpLensHost
         "Unity_Editor_ScriptUpdatingConsentModal",
         "Unity_Editor_SyncScripts",
         "Unity_Editor_SetPlayMode",
+        "Unity_PlayMode_EnterReady",
         "Unity_Tile_BuildSet",
         "Unity_Tilemap_Setup",
         "Unity_Tilemap_Paint",
@@ -172,6 +173,23 @@ sealed class UnityMcpLensHost
         }
 
         public BridgeDiscoverySnapshot Snapshot { get; }
+    }
+
+    sealed class HostPlayReadyResult
+    {
+        public bool Success { get; init; }
+        public string Message { get; init; } = string.Empty;
+        public bool EditorIdle { get; init; }
+        public bool IsPlaying { get; init; }
+        public bool RuntimeAdvanced { get; init; }
+        public bool RuntimeProbeAvailable { get; init; }
+        public int UpdateCount { get; init; }
+        public int FixedUpdateCount { get; init; }
+        public double UnscaledTime { get; init; }
+        public string ActiveScene { get; init; } = string.Empty;
+        public List<object> Attempts { get; init; } = [];
+        public object? LastState { get; init; }
+        public string? LastError { get; init; }
     }
 
     readonly JsonSerializerOptions m_JsonOptions = new(JsonSerializerDefaults.Web)
@@ -707,6 +725,12 @@ sealed class UnityMcpLensHost
         }
 
         await EnsureBridgeReadyAsync(cancellationToken).ConfigureAwait(false);
+
+        if (ToolNamesMatch(canonicalToolName, "Unity.PlayMode.EnterReady"))
+        {
+            JsonElement payload = await CreatePlayModeEnterReadyPayloadAsync(argumentsElement, cancellationToken).ConfigureAwait(false);
+            return BuildToolCallResult(payload, IsToolLevelError(payload));
+        }
 
         if (ToolNamesMatch(canonicalToolName, "Unity.SetToolPacks"))
         {
@@ -1613,6 +1637,535 @@ sealed class UnityMcpLensHost
         }, m_JsonOptions);
     }
 
+    async Task<JsonElement> CreatePlayModeEnterReadyPayloadAsync(JsonElement argumentsElement, CancellationToken cancellationToken)
+    {
+        int timeoutMs = ExtractInt(argumentsElement, 0, "timeoutMs", "TimeoutMs");
+        if (timeoutMs <= 0)
+            timeoutMs = Math.Max(1, ExtractInt(argumentsElement, 30, "timeoutSeconds", "TimeoutSeconds")) * 1000;
+        timeoutMs = Math.Clamp(timeoutMs, 1000, 600000);
+
+        int pollIntervalMs = Math.Clamp(ExtractInt(argumentsElement, 500, "pollIntervalMs", "PollIntervalMs"), 100, 5000);
+        int warmupFrames = Math.Max(0, ExtractInt(argumentsElement, 0, "warmupFrames", "WarmupFrames"));
+        double warmupSeconds = Math.Max(0d, ExtractDouble(argumentsElement, 1.0d, "warmupSeconds", "WarmupSeconds"));
+        if (warmupFrames > 0)
+            warmupSeconds = Math.Max(warmupSeconds, warmupFrames / 60.0d);
+
+        bool stopFirst = ExtractBool(argumentsElement, false, "stopFirst", "StopFirst");
+        bool clearPause = ExtractBool(argumentsElement, true, "clearPause", "ClearPause", "unpauseBeforeExit", "UnpauseBeforeExit");
+        bool captureConsoleDelta = ExtractBool(argumentsElement, true, "captureConsoleDelta", "CaptureConsoleDelta");
+        string? scenePath = ExtractString(argumentsElement, "scenePath", "ScenePath");
+
+        DateTime startedUtc = DateTime.UtcNow;
+        DateTime deadlineUtc = startedUtc.AddMilliseconds(timeoutMs);
+        string[] startingActivePacks = m_ActiveToolPacks.ToArray();
+        object? runtimePackActivation = null;
+        object? sceneLoad = null;
+        object? stopResult = null;
+        object? preConsole = null;
+        object? postConsole = null;
+        object? playRequest = null;
+        string? playRequestError = null;
+        bool requestAccepted = false;
+        bool reconnectExpected = false;
+
+        try
+        {
+            runtimePackActivation = await EnsureRuntimePackActiveForEnterReadyAsync(
+                includeScenePack: !string.IsNullOrWhiteSpace(scenePath),
+                cancellationToken).ConfigureAwait(false);
+
+            if (captureConsoleDelta)
+                preConsole = await TryReadConsoleErrorSummaryAsync(cancellationToken).ConfigureAwait(false);
+
+            if (!string.IsNullOrWhiteSpace(scenePath))
+            {
+                sceneLoad = await LoadSceneForEnterReadyAsync(scenePath!, cancellationToken).ConfigureAwait(false);
+                if (sceneLoad is JsonElement sceneLoadElement && IsToolLevelError(sceneLoadElement))
+                {
+                    return CreateErrorPayload(
+                        $"Could not load scene '{scenePath}' before entering play mode.",
+                        "UNITY_MCP_PLAY_MODE_SCENE_LOAD_FAILED",
+                        new
+                        {
+                            scenePath,
+                            sceneLoad,
+                            startingActivePacks,
+                            activeToolPacks = m_ActiveToolPacks
+                        });
+                }
+            }
+
+            if (stopFirst)
+            {
+                stopResult = await CallBridgeToolResultAsync(
+                    "Unity.Editor.SetPlayMode",
+                    new
+                    {
+                        mode = "exit",
+                        timeoutSeconds = Math.Max(1, timeoutMs / 1000),
+                        waitForRuntimeAdvance = false,
+                        unpauseBeforeExit = clearPause
+                    },
+                    cancellationToken).ConfigureAwait(false);
+            }
+
+            try
+            {
+                JsonElement playRequestElement = await CallBridgeToolResultAsync(
+                    "Unity.Editor.SetPlayMode",
+                    new
+                    {
+                        mode = "enter",
+                        stopFirst,
+                        waitForRuntimeAdvance = true,
+                        warmupSeconds,
+                        timeoutSeconds = Math.Max(1, (int)Math.Ceiling(timeoutMs / 1000.0d)),
+                        unpauseBeforeExit = clearPause
+                    },
+                    cancellationToken).ConfigureAwait(false);
+
+                playRequest = playRequestElement.Clone();
+                string playRequestJson = playRequestElement.GetRawText();
+                requestAccepted = playRequestJson.IndexOf("\"requested\":true", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    playRequestJson.IndexOf("\"transitionState\":\"already_playing\"", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    playRequestJson.IndexOf("\"transitionState\":\"entered_play_mode\"", StringComparison.OrdinalIgnoreCase) >= 0;
+                reconnectExpected = playRequestJson.IndexOf("\"reconnectExpected\":true", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    playRequestJson.IndexOf("\"enter_requested_after_response\"", StringComparison.OrdinalIgnoreCase) >= 0;
+            }
+            catch (BridgeTransportException ex)
+            {
+                playRequestError = ex.Message;
+                requestAccepted = ex.RequestSent;
+                reconnectExpected = ex.RequestSent;
+                await ResetBridgeClientAsync(preserveActivePacks: true, clearToolCache: true).ConfigureAwait(false);
+            }
+
+            HostPlayReadyResult ready = await WaitForPlayModeReadyFromHostAsync(
+                deadlineUtc,
+                pollIntervalMs,
+                warmupSeconds,
+                cancellationToken).ConfigureAwait(false);
+
+            if (captureConsoleDelta)
+                postConsole = await TryReadConsoleErrorSummaryAsync(cancellationToken).ConfigureAwait(false);
+
+            int? preConsoleErrors = ExtractConsoleErrorCount(preConsole);
+            int? postConsoleErrors = ExtractConsoleErrorCount(postConsole);
+            int? consoleErrorDelta = preConsoleErrors.HasValue && postConsoleErrors.HasValue
+                ? Math.Max(0, postConsoleErrors.Value - preConsoleErrors.Value)
+                : null;
+            int elapsedMs = (int)Math.Round((DateTime.UtcNow - startedUtc).TotalMilliseconds);
+
+            return JsonSerializer.SerializeToElement(new
+            {
+                success = ready.Success,
+                message = ready.Success
+                    ? "Play mode entered and runtime is ready for runtime tools."
+                    : "Play mode did not become ready for runtime tools before timeout.",
+                data = new
+                {
+                    requestAccepted,
+                    editorStable = ready.EditorIdle,
+                    isPlaying = ready.IsPlaying,
+                    runtimeAdvanced = ready.RuntimeAdvanced,
+                    readyForRuntimeTools = ready.Success,
+                    activeScene = ready.ActiveScene,
+                    frameCounts = new
+                    {
+                        update = ready.UpdateCount,
+                        fixedUpdate = ready.FixedUpdateCount,
+                        unscaledTime = ready.UnscaledTime
+                    },
+                    timeoutMs,
+                    pollIntervalMs,
+                    warmupSeconds,
+                    warmupFrames,
+                    elapsedMs,
+                    stopFirst,
+                    clearPause,
+                    captureConsoleDelta,
+                    reconnectExpected,
+                    playRequestWasReconnectProne = reconnectExpected,
+                    playRequestError,
+                    playRequest,
+                    stopResult,
+                    scenePath,
+                    sceneLoad,
+                    runtimePackActivation,
+                    startingActivePacks,
+                    activeToolPacks = m_ActiveToolPacks,
+                    consoleDelta = captureConsoleDelta
+                        ? new
+                        {
+                            beforeErrors = preConsoleErrors,
+                            afterErrors = postConsoleErrors,
+                            errorDelta = consoleErrorDelta,
+                            before = preConsole,
+                            after = postConsole
+                        }
+                        : null,
+                    attemptCount = ready.Attempts.Count,
+                    attempts = ready.Attempts,
+                    finalState = ready.LastState,
+                    lastError = ready.LastError,
+                    host = CreateHostDiagnostics()
+                }
+            }, m_JsonOptions);
+        }
+        catch (Exception ex)
+        {
+            return CreateErrorPayload(
+                $"Unity play-mode readiness workflow failed: {ex.Message}",
+                "UNITY_MCP_PLAY_MODE_ENTER_READY_FAILED",
+                new
+                {
+                    exceptionType = ex.GetType().Name,
+                    timeoutMs,
+                    pollIntervalMs,
+                    warmupSeconds,
+                    warmupFrames,
+                    stopFirst,
+                    clearPause,
+                    scenePath,
+                    requestAccepted,
+                    reconnectExpected,
+                    playRequestError,
+                    playRequest,
+                    stopResult,
+                    sceneLoad,
+                    runtimePackActivation,
+                    startingActivePacks,
+                    activeToolPacks = m_ActiveToolPacks,
+                    host = CreateHostDiagnostics()
+                });
+        }
+    }
+
+    async Task<object> EnsureRuntimePackActiveForEnterReadyAsync(bool includeScenePack, CancellationToken cancellationToken)
+    {
+        string[] before = m_ActiveToolPacks.ToArray();
+        if (IsStaticAllToolSurface)
+        {
+            return new
+            {
+                changed = false,
+                reason = "static_all_surface",
+                before,
+                activeToolPacks = m_ActiveToolPacks,
+                toolsListChangedNotificationSent = false
+            };
+        }
+
+        await EnsureBridgeReadyAsync(cancellationToken).ConfigureAwait(false);
+        string[] activeAdditional = NormalizeAdditionalToolPacks(m_ActiveToolPacks);
+        bool runtimeActive = activeAdditional.Any(pack => string.Equals(pack, "runtime", StringComparison.OrdinalIgnoreCase));
+        bool sceneActive = activeAdditional.Any(pack => string.Equals(pack, "scene", StringComparison.OrdinalIgnoreCase));
+        if (runtimeActive && (!includeScenePack || sceneActive))
+        {
+            return new
+            {
+                changed = false,
+                reason = includeScenePack ? "runtime_and_scene_already_active" : "runtime_already_active",
+                before,
+                activeToolPacks = m_ActiveToolPacks,
+                toolsListChangedNotificationSent = false
+            };
+        }
+
+        var desired = new List<string> { "runtime" };
+        if (includeScenePack)
+            desired.Add("scene");
+        foreach (string pack in activeAdditional)
+        {
+            if (desired.Count >= 2)
+                break;
+            if (!desired.Contains(pack, StringComparer.OrdinalIgnoreCase))
+                desired.Add(pack);
+        }
+
+        var manifestEnvelope = await m_BridgeClient!.SetToolPacksAsync(
+            desired.ToArray(),
+            includeSchemas: false,
+            cancellationToken,
+            reason: "play_mode_enter_ready",
+            toolSurfaceMode: s_ToolSurfaceMode).ConfigureAwait(false);
+        if (!string.Equals(manifestEnvelope.Status, "success", StringComparison.OrdinalIgnoreCase) || manifestEnvelope.Result == null)
+            throw new InvalidOperationException(manifestEnvelope.Error ?? "Unity bridge did not activate the runtime tool pack.");
+
+        bool unchanged = string.Equals(manifestEnvelope.Result.Kind, "unchanged", StringComparison.OrdinalIgnoreCase);
+        await ApplyManifestAsync(manifestEnvelope.Result, shouldFetchSchemas: true, cancellationToken).ConfigureAwait(false);
+        bool toolsListChangedNotificationSent = false;
+        if (!unchanged && m_ClientInitialized)
+        {
+            await SendToolsListChangedNotificationAsync(cancellationToken).ConfigureAwait(false);
+            toolsListChangedNotificationSent = true;
+        }
+
+        return new
+        {
+            changed = !unchanged,
+            reason = "runtime_pack_activated",
+            before,
+            requestedAdditionalPacks = desired.ToArray(),
+            activeToolPacks = m_ActiveToolPacks,
+            toolsListChangedNotificationSent
+        };
+    }
+
+    async Task<JsonElement> LoadSceneForEnterReadyAsync(string scenePath, CancellationToken cancellationToken)
+    {
+        string normalizedScenePath = scenePath.Replace('\\', '/').Trim();
+        if (normalizedScenePath.StartsWith("Assets/", StringComparison.OrdinalIgnoreCase))
+            normalizedScenePath = normalizedScenePath["Assets/".Length..];
+        normalizedScenePath = normalizedScenePath.TrimStart('/');
+
+        if (!normalizedScenePath.EndsWith(".unity", StringComparison.OrdinalIgnoreCase))
+        {
+            return CreateErrorPayload(
+                "scenePath must point to a .unity scene under Assets.",
+                "UNITY_MCP_INVALID_SCENE_PATH",
+                new { scenePath });
+        }
+
+        string sceneName = Path.GetFileNameWithoutExtension(normalizedScenePath);
+        string? directory = Path.GetDirectoryName(normalizedScenePath)?.Replace('\\', '/');
+        return await CallBridgeToolResultAsync(
+            "Unity.ManageScene",
+            new
+            {
+                action = "Load",
+                name = sceneName,
+                path = string.IsNullOrWhiteSpace(directory) ? string.Empty : directory
+            },
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    async Task<JsonElement> CallBridgeToolResultAsync(string toolName, object arguments, CancellationToken cancellationToken)
+    {
+        await EnsureBridgeReadyAsync(cancellationToken).ConfigureAwait(false);
+        JsonElement argumentElement = JsonSerializer.SerializeToElement(arguments, m_JsonOptions);
+        var envelope = await m_BridgeClient!.CallToolAsync(toolName, argumentElement, cancellationToken).ConfigureAwait(false);
+        if (!string.Equals(envelope.Status, "success", StringComparison.OrdinalIgnoreCase))
+            return CreateErrorPayload(envelope.Error ?? $"Tool '{toolName}' failed.");
+
+        return envelope.Result.Clone();
+    }
+
+    async Task<object> TryReadConsoleErrorSummaryAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await CallBridgeToolResultAsync(
+                "Unity.ReadConsole",
+                new
+                {
+                    action = "Get",
+                    types = new[] { "Error" },
+                    count = 100,
+                    format = "Summary",
+                    excludeMcpNoise = true,
+                    includeStacktrace = false
+                },
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            return new
+            {
+                success = false,
+                error = ex.Message,
+                exceptionType = ex.GetType().Name
+            };
+        }
+    }
+
+    async Task<HostPlayReadyResult> WaitForPlayModeReadyFromHostAsync(
+        DateTime deadlineUtc,
+        int pollIntervalMs,
+        double warmupSeconds,
+        CancellationToken cancellationToken)
+    {
+        var attempts = new List<object>();
+        double? previousUnscaledTime = null;
+        object? lastState = null;
+        string? lastError = null;
+
+        while (DateTime.UtcNow < deadlineUtc)
+        {
+            try
+            {
+                int remainingTimeoutSeconds = Math.Max(
+                    1,
+                    (int)Math.Ceiling(Math.Min(10d, Math.Max(1d, (deadlineUtc - DateTime.UtcNow).TotalSeconds))));
+                JsonElement state = await CallBridgeToolResultAsync(
+                    "Unity.Editor.SetPlayMode",
+                    new
+                    {
+                        mode = "enter",
+                        stopFirst = false,
+                        waitForRuntimeAdvance = true,
+                        warmupSeconds = 0d,
+                        timeoutSeconds = remainingTimeoutSeconds,
+                        unpauseBeforeExit = true
+                    },
+                    cancellationToken).ConfigureAwait(false);
+
+                object attempt = CreatePlayReadyAttemptFromSetPlayMode(state, previousUnscaledTime, out bool playReady, out double unscaledTime);
+                attempts.Add(attempt);
+                lastState = attempt;
+                previousUnscaledTime = unscaledTime;
+
+                if (playReady)
+                {
+                    if (warmupSeconds > 0d)
+                        await Task.Delay((int)Math.Round(warmupSeconds * 1000d), cancellationToken).ConfigureAwait(false);
+
+                    JsonElement finalState = await CallBridgeToolResultAsync(
+                        "Unity.Editor.SetPlayMode",
+                        new
+                        {
+                            mode = "enter",
+                            stopFirst = false,
+                            waitForRuntimeAdvance = true,
+                            warmupSeconds = 0d,
+                            timeoutSeconds = 5,
+                            unpauseBeforeExit = true
+                        },
+                        cancellationToken).ConfigureAwait(false);
+                    object finalAttempt = CreatePlayReadyAttemptFromSetPlayMode(finalState, previousUnscaledTime, out bool finalReady, out _);
+                    attempts.Add(finalAttempt);
+
+                    return BuildHostPlayReadyResult(
+                        finalReady,
+                        finalReady
+                            ? "Play mode entered and runtime reached a settled advancing state."
+                            : "Play mode advanced, but the final warmup probe was not ready.",
+                        finalAttempt,
+                        attempts,
+                        finalReady ? null : lastError);
+                }
+            }
+            catch (Exception ex)
+            {
+                lastError = ex.Message;
+                attempts.Add(new
+                {
+                    timestamp = DateTime.UtcNow.ToString("O"),
+                    success = false,
+                    error = ex.Message,
+                    exceptionType = ex.GetType().Name
+                });
+
+                if (IsBridgeTransportFailure(ex))
+                    await ResetBridgeClientAsync(preserveActivePacks: true, clearToolCache: true).ConfigureAwait(false);
+            }
+
+            TimeSpan remaining = deadlineUtc - DateTime.UtcNow;
+            if (remaining <= TimeSpan.Zero)
+                break;
+
+            int delayMs = (int)Math.Min(pollIntervalMs, Math.Max(1, remaining.TotalMilliseconds));
+            await Task.Delay(delayMs, cancellationToken).ConfigureAwait(false);
+        }
+
+        return BuildHostPlayReadyResult(
+            success: false,
+            message: "Play mode did not reach a settled advancing runtime state before timeout.",
+            lastState,
+            attempts,
+            lastError);
+    }
+
+    object CreatePlayReadyAttemptFromSetPlayMode(JsonElement result, double? previousUnscaledTime, out bool playReady, out double unscaledTime)
+    {
+        JsonElement data = TryGetNestedProperty(result, out var dataElement, "data") ? dataElement : default;
+        JsonElement finalState = TryGetNestedProperty(data, out var finalStateElement, "finalState") ? finalStateElement : default;
+        JsonElement runtimeAdvance = TryGetNestedProperty(data, out var runtimeAdvanceElement, "runtimeAdvance") ? runtimeAdvanceElement : default;
+        JsonElement finalProbe =
+            TryGetNestedProperty(runtimeAdvance, out var runtimeAdvanceProbe, "finalProbe") ? runtimeAdvanceProbe :
+            TryGetNestedProperty(finalState, out var finalStateProbe, "runtimeProbe") ? finalStateProbe :
+            default;
+
+        bool success = GetJsonBool(result, false, "success");
+        bool requestAccepted = GetJsonBool(data, false, "requested") ||
+            string.Equals(GetJsonString(data, "transitionState"), "already_playing", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(GetJsonString(data, "transitionState"), "entered_play_mode", StringComparison.OrdinalIgnoreCase);
+        bool isPlaying = GetJsonBool(finalState, false, "isPlaying", "IsPlaying");
+        bool isPaused = GetJsonBool(finalState, false, "isPaused", "IsPaused");
+        bool isCompiling = GetJsonBool(finalState, false, "isCompiling", "IsCompiling");
+        bool isUpdating = GetJsonBool(finalState, false, "isUpdating", "IsUpdating");
+        bool isBuildingPlayer = GetJsonBool(finalState, false, "isBuildingPlayer", "IsBuildingPlayer");
+        bool isTransitioning = GetJsonBool(finalState, false, "isPlayingOrWillChangePlaymode", "IsPlayingOrWillChangePlaymode");
+        bool runtimeProbeAvailable = GetJsonBool(finalProbe, false, "IsAvailable", "isAvailable");
+        bool runtimeProbeHasAdvancedFrames = GetJsonBool(finalProbe, false, "HasAdvancedFrames", "hasAdvancedFrames");
+        int updateCount = GetJsonInt(finalProbe, 0, "UpdateCount", "updateCount");
+        int fixedUpdateCount = GetJsonInt(finalProbe, 0, "FixedUpdateCount", "fixedUpdateCount");
+        unscaledTime = GetJsonDouble(finalProbe, 0d, "UnscaledTime", "unscaledTime");
+        string activeSceneName = GetJsonString(finalProbe, "ActiveSceneName", "activeSceneName") ?? string.Empty;
+        bool runtimeAdvancedByTime = previousUnscaledTime.HasValue && unscaledTime > previousUnscaledTime.Value;
+        bool runtimeAdvanced = GetJsonBool(data, false, "runtimeAdvanced") ||
+            (isPlaying && runtimeProbeAvailable && runtimeProbeHasAdvancedFrames && (updateCount >= 10 || runtimeAdvancedByTime));
+        bool transitionPending = GetJsonBool(data, false, "transitionPending");
+        bool editorIdle = success && !isCompiling && !isUpdating && !isBuildingPlayer && !transitionPending;
+        bool readyForRuntimeTools = GetJsonBool(data, false, "readyForRuntimeTools") || (editorIdle && runtimeAdvanced);
+        playReady = readyForRuntimeTools;
+
+        return new
+        {
+            timestamp = DateTime.UtcNow.ToString("O"),
+            success,
+            requestAccepted,
+            transitionState = GetJsonString(data, "transitionState"),
+            reconnectExpected = GetJsonBool(data, false, "reconnectExpected"),
+            editorIdle,
+            isPlaying,
+            isPaused,
+            isCompiling,
+            isUpdating,
+            isBuildingPlayer,
+            isTransitioning,
+            transitionPending,
+            runtimeProbeAvailable,
+            runtimeProbeHasAdvancedFrames,
+            runtimeProbeUpdateCount = updateCount,
+            runtimeProbeFixedUpdateCount = fixedUpdateCount,
+            runtimeProbeUnscaledTime = unscaledTime,
+            runtimeAdvancedByTime,
+            runtimeAdvanced,
+            activeSceneName,
+            readyForRuntimeTools,
+            playReady,
+            consoleErrorCount = GetJsonInt(data, 0, "consoleErrorCount"),
+            timedOut = GetJsonBool(data, false, "timedOut")
+        };
+    }
+
+    HostPlayReadyResult BuildHostPlayReadyResult(
+        bool success,
+        string message,
+        object? lastState,
+        List<object> attempts,
+        string? lastError)
+    {
+        JsonElement lastStateElement = JsonSerializer.SerializeToElement(lastState ?? new { }, m_JsonOptions);
+        return new HostPlayReadyResult
+        {
+            Success = success,
+            Message = message,
+            EditorIdle = GetJsonBool(lastStateElement, false, "editorIdle"),
+            IsPlaying = GetJsonBool(lastStateElement, false, "isPlaying"),
+            RuntimeAdvanced = GetJsonBool(lastStateElement, false, "runtimeAdvanced"),
+            RuntimeProbeAvailable = GetJsonBool(lastStateElement, false, "runtimeProbeAvailable"),
+            UpdateCount = GetJsonInt(lastStateElement, 0, "runtimeProbeUpdateCount"),
+            FixedUpdateCount = GetJsonInt(lastStateElement, 0, "runtimeProbeFixedUpdateCount"),
+            UnscaledTime = GetJsonDouble(lastStateElement, 0d, "runtimeProbeUnscaledTime"),
+            ActiveScene = GetJsonString(lastStateElement, "activeSceneName") ?? string.Empty,
+            Attempts = attempts,
+            LastState = lastState,
+            LastError = lastError
+        };
+    }
+
     static string[] ExtractPacks(JsonElement argumentsElement)
     {
         if (argumentsElement.ValueKind != JsonValueKind.Object)
@@ -1675,6 +2228,20 @@ sealed class UnityMcpLensHost
         return fallback;
     }
 
+    static double ExtractDouble(JsonElement argumentsElement, double fallback, params string[] names)
+    {
+        if (argumentsElement.ValueKind != JsonValueKind.Object)
+            return fallback;
+
+        foreach (string name in names)
+        {
+            if (argumentsElement.TryGetProperty(name, out var element) && element.ValueKind == JsonValueKind.Number && element.TryGetDouble(out double value))
+                return value;
+        }
+
+        return fallback;
+    }
+
     static string[] ExtractExpectedTools(JsonElement argumentsElement)
     {
         if (argumentsElement.ValueKind != JsonValueKind.Object)
@@ -1709,6 +2276,103 @@ sealed class UnityMcpLensHost
             return refIdElement.GetString() ?? string.Empty;
 
         return string.Empty;
+    }
+
+    static bool TryGetPropertyIgnoreCase(JsonElement element, out JsonElement value, params string[] names)
+    {
+        value = default;
+        if (element.ValueKind != JsonValueKind.Object)
+            return false;
+
+        foreach (string name in names)
+        {
+            if (element.TryGetProperty(name, out value))
+                return true;
+        }
+
+        foreach (JsonProperty property in element.EnumerateObject())
+        {
+            if (names.Any(name => string.Equals(property.Name, name, StringComparison.OrdinalIgnoreCase)))
+            {
+                value = property.Value;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    static bool TryGetNestedProperty(JsonElement element, out JsonElement value, params string[] path)
+    {
+        value = element;
+        foreach (string name in path)
+        {
+            if (!TryGetPropertyIgnoreCase(value, out value, name))
+                return false;
+        }
+
+        return true;
+    }
+
+    static bool GetJsonBool(JsonElement element, bool fallback, params string[] names)
+    {
+        if (!TryGetPropertyIgnoreCase(element, out var value, names))
+            return fallback;
+
+        return value.ValueKind switch
+        {
+            JsonValueKind.True => true,
+            JsonValueKind.False => false,
+            _ => fallback
+        };
+    }
+
+    static int GetJsonInt(JsonElement element, int fallback, params string[] names)
+    {
+        return TryGetPropertyIgnoreCase(element, out var value, names) &&
+            value.ValueKind == JsonValueKind.Number &&
+            value.TryGetInt32(out int result)
+            ? result
+            : fallback;
+    }
+
+    static double GetJsonDouble(JsonElement element, double fallback, params string[] names)
+    {
+        return TryGetPropertyIgnoreCase(element, out var value, names) &&
+            value.ValueKind == JsonValueKind.Number &&
+            value.TryGetDouble(out double result)
+            ? result
+            : fallback;
+    }
+
+    static string? GetJsonString(JsonElement element, params string[] names)
+    {
+        return TryGetPropertyIgnoreCase(element, out var value, names) && value.ValueKind == JsonValueKind.String
+            ? value.GetString()
+            : null;
+    }
+
+    static int? ExtractConsoleErrorCount(object? consoleSummary)
+    {
+        if (consoleSummary == null)
+            return null;
+
+        JsonElement element = JsonSerializer.SerializeToElement(consoleSummary);
+        if (TryGetNestedProperty(element, out var errorCount, "data", "typeCounts", "error") &&
+            errorCount.ValueKind == JsonValueKind.Number &&
+            errorCount.TryGetInt32(out int count))
+        {
+            return count;
+        }
+
+        if (TryGetNestedProperty(element, out var entryCount, "data", "entryCount") &&
+            entryCount.ValueKind == JsonValueKind.Number &&
+            entryCount.TryGetInt32(out count))
+        {
+            return count;
+        }
+
+        return null;
     }
 
     static string CanonicalizeToolName(string toolName)
