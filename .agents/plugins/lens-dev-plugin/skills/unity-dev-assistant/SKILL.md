@@ -107,7 +107,7 @@ or YAML edits.
    - `Import-UnitySpriteState.ps1`
 12. For long custom builds or exports, validate the exact enabled build-scene list first with `scripts/Test-UnityBuildSceneList.js --ExpectedScenes ...` on macOS/Linux, or `scripts/Test-UnityBuildSceneList.ps1 -ExpectedScenes ...` on Windows.
 13. For play mode, prefer `Unity.Editor.SetPlayMode` through `scripts/Enter-UnityPlayMode.js` on macOS/Linux or `scripts/Enter-UnityPlayMode.ps1` on Windows. Require source-integrity preflight plus runtime advancement and a short warmup, read inline console-error counts on failure, exit with `scripts/Exit-UnityPlayMode.ps1` or `Unity.Editor.SetPlayMode(mode=exit)`, and treat transient disconnects during play/exit transition as recoverable until the runtime probe proves success or failure. Successful helper output is compact by default; use `--IncludeDetails` / `-IncludeDetails` only when raw nested readiness attempts are needed.
-14. For `Unity_RunCommand`, use `scripts/Invoke-UnityRunCommand.js` on macOS/Linux or `scripts/Invoke-UnityRunCommand.ps1` on Windows instead of hand-escaping JSON, and prefer small focused probes over one large validation script.
+14. For `Unity_RunCommand`, use `scripts/Invoke-UnityRunCommand.js` on macOS/Linux or `scripts/Invoke-UnityRunCommand.ps1` on Windows instead of hand-escaping JSON, and prefer small focused probes over one large validation script. In Play Mode, prefer `Unity.Runtime.InvokeComponentMethod`, `Unity.Runtime.SetComponentProperty`, and `Unity.Runtime.AddTemporaryComponent` before using `Unity_RunCommand` for explicit runtime smoke actions.
    - In healthy play mode, the helper should skip its own idle-wait gate and run directly.
    - Prefer `result.ReturnResult(...)` for structured probe output; do not promote probe data to warning logs just to make it visible.
    - Treat `compilationLogs`, `executionLogs`, and `consoleLogs` as compact previews. Use `logSummary` first, then `Unity.ReadDetailRef` only when full log text is needed.
@@ -183,7 +183,7 @@ Prefer a scene-owned debugger component when a project needs fast UI or state it
 - Current `foundation` surface: `17` tools
 - Current `foundation` + `scene` surface: `41` tools
 - Current `foundation` + `ui` surface: `33` tools
-- Current `foundation` + `runtime` surface: `23` tools
+- Current `foundation` + `runtime` surface: `29` tools
 - Current `foundation` + `project` surface: `26` tools
 - Current `foundation` + `assets` surface: `30` tools
 - Prefer split GameObject TSAM tools before legacy `Unity.ManageGameObject`
@@ -210,6 +210,7 @@ Prefer a scene-owned debugger component when a project needs fast UI or state it
 - Prefer `Unity.Asset.SetSerializedProperties` for ScriptableObject/data asset scalar and object-reference binding
 - Prefer `Unity.Runtime.QueryObjects` for play-mode component counts and sample paths
 - Prefer `Unity.Runtime.GetComponentSnapshot` for read-only public/serialized runtime component state before writing project-specific `Unity.RunCommand` snippets
+- Prefer `Unity.Runtime.InvokeComponentMethod` for public instance smoke hooks, `Unity.Runtime.SetComponentProperty` for narrow runtime state changes, and `Unity.Runtime.AddTemporaryComponent` for play-mode-only harness attachment. Use `requireLensCallable=true` once a project has adopted `[LensCallable]` or `[LensSmokeAction]`.
 - When `rg.exe` is blocked in the Codex desktop app context, prefer the shared PowerShell search fallback instead of retrying `rg`
 - Hybrid snapshots for playtesting: Unity-aware first, desktop fallback second
 - Prefer relative project paths for Unity-side screenshots and state captures

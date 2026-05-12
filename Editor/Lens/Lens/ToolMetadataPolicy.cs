@@ -101,6 +101,8 @@ namespace Becool.UnityMcpLens.Editor.Lens
             NormalizeToolName("Unity.Editor.SyncScripts"),
             NormalizeToolName("Unity.Editor.SetPlayMode"),
             NormalizeToolName("Unity.Runtime.InvokeComponentMethod"),
+            NormalizeToolName("Unity.Runtime.SetComponentProperty"),
+            NormalizeToolName("Unity.Runtime.AddTemporaryComponent"),
             NormalizeToolName("Unity.Tile.BuildSet"),
             NormalizeToolName("Unity.Tilemap.Setup"),
             NormalizeToolName("Unity.Tilemap.Paint"),

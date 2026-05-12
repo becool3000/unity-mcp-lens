@@ -172,7 +172,7 @@ sealed class MetadataAudit(BenchmarkOptions options)
     const int ExpectedFoundationToolCount = 18;
     const int ExpectedSceneToolCount = 43;
     const int ExpectedUiToolCount = 35;
-    const int ExpectedRuntimeToolCount = 27;
+    const int ExpectedRuntimeToolCount = 29;
     const int ExpectedProjectToolCount = 27;
     const int ExpectedAssetsToolCount = 31;
 
@@ -260,6 +260,8 @@ sealed class MetadataAudit(BenchmarkOptions options)
         "Unity_Runtime_QueryObjects",
         "Unity_Object_ResolveStablePath",
         "Unity_Runtime_InvokeComponentMethod",
+        "Unity_Runtime_SetComponentProperty",
+        "Unity_Runtime_AddTemporaryComponent",
         "Unity_PlayMode_PointerInputSmoke",
         "Unity_PlayMode_EnterReady",
         "Unity_Editor_ExitPlayMode",
@@ -404,6 +406,9 @@ sealed class MetadataAudit(BenchmarkOptions options)
         ValidateReadOnlyHint(runtimeTools, "Unity_Editor_ExitPlayMode", expected: false, failures);
         ValidateReadOnlyHint(runtimeTools, "Unity_Editor_SetPlayMode", expected: false, failures);
         ValidateReadOnlyHint(runtimeTools, "Unity_Runtime_GetComponentSnapshot", expected: true, failures);
+        ValidateReadOnlyHint(runtimeTools, "Unity_Runtime_InvokeComponentMethod", expected: false, failures);
+        ValidateReadOnlyHint(runtimeTools, "Unity_Runtime_SetComponentProperty", expected: false, failures);
+        ValidateReadOnlyHint(runtimeTools, "Unity_Runtime_AddTemporaryComponent", expected: false, failures);
         ValidateReadOnlyHint(projectTools, "Unity_InputSystem_Diagnostics", expected: true, failures);
         ValidateReadOnlyHint(projectTools, "Unity_Project_PackageCompatibility", expected: true, failures);
         ValidateReadOnlyHint(projectTools, "Unity_InputActions_InspectAsset", expected: true, failures);
@@ -872,8 +877,20 @@ sealed class MetadataAudit(BenchmarkOptions options)
         ValidateSplitGameObjectSchema(
             tools,
             "Unity_Runtime_InvokeComponentMethod",
-            ["target", "searchMethod", "componentType", "componentIndex", "methodName", "args", "includeInactive", "waitFrames", "captureConsoleDelta", "requirePlayMode"],
+            ["target", "searchMethod", "componentType", "componentIndex", "methodName", "args", "includeInactive", "waitFrames", "captureConsoleDelta", "requirePlayMode", "requireLensCallable", "allowedMethodMarkers", "surfacePolicy"],
             ["target", "componentType", "methodName"],
+            failures);
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_Runtime_SetComponentProperty",
+            ["target", "searchMethod", "componentType", "componentIndex", "memberName", "value", "includeInactive", "requirePlayMode", "allowNonPublicSerializedField", "waitFrames", "captureConsoleDelta"],
+            ["target", "componentType", "memberName", "value"],
+            failures);
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_Runtime_AddTemporaryComponent",
+            ["target", "searchMethod", "componentType", "includeInactive", "requirePlayMode", "allowDuplicate", "markDontSave", "waitFrames", "captureConsoleDelta"],
+            ["target", "componentType"],
             failures);
         ValidateSplitGameObjectSchema(
             tools,
