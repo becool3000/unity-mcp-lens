@@ -174,7 +174,7 @@ sealed class MetadataAudit(BenchmarkOptions options)
     const int ExpectedUiToolCount = 35;
     const int ExpectedRuntimeToolCount = 29;
     const int ExpectedProjectToolCount = 31;
-    const int ExpectedAssetsToolCount = 31;
+    const int ExpectedAssetsToolCount = 39;
 
     static readonly string[] k_RequiredFoundationTools =
     [
@@ -298,6 +298,14 @@ sealed class MetadataAudit(BenchmarkOptions options)
         "Unity_Asset_ApplyImportSpriteSheetAndBind",
         "Unity_Asset_VerifySpriteArrayBinding",
         "Unity_ManageAsset",
+        "Unity_Prefab_Inspect",
+        "Unity_Prefab_Instantiate",
+        "Unity_Prefab_CreateFromSceneObject",
+        "Unity_Prefab_GetOverrides",
+        "Unity_Prefab_PreviewApplyOverrides",
+        "Unity_Prefab_ApplyOverrides",
+        "Unity_Prefab_PreviewRevertOverrides",
+        "Unity_Prefab_RevertOverrides",
         "Unity_Prefab_SetSerializedProperties",
         "Unity_Resource_Write",
         "Unity_Tile_BuildSet",
@@ -438,6 +446,15 @@ sealed class MetadataAudit(BenchmarkOptions options)
         ValidateReadOnlyHint(assetsTools, "Unity_Asset_PreviewImportSpriteSheetAndBind", expected: true, failures);
         ValidateReadOnlyHint(assetsTools, "Unity_Asset_ApplyImportSpriteSheetAndBind", expected: false, failures);
         ValidateReadOnlyHint(assetsTools, "Unity_Asset_VerifySpriteArrayBinding", expected: true, failures);
+        ValidateReadOnlyHint(assetsTools, "Unity_Prefab_Inspect", expected: true, failures);
+        ValidateReadOnlyHint(assetsTools, "Unity_Prefab_Instantiate", expected: false, failures);
+        ValidateReadOnlyHint(assetsTools, "Unity_Prefab_CreateFromSceneObject", expected: false, failures);
+        ValidateReadOnlyHint(assetsTools, "Unity_Prefab_GetOverrides", expected: true, failures);
+        ValidateReadOnlyHint(assetsTools, "Unity_Prefab_PreviewApplyOverrides", expected: true, failures);
+        ValidateReadOnlyHint(assetsTools, "Unity_Prefab_ApplyOverrides", expected: false, failures);
+        ValidateReadOnlyHint(assetsTools, "Unity_Prefab_PreviewRevertOverrides", expected: true, failures);
+        ValidateReadOnlyHint(assetsTools, "Unity_Prefab_RevertOverrides", expected: false, failures);
+        ValidateReadOnlyHint(assetsTools, "Unity_Prefab_SetSerializedProperties", expected: false, failures);
         ValidateReadOnlyHint(debugTools, "Unity_GetLensUsageReport", expected: true, failures);
         ValidateGameObjectSchemas(sceneTools, failures);
         ValidateUiToolSchemas(uiTools, failures);
@@ -764,6 +781,60 @@ sealed class MetadataAudit(BenchmarkOptions options)
             "Unity_Asset_VerifySpriteArrayBinding",
             ["targetAssetPath", "targetFieldName", "expectedCount", "expectedTextureName", "expectedTextureGuid", "expectedSpriteNames"],
             ["targetAssetPath", "targetFieldName"],
+            failures);
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_Prefab_Inspect",
+            ["prefabPath", "target", "searchMethod", "includeInactive", "includeComponents", "includeOverrides", "maxRows"],
+            [],
+            failures);
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_Prefab_Instantiate",
+            ["prefabPath", "instanceName", "parent", "parentSearchMethod", "includeInactive", "position", "rotation", "scale"],
+            ["prefabPath"],
+            failures);
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_Prefab_CreateFromSceneObject",
+            ["target", "searchMethod", "includeInactive", "prefabPath", "connect", "overwrite"],
+            ["target", "prefabPath"],
+            failures);
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_Prefab_GetOverrides",
+            ["target", "searchMethod", "includeInactive", "includeInherited", "includeNested", "maxOverrides"],
+            ["target"],
+            failures);
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_Prefab_PreviewApplyOverrides",
+            ["target", "searchMethod", "includeInactive", "overrideIds", "propertyPaths", "targetPaths", "includeNested", "applyAll"],
+            ["target"],
+            failures);
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_Prefab_ApplyOverrides",
+            ["target", "searchMethod", "includeInactive", "overrideIds", "propertyPaths", "targetPaths", "includeNested", "applyAll"],
+            ["target"],
+            failures);
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_Prefab_PreviewRevertOverrides",
+            ["target", "searchMethod", "includeInactive", "overrideIds", "propertyPaths", "targetPaths", "includeNested", "revertAll"],
+            ["target"],
+            failures);
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_Prefab_RevertOverrides",
+            ["target", "searchMethod", "includeInactive", "overrideIds", "propertyPaths", "targetPaths", "includeNested", "revertAll"],
+            ["target"],
+            failures);
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_Prefab_SetSerializedProperties",
+            ["prefabPath", "target", "searchMethod", "includeInactive", "assignments", "previewOnly"],
+            ["assignments"],
             failures);
     }
 

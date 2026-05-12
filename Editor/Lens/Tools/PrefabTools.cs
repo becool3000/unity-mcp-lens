@@ -7,6 +7,7 @@ using Newtonsoft.Json.Linq;
 using Becool.UnityMcpLens.Editor.Helpers;
 using Becool.UnityMcpLens.Editor.ToolRegistry;
 using Becool.UnityMcpLens.Editor.Tools.Parameters;
+using Becool.UnityMcpLens.Editor.Utils.Scene;
 using UnityEditor;
 using UnityEngine;
 
@@ -14,35 +15,48 @@ namespace Becool.UnityMcpLens.Editor.Tools
 {
     public static class PrefabTools
     {
-        public const string SetSerializedPropertiesDescription = @"Sets serialized property values on a prefab asset without requiring a custom RunCommand.
+        public const string SetSerializedPropertiesDescription = @"Sets serialized property values on a prefab asset or prefab instance without requiring a custom RunCommand.
 
 Args:
-    PrefabPath: Prefab asset path under Assets/.
+    PrefabPath: Prefab asset path under Assets/. When omitted, Target must resolve to a scene prefab instance.
+    Target: Scene prefab instance GameObject target, path, or instance id.
+    SearchMethod: How to find Target when editing a scene prefab instance.
+    IncludeInactive: Include inactive scene objects when resolving Target.
     Assignments: Array of serialized property assignments.
       TargetPath: Relative child path under the prefab root. Use '.' or omit for the root GameObject.
       ComponentType: Component type name on the target GameObject.
       ComponentIndex: 0-based component index when multiple matching components exist.
       PropertyPath: Serialized property path to set.
-      Value: Primitive value or object-reference asset path string.
-    PreviewOnly: When true, validates and reports the assignments without saving.
+      Value: Primitive value, asset path string, null, or a scene object-reference descriptor when Target mode is used.
+    PreviewOnly: When true, validates and reports the assignments without mutating or saving.
 
 Returns:
-    Dictionary with success/message/data. Data contains the applied assignments and resulting serialized values.";
+    Dictionary with success/message/data. Data contains changed fields, stable target identifiers, dirty state, asset state, and save state.";
 
         [McpTool("Unity.Prefab.SetSerializedProperties", SetSerializedPropertiesDescription, Groups = new[] { "assets", "editor" }, EnabledByDefault = true)]
         public static object SetSerializedProperties(SetPrefabSerializedPropertiesParams parameters)
         {
             parameters ??= new SetPrefabSerializedPropertiesParams();
-            if (string.IsNullOrWhiteSpace(parameters.PrefabPath))
-            {
-                return Response.Error("PrefabPath is required.");
-            }
-
             if (parameters.Assignments == null || parameters.Assignments.Length == 0)
             {
                 return Response.Error("At least one assignment is required.");
             }
 
+            if (!string.IsNullOrWhiteSpace(parameters.PrefabPath))
+            {
+                return SetPrefabAssetSerializedProperties(parameters);
+            }
+
+            if (parameters.Target == null)
+            {
+                return Response.Error("PrefabPath or Target is required.");
+            }
+
+            return SetPrefabInstanceSerializedProperties(parameters);
+        }
+
+        static object SetPrefabAssetSerializedProperties(SetPrefabSerializedPropertiesParams parameters)
+        {
             string prefabPath = SanitizeAssetPath(parameters.PrefabPath);
             if (!prefabPath.EndsWith(".prefab", StringComparison.OrdinalIgnoreCase))
             {
@@ -54,6 +68,8 @@ Returns:
                 return Response.Error($"Prefab asset '{prefabPath}' could not be loaded.");
             }
 
+            object prefabStateBefore = CapturePrefabState(prefabPath);
+            object assetStateBefore = CaptureAssetState(prefabPath);
             var assignmentResults = new List<object>();
             GameObject prefabRoot = null;
 
@@ -67,37 +83,68 @@ Returns:
 
                 foreach (PrefabSerializedPropertyAssignment assignment in parameters.Assignments)
                 {
-                    object applied = ApplyAssignment(prefabRoot, assignment, parameters.PreviewOnly, out string error);
+                    object applied = ApplyAssignment(prefabRoot, assignment, parameters.PreviewOnly, allowSceneReferences: false, recordPrefabInstanceOverride: false, out string error);
                     if (!string.IsNullOrWhiteSpace(error))
                     {
                         return Response.Error(error, new
                         {
                             prefabPath,
-                            assignmentResults
+                            assignmentResults,
+                            prefabStateBefore,
+                            prefabStateAfter = CapturePrefabState(prefabPath),
+                            assetStateBefore,
+                            assetStateAfter = CaptureAssetState(prefabPath),
+                            saveState = BuildAssetSaveState(requested: !parameters.PreviewOnly, attempted: false, saved: false, message: "failed_before_save", error: error)
                         });
                     }
 
                     assignmentResults.Add(applied);
                 }
 
+                bool saveAttempted = false;
+                bool saved = false;
                 if (!parameters.PreviewOnly)
                 {
+                    saveAttempted = true;
                     PrefabUtility.SaveAsPrefabAsset(prefabRoot, prefabPath);
                     AssetDatabase.SaveAssets();
+                    saved = true;
                 }
 
                 return Response.Success(parameters.PreviewOnly
                     ? $"Validated serialized property assignments for '{prefabPath}'."
                     : $"Saved serialized property assignments for '{prefabPath}'.", new
                 {
+                    mode = "prefab_asset",
                     prefabPath,
                     previewOnly = parameters.PreviewOnly,
-                    assignments = assignmentResults
+                    changedObjects = new[] { DescribePrefabObject(prefabRoot, ".") },
+                    fields = assignmentResults,
+                    assignments = assignmentResults,
+                    warnings = Array.Empty<string>(),
+                    prefabStateBefore,
+                    prefabStateAfter = CapturePrefabState(prefabPath),
+                    assetStateBefore,
+                    assetStateAfter = CaptureAssetState(prefabPath),
+                    saveState = BuildAssetSaveState(
+                        requested: !parameters.PreviewOnly,
+                        attempted: saveAttempted,
+                        saved: saved,
+                        savedAssets: saved ? new object[] { CaptureAssetState(prefabPath) } : Array.Empty<object>(),
+                        message: parameters.PreviewOnly ? "not_requested" : "prefab_asset_saved_by_tool_contract")
                 });
             }
             catch (Exception ex)
             {
-                return Response.Error($"Failed to set prefab serialized properties: {ex.Message}");
+                return Response.Error($"Failed to set prefab serialized properties: {ex.Message}", new
+                {
+                    prefabPath,
+                    prefabStateBefore,
+                    prefabStateAfter = CapturePrefabState(prefabPath),
+                    assetStateBefore,
+                    assetStateAfter = CaptureAssetState(prefabPath),
+                    saveState = BuildAssetSaveState(requested: !parameters.PreviewOnly, attempted: false, saved: false, message: "exception", error: ex.Message)
+                });
             }
             finally
             {
@@ -108,7 +155,114 @@ Returns:
             }
         }
 
-        static object ApplyAssignment(GameObject prefabRoot, PrefabSerializedPropertyAssignment assignment, bool previewOnly, out string error)
+        static object SetPrefabInstanceSerializedProperties(SetPrefabSerializedPropertiesParams parameters)
+        {
+            JObject findParams = new()
+            {
+                ["search_inactive"] = parameters.IncludeInactive
+            };
+            GameObject targetRoot = ObjectsHelper.FindObject(parameters.Target, parameters.SearchMethod, findParams);
+            if (targetRoot == null)
+            {
+                return Response.Error("Scene prefab instance target could not be found.");
+            }
+
+            if (!targetRoot.scene.IsValid())
+            {
+                return Response.Error("Target does not belong to a valid loaded scene.");
+            }
+
+            if (!PrefabUtility.IsPartOfPrefabInstance(targetRoot))
+            {
+                return Response.Error($"Target '{UiDiagnosticsHelper.GetHierarchyPath(targetRoot.transform)}' is not part of a prefab instance.", new
+                {
+                    target = DescribePrefabObject(targetRoot, "."),
+                    dirtyState = SceneDirtyStateUtility.CaptureLoadedScenes()
+                });
+            }
+
+            GameObject instanceRoot = PrefabUtility.GetNearestPrefabInstanceRoot(targetRoot) ?? targetRoot;
+            string sourcePrefabPath = PrefabUtility.GetPrefabAssetPathOfNearestInstanceRoot(instanceRoot);
+            object dirtyStateBefore = SceneDirtyStateUtility.CaptureLoadedScenes();
+            object prefabStateBefore = CapturePrefabState(sourcePrefabPath);
+            object assetStateBefore = CaptureAssetState(sourcePrefabPath);
+            var assignmentResults = new List<object>();
+
+            try
+            {
+                foreach (PrefabSerializedPropertyAssignment assignment in parameters.Assignments)
+                {
+                    object applied = ApplyAssignment(targetRoot, assignment, parameters.PreviewOnly, allowSceneReferences: true, recordPrefabInstanceOverride: true, out string error);
+                    if (!string.IsNullOrWhiteSpace(error))
+                    {
+                        return Response.Error(error, new
+                        {
+                            target = UiDiagnosticsHelper.GetHierarchyPath(targetRoot.transform),
+                            instanceRoot = DescribePrefabObject(instanceRoot, "."),
+                            assignmentResults,
+                            dirtyStateBefore,
+                            dirtyStateAfter = SceneDirtyStateUtility.CaptureLoadedScenes(),
+                            prefabStateBefore,
+                            prefabStateAfter = CapturePrefabState(sourcePrefabPath),
+                            assetStateBefore,
+                            assetStateAfter = CaptureAssetState(sourcePrefabPath),
+                            saveState = SceneDirtyStateUtility.BuildSaveState(message: "not_requested")
+                        });
+                    }
+
+                    assignmentResults.Add(applied);
+                }
+
+                if (!parameters.PreviewOnly)
+                {
+                    SceneDirtyStateUtility.MarkSceneDirty(instanceRoot);
+                }
+
+                return Response.Success(parameters.PreviewOnly
+                    ? $"Validated serialized property assignments on prefab instance '{UiDiagnosticsHelper.GetHierarchyPath(targetRoot.transform)}'."
+                    : $"Applied serialized property assignments on prefab instance '{UiDiagnosticsHelper.GetHierarchyPath(targetRoot.transform)}'.", new
+                {
+                    mode = "prefab_instance",
+                    target = DescribePrefabObject(targetRoot, "."),
+                    instanceRoot = DescribePrefabObject(instanceRoot, "."),
+                    sourcePrefabPath,
+                    previewOnly = parameters.PreviewOnly,
+                    changedObjects = new[] { DescribePrefabObject(targetRoot, ".") },
+                    fields = assignmentResults,
+                    assignments = assignmentResults,
+                    warnings = Array.Empty<string>(),
+                    dirtyStateBefore,
+                    dirtyStateAfter = SceneDirtyStateUtility.CaptureLoadedScenes(),
+                    prefabStateBefore,
+                    prefabStateAfter = CapturePrefabState(sourcePrefabPath),
+                    assetStateBefore,
+                    assetStateAfter = CaptureAssetState(sourcePrefabPath),
+                    saveState = SceneDirtyStateUtility.BuildSaveState(message: "not_requested")
+                });
+            }
+            catch (Exception ex)
+            {
+                return Response.Error($"Failed to set prefab instance serialized properties: {ex.Message}", new
+                {
+                    target = UiDiagnosticsHelper.GetHierarchyPath(targetRoot.transform),
+                    dirtyStateBefore,
+                    dirtyStateAfter = SceneDirtyStateUtility.CaptureLoadedScenes(),
+                    prefabStateBefore,
+                    prefabStateAfter = CapturePrefabState(sourcePrefabPath),
+                    assetStateBefore,
+                    assetStateAfter = CaptureAssetState(sourcePrefabPath),
+                    saveState = SceneDirtyStateUtility.BuildSaveState(message: "not_requested")
+                });
+            }
+        }
+
+        static object ApplyAssignment(
+            GameObject prefabRoot,
+            PrefabSerializedPropertyAssignment assignment,
+            bool previewOnly,
+            bool allowSceneReferences,
+            bool recordPrefabInstanceOverride,
+            out string error)
         {
             error = null;
             if (assignment == null)
@@ -164,13 +318,20 @@ Returns:
             string beforeValue = DescribeProperty(property);
             if (!previewOnly)
             {
-                if (!TryAssignValue(property, assignment.Value, out string assignError))
+                if (!TryAssignValue(property, assignment.Value, allowSceneReferences, out string assignError))
                 {
                     error = $"Failed to assign '{assignment.PropertyPath}' on '{assignment.ComponentType}': {assignError}";
                     return null;
                 }
 
                 serializedObject.ApplyModifiedPropertiesWithoutUndo();
+                EditorUtility.SetDirty(component);
+                if (recordPrefabInstanceOverride)
+                {
+                    PrefabUtility.RecordPrefabInstancePropertyModifications(component);
+                    PrefabUtility.RecordPrefabInstancePropertyModifications(targetTransform.gameObject);
+                }
+
                 if (assignment.Value != null && assignment.Value.Type != JTokenType.Null &&
                     property.propertyType == SerializedPropertyType.ObjectReference &&
                     property.objectReferenceValue == null)
@@ -187,17 +348,21 @@ Returns:
             {
                 targetPath,
                 hierarchyPath = UiDiagnosticsHelper.GetHierarchyPath(targetTransform),
+                targetObjectId = UnityApiAdapter.GetObjectIdOrZero(targetTransform.gameObject),
                 componentType = component.GetType().FullName,
+                componentId = UnityApiAdapter.GetObjectIdOrZero(component),
                 componentIndex = index,
                 propertyPath = assignment.PropertyPath,
                 propertyType = property.propertyType.ToString(),
                 previousValue = beforeValue,
                 value = assignment.Value,
-                newValue = afterValue
+                newValue = afterValue,
+                changed = !string.Equals(beforeValue, afterValue, StringComparison.Ordinal),
+                applied = !previewOnly
             };
         }
 
-        static bool TryAssignValue(SerializedProperty property, JToken value, out string error)
+        static bool TryAssignValue(SerializedProperty property, JToken value, bool allowSceneReferences, out string error)
         {
             error = null;
             try
@@ -226,7 +391,7 @@ Returns:
                         error = "Expected a color object with r/g/b/a or an array [r,g,b,a].";
                         return false;
                     case SerializedPropertyType.ObjectReference:
-                        if (TryResolveObjectReference(value, out UnityEngine.Object resolved, out error))
+                        if (TryResolveObjectReference(value, allowSceneReferences, out UnityEngine.Object resolved, out error))
                         {
                             property.objectReferenceValue = resolved;
                             return true;
@@ -298,11 +463,16 @@ Returns:
             }
         }
 
-        static bool TryResolveObjectReference(JToken value, out UnityEngine.Object resolved, out string error)
+        static bool TryResolveObjectReference(JToken value, bool allowSceneReferences, out UnityEngine.Object resolved, out string error)
         {
             resolved = null;
             error = null;
             if (value == null || value.Type == JTokenType.Null)
+            {
+                return true;
+            }
+
+            if (allowSceneReferences && SceneTools.TryResolveObjectReference(value, out resolved, out error))
             {
                 return true;
             }
@@ -349,6 +519,77 @@ Returns:
             }
 
             return true;
+        }
+
+        static object CapturePrefabState(string prefabPath)
+        {
+            prefabPath = SanitizeAssetPath(prefabPath);
+            GameObject asset = string.IsNullOrWhiteSpace(prefabPath)
+                ? null
+                : AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
+            return new
+            {
+                prefabPath,
+                exists = asset != null,
+                guid = string.IsNullOrWhiteSpace(prefabPath) ? null : AssetDatabase.AssetPathToGUID(prefabPath),
+                name = asset != null ? asset.name : null,
+                prefabAssetType = asset != null ? PrefabUtility.GetPrefabAssetType(asset).ToString() : null,
+                isDirty = asset != null && EditorUtility.IsDirty(asset)
+            };
+        }
+
+        static object CaptureAssetState(string assetPath)
+        {
+            assetPath = SanitizeAssetPath(assetPath);
+            UnityEngine.Object asset = string.IsNullOrWhiteSpace(assetPath)
+                ? null
+                : AssetDatabase.LoadMainAssetAtPath(assetPath);
+            return new
+            {
+                assetPath,
+                exists = asset != null,
+                guid = string.IsNullOrWhiteSpace(assetPath) ? null : AssetDatabase.AssetPathToGUID(assetPath),
+                name = asset != null ? asset.name : null,
+                type = asset != null ? asset.GetType().FullName : null,
+                isDirty = asset != null && EditorUtility.IsDirty(asset)
+            };
+        }
+
+        static object BuildAssetSaveState(
+            bool requested = false,
+            bool attempted = false,
+            bool saved = false,
+            object savedAssets = null,
+            string message = null,
+            string error = null)
+        {
+            return new
+            {
+                requested,
+                attempted,
+                saved,
+                savedAssets = savedAssets ?? Array.Empty<object>(),
+                message = message ?? (requested ? "save_requested" : "not_requested"),
+                error
+            };
+        }
+
+        static object DescribePrefabObject(GameObject gameObject, string targetPath)
+        {
+            if (gameObject == null)
+                return null;
+
+            string sourcePrefabPath = PrefabUtility.GetPrefabAssetPathOfNearestInstanceRoot(gameObject);
+            return new
+            {
+                name = gameObject.name,
+                targetPath,
+                hierarchyPath = UiDiagnosticsHelper.GetHierarchyPath(gameObject.transform),
+                objectId = UnityApiAdapter.GetObjectIdOrZero(gameObject),
+                sourcePrefabPath = string.IsNullOrWhiteSpace(sourcePrefabPath) ? null : sourcePrefabPath,
+                isPrefabInstance = PrefabUtility.IsPartOfPrefabInstance(gameObject),
+                prefabInstanceStatus = PrefabUtility.GetPrefabInstanceStatus(gameObject).ToString()
+            };
         }
 
         static UnityEngine.Object ChooseBestObjectReference(UnityEngine.Object[] candidates, string assetName)
