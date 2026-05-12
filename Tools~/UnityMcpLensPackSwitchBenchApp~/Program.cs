@@ -170,10 +170,10 @@ sealed class BenchmarkOptions
 sealed class MetadataAudit(BenchmarkOptions options)
 {
     const int ExpectedFoundationToolCount = 18;
-    const int ExpectedSceneToolCount = 47;
+    const int ExpectedSceneToolCount = 48;
     const int ExpectedUiToolCount = 35;
     const int ExpectedRuntimeToolCount = 29;
-    const int ExpectedProjectToolCount = 27;
+    const int ExpectedProjectToolCount = 31;
     const int ExpectedAssetsToolCount = 31;
 
     static readonly string[] k_RequiredFoundationTools =
@@ -224,6 +224,7 @@ sealed class MetadataAudit(BenchmarkOptions options)
         "Unity_Scene_ApplyInstantiatePrefabAndBind",
         "Unity_Scene_VerifySerializedReferences",
         "Unity_Scene_QueryObjects",
+        "Unity_Scene_FindComponents",
         "Unity_Object_ResolveStablePath",
         "Unity_Scene_CaptureView",
         "Unity_Tilemap_Setup",
@@ -280,7 +281,11 @@ sealed class MetadataAudit(BenchmarkOptions options)
         "Unity_Project_PackageCompatibility",
         "Unity_InputActions_InspectAsset",
         "Unity_ProjectSettings_PreviewActiveInputHandler",
-        "Unity_ProjectSettings_SetActiveInputHandler"
+        "Unity_ProjectSettings_SetActiveInputHandler",
+        "Unity_Component_Search",
+        "Unity_Component_ResolveCapability",
+        "Unity_Component_InspectSchema",
+        "Unity_Authoring_SuggestReusePlan"
     ];
 
     static readonly string[] k_RequiredAssetsTools =
@@ -394,6 +399,7 @@ sealed class MetadataAudit(BenchmarkOptions options)
         ValidateReadOnlyHint(sceneTools, "Unity_Scene_GetDirtyState", expected: true, failures);
         ValidateReadOnlyHint(sceneTools, "Unity_Scene_Save", expected: false, failures);
         ValidateReadOnlyHint(sceneTools, "Unity_Scene_VerifySerializedReferences", expected: true, failures);
+        ValidateReadOnlyHint(sceneTools, "Unity_Scene_FindComponents", expected: true, failures);
         ValidateReadOnlyHint(sceneTools, "Unity_ManageGameObject", expected: false, failures);
         ValidateReadOnlyHint(uiTools, "Unity_UI_PreviewEnsureHierarchy", expected: true, failures);
         ValidateReadOnlyHint(uiTools, "Unity_UI_ApplyEnsureHierarchy", expected: false, failures);
@@ -422,6 +428,10 @@ sealed class MetadataAudit(BenchmarkOptions options)
         ValidateReadOnlyHint(projectTools, "Unity_InputActions_InspectAsset", expected: true, failures);
         ValidateReadOnlyHint(projectTools, "Unity_ProjectSettings_PreviewActiveInputHandler", expected: true, failures);
         ValidateReadOnlyHint(projectTools, "Unity_ProjectSettings_SetActiveInputHandler", expected: false, failures);
+        ValidateReadOnlyHint(projectTools, "Unity_Component_Search", expected: true, failures);
+        ValidateReadOnlyHint(projectTools, "Unity_Component_ResolveCapability", expected: true, failures);
+        ValidateReadOnlyHint(projectTools, "Unity_Component_InspectSchema", expected: true, failures);
+        ValidateReadOnlyHint(projectTools, "Unity_Authoring_SuggestReusePlan", expected: true, failures);
         ValidateReadOnlyHint(assetsTools, "Unity_Asset_Search", expected: true, failures);
         ValidateReadOnlyHint(assetsTools, "Unity_Asset_ConfigureSpriteImport", expected: false, failures);
         ValidateReadOnlyHint(assetsTools, "Unity_Asset_ImportSpriteSheetAndBind", expected: false, failures);
@@ -703,6 +713,30 @@ sealed class MetadataAudit(BenchmarkOptions options)
             ["mode", "save", "requestScriptReload"],
             ["mode"],
             failures);
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_Component_Search",
+            ["query", "providers", "includeComponents", "includePrefabs", "includePresets", "includeMissingPackages", "maxResults", "maxAssetScans"],
+            [],
+            failures);
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_Component_ResolveCapability",
+            ["intent", "context", "includePrefabs", "includePresets", "includeMissingPackages", "maxResults", "maxAssetScans"],
+            ["intent"],
+            failures);
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_Component_InspectSchema",
+            ["componentName", "target", "searchMethod", "includeInactive", "componentIndex", "includeDefaults", "includeReadOnly", "maxFields"],
+            ["componentName"],
+            failures);
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_Authoring_SuggestReusePlan",
+            ["intent", "context", "includeSceneSearch", "includePrefabs", "includePresets", "includeMissingPackages", "maxResults"],
+            ["intent"],
+            failures);
     }
 
     static void ValidateAssetToolSchemas(IReadOnlyList<ToolDescriptor> tools, List<string> failures)
@@ -875,6 +909,12 @@ sealed class MetadataAudit(BenchmarkOptions options)
             tools,
             "Unity_Scene_QueryObjects",
             ["namePrefix", "nameExact", "componentTypes", "componentMatch", "root", "rootSearchMethod", "scene", "includeInactive", "fields", "maxRows"],
+            [],
+            failures);
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_Scene_FindComponents",
+            ["componentName", "query", "intent", "scene", "includeInactive", "maxResults", "propertyPaths"],
             [],
             failures);
         ValidateObjectResolveStablePathSchema(tools, failures);

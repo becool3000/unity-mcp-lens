@@ -43,14 +43,15 @@ Current TSAM-covered surfaces include:
 - Phase 12 UI tools: preview/apply hierarchy authoring, preview/apply layout authoring, and read-only screen-layout verification.
 - Phase 12 scene binding tools: preview/apply serialized object-reference binding for scene components.
 - Phase 17 UI/scene/runtime tools: canvas prefab preview/apply, scene prefab instantiate/bind preview/apply, UI raycast/layout verification, and play-mode pointer-input smoke verification.
+- Authoring-First Phase 2 tools: component search, capability resolution, serialized schema inspection, scene component finding, and reuse-plan suggestions before custom scripts.
 
 Current baselines:
 
 - `foundation`: `18` exported tools.
-- `foundation + scene`: `47` exported tools.
+- `foundation + scene`: `48` exported tools.
 - `foundation + ui`: `35` exported tools.
 - `foundation + runtime`: `29` exported tools.
-- `project`: `27` exported tools.
+- `project`: `31` exported tools.
 - `foundation + assets`: `31` exported tools.
 - `debug`: `28` exported tools.
 
@@ -105,8 +106,8 @@ is selected as an administrative escape hatch.
 Important packs:
 
 - `console`: console reads, editor health, and lightweight troubleshooting.
-- `project`: project/package/import metadata, validation, missing script/reference checks, Input System diagnostics/settings, package compatibility, and input-action inspection.
-- `scene`: scene hierarchy, GameObject operations, serialized-reference binding, and prefab instantiate/bind workflows.
+- `project`: project/package/import metadata, validation, component reuse discovery, missing script/reference checks, Input System diagnostics/settings, package compatibility, and input-action inspection.
+- `scene`: scene hierarchy, GameObject operations, serialized-reference binding, scene component discovery, and prefab instantiate/bind workflows.
 - `ui`: UI Toolkit reads, uGUI hierarchy/layout authoring, canvas prefab authoring, raycast/layout verification, and screen-layout verification.
 - `runtime`: play-mode runtime probes, visual bounds snapshots, and pointer-input smoke verification.
 - `scripting`: script/resource reads, edits, validation, and `Unity.RunCommand`.

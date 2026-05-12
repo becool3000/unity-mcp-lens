@@ -103,8 +103,8 @@ agent should inspect first instead of running custom editor code.
 
 Pack-specific TSAM work is used to keep the MCP surface small:
 
-- `scene`: split GameObject tools, scene serialized-reference/object-reference assignment, explicit dirty/save tools, prefab instantiate/bind workflows, and read-only serialized-reference verification.
-- `project`: package/import diagnostics, Input System diagnostics, input-action asset inspection, and active input handler tools.
+- `scene`: split GameObject tools, scene serialized-reference/object-reference assignment, explicit dirty/save tools, prefab instantiate/bind workflows, read-only serialized-reference verification, and scene component reuse discovery.
+- `project`: package/import diagnostics, component reuse discovery, Input System diagnostics, input-action asset inspection, and active input handler tools.
 - `ui`: uGUI hierarchy/layout preview/apply authoring, canvas prefab authoring, raycast/layout verification, runtime UI query/invoke tools, and screen-layout or resolution-matrix verification.
 - `runtime`: play-mode runtime probes, visual bounds snapshots, pointer/scroll input smoke verification, and explicit play-mode exit.
 - `assets`: asset/resource workflows, sprite-sheet import/slicing/binding preview/apply, and Sprite-array binding verification.
@@ -113,10 +113,10 @@ Pack-specific TSAM work is used to keep the MCP surface small:
 Current metadata baselines are:
 
 - `foundation`: `18` exported tools.
-- `foundation + scene`: `47` exported tools.
+- `foundation + scene`: `48` exported tools.
 - `foundation + ui`: `35` exported tools.
 - `foundation + runtime`: `29` exported tools.
-- `project`: `27` exported tools.
+- `project`: `31` exported tools.
 - `foundation + assets`: `31` exported tools.
 - `debug`: `28` exported tools.
 

@@ -8,8 +8,8 @@ host-local recovery from Unity's Script Updating Consent modal.
 Common packs:
 
 - `console` for compact console inspection.
-- `project` for project/package/import metadata, validation, missing script/reference checks, Input System diagnostics, package compatibility, input-action inspection, and active input handler preview/apply.
-- `scene` for scene and GameObject inspection/editing, including the Phase 8 split GameObject TSAM surface, serialized-reference/object-reference assignment tools, explicit dirty/save tools, prefab instantiate/bind workflows, and read-only serialized-reference verification.
+- `project` for project/package/import metadata, validation, missing script/reference checks, component reuse discovery, Input System diagnostics, package compatibility, input-action inspection, and active input handler preview/apply.
+- `scene` for scene and GameObject inspection/editing, including the Phase 8 split GameObject TSAM surface, serialized-reference/object-reference assignment tools, explicit dirty/save tools, prefab instantiate/bind workflows, read-only serialized-reference verification, and scene component reuse discovery.
 - `ui` for UI Toolkit reads, uGUI hierarchy/layout preview/apply authoring, canvas prefab authoring, raycast/layout verification, and read-only screen-layout or resolution-matrix verification.
 - `runtime` for play-mode runtime probes, visual bounds snapshots, pointer/scroll smoke verification, and explicit play-mode exit.
 - `scripting` for scripts, edits, command execution, and structured `Unity.RunCommand` return payloads.
@@ -22,10 +22,10 @@ Use `Unity.ListToolPacks` to inspect available packs and `Unity.SetToolPacks` to
 Current live metadata baselines:
 
 - `foundation`: `18` exported tools.
-- `foundation + scene`: `47` exported tools.
+- `foundation + scene`: `48` exported tools.
 - `foundation + ui`: `35` exported tools.
 - `foundation + runtime`: `29` exported tools.
-- `project`: `27` exported tools.
+- `project`: `31` exported tools.
 - `foundation + assets`: `31` exported tools.
 - `debug`: `28` exported tools.
 
