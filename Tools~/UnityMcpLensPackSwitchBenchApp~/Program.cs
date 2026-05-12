@@ -170,9 +170,9 @@ sealed class BenchmarkOptions
 sealed class MetadataAudit(BenchmarkOptions options)
 {
     const int ExpectedFoundationToolCount = 18;
-    const int ExpectedSceneToolCount = 42;
-    const int ExpectedUiToolCount = 34;
-    const int ExpectedRuntimeToolCount = 25;
+    const int ExpectedSceneToolCount = 43;
+    const int ExpectedUiToolCount = 35;
+    const int ExpectedRuntimeToolCount = 26;
     const int ExpectedProjectToolCount = 27;
     const int ExpectedAssetsToolCount = 31;
 
@@ -220,6 +220,7 @@ sealed class MetadataAudit(BenchmarkOptions options)
         "Unity_Scene_ApplyInstantiatePrefabAndBind",
         "Unity_Scene_VerifySerializedReferences",
         "Unity_Scene_QueryObjects",
+        "Unity_Object_ResolveStablePath",
         "Unity_Scene_CaptureView",
         "Unity_Tilemap_Setup",
         "Unity_Tilemap_Paint",
@@ -241,6 +242,7 @@ sealed class MetadataAudit(BenchmarkOptions options)
         "Unity_UI_Raycast",
         "Unity_UI_GetInteractiveRegions",
         "Unity_UI_QueryRuntimeLayout",
+        "Unity_Object_ResolveStablePath",
         "Unity_UI_InvokeControl",
         "Unity_UI_CaptureGameView",
         "Unity_UI_Toolkit"
@@ -255,6 +257,7 @@ sealed class MetadataAudit(BenchmarkOptions options)
     [
         "Unity_Runtime_GetVisualBoundsSnapshot",
         "Unity_Runtime_QueryObjects",
+        "Unity_Object_ResolveStablePath",
         "Unity_Runtime_InvokeComponentMethod",
         "Unity_PlayMode_PointerInputSmoke",
         "Unity_PlayMode_EnterReady",
@@ -391,6 +394,7 @@ sealed class MetadataAudit(BenchmarkOptions options)
         ValidateReadOnlyHint(uiTools, "Unity_UI_ApplyCreateCanvasPrefab", expected: false, failures);
         ValidateReadOnlyHint(uiTools, "Unity_UI_VerifyRaycastAndLayout", expected: true, failures);
         ValidateReadOnlyHint(uiTools, "Unity_UI_QueryRuntimeLayout", expected: true, failures);
+        ValidateReadOnlyHint(uiTools, "Unity_Object_ResolveStablePath", expected: true, failures);
         ValidateReadOnlyHint(uiTools, "Unity_UI_InvokeControl", expected: false, failures);
         ValidateReadOnlyHint(sceneTools, "Unity_Scene_PreviewInstantiatePrefabAndBind", expected: true, failures);
         ValidateReadOnlyHint(sceneTools, "Unity_Scene_ApplyInstantiatePrefabAndBind", expected: false, failures);
@@ -776,6 +780,7 @@ sealed class MetadataAudit(BenchmarkOptions options)
             ["target", "searchMethod", "includeChildren", "includeInactive", "elementTypes", "textFilter", "maxElements", "includeScreenBounds"],
             [],
             failures);
+        ValidateObjectResolveStablePathSchema(tools, failures);
         ValidateSplitGameObjectSchema(
             tools,
             "Unity_UI_InvokeControl",
@@ -827,6 +832,7 @@ sealed class MetadataAudit(BenchmarkOptions options)
             ["namePrefix", "nameExact", "componentTypes", "componentMatch", "root", "rootSearchMethod", "scene", "includeInactive", "fields", "maxRows"],
             [],
             failures);
+        ValidateObjectResolveStablePathSchema(tools, failures);
     }
 
     static void ValidateRuntimeToolSchemas(IReadOnlyList<ToolDescriptor> tools, List<string> failures)
@@ -861,10 +867,21 @@ sealed class MetadataAudit(BenchmarkOptions options)
             ["target", "searchMethod", "componentType", "componentIndex", "methodName", "args", "includeInactive", "waitFrames", "captureConsoleDelta", "requirePlayMode"],
             ["target", "componentType", "methodName"],
             failures);
+        ValidateObjectResolveStablePathSchema(tools, failures);
         ValidateSplitGameObjectSchema(
             tools,
             "Unity_Tools_ActivateAndVerify",
             ["packs", "expectedTools"],
+            [],
+            failures);
+    }
+
+    static void ValidateObjectResolveStablePathSchema(IReadOnlyList<ToolDescriptor> tools, List<string> failures)
+    {
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_Object_ResolveStablePath",
+            ["path", "target", "mode", "includeInactive", "maxCandidates"],
             [],
             failures);
     }
@@ -1366,7 +1383,7 @@ sealed class LensSession : IAsyncDisposable
         m_Timeout = timeout;
     }
 
-    public static async Task<LensSession> StartAsync(string serverPath, string projectPath, TimeSpan timeout)
+    public static Task<LensSession> StartAsync(string serverPath, string projectPath, TimeSpan timeout)
     {
         var startInfo = new ProcessStartInfo
         {
@@ -1383,7 +1400,7 @@ sealed class LensSession : IAsyncDisposable
         if (!process.Start())
             throw new InvalidOperationException("Failed to start unity-mcp-lens.");
 
-        return new LensSession(process, timeout);
+        return Task.FromResult(new LensSession(process, timeout));
     }
 
     public async Task InitializeAsync()

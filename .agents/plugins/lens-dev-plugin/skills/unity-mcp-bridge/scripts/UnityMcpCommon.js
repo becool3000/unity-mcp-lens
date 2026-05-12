@@ -394,6 +394,7 @@ const exactPackMap = new Map(
     Unity_ProjectSettings_SetActiveInputHandler: ["project"],
     Unity_Object_ValidateReferences: ["project"],
     Unity_Project_ScanMissingScripts: ["project"],
+    Unity_Object_ResolveStablePath: ["scene"],
     Unity_Runtime_GetVisualBoundsSnapshot: ["runtime"],
     Unity_PlayMode_PointerInputSmoke: ["runtime"],
     Unity_Editor_ExitPlayMode: ["runtime"],

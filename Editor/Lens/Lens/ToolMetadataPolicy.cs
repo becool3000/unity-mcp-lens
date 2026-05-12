@@ -40,6 +40,7 @@ namespace Becool.UnityMcpLens.Editor.Lens
             NormalizeToolName("Unity.Asset.VerifySpriteArrayBinding"),
             NormalizeToolName("Unity.Runtime.QueryObjects"),
             NormalizeToolName("Unity.Bridge.ListConnections"),
+            NormalizeToolName("Unity.Object.ResolveStablePath"),
             NormalizeToolName("Unity.GetLensHealth"),
             NormalizeToolName("Unity.ListToolPacks"),
             NormalizeToolName("Unity.ReadDetailRef"),

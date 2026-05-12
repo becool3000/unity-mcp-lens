@@ -206,6 +206,7 @@ Prefer a scene-owned debugger component when a project needs fast UI or state it
 - `Verify-UnityUiScreenLayout.ps1` requires JSON arrays, for example: `-TargetsJson '[{"key":"hud","target":"HUD Canvas","searchMethod":"by_name"}]' -AssertionsJson '[{"type":"inside_screen","targetKey":"hud","margin":0}]'`
 - Prefer `Unity.Bridge.ListConnections` for wrong-project or stale-status diagnosis before retrying project-wide reads
 - If `Unity.Bridge.ListConnections` shows stale duplicate status files, trust the selected fresh connection/project/PID first and keep stale candidates only as recovery evidence.
+- Prefer `Unity.Object.ResolveStablePath` before reusing a hierarchy path across scene, runtime, and UI tools; use its `stableId` or `indexedPath` when duplicate sibling names make plain paths ambiguous.
 - Prefer `Unity.Asset.SetSerializedProperties` for ScriptableObject/data asset scalar and object-reference binding
 - Prefer `Unity.Runtime.QueryObjects` for play-mode component counts and sample paths
 - When `rg.exe` is blocked in the Codex desktop app context, prefer the shared PowerShell search fallback instead of retrying `rg`

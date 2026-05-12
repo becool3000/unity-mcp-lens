@@ -45,6 +45,7 @@ sealed class UnityMcpLensHost
         "Unity_Asset_VerifySpriteArrayBinding",
         "Unity_Runtime_QueryObjects",
         "Unity_UI_Raycast",
+        "Unity_Object_ResolveStablePath",
         "Unity_Asset_Search",
         "Unity_Object_ValidateReferences",
         "Unity_Project_ScanMissingScripts",
