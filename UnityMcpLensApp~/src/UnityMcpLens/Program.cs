@@ -192,6 +192,21 @@ sealed class UnityMcpLensHost
         public string? LastError { get; init; }
     }
 
+    sealed class HostSyncReadyResult
+    {
+        public bool Success { get; init; }
+        public string Message { get; init; } = string.Empty;
+        public bool EditorIdle { get; init; }
+        public bool TimedOut { get; init; }
+        public bool ConsoleCheckSucceeded { get; init; } = true;
+        public int FinalConsoleErrorCount { get; init; }
+        public int NewConsoleErrorCount { get; init; }
+        public object? FinalConsole { get; init; }
+        public List<object> Attempts { get; init; } = [];
+        public object? LastState { get; init; }
+        public string? LastError { get; init; }
+    }
+
     readonly JsonSerializerOptions m_JsonOptions = new(JsonSerializerDefaults.Web)
     {
         DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
@@ -729,6 +744,12 @@ sealed class UnityMcpLensHost
         if (ToolNamesMatch(canonicalToolName, "Unity.PlayMode.EnterReady"))
         {
             JsonElement payload = await CreatePlayModeEnterReadyPayloadAsync(argumentsElement, cancellationToken).ConfigureAwait(false);
+            return BuildToolCallResult(payload, IsToolLevelError(payload));
+        }
+
+        if (ToolNamesMatch(canonicalToolName, "Unity.Editor.SyncScripts"))
+        {
+            JsonElement payload = await CreateSyncScriptsReadyPayloadAsync(argumentsElement, cancellationToken).ConfigureAwait(false);
             return BuildToolCallResult(payload, IsToolLevelError(payload));
         }
 
@@ -1637,6 +1658,269 @@ sealed class UnityMcpLensHost
         }, m_JsonOptions);
     }
 
+    async Task<JsonElement> CreateSyncScriptsReadyPayloadAsync(JsonElement argumentsElement, CancellationToken cancellationToken)
+    {
+        int timeoutMs = ExtractInt(argumentsElement, 0, "timeoutMs", "TimeoutMs");
+        if (timeoutMs <= 0)
+            timeoutMs = Math.Max(1, ExtractInt(argumentsElement, 120, "timeoutSeconds", "TimeoutSeconds")) * 1000;
+        timeoutMs = Math.Clamp(timeoutMs, 1000, 600000);
+
+        int pollIntervalMs = Math.Clamp(ExtractInt(argumentsElement, 250, "pollIntervalMs", "PollIntervalMs"), 50, 5000);
+        int stablePollCount = Math.Max(1, ExtractInt(argumentsElement, 2, "stablePollCount", "StablePollCount"));
+        int postStableDelayMs = Math.Clamp(ExtractInt(argumentsElement, 500, "postStableDelayMs", "PostStableDelayMs"), 0, 10000);
+        bool waitForCompile = ExtractBool(argumentsElement, true, "waitForCompile", "WaitForCompile");
+        bool captureConsoleDelta = ExtractBool(argumentsElement, true, "captureConsoleDelta", "CaptureConsoleDelta");
+
+        DateTime startedUtc = DateTime.UtcNow;
+        DateTime deadlineUtc = startedUtc.AddMilliseconds(timeoutMs);
+        string[] startingActivePacks = m_ActiveToolPacks.ToArray();
+        object? packActivation = null;
+        JsonElement syncRequest = default;
+        HostSyncReadyResult? ready = null;
+        bool hostWaitAttempted = false;
+
+        try
+        {
+            packActivation = await EnsureScriptSyncPacksActiveAsync(cancellationToken).ConfigureAwait(false);
+            syncRequest = await CallBridgeToolResultAsync(
+                "Unity.Editor.SyncScripts",
+                argumentsElement,
+                cancellationToken).ConfigureAwait(false);
+
+            bool hasNativeData = TryGetNestedProperty(syncRequest, out var nativeData, "data");
+            bool nativeSuccess = GetJsonBool(syncRequest, false, "success");
+            string? nativeStatus = GetJsonString(nativeData, "status");
+            bool nativeReadyForFollowUp = GetJsonBool(nativeData, false, "readyForFollowUp");
+            bool nativeRefreshScheduled = GetJsonBool(nativeData, false, "refreshScheduledAfterResponse");
+            bool nativeRefused = GetJsonBool(nativeData, false, "refused");
+            bool nativeTimedOut = GetJsonBool(nativeData, false, "timedOut");
+            bool nativeNewConsoleErrorsDetected = GetJsonBool(nativeData, false, "newConsoleErrorsDetected", "consoleErrorsDetected");
+            int initialConsoleErrorCount = GetJsonInt(nativeData, 0, "initialConsoleErrorCount");
+            int nativeFinalConsoleErrorCount = GetJsonInt(
+                nativeData,
+                initialConsoleErrorCount,
+                "finalConsoleErrorCount",
+                "consoleErrorCount");
+            int nativeNewConsoleErrorCount = GetJsonInt(
+                nativeData,
+                Math.Max(0, nativeFinalConsoleErrorCount - initialConsoleErrorCount),
+                "newConsoleErrorCount");
+
+            bool nativeBusyButWaitable =
+                string.Equals(nativeStatus, "busy", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(nativeStatus, "pending_refresh", StringComparison.OrdinalIgnoreCase);
+            bool shouldWaitForReady = waitForCompile &&
+                hasNativeData &&
+                !nativeRefused &&
+                !nativeTimedOut &&
+                !nativeNewConsoleErrorsDetected &&
+                (nativeRefreshScheduled || (!nativeReadyForFollowUp && nativeBusyButWaitable));
+
+            if (shouldWaitForReady)
+            {
+                hostWaitAttempted = true;
+                ready = await WaitForScriptSyncReadyFromHostAsync(
+                    deadlineUtc,
+                    pollIntervalMs,
+                    stablePollCount,
+                    postStableDelayMs,
+                    initialConsoleErrorCount,
+                    nativeFinalConsoleErrorCount,
+                    captureConsoleDelta,
+                    cancellationToken).ConfigureAwait(false);
+            }
+
+            bool finalReadyForFollowUp = hostWaitAttempted
+                ? ready?.Success == true
+                : nativeSuccess && nativeReadyForFollowUp && !nativeNewConsoleErrorsDetected;
+            bool finalTimedOut = hostWaitAttempted ? ready?.TimedOut == true : nativeTimedOut;
+            bool consoleCheckSucceeded = !hostWaitAttempted || ready?.ConsoleCheckSucceeded == true;
+            int finalConsoleErrorCount = hostWaitAttempted
+                ? ready?.FinalConsoleErrorCount ?? nativeFinalConsoleErrorCount
+                : nativeFinalConsoleErrorCount;
+            int newConsoleErrorCount = hostWaitAttempted
+                ? ready?.NewConsoleErrorCount ?? nativeNewConsoleErrorCount
+                : nativeNewConsoleErrorCount;
+            bool newConsoleErrorsDetected = newConsoleErrorCount > 0;
+            bool staleConsoleErrorsPresent = finalConsoleErrorCount > 0 && !newConsoleErrorsDetected;
+            string finalStatus = finalReadyForFollowUp
+                ? "ready"
+                : !consoleCheckSucceeded
+                    ? "console_check_failed"
+                    : newConsoleErrorsDetected
+                        ? "console_errors"
+                        : finalTimedOut
+                            ? "timed_out"
+                            : nativeRefused
+                                ? "refused"
+                                : nativeStatus ?? "failed";
+            int elapsedMs = (int)Math.Round((DateTime.UtcNow - startedUtc).TotalMilliseconds);
+            object[] nativeWarnings = CloneJsonArray(nativeData, "warnings") ?? [];
+            var warnings = new List<object>(nativeWarnings);
+            if (hostWaitAttempted && ready?.ConsoleCheckSucceeded == false)
+            {
+                warnings.Add(new
+                {
+                    kind = "post_refresh_console_check_failed",
+                    message = "The editor became idle after script refresh, but Lens could not read a post-refresh console summary."
+                });
+            }
+
+            return JsonSerializer.SerializeToElement(new
+            {
+                success = finalReadyForFollowUp,
+                message = finalReadyForFollowUp
+                    ? "Unity script sync completed and the editor is ready for follow-up Unity actions."
+                    : "Unity script sync did not reach a follow-up-ready state.",
+                data = new
+                {
+                    status = finalStatus,
+                    readyForFollowUp = finalReadyForFollowUp,
+                    noChangesDetected = GetJsonBool(nativeData, false, "noChangesDetected"),
+                    changedPaths = CloneJsonProperty(nativeData, "changedPaths"),
+                    relevantChangedPaths = CloneJsonProperty(nativeData, "relevantChangedPaths"),
+                    force = GetJsonBool(nativeData, false, "force"),
+                    waitForCompile,
+                    refreshRequested = GetJsonBool(nativeData, false, "refreshRequested"),
+                    refreshScheduledAfterResponse = nativeRefreshScheduled && !hostWaitAttempted,
+                    refreshWasScheduledAfterResponse = nativeRefreshScheduled,
+                    hostWaitAttempted,
+                    hostWaitCompleted = hostWaitAttempted && ready?.EditorIdle == true,
+                    compileStarted = GetJsonBool(nativeData, false, "compileStarted"),
+                    compileObserved = GetJsonBool(nativeData, false, "compileObserved"),
+                    editorIdle = hostWaitAttempted ? ready?.EditorIdle == true : GetJsonBool(nativeData, false, "editorIdle"),
+                    timedOut = finalTimedOut,
+                    initialConsoleErrorCount,
+                    finalConsoleErrorCount,
+                    consoleErrorCount = finalConsoleErrorCount,
+                    newConsoleErrorCount,
+                    newConsoleErrorsDetected,
+                    staleConsoleErrorsPresent,
+                    consoleErrorsDetected = newConsoleErrorsDetected,
+                    consoleCheckSucceeded,
+                    elapsedMs,
+                    timeoutMs,
+                    pollIntervalMs,
+                    stablePollCount,
+                    postStableDelayMs,
+                    captureConsoleDelta,
+                    warningCount = warnings.Count,
+                    warnings = warnings.ToArray(),
+                    finalState = hostWaitAttempted ? ready?.LastState : CloneJsonProperty(nativeData, "finalState"),
+                    postRefreshConsole = hostWaitAttempted ? ready?.FinalConsole : null,
+                    pollAttemptCount = (hostWaitAttempted ? ready?.Attempts.Count ?? 0 : 0) +
+                        GetJsonInt(nativeData, 0, "pollAttemptCount"),
+                    hostReadyWait = hostWaitAttempted
+                        ? new
+                        {
+                            ready?.Success,
+                            ready?.Message,
+                            ready?.EditorIdle,
+                            ready?.TimedOut,
+                            ready?.ConsoleCheckSucceeded,
+                            ready?.FinalConsoleErrorCount,
+                            ready?.NewConsoleErrorCount,
+                            attemptCount = ready?.Attempts.Count ?? 0,
+                            ready?.Attempts,
+                            ready?.LastState,
+                            ready?.LastError
+                        }
+                        : null,
+                    nativeStatus,
+                    nativeReadyForFollowUp,
+                    nativeRefreshScheduledAfterResponse = nativeRefreshScheduled,
+                    nativeSyncRequest = syncRequest,
+                    packActivation,
+                    startingActivePacks,
+                    activeToolPacks = m_ActiveToolPacks,
+                    host = CreateHostDiagnostics()
+                }
+            }, m_JsonOptions);
+        }
+        catch (Exception ex)
+        {
+            return CreateErrorPayload(
+                $"Unity script sync readiness workflow failed: {ex.Message}",
+                "UNITY_MCP_SYNC_SCRIPTS_READY_FAILED",
+                new
+                {
+                    exceptionType = ex.GetType().Name,
+                    timeoutMs,
+                    pollIntervalMs,
+                    stablePollCount,
+                    postStableDelayMs,
+                    waitForCompile,
+                    captureConsoleDelta,
+                    syncRequest,
+                    packActivation,
+                    startingActivePacks,
+                    activeToolPacks = m_ActiveToolPacks,
+                    host = CreateHostDiagnostics()
+                });
+        }
+    }
+
+    async Task<object> EnsureScriptSyncPacksActiveAsync(CancellationToken cancellationToken)
+    {
+        string[] before = m_ActiveToolPacks.ToArray();
+        if (IsStaticAllToolSurface)
+        {
+            return new
+            {
+                changed = false,
+                reason = "static_all_surface",
+                before,
+                activeToolPacks = m_ActiveToolPacks,
+                toolsListChangedNotificationSent = false
+            };
+        }
+
+        await EnsureBridgeReadyAsync(cancellationToken).ConfigureAwait(false);
+        string[] activeAdditional = NormalizeAdditionalToolPacks(m_ActiveToolPacks);
+        bool scriptingActive = activeAdditional.Any(pack => string.Equals(pack, "scripting", StringComparison.OrdinalIgnoreCase));
+        bool consoleActive = activeAdditional.Any(pack => string.Equals(pack, "console", StringComparison.OrdinalIgnoreCase));
+        if (scriptingActive && consoleActive)
+        {
+            return new
+            {
+                changed = false,
+                reason = "scripting_and_console_already_active",
+                before,
+                activeToolPacks = m_ActiveToolPacks,
+                toolsListChangedNotificationSent = false
+            };
+        }
+
+        string[] desired = ["scripting", "console"];
+        var manifestEnvelope = await m_BridgeClient!.SetToolPacksAsync(
+            desired,
+            includeSchemas: false,
+            cancellationToken,
+            reason: "script_sync_ready",
+            toolSurfaceMode: s_ToolSurfaceMode).ConfigureAwait(false);
+        if (!string.Equals(manifestEnvelope.Status, "success", StringComparison.OrdinalIgnoreCase) || manifestEnvelope.Result == null)
+            throw new InvalidOperationException(manifestEnvelope.Error ?? "Unity bridge did not activate the scripting and console tool packs.");
+
+        bool unchanged = string.Equals(manifestEnvelope.Result.Kind, "unchanged", StringComparison.OrdinalIgnoreCase);
+        await ApplyManifestAsync(manifestEnvelope.Result, shouldFetchSchemas: true, cancellationToken).ConfigureAwait(false);
+        bool toolsListChangedNotificationSent = false;
+        if (!unchanged && m_ClientInitialized)
+        {
+            await SendToolsListChangedNotificationAsync(cancellationToken).ConfigureAwait(false);
+            toolsListChangedNotificationSent = true;
+        }
+
+        return new
+        {
+            changed = !unchanged,
+            reason = "scripting_console_packs_activated",
+            before,
+            requestedAdditionalPacks = desired,
+            activeToolPacks = m_ActiveToolPacks,
+            toolsListChangedNotificationSent
+        };
+    }
+
     async Task<JsonElement> CreatePlayModeEnterReadyPayloadAsync(JsonElement argumentsElement, CancellationToken cancellationToken)
     {
         int timeoutMs = ExtractInt(argumentsElement, 0, "timeoutMs", "TimeoutMs");
@@ -1940,15 +2224,21 @@ sealed class UnityMcpLensHost
             cancellationToken).ConfigureAwait(false);
     }
 
-    async Task<JsonElement> CallBridgeToolResultAsync(string toolName, object arguments, CancellationToken cancellationToken)
+    async Task<JsonElement> CallBridgeToolResultAsync(string toolName, JsonElement argumentsElement, CancellationToken cancellationToken)
     {
         await EnsureBridgeReadyAsync(cancellationToken).ConfigureAwait(false);
-        JsonElement argumentElement = JsonSerializer.SerializeToElement(arguments, m_JsonOptions);
-        var envelope = await m_BridgeClient!.CallToolAsync(toolName, argumentElement, cancellationToken).ConfigureAwait(false);
+        var envelope = await m_BridgeClient!.CallToolAsync(toolName, argumentsElement, cancellationToken).ConfigureAwait(false);
         if (!string.Equals(envelope.Status, "success", StringComparison.OrdinalIgnoreCase))
             return CreateErrorPayload(envelope.Error ?? $"Tool '{toolName}' failed.");
 
         return envelope.Result.Clone();
+    }
+
+    async Task<JsonElement> CallBridgeToolResultAsync(string toolName, object arguments, CancellationToken cancellationToken)
+    {
+        await EnsureBridgeReadyAsync(cancellationToken).ConfigureAwait(false);
+        JsonElement argumentElement = JsonSerializer.SerializeToElement(arguments, m_JsonOptions);
+        return await CallBridgeToolResultAsync(toolName, argumentElement, cancellationToken).ConfigureAwait(false);
     }
 
     async Task<object> TryReadConsoleErrorSummaryAsync(CancellationToken cancellationToken)
@@ -1977,6 +2267,164 @@ sealed class UnityMcpLensHost
                 exceptionType = ex.GetType().Name
             };
         }
+    }
+
+    async Task<HostSyncReadyResult> WaitForScriptSyncReadyFromHostAsync(
+        DateTime deadlineUtc,
+        int pollIntervalMs,
+        int stablePollCount,
+        int postStableDelayMs,
+        int initialConsoleErrorCount,
+        int fallbackFinalConsoleErrorCount,
+        bool captureConsoleDelta,
+        CancellationToken cancellationToken)
+    {
+        var attempts = new List<object>();
+        object? lastState = null;
+        string? lastError = null;
+
+        while (DateTime.UtcNow < deadlineUtc)
+        {
+            try
+            {
+                int remainingMs = (int)Math.Max(1000d, Math.Min(30000d, (deadlineUtc - DateTime.UtcNow).TotalMilliseconds));
+                JsonElement state = await CallBridgeToolResultAsync(
+                    "Unity.ManageEditor",
+                    new
+                    {
+                        action = "WaitForStableEditor",
+                        timeoutMs = remainingMs,
+                        pollIntervalMs,
+                        stablePollCount,
+                        postStableDelayMs
+                    },
+                    cancellationToken).ConfigureAwait(false);
+
+                object attempt = CreateSyncReadyAttemptFromWait(state);
+                attempts.Add(attempt);
+                lastState = attempt;
+
+                JsonElement attemptElement = JsonSerializer.SerializeToElement(attempt, m_JsonOptions);
+                bool editorIdle = GetJsonBool(attemptElement, false, "editorIdle");
+                bool timedOut = GetJsonBool(attemptElement, false, "timedOut");
+                if (editorIdle)
+                {
+                    object? finalConsole = null;
+                    int finalConsoleErrorCount = fallbackFinalConsoleErrorCount;
+                    bool consoleCheckSucceeded = true;
+                    if (captureConsoleDelta)
+                    {
+                        finalConsole = await TryReadConsoleErrorSummaryAsync(cancellationToken).ConfigureAwait(false);
+                        int? extractedFinalConsoleErrorCount = ExtractConsoleErrorCount(finalConsole);
+                        JsonElement finalConsoleElement = JsonSerializer.SerializeToElement(finalConsole, m_JsonOptions);
+                        consoleCheckSucceeded = GetJsonBool(finalConsoleElement, false, "success") &&
+                            extractedFinalConsoleErrorCount.HasValue;
+                        if (extractedFinalConsoleErrorCount.HasValue)
+                            finalConsoleErrorCount = extractedFinalConsoleErrorCount.Value;
+                    }
+
+                    int newConsoleErrorCount = Math.Max(0, finalConsoleErrorCount - initialConsoleErrorCount);
+                    bool success = consoleCheckSucceeded && newConsoleErrorCount == 0;
+                    return new HostSyncReadyResult
+                    {
+                        Success = success,
+                        Message = success
+                            ? "Editor is idle and no new console errors were detected after script sync."
+                            : consoleCheckSucceeded
+                                ? "Editor is idle, but new console errors were detected after script sync."
+                                : "Editor is idle, but the post-refresh console check failed.",
+                        EditorIdle = true,
+                        TimedOut = false,
+                        ConsoleCheckSucceeded = consoleCheckSucceeded,
+                        FinalConsoleErrorCount = finalConsoleErrorCount,
+                        NewConsoleErrorCount = newConsoleErrorCount,
+                        FinalConsole = finalConsole,
+                        Attempts = attempts,
+                        LastState = lastState,
+                        LastError = lastError
+                    };
+                }
+
+                if (timedOut)
+                {
+                    return new HostSyncReadyResult
+                    {
+                        Success = false,
+                        Message = "Editor did not become idle after script sync before timeout.",
+                        EditorIdle = false,
+                        TimedOut = true,
+                        ConsoleCheckSucceeded = !captureConsoleDelta,
+                        FinalConsoleErrorCount = fallbackFinalConsoleErrorCount,
+                        NewConsoleErrorCount = Math.Max(0, fallbackFinalConsoleErrorCount - initialConsoleErrorCount),
+                        Attempts = attempts,
+                        LastState = lastState,
+                        LastError = lastError
+                    };
+                }
+            }
+            catch (Exception ex)
+            {
+                lastError = ex.Message;
+                attempts.Add(new
+                {
+                    timestamp = DateTime.UtcNow.ToString("O"),
+                    success = false,
+                    error = ex.Message,
+                    exceptionType = ex.GetType().Name
+                });
+
+                if (IsBridgeTransportFailure(ex))
+                    await ResetBridgeClientAsync(preserveActivePacks: true, clearToolCache: true).ConfigureAwait(false);
+            }
+
+            TimeSpan remaining = deadlineUtc - DateTime.UtcNow;
+            if (remaining <= TimeSpan.Zero)
+                break;
+
+            int delayMs = (int)Math.Min(pollIntervalMs, Math.Max(1, remaining.TotalMilliseconds));
+            await Task.Delay(delayMs, cancellationToken).ConfigureAwait(false);
+        }
+
+        return new HostSyncReadyResult
+        {
+            Success = false,
+            Message = "Editor did not become idle after script sync before timeout.",
+            EditorIdle = false,
+            TimedOut = true,
+            ConsoleCheckSucceeded = !captureConsoleDelta,
+            FinalConsoleErrorCount = fallbackFinalConsoleErrorCount,
+            NewConsoleErrorCount = Math.Max(0, fallbackFinalConsoleErrorCount - initialConsoleErrorCount),
+            Attempts = attempts,
+            LastState = lastState,
+            LastError = lastError
+        };
+    }
+
+    object CreateSyncReadyAttemptFromWait(JsonElement result)
+    {
+        JsonElement data = TryGetNestedProperty(result, out var dataElement, "data") ? dataElement : default;
+        JsonElement editorState = TryGetNestedProperty(data, out var editorStateElement, "EditorState") ? editorStateElement :
+            TryGetNestedProperty(data, out editorStateElement, "editorState") ? editorStateElement :
+            default;
+        bool success = GetJsonBool(result, false, "success");
+        bool isStable = GetJsonBool(data, false, "IsStable", "isStable");
+        bool timedOut = GetJsonBool(data, false, "TimedOut", "timedOut");
+
+        return new
+        {
+            timestamp = DateTime.UtcNow.ToString("O"),
+            success,
+            editorIdle = success && isStable,
+            isStable,
+            timedOut,
+            waitedMilliseconds = GetJsonInt(data, 0, "WaitedMilliseconds", "waitedMilliseconds"),
+            stablePollCountReached = GetJsonInt(data, 0, "StablePollCountReached", "stablePollCountReached"),
+            attemptCount = GetJsonInt(data, 0, "AttemptCount", "attemptCount"),
+            stableAttemptCount = GetJsonInt(data, 0, "StableAttemptCount", "stableAttemptCount"),
+            blockingReasons = CloneJsonProperty(data, "BlockingReasons", "blockingReasons"),
+            editorState = editorState.ValueKind == JsonValueKind.Undefined ? null : (object)editorState.Clone(),
+            errorKind = GetJsonString(data, "errorKind")
+        };
     }
 
     async Task<HostPlayReadyResult> WaitForPlayModeReadyFromHostAsync(
@@ -2312,6 +2760,23 @@ sealed class UnityMcpLensHost
         }
 
         return true;
+    }
+
+    static object? CloneJsonProperty(JsonElement element, params string[] names)
+    {
+        return TryGetPropertyIgnoreCase(element, out var value, names)
+            ? value.Clone()
+            : null;
+    }
+
+    static object[]? CloneJsonArray(JsonElement element, params string[] names)
+    {
+        if (!TryGetPropertyIgnoreCase(element, out var value, names) || value.ValueKind != JsonValueKind.Array)
+            return null;
+
+        return value.EnumerateArray()
+            .Select(item => (object)item.Clone())
+            .ToArray();
     }
 
     static bool GetJsonBool(JsonElement element, bool fallback, params string[] names)

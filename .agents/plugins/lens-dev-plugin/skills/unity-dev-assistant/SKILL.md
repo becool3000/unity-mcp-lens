@@ -85,7 +85,8 @@ or YAML edits.
    - `1.0s` post-idle settle
    `Unity_RunCommand` is the exception in healthy play mode: use the helper, let it prove direct Lens health plus compact play-state health, and allow it to bypass helper-side idle wait when safe.
 7. After external edits to compile-affecting files (`*.cs`, `*.asmdef`, `*.asmref`, `*.rsp`, package manifest changes), run `scripts/Sync-UnityScriptChanges.js` on macOS/Linux or `scripts/Sync-UnityScriptChanges.ps1` on Windows before the next Unity-side action.
-   - The helper calls `Unity.Editor.SyncScripts`; empty `changedPaths` with no force should be a fast no-op.
+   - The helper calls `Unity.Editor.SyncScripts`; model-facing calls now wait through scheduled refresh/reload windows and should return `readyForFollowUp=true` only when the editor is safe for follow-up Unity actions.
+   - Empty `changedPaths` with no force should still be a fast no-op.
    - Treat transient pack-restore or compact-state failures during an expected reload window as recoverable unless direct Lens health also fails.
    - Treat `newConsoleErrorsDetected=true` as the sync failure signal. Treat `staleConsoleErrorsPresent=true` as old console state unless new errors are also reported.
    - If compile/play behavior looks wrong after file edits, run `scripts/Test-UnitySourceFileIntegrity.ps1` on Windows to check for NUL-byte or invalid UTF-8 source corruption before interpreting bridge failures.
@@ -201,7 +202,7 @@ Prefer a scene-owned debugger component when a project needs fast UI or state it
 - Editor idle gating before all Unity-facing work except helper-driven `Unity_RunCommand` in healthy play mode
 - Exact build-scene preflight before long custom builds when the intended scene list is known
 - External script edits should be synced through `Unity.Editor.SyncScripts` via `Sync-UnityScriptChanges.js` on macOS/Linux or `Sync-UnityScriptChanges.ps1` on Windows before follow-up Unity actions
-- `Unity.Editor.SyncScripts` with `status=pending_refresh` is an expected scheduled-refresh state, but it is not a clean follow-up point; wait for editor idle and verify no new console errors before parallel reads or mutations
+- Model-facing `Unity.Editor.SyncScripts` should return `readyForFollowUp=true` only after the host has waited through any scheduled refresh/reload window and verified no new console errors. If a raw/native `status=pending_refresh` appears, treat it as a lower-level scheduled state and wait for editor idle before parallel reads or mutations.
 - `Verify-UnityUiScreenLayout.ps1` requires JSON arrays, for example: `-TargetsJson '[{"key":"hud","target":"HUD Canvas","searchMethod":"by_name"}]' -AssertionsJson '[{"type":"inside_screen","targetKey":"hud","margin":0}]'`
 - Prefer `Unity.Bridge.ListConnections` for wrong-project or stale-status diagnosis before retrying project-wide reads
 - If `Unity.Bridge.ListConnections` shows stale duplicate status files, trust the selected fresh connection/project/PID first and keep stale candidates only as recovery evidence.
