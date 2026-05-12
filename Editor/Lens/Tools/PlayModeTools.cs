@@ -129,10 +129,8 @@ Use this instead of Unity.ManageEditor Play/Stop or Unity.RunCommand play-mode s
                 {
                     data = await RequestSetPlayModeAsync(parameters);
                     string serialized = JsonConvert.SerializeObject(data, Formatting.None);
-                    success = serialized.IndexOf("\"refused\":true", StringComparison.OrdinalIgnoreCase) < 0 &&
-                        serialized.IndexOf("\"timedOut\":true", StringComparison.OrdinalIgnoreCase) < 0 &&
-                        serialized.IndexOf("\"consoleErrorsDetected\":true", StringComparison.OrdinalIgnoreCase) < 0;
-                    errorKind = success ? null : "set_play_mode_failed";
+                    success = serialized.IndexOf("\"readyForFollowUp\":true", StringComparison.OrdinalIgnoreCase) >= 0;
+                    errorKind = success ? null : DetermineSetPlayModeErrorKind(serialized);
                 }
             }
             catch (Exception ex)
@@ -275,7 +273,9 @@ Use this instead of Unity.ManageEditor Play/Stop or Unity.RunCommand play-mode s
                 runtimeAdvance = parameters.WaitForRuntimeAdvance
                     ? await WaitForRuntimeAdvanceAsync(parameters.TimeoutSeconds, parameters.WarmupSeconds, attempts)
                     : null;
-                transitionState = RuntimeAdvanceSucceeded(runtimeAdvance) ? "entered_play_mode" : "enter_requested";
+                transitionState = !parameters.WaitForRuntimeAdvance || RuntimeAdvanceSucceeded(runtimeAdvance)
+                    ? "entered_play_mode"
+                    : "enter_requested";
                 reconnectExpected = false;
             }
             else
@@ -302,8 +302,23 @@ Use this instead of Unity.ManageEditor Play/Stop or Unity.RunCommand play-mode s
         {
             int consoleErrorCount = EditorToolStateHelpers.CountConsoleErrors();
             bool consoleErrorsDetected = consoleErrorCount > 0;
+            bool runtimeAdvanced = RuntimeAdvanceSucceeded(runtimeAdvance);
             bool timedOut = JsonConvert.SerializeObject(runtimeAdvance ?? new { }).IndexOf("\"timedOut\":true", StringComparison.OrdinalIgnoreCase) >= 0 ||
                 transitionState?.IndexOf("timed_out", StringComparison.OrdinalIgnoreCase) >= 0;
+            bool transitionPending = IsSetPlayModeTransitionPending(transitionState);
+            bool readyForRuntimeTools = parameters.Mode == "enter" &&
+                !refused &&
+                !timedOut &&
+                !consoleErrorsDetected &&
+                !transitionPending &&
+                (!parameters.WaitForRuntimeAdvance || runtimeAdvanced);
+            bool readyForFollowUp = IsSetPlayModeReadyForFollowUp(
+                parameters,
+                refused,
+                transitionState,
+                runtimeAdvanced,
+                timedOut,
+                consoleErrorsDetected);
             var rawData = new
             {
                 requestedMode = parameters.Mode,
@@ -316,7 +331,10 @@ Use this instead of Unity.ManageEditor Play/Stop or Unity.RunCommand play-mode s
                 reconnectExpected,
                 transitionState,
                 transitionRecoveryNotes,
-                runtimeAdvanced = RuntimeAdvanceSucceeded(runtimeAdvance),
+                transitionPending,
+                runtimeAdvanced,
+                readyForRuntimeTools,
+                readyForFollowUp,
                 runtimeAdvance,
                 exitResult,
                 timedOut,
@@ -337,7 +355,10 @@ Use this instead of Unity.ManageEditor Play/Stop or Unity.RunCommand play-mode s
                 rawData.reconnectExpected,
                 rawData.transitionState,
                 rawData.transitionRecoveryNotes,
+                rawData.transitionPending,
                 rawData.runtimeAdvanced,
+                rawData.readyForRuntimeTools,
+                rawData.readyForFollowUp,
                 rawData.runtimeAdvance,
                 rawData.timedOut,
                 rawData.consoleErrorCount,
@@ -359,6 +380,53 @@ Use this instead of Unity.ManageEditor Play/Stop or Unity.RunCommand play-mode s
                 },
                 "editor_set_play_mode_result",
                 detailRefMinBytes: PayloadBudgetPolicy.MaxToolResultBytes);
+        }
+
+        static string DetermineSetPlayModeErrorKind(string serializedResult)
+        {
+            if (serializedResult.IndexOf("\"refused\":true", StringComparison.OrdinalIgnoreCase) >= 0)
+                return "set_play_mode_refused";
+            if (serializedResult.IndexOf("\"timedOut\":true", StringComparison.OrdinalIgnoreCase) >= 0)
+                return "set_play_mode_timeout";
+            if (serializedResult.IndexOf("\"consoleErrorsDetected\":true", StringComparison.OrdinalIgnoreCase) >= 0)
+                return "set_play_mode_console_errors";
+            if (serializedResult.IndexOf("\"transitionPending\":true", StringComparison.OrdinalIgnoreCase) >= 0)
+                return "set_play_mode_pending";
+
+            return "set_play_mode_not_ready";
+        }
+
+        static bool IsSetPlayModeTransitionPending(string transitionState)
+        {
+            return string.Equals(transitionState, "enter_requested", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(transitionState, "enter_requested_after_response", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(transitionState, "exiting_play_mode", StringComparison.OrdinalIgnoreCase);
+        }
+
+        static bool IsSetPlayModeReadyForFollowUp(
+            SetPlayModeParams parameters,
+            bool refused,
+            string transitionState,
+            bool runtimeAdvanced,
+            bool timedOut,
+            bool consoleErrorsDetected)
+        {
+            if (refused || timedOut || consoleErrorsDetected || IsSetPlayModeTransitionPending(transitionState))
+                return false;
+
+            if (parameters.Mode == "exit")
+                return string.Equals(transitionState, "exited_play_mode", StringComparison.OrdinalIgnoreCase);
+
+            if (parameters.Mode == "enter")
+            {
+                if (!string.Equals(transitionState, "entered_play_mode", StringComparison.OrdinalIgnoreCase) &&
+                    !string.Equals(transitionState, "already_playing", StringComparison.OrdinalIgnoreCase))
+                    return false;
+
+                return !parameters.WaitForRuntimeAdvance || runtimeAdvanced;
+            }
+
+            return false;
         }
 
         static async Task<object> WaitForRuntimeAdvanceAsync(int timeoutSeconds, double warmupSeconds, IList<object> attempts)

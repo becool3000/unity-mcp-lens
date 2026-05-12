@@ -143,6 +143,28 @@ namespace Becool.UnityMcpLens.Editor.Services.Project
 
         public ProjectOperationResult PreviewActiveInputHandler(ActiveInputHandlerRequest request, ToolOperationTiming timing)
         {
+            request ??= new ActiveInputHandlerRequest();
+            if (string.IsNullOrWhiteSpace(request.Mode))
+            {
+                ActiveInputHandlerState current;
+                object expectedDefines;
+                using (timing.Measure("adapter"))
+                {
+                    current = m_Adapter.ReadActiveInputHandler();
+                    expectedDefines = m_Adapter.ReadScriptingDefineSignals();
+                }
+
+                return ProjectOperationResult.Ok("Read current active input handler setting.", new
+                {
+                    current,
+                    requested = (object)null,
+                    willModify = false,
+                    restartRequired = false,
+                    expectedDefines,
+                    validationMessages = Array.Empty<ProjectValidationMessage>()
+                });
+            }
+
             if (!TryBuildPlan(request, timing, out var plan, out var error))
                 return error;
 

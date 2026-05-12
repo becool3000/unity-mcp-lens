@@ -1,4 +1,7 @@
 using System;
+using System.Collections.Generic;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using Becool.UnityMcpLens.Editor.ToolRegistry;
 
 namespace Becool.UnityMcpLens.Editor.Tools.Parameters
@@ -38,6 +41,16 @@ namespace Becool.UnityMcpLens.Editor.Tools.Parameters
         /// Error messages.
         /// </summary>
         Error,
+
+        /// <summary>
+        /// Exception messages.
+        /// </summary>
+        Exception,
+
+        /// <summary>
+        /// Assertion messages.
+        /// </summary>
+        Assert,
 
         /// <summary>
         /// All message types.
@@ -86,6 +99,7 @@ namespace Becool.UnityMcpLens.Editor.Tools.Parameters
         /// Gets or sets the console log types to retrieve.
         /// </summary>
         [McpDescription("Console log types to retrieve", Required = false)]
+        [JsonConverter(typeof(ConsoleLogTypesJsonConverter))]
         public ConsoleLogType[] Types { get; set; } = { ConsoleLogType.Error, ConsoleLogType.Warning, ConsoleLogType.Log };
 
         /// <summary>
@@ -126,5 +140,75 @@ namespace Becool.UnityMcpLens.Editor.Tools.Parameters
         /// </summary>
         [McpDescription("Include stack traces in output", Required = false, Default = false)]
         public bool IncludeStacktrace { get; set; } = false;
+    }
+
+    sealed class ConsoleLogTypesJsonConverter : JsonConverter
+    {
+        public override bool CanConvert(Type objectType)
+        {
+            return objectType == typeof(ConsoleLogType[]);
+        }
+
+        public override object ReadJson(JsonReader reader, Type objectType, object existingValue, JsonSerializer serializer)
+        {
+            if (reader.TokenType == JsonToken.Null)
+                return Array.Empty<ConsoleLogType>();
+
+            var values = new List<ConsoleLogType>();
+
+            if (reader.TokenType == JsonToken.String)
+            {
+                AddTypes(values, reader.Value?.ToString());
+                return values.ToArray();
+            }
+
+            if (reader.TokenType == JsonToken.StartArray)
+            {
+                var array = JArray.Load(reader);
+                foreach (var item in array)
+                    AddTypes(values, item?.ToString());
+
+                return values.ToArray();
+            }
+
+            if (reader.TokenType == JsonToken.Integer)
+            {
+                int raw = Convert.ToInt32(reader.Value);
+                if (Enum.IsDefined(typeof(ConsoleLogType), raw))
+                    values.Add((ConsoleLogType)raw);
+
+                return values.ToArray();
+            }
+
+            reader.Skip();
+            return Array.Empty<ConsoleLogType>();
+        }
+
+        public override void WriteJson(JsonWriter writer, object value, JsonSerializer serializer)
+        {
+            if (value is ConsoleLogType[] types)
+            {
+                writer.WriteStartArray();
+                foreach (var type in types)
+                    writer.WriteValue(type.ToString());
+                writer.WriteEndArray();
+                return;
+            }
+
+            writer.WriteNull();
+        }
+
+        static void AddTypes(ICollection<ConsoleLogType> values, string raw)
+        {
+            if (string.IsNullOrWhiteSpace(raw))
+                return;
+
+            foreach (string part in raw.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                string normalized = part.Trim();
+                if (Enum.TryParse(normalized, ignoreCase: true, out ConsoleLogType parsed))
+                    values.Add(parsed);
+            }
+        }
     }
 }

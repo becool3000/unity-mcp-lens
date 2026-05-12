@@ -26,7 +26,7 @@ namespace Becool.UnityMcpLens.Editor.Tools
 
 Args:
     Action: Operation ('Get' or 'Clear').
-    Types: Message types to get ('Error', 'Warning', 'Log', 'All').
+    Types: Message types to get ('Error', 'Warning', 'Log', 'Exception', 'Assert', 'All'), as a string or array.
     Count: Max messages to return.
     FilterText: Text filter for messages.
     SinceTimestamp: Get messages after this timestamp (ISO 8601).
@@ -308,7 +308,7 @@ Returns:
 
                     if (types.Contains("all"))
                     {
-                        types = new List<string> { "error", "warning", "log" }; // Expand 'all'
+                        types = new List<string> { "error", "warning", "log", "exception", "assert" }; // Expand 'all'
                     }
 
                     return GetConsoleEntries(types, count, filterText, format, includeStacktrace, excludeMcpNoise, startCursor);

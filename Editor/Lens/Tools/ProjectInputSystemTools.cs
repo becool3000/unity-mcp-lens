@@ -34,9 +34,9 @@ Returns package install/version state, editor metadata, assembly load/type-load 
 
 Returns compact map/action/binding counts, wrapper-generation metadata, binding rows when requested, and derived asset issues.";
 
-        const string PreviewActiveInputHandlerDescription = @"Previews a Unity ProjectSettings active input handler change without mutation.
+        const string PreviewActiveInputHandlerDescription = @"Reads or previews a Unity ProjectSettings active input handler change without mutation.
 
-Modes: legacy, inputSystem, both.";
+Omit mode to inspect the current state. Modes: legacy, inputSystem, both.";
 
         const string SetActiveInputHandlerDescription = @"Sets Unity ProjectSettings active input handler through editor-authored PlayerSettings mutation.
 
@@ -101,13 +101,13 @@ Modes: legacy, inputSystem, both. Usually requires an editor restart or script r
         [McpSchema(PreviewActiveInputHandlerToolName)]
         public static object GetPreviewActiveInputHandlerSchema()
         {
-            return BuildActiveInputHandlerSchema();
+            return BuildActiveInputHandlerSchema(requireMode: false);
         }
 
         [McpSchema(SetActiveInputHandlerToolName)]
         public static object GetSetActiveInputHandlerSchema()
         {
-            return BuildActiveInputHandlerSchema();
+            return BuildActiveInputHandlerSchema(requireMode: true);
         }
 
         [McpTool(DiagnosticsToolName, DiagnosticsDescription, "Input System Diagnostics", Groups = new[] { "project" }, EnabledByDefault = true)]
@@ -210,9 +210,9 @@ Modes: legacy, inputSystem, both. Usually requires an editor restart or script r
             return ShapeResponse(toolName, result, timing, errorKind, compactSuccessData: false);
         }
 
-        static object BuildActiveInputHandlerSchema()
+        static object BuildActiveInputHandlerSchema(bool requireMode)
         {
-            return new
+            var schema = new
             {
                 type = "object",
                 properties = new
@@ -220,14 +220,18 @@ Modes: legacy, inputSystem, both. Usually requires an editor restart or script r
                     mode = new
                     {
                         type = "string",
-                        description = "Requested active input handler mode.",
+                        description = requireMode
+                            ? "Requested active input handler mode."
+                            : "Optional requested active input handler mode. Omit to inspect the current state.",
                         @enum = new[] { "legacy", "inputSystem", "both" }
                     },
                     save = new { type = "boolean", description = "Save project settings after apply. Defaults to true." },
                     requestScriptReload = new { type = "boolean", description = "Request a script compilation/reload after apply." }
                 },
-                required = new[] { "mode" }
+                required = requireMode ? new[] { "mode" } : Array.Empty<string>()
             };
+
+            return schema;
         }
 
         static InputSystemDiagnosticsRequest NormalizeDiagnosticsRequest(JObject parameters)
