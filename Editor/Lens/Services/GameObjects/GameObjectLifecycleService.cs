@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Becool.UnityMcpLens.Editor.Adapters.Unity.GameObjects;
 using Becool.UnityMcpLens.Editor.Models.GameObjects;
+using Becool.UnityMcpLens.Editor.Utils.Scene;
 using UnityEngine;
 
 namespace Becool.UnityMcpLens.Editor.Services.GameObjects
@@ -82,6 +83,7 @@ namespace Becool.UnityMcpLens.Editor.Services.GameObjects
 
         public GameObjectOperationResult PreviewCreate(GameObjectCreateRequest request, GameObjectToolTiming timing)
         {
+            object dirtyStateBefore = SceneDirtyStateUtility.CaptureLoadedScenes();
             var plan = BuildCreatePlan(request, timing, splitTool: true);
             if (!plan.success)
                 return ToErrorResult(plan);
@@ -92,16 +94,21 @@ namespace Becool.UnityMcpLens.Editor.Services.GameObjects
                 {
                     willCreate = true,
                     source = plan.source,
+                    objectKind = plan.request.objectKind,
                     prefabPath = plan.prefab?.resolvedPath,
                     parent = plan.parentSummary,
                     plannedObject = BuildPlannedObject(plan),
                     components = plan.plannedComponents,
-                    validationMessages = plan.validationMessages
+                    validationMessages = plan.validationMessages,
+                    dirtyStateBefore = dirtyStateBefore,
+                    dirtyStateAfter = SceneDirtyStateUtility.CaptureLoadedScenes(),
+                    saveState = SceneDirtyStateUtility.BuildSaveState()
                 });
         }
 
         public GameObjectOperationResult ApplyCreate(GameObjectCreateRequest request, GameObjectToolTiming timing)
         {
+            object dirtyStateBefore = SceneDirtyStateUtility.CaptureLoadedScenes();
             var plan = BuildCreatePlan(request, timing, splitTool: true);
             if (!plan.success)
                 return ToErrorResult(plan);
@@ -110,17 +117,24 @@ namespace Becool.UnityMcpLens.Editor.Services.GameObjects
             if (!apply.success)
                 return ToErrorResult(apply.message, apply.errorKind, plan.validationMessages);
 
+            SceneDirtyStateUtility.MarkSceneDirty(apply.handle?.GameObject);
+            object dirtyStateAfter = SceneDirtyStateUtility.CaptureLoadedScenes();
+
             return GameObjectOperationResult.Ok(
                 apply.message,
                 new GameObjectCreateApplyResult
                 {
                     created = true,
                     source = apply.source,
+                    objectKind = plan.request.objectKind,
                     savedAsPrefab = apply.savedAsPrefab,
                     prefabPath = apply.prefabPath,
                     @object = m_LifecycleAdapter.ToGameObjectInfo(apply.handle),
                     components = plan.plannedComponents,
-                    validationMessages = plan.validationMessages
+                    validationMessages = plan.validationMessages,
+                    dirtyStateBefore = dirtyStateBefore,
+                    dirtyStateAfter = dirtyStateAfter,
+                    saveState = SceneDirtyStateUtility.BuildSaveState()
                 });
         }
 
@@ -139,6 +153,7 @@ namespace Becool.UnityMcpLens.Editor.Services.GameObjects
 
         public GameObjectOperationResult PreviewDelete(GameObjectDeleteRequest request, GameObjectToolTiming timing)
         {
+            object dirtyStateBefore = SceneDirtyStateUtility.CaptureLoadedScenes();
             var plan = BuildDeletePlan(request, timing, splitTool: true);
             if (!plan.success)
                 return ToErrorResult(plan);
@@ -152,12 +167,16 @@ namespace Becool.UnityMcpLens.Editor.Services.GameObjects
                     willDelete = plan.targets.Count > 0,
                     count = plan.targets.Count,
                     objects = plan.summaries,
-                    validationMessages = plan.validationMessages
+                    validationMessages = plan.validationMessages,
+                    dirtyStateBefore = dirtyStateBefore,
+                    dirtyStateAfter = SceneDirtyStateUtility.CaptureLoadedScenes(),
+                    saveState = SceneDirtyStateUtility.BuildSaveState()
                 });
         }
 
         public GameObjectOperationResult ApplyDelete(GameObjectDeleteRequest request, GameObjectToolTiming timing)
         {
+            object dirtyStateBefore = SceneDirtyStateUtility.CaptureLoadedScenes();
             var plan = BuildDeletePlan(request, timing, splitTool: true);
             if (!plan.success)
                 return ToErrorResult(plan);
@@ -165,19 +184,27 @@ namespace Becool.UnityMcpLens.Editor.Services.GameObjects
             UnityGameObjectDeleteApplyStatus apply;
             using (timing.Measure("adapter"))
             {
+                foreach (var target in plan.targets)
+                    SceneDirtyStateUtility.MarkSceneDirty(target?.GameObject);
+
                 apply = m_LifecycleAdapter.DeleteObjects(plan.targets);
             }
 
             if (!apply.success)
                 return ToErrorResult(apply.message, apply.errorKind, plan.validationMessages);
 
+            object dirtyStateAfter = SceneDirtyStateUtility.CaptureLoadedScenes();
             return GameObjectOperationResult.Ok(
                 apply.message,
                 new GameObjectDeleteApplyResult
                 {
                     deleted = true,
                     count = apply.deletedObjects.Count,
-                    objects = apply.deletedObjects
+                    objects = apply.deletedObjects,
+                    validationMessages = plan.validationMessages,
+                    dirtyStateBefore = dirtyStateBefore,
+                    dirtyStateAfter = dirtyStateAfter,
+                    saveState = SceneDirtyStateUtility.BuildSaveState()
                 });
         }
 
@@ -228,6 +255,26 @@ namespace Becool.UnityMcpLens.Editor.Services.GameObjects
                 }
             }
 
+            string objectKind = NormalizeObjectKind(request.objectKind, request.primitiveType);
+            if (objectKind == null)
+            {
+                string message = $"Invalid objectKind: '{request.objectKind}'. Valid values: empty, primitive, camera, light, canvas, eventSystem.";
+                return CreatePlan.Error(message, "invalid_object_kind", BuildErrorData("invalid_object_kind", message));
+            }
+
+            if (objectKind == "primitive" && string.IsNullOrEmpty(request.primitiveType) && prefab.prefabAsset == null)
+            {
+                string message = "primitiveType is required when objectKind is 'primitive'.";
+                return CreatePlan.Error(message, "missing_primitive_type", BuildErrorData("missing_primitive_type", message));
+            }
+
+            if (!string.IsNullOrEmpty(request.primitiveType) && objectKind != "primitive" && prefab.prefabAsset == null)
+            {
+                string message = "primitiveType can only be used with objectKind 'primitive'.";
+                return CreatePlan.Error(message, "object_kind_primitive_conflict", BuildErrorData("object_kind_primitive_conflict", message));
+            }
+
+            request.objectKind = objectKind;
             var plan = new CreatePlan
             {
                 success = true,
@@ -235,7 +282,7 @@ namespace Becool.UnityMcpLens.Editor.Services.GameObjects
                 prefab = prefab,
                 source = prefab.prefabAsset != null
                     ? "prefab"
-                    : (!string.IsNullOrEmpty(request.primitiveType) ? "primitive" : "empty")
+                    : objectKind
             };
 
             if (request.hasParent && request.parent != null && !request.parent.isNull && !request.parent.isEmptyString)
@@ -298,6 +345,8 @@ namespace Becool.UnityMcpLens.Editor.Services.GameObjects
                     }
                 }
             }
+
+            AddTemplateComponentPlans(plan);
 
             var componentValidation = ValidateCreateComponents(request, plan, splitTool);
             if (!componentValidation.success)
@@ -486,6 +535,68 @@ namespace Becool.UnityMcpLens.Editor.Services.GameObjects
                 },
                 componentNames = plan.plannedComponents.Select(component => component.typeName).ToList()
             };
+        }
+
+        static string NormalizeObjectKind(string objectKind, string primitiveType)
+        {
+            if (string.IsNullOrWhiteSpace(objectKind))
+                return string.IsNullOrEmpty(primitiveType) ? "empty" : "primitive";
+
+            string normalized = objectKind.Trim();
+            if (string.Equals(normalized, "empty", StringComparison.OrdinalIgnoreCase))
+                return "empty";
+            if (string.Equals(normalized, "primitive", StringComparison.OrdinalIgnoreCase))
+                return "primitive";
+            if (string.Equals(normalized, "camera", StringComparison.OrdinalIgnoreCase))
+                return "camera";
+            if (string.Equals(normalized, "light", StringComparison.OrdinalIgnoreCase))
+                return "light";
+            if (string.Equals(normalized, "canvas", StringComparison.OrdinalIgnoreCase))
+                return "canvas";
+            if (string.Equals(normalized, "eventSystem", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(normalized, "event_system", StringComparison.OrdinalIgnoreCase))
+                return "eventSystem";
+
+            return null;
+        }
+
+        static void AddTemplateComponentPlans(CreatePlan plan)
+        {
+            if (plan?.prefab?.prefabAsset != null)
+                return;
+
+            switch (plan.request.objectKind)
+            {
+                case "camera":
+                    AddPlannedComponent(plan, typeof(Camera));
+                    AddPlannedComponent(plan, typeof(AudioListener));
+                    break;
+                case "light":
+                    AddPlannedComponent(plan, typeof(Light));
+                    break;
+                case "canvas":
+                    AddPlannedComponent(plan, typeof(RectTransform));
+                    AddPlannedComponent(plan, typeof(UnityEngine.Canvas));
+                    AddPlannedComponent(plan, typeof(UnityEngine.UI.CanvasScaler));
+                    AddPlannedComponent(plan, typeof(UnityEngine.UI.GraphicRaycaster));
+                    break;
+                case "eventSystem":
+                    AddPlannedComponent(plan, typeof(UnityEngine.EventSystems.EventSystem));
+                    AddPlannedComponent(plan, typeof(UnityEngine.EventSystems.StandaloneInputModule));
+                    break;
+            }
+        }
+
+        static void AddPlannedComponent(CreatePlan plan, Type componentType)
+        {
+            plan.plannedComponents.Add(new GameObjectComponentInfo
+            {
+                index = plan.plannedComponents.Count,
+                typeName = componentType.FullName,
+                shortTypeName = componentType.Name,
+                name = componentType.Name,
+                missing = false
+            });
         }
 
         static GameObjectOperationResult ToErrorResult(CreatePlan plan)

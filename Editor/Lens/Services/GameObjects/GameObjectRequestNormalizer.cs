@@ -110,6 +110,7 @@ namespace Becool.UnityMcpLens.Editor.Services.GameObjects
             return new GameObjectCreateRequest
             {
                 name = parameters?["name"]?.ToString(),
+                objectKind = parameters?["object_kind"]?.ToString() ?? parameters?["objectKind"]?.ToString(),
                 primitiveType = parameters?["primitive_type"]?.ToString() ?? parameters?["primitiveType"]?.ToString(),
                 saveAsPrefab = parameters?["save_as_prefab"]?.ToObject<bool>() ?? parameters?["saveAsPrefab"]?.ToObject<bool>() ?? false,
                 prefabPath = parameters?["prefab_path"]?.ToString() ?? parameters?["prefabPath"]?.ToString(),

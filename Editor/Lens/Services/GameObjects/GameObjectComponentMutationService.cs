@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using Becool.UnityMcpLens.Editor.Adapters.Unity.GameObjects;
 using Becool.UnityMcpLens.Editor.Models.GameObjects;
+using Becool.UnityMcpLens.Editor.Utils.Scene;
 
 namespace Becool.UnityMcpLens.Editor.Services.GameObjects
 {
@@ -45,6 +46,7 @@ namespace Becool.UnityMcpLens.Editor.Services.GameObjects
 
         public GameObjectOperationResult Preview(GameObjectComponentMutationRequest request, GameObjectToolTiming timing)
         {
+            object dirtyStateBefore = SceneDirtyStateUtility.CaptureLoadedScenes();
             var plan = BuildPlan(request, timing, splitTool: true);
             if (!plan.success)
                 return ToErrorResult(plan);
@@ -61,12 +63,16 @@ namespace Becool.UnityMcpLens.Editor.Services.GameObjects
                     changes = plan.mutation.changes,
                     validationMessages = plan.mutation.validationMessages,
                     component = plan.mutation.component?.Info,
-                    @object = plan.currentObject
+                    @object = plan.currentObject,
+                    dirtyStateBefore = dirtyStateBefore,
+                    dirtyStateAfter = SceneDirtyStateUtility.CaptureLoadedScenes(),
+                    saveState = SceneDirtyStateUtility.BuildSaveState()
                 });
         }
 
         public GameObjectOperationResult Apply(GameObjectComponentMutationRequest request, GameObjectToolTiming timing)
         {
+            object dirtyStateBefore = SceneDirtyStateUtility.CaptureLoadedScenes();
             var plan = BuildPlan(request, timing, splitTool: true);
             if (!plan.success)
                 return ToErrorResult(plan);
@@ -83,7 +89,10 @@ namespace Becool.UnityMcpLens.Editor.Services.GameObjects
                         changes = plan.mutation.changes,
                         validationMessages = plan.mutation.validationMessages,
                         component = plan.mutation.component?.Info,
-                        @object = plan.currentObject
+                        @object = plan.currentObject,
+                        dirtyStateBefore = dirtyStateBefore,
+                        dirtyStateAfter = SceneDirtyStateUtility.CaptureLoadedScenes(),
+                        saveState = SceneDirtyStateUtility.BuildSaveState()
                     });
             }
 
@@ -96,6 +105,9 @@ namespace Becool.UnityMcpLens.Editor.Services.GameObjects
             if (!applyResult.success)
                 return ToErrorResult(plan, applyResult);
 
+            SceneDirtyStateUtility.MarkSceneDirty(plan.target.GameObject);
+            object dirtyStateAfter = SceneDirtyStateUtility.CaptureLoadedScenes();
+
             return GameObjectOperationResult.Ok(
                 applyResult.message ?? $"Component changes applied to GameObject '{plan.target.Name}'.",
                 new GameObjectComponentMutationApplyResult
@@ -106,7 +118,10 @@ namespace Becool.UnityMcpLens.Editor.Services.GameObjects
                     changes = applyResult.changes,
                     validationMessages = applyResult.validationMessages,
                     component = applyResult.component?.Info,
-                    @object = m_GameObjectAdapter.ToGameObjectInfo(plan.target)
+                    @object = m_GameObjectAdapter.ToGameObjectInfo(plan.target),
+                    dirtyStateBefore = dirtyStateBefore,
+                    dirtyStateAfter = dirtyStateAfter,
+                    saveState = SceneDirtyStateUtility.BuildSaveState()
                 });
         }
 

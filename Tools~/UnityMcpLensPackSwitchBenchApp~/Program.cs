@@ -170,7 +170,7 @@ sealed class BenchmarkOptions
 sealed class MetadataAudit(BenchmarkOptions options)
 {
     const int ExpectedFoundationToolCount = 18;
-    const int ExpectedSceneToolCount = 43;
+    const int ExpectedSceneToolCount = 47;
     const int ExpectedUiToolCount = 35;
     const int ExpectedRuntimeToolCount = 29;
     const int ExpectedProjectToolCount = 27;
@@ -216,6 +216,10 @@ sealed class MetadataAudit(BenchmarkOptions options)
         "Unity_Scene_SetSerializedProperties",
         "Unity_Scene_PreviewBindSerializedReferences",
         "Unity_Scene_ApplyBindSerializedReferences",
+        "Unity_Scene_PreviewAssignObjectReferences",
+        "Unity_Scene_ApplyAssignObjectReferences",
+        "Unity_Scene_GetDirtyState",
+        "Unity_Scene_Save",
         "Unity_Scene_PreviewInstantiatePrefabAndBind",
         "Unity_Scene_ApplyInstantiatePrefabAndBind",
         "Unity_Scene_VerifySerializedReferences",
@@ -385,6 +389,10 @@ sealed class MetadataAudit(BenchmarkOptions options)
         ValidateReadOnlyHint(sceneTools, "Unity_GameObject_Delete", expected: false, failures);
         ValidateReadOnlyHint(sceneTools, "Unity_Scene_PreviewBindSerializedReferences", expected: true, failures);
         ValidateReadOnlyHint(sceneTools, "Unity_Scene_ApplyBindSerializedReferences", expected: false, failures);
+        ValidateReadOnlyHint(sceneTools, "Unity_Scene_PreviewAssignObjectReferences", expected: true, failures);
+        ValidateReadOnlyHint(sceneTools, "Unity_Scene_ApplyAssignObjectReferences", expected: false, failures);
+        ValidateReadOnlyHint(sceneTools, "Unity_Scene_GetDirtyState", expected: true, failures);
+        ValidateReadOnlyHint(sceneTools, "Unity_Scene_Save", expected: false, failures);
         ValidateReadOnlyHint(sceneTools, "Unity_Scene_VerifySerializedReferences", expected: true, failures);
         ValidateReadOnlyHint(sceneTools, "Unity_ManageGameObject", expected: false, failures);
         ValidateReadOnlyHint(uiTools, "Unity_UI_PreviewEnsureHierarchy", expected: true, failures);
@@ -617,13 +625,13 @@ sealed class MetadataAudit(BenchmarkOptions options)
         ValidateSplitGameObjectSchema(
             tools,
             "Unity_GameObject_PreviewCreate",
-            ["name", "primitiveType", "prefabPath", "saveAsPrefab", "prefabFolder", "parent", "tag", "layer", "position", "rotation", "scale", "componentsToAdd"],
+            ["name", "objectKind", "primitiveType", "prefabPath", "saveAsPrefab", "prefabFolder", "parent", "tag", "layer", "position", "rotation", "scale", "componentsToAdd"],
             ["name"],
             failures);
         ValidateSplitGameObjectSchema(
             tools,
             "Unity_GameObject_Create",
-            ["name", "primitiveType", "prefabPath", "saveAsPrefab", "prefabFolder", "parent", "tag", "layer", "position", "rotation", "scale", "componentsToAdd"],
+            ["name", "objectKind", "primitiveType", "prefabPath", "saveAsPrefab", "prefabFolder", "parent", "tag", "layer", "position", "rotation", "scale", "componentsToAdd"],
             ["name"],
             failures);
         ValidateSplitGameObjectSchema(
@@ -820,6 +828,30 @@ sealed class MetadataAudit(BenchmarkOptions options)
             "Unity_Scene_ApplyBindSerializedReferences",
             ["target", "searchMethod", "includeInactive", "bindings"],
             ["target", "bindings"],
+            failures);
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_Scene_PreviewAssignObjectReferences",
+            ["target", "searchMethod", "includeInactive", "bindings"],
+            ["target", "bindings"],
+            failures);
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_Scene_ApplyAssignObjectReferences",
+            ["target", "searchMethod", "includeInactive", "bindings"],
+            ["target", "bindings"],
+            failures);
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_Scene_GetDirtyState",
+            ["scene"],
+            [],
+            failures);
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_Scene_Save",
+            ["scene", "allLoadedScenes", "saveAsPath"],
+            [],
             failures);
         ValidateSplitGameObjectSchema(
             tools,

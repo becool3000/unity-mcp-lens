@@ -635,10 +635,16 @@ Defaults to single-target safety and requires findAll=true to delete multiple ma
                 properties = new
                 {
                     name = new { type = "string", description = "Name for the created or instantiated GameObject." },
+                    objectKind = new
+                    {
+                        type = "string",
+                        description = "Authoring template to create when prefabPath is not resolved.",
+                        @enum = new[] { "empty", "primitive", "camera", "light", "canvas", "eventSystem" }
+                    },
                     primitiveType = new
                     {
                         type = "string",
-                        description = "Unity primitive type to create when prefabPath is not resolved.",
+                        description = "Unity primitive type to create when objectKind is primitive and prefabPath is not resolved.",
                         @enum = new[] { "Sphere", "Capsule", "Cylinder", "Cube", "Plane", "Quad" }
                     },
                     prefabPath = new { type = "string", description = "Prefab asset path or unique prefab name to instantiate. Also used as save path when saveAsPrefab=true." },

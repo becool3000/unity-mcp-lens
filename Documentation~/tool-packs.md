@@ -1,7 +1,7 @@
 # Tool Packs And MCP Surface
 
 Lens keeps the default tool surface small. The `foundation` pack is always
-active and currently exports `13` tools for health, pack control, detail refs,
+active and currently exports `18` tools for health, pack control, detail refs,
 console/resource reads, script validation, compact project information, and
 host-local recovery from Unity's Script Updating Consent modal.
 
@@ -9,7 +9,7 @@ Common packs:
 
 - `console` for compact console inspection.
 - `project` for project/package/import metadata, validation, missing script/reference checks, Input System diagnostics, package compatibility, input-action inspection, and active input handler preview/apply.
-- `scene` for scene and GameObject inspection/editing, including the Phase 8 split GameObject TSAM surface, Phase 12 serialized-reference binding tools, prefab instantiate/bind workflows, and read-only serialized-reference verification.
+- `scene` for scene and GameObject inspection/editing, including the Phase 8 split GameObject TSAM surface, serialized-reference/object-reference assignment tools, explicit dirty/save tools, prefab instantiate/bind workflows, and read-only serialized-reference verification.
 - `ui` for UI Toolkit reads, uGUI hierarchy/layout preview/apply authoring, canvas prefab authoring, raycast/layout verification, and read-only screen-layout or resolution-matrix verification.
 - `runtime` for play-mode runtime probes, visual bounds snapshots, pointer/scroll smoke verification, and explicit play-mode exit.
 - `scripting` for scripts, edits, command execution, and structured `Unity.RunCommand` return payloads.
@@ -21,13 +21,13 @@ Use `Unity.ListToolPacks` to inspect available packs and `Unity.SetToolPacks` to
 
 Current live metadata baselines:
 
-- `foundation`: `13` exported tools.
-- `foundation + scene`: `36` exported tools.
-- `foundation + ui`: `27` exported tools.
-- `foundation + runtime`: `16` exported tools.
-- `project`: `22` exported tools.
-- `foundation + assets`: `24` exported tools.
-- `debug`: `24` exported tools.
+- `foundation`: `18` exported tools.
+- `foundation + scene`: `47` exported tools.
+- `foundation + ui`: `35` exported tools.
+- `foundation + runtime`: `29` exported tools.
+- `project`: `27` exported tools.
+- `foundation + assets`: `31` exported tools.
+- `debug`: `28` exported tools.
 
 Pack additions must not change the `foundation` baseline unless the metadata
 audit and workflow docs are updated at the same time.

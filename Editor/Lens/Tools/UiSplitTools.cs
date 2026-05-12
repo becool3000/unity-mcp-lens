@@ -31,13 +31,13 @@ namespace Becool.UnityMcpLens.Editor.Tools
 
 Uses the same target/search semantics as the earlier ensure hierarchy tool, but returns deterministic create, recreate, update, and preserve rows.";
 
-        const string ApplyEnsureHierarchyDescription = @"Applies persistent UI hierarchy authoring and saves open scenes when changes are required.
+        const string ApplyEnsureHierarchyDescription = @"Applies persistent UI hierarchy authoring, marks changed scenes dirty, and does not save scenes.
 
 Uses the same target/search semantics as the earlier ensure hierarchy tool, with per-node component and layout support.";
 
         const string PreviewLayoutPropertiesDescription = @"Previews authored UI RectTransform and display-property changes without mutating or saving scenes.";
 
-        const string ApplyLayoutPropertiesDescription = @"Applies authored UI RectTransform and display-property changes and saves open scenes when changes are required.";
+        const string ApplyLayoutPropertiesDescription = @"Applies authored UI RectTransform and display-property changes, marks changed scenes dirty, and does not save scenes.";
 
         const string VerifyScreenLayoutDescription = @"Verifies measured screen-space UI layout assertions without mutation.
 

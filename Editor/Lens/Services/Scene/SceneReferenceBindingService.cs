@@ -4,7 +4,7 @@ using Becool.UnityMcpLens.Editor.Adapters.Unity.Scene;
 using Becool.UnityMcpLens.Editor.Helpers;
 using Becool.UnityMcpLens.Editor.Models.Scene;
 using Becool.UnityMcpLens.Editor.Services;
-using UnityEditor.SceneManagement;
+using Becool.UnityMcpLens.Editor.Utils.Scene;
 
 namespace Becool.UnityMcpLens.Editor.Services.Scene
 {
@@ -75,6 +75,7 @@ namespace Becool.UnityMcpLens.Editor.Services.Scene
 
         SceneReferenceBindingOperationResult Run(SceneReferenceBindingRequest request, bool previewOnly, ToolOperationTiming timing)
         {
+            object dirtyStateBefore = SceneDirtyStateUtility.CaptureLoadedScenes();
             if (request?.Target == null)
             {
                 return SceneReferenceBindingOperationResult.Error("target is required.", "target_required");
@@ -97,8 +98,7 @@ namespace Becool.UnityMcpLens.Editor.Services.Scene
 
                 if (!previewOnly && applied)
                 {
-                    EditorSceneManager.MarkSceneDirty(targetRoot.scene);
-                    EditorSceneManager.SaveOpenScenes();
+                    SceneDirtyStateUtility.MarkSceneDirty(targetRoot);
                 }
 
                 return SceneReferenceBindingOperationResult.Ok(
@@ -112,13 +112,17 @@ namespace Becool.UnityMcpLens.Editor.Services.Scene
                         target = UiDiagnosticsHelper.GetHierarchyPath(targetRoot.transform),
                         applied = !previewOnly && applied,
                         willModify = applied,
-                        bindings = bindings.ToArray()
+                        bindings = bindings.ToArray(),
+                        dirtyStateBefore,
+                        dirtyStateAfter = SceneDirtyStateUtility.CaptureLoadedScenes(),
+                        saveState = SceneDirtyStateUtility.BuildSaveState()
                     });
             }
         }
 
         SceneReferenceBindingOperationResult RunInstantiatePrefabAndBind(ScenePrefabInstantiateAndBindRequest request, bool previewOnly, ToolOperationTiming timing)
         {
+            object dirtyStateBefore = SceneDirtyStateUtility.CaptureLoadedScenes();
             if (string.IsNullOrWhiteSpace(request?.PrefabPath))
             {
                 return SceneReferenceBindingOperationResult.Error("prefabPath is required.", "prefab_path_required");
@@ -136,10 +140,10 @@ namespace Becool.UnityMcpLens.Editor.Services.Scene
 
                 if (!previewOnly && applied && instanceRoot != null)
                 {
-                    EditorSceneManager.MarkSceneDirty(instanceRoot.scene);
-                    EditorSceneManager.SaveOpenScenes();
+                    SceneDirtyStateUtility.MarkSceneDirty(instanceRoot);
                 }
 
+                data = AddDirtyAndSaveState(data, dirtyStateBefore);
                 return SceneReferenceBindingOperationResult.Ok(
                     previewOnly
                         ? $"Previewed prefab instantiate/bind for '{request.PrefabPath}'."
@@ -148,6 +152,15 @@ namespace Becool.UnityMcpLens.Editor.Services.Scene
                             : $"No prefab instantiate/bind changes were required for '{request.PrefabPath}'.",
                     data);
             }
+        }
+
+        static object AddDirtyAndSaveState(object data, object dirtyStateBefore)
+        {
+            var root = Newtonsoft.Json.Linq.JObject.FromObject(data ?? new { });
+            root["dirtyStateBefore"] = Newtonsoft.Json.Linq.JToken.FromObject(dirtyStateBefore);
+            root["dirtyStateAfter"] = Newtonsoft.Json.Linq.JToken.FromObject(SceneDirtyStateUtility.CaptureLoadedScenes());
+            root["saveState"] = Newtonsoft.Json.Linq.JToken.FromObject(SceneDirtyStateUtility.BuildSaveState());
+            return root;
         }
     }
 }

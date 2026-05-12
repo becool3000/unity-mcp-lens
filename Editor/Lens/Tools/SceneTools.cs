@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Reflection;
 using Newtonsoft.Json.Linq;
@@ -8,14 +9,19 @@ using Becool.UnityMcpLens.Editor.Adapters.Unity;
 using Becool.UnityMcpLens.Editor.Helpers;
 using Becool.UnityMcpLens.Editor.ToolRegistry;
 using Becool.UnityMcpLens.Editor.Tools.Parameters;
+using Becool.UnityMcpLens.Editor.Utils.Scene;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 namespace Becool.UnityMcpLens.Editor.Tools
 {
     public static class SceneTools
     {
+        const string GetDirtyStateToolName = "Unity.Scene.GetDirtyState";
+        const string SaveToolName = "Unity.Scene.Save";
+
         public const string SetSerializedPropertiesDescription = @"Sets serialized property values on scene objects without requiring a custom RunCommand.
 
 Args:
@@ -27,10 +33,147 @@ Args:
       ComponentIndex: 0-based component index when multiple matching components exist.
       PropertyPath: Serialized property path to set.
       Value: Primitive value, asset path string, null, or an object reference descriptor like { find, method, component, componentIndex }.
-    PreviewOnly: When true, validates and reports the assignments without saving the open scenes.
+    PreviewOnly: When true, validates and reports the assignments without mutating or saving the open scenes.
 
 Returns:
     Dictionary with success/message/data. Data contains the applied assignments and resulting serialized values.";
+
+        const string GetDirtyStateDescription = @"Reports dirty state for loaded scenes without saving or mutating scene content.";
+
+        const string SaveDescription = @"Explicitly saves a loaded scene or all loaded dirty scenes.
+
+No save occurs unless this tool is called. Without arguments, saves the active scene. Use allLoadedScenes=true to save all loaded dirty scenes.";
+
+        [McpSchema(GetDirtyStateToolName)]
+        public static object GetDirtyStateSchema()
+        {
+            return new
+            {
+                type = "object",
+                properties = new
+                {
+                    scene = new { type = "string", description = "Optional loaded scene name or Assets-relative .unity path to highlight." }
+                }
+            };
+        }
+
+        [McpSchema(SaveToolName)]
+        public static object GetSaveSchema()
+        {
+            return new
+            {
+                type = "object",
+                properties = new
+                {
+                    scene = new { type = "string", description = "Optional loaded scene name or Assets-relative .unity path. Defaults to the active scene." },
+                    allLoadedScenes = new { type = "boolean", description = "Save all loaded dirty scenes instead of one scene." },
+                    saveAsPath = new { type = "string", description = "Optional Assets-relative .unity path for saving the selected scene." }
+                }
+            };
+        }
+
+        [McpTool(GetDirtyStateToolName, GetDirtyStateDescription, "Get Scene Dirty State", Groups = new[] { "scene" }, EnabledByDefault = true)]
+        public static object GetDirtyState(JObject @params)
+        {
+            @params ??= new JObject();
+            string sceneTarget = GetString(@params, "scene", "Scene", "scenePath", "ScenePath", "sceneName", "SceneName");
+            object selectedScene = null;
+            if (!string.IsNullOrWhiteSpace(sceneTarget))
+            {
+                if (!SceneDirtyStateUtility.TryResolveScene(sceneTarget, out Scene scene, out string error))
+                    return Response.Error(error, new { errorKind = "scene_not_found", dirtyState = SceneDirtyStateUtility.CaptureLoadedScenes() });
+
+                selectedScene = SceneDirtyStateUtility.ToSceneState(scene);
+            }
+
+            return Response.Success("Retrieved loaded scene dirty state.", new
+            {
+                selectedScene,
+                dirtyState = SceneDirtyStateUtility.CaptureLoadedScenes()
+            });
+        }
+
+        [McpTool(SaveToolName, SaveDescription, "Save Scene", Groups = new[] { "scene" }, EnabledByDefault = true)]
+        public static object Save(JObject @params)
+        {
+            @params ??= new JObject();
+            object dirtyStateBefore = SceneDirtyStateUtility.CaptureLoadedScenes();
+            bool allLoadedScenes = GetBool(@params, false, "allLoadedScenes", "AllLoadedScenes", "all", "All");
+            string sceneTarget = GetString(@params, "scene", "Scene", "scenePath", "ScenePath", "sceneName", "SceneName", "target", "Target");
+            string saveAsPath = GetString(@params, "saveAsPath", "SaveAsPath", "save_as_path", "path", "Path");
+
+            if (allLoadedScenes && !string.IsNullOrWhiteSpace(saveAsPath))
+            {
+                return Response.Error("saveAsPath cannot be used with allLoadedScenes=true.", new
+                {
+                    errorKind = "invalid_save_arguments",
+                    dirtyStateBefore,
+                    dirtyStateAfter = SceneDirtyStateUtility.CaptureLoadedScenes(),
+                    saveState = SceneDirtyStateUtility.BuildSaveState(requested: true, attempted: false, saved: false, message: "invalid_arguments")
+                });
+            }
+
+            var savedScenes = new List<object>();
+            var errors = new List<string>();
+            bool attempted = false;
+
+            if (allLoadedScenes)
+            {
+                foreach (Scene scene in SceneDirtyStateUtility.GetDirtyLoadedScenes())
+                {
+                    attempted = true;
+                    SaveOneScene(scene, null, savedScenes, errors);
+                }
+            }
+            else
+            {
+                if (!SceneDirtyStateUtility.TryResolveScene(sceneTarget, out Scene scene, out string error))
+                    return Response.Error(error, new
+                    {
+                        errorKind = "scene_not_found",
+                        dirtyStateBefore,
+                        dirtyStateAfter = SceneDirtyStateUtility.CaptureLoadedScenes(),
+                        saveState = SceneDirtyStateUtility.BuildSaveState(requested: true, attempted: false, saved: false, message: "scene_not_found", error: error)
+                    });
+
+                attempted = true;
+                SaveOneScene(scene, NormalizeSavePath(saveAsPath), savedScenes, errors);
+            }
+
+            if (savedScenes.Count > 0)
+                AssetDatabase.Refresh();
+
+            object dirtyStateAfter = SceneDirtyStateUtility.CaptureLoadedScenes();
+            bool success = errors.Count == 0;
+            object saveState = SceneDirtyStateUtility.BuildSaveState(
+                requested: true,
+                attempted: attempted,
+                saved: success && savedScenes.Count > 0,
+                savedScenes: savedScenes.ToArray(),
+                message: !attempted ? "no_dirty_loaded_scenes" : success ? "saved" : "save_failed",
+                error: errors.Count == 0 ? null : string.Join("; ", errors));
+
+            if (!success)
+            {
+                return Response.Error("One or more scene saves failed.", new
+                {
+                    errorKind = "scene_save_failed",
+                    errors,
+                    dirtyStateBefore,
+                    dirtyStateAfter,
+                    saveState
+                });
+            }
+
+            return Response.Success(
+                savedScenes.Count == 0 ? "No dirty loaded scenes required saving." : $"Saved {savedScenes.Count} scene(s).",
+                new
+                {
+                    dirtyStateBefore,
+                    dirtyStateAfter,
+                    saveState
+                });
+        }
 
         [McpTool("Unity.Scene.SetSerializedProperties", SetSerializedPropertiesDescription, Groups = new[] { "scene", "editor" }, EnabledByDefault = true)]
         public static object SetSerializedProperties(SetSceneSerializedPropertiesParams parameters)
@@ -61,6 +204,7 @@ Returns:
                 return Response.Error("Target does not belong to a valid loaded scene.");
             }
 
+            object dirtyStateBefore = SceneDirtyStateUtility.CaptureLoadedScenes();
             var assignmentResults = new List<object>();
             try
             {
@@ -82,16 +226,18 @@ Returns:
                 if (!parameters.PreviewOnly)
                 {
                     EditorSceneManager.MarkSceneDirty(targetRoot.scene);
-                    EditorSceneManager.SaveOpenScenes();
                 }
 
                 return Response.Success(parameters.PreviewOnly
                     ? $"Validated serialized property assignments on '{UiDiagnosticsHelper.GetHierarchyPath(targetRoot.transform)}'."
-                    : $"Saved serialized property assignments on '{UiDiagnosticsHelper.GetHierarchyPath(targetRoot.transform)}'.", new
+                    : $"Applied serialized property assignments on '{UiDiagnosticsHelper.GetHierarchyPath(targetRoot.transform)}'.", new
                 {
                     target = UiDiagnosticsHelper.GetHierarchyPath(targetRoot.transform),
                     previewOnly = parameters.PreviewOnly,
-                    assignments = assignmentResults
+                    assignments = assignmentResults,
+                    dirtyStateBefore,
+                    dirtyStateAfter = SceneDirtyStateUtility.CaptureLoadedScenes(),
+                    saveState = SceneDirtyStateUtility.BuildSaveState()
                 });
             }
             catch (Exception ex)
@@ -502,6 +648,89 @@ Returns:
             }
 
             return "Assets/" + normalized.TrimStart('/');
+        }
+
+        static void SaveOneScene(Scene scene, string saveAsPath, List<object> savedScenes, List<string> errors)
+        {
+            if (!scene.IsValid() || !scene.isLoaded)
+            {
+                errors.Add("Cannot save an invalid or unloaded scene.");
+                return;
+            }
+
+            string finalPath = string.IsNullOrWhiteSpace(saveAsPath) ? scene.path : saveAsPath;
+            if (string.IsNullOrWhiteSpace(finalPath))
+            {
+                errors.Add($"Scene '{scene.name}' is untitled. Provide saveAsPath to save it.");
+                return;
+            }
+
+            bool wasDirty = scene.isDirty;
+            EnsureAssetDirectory(finalPath);
+            bool saved = string.IsNullOrWhiteSpace(saveAsPath)
+                ? EditorSceneManager.SaveScene(scene)
+                : EditorSceneManager.SaveScene(scene, saveAsPath);
+
+            if (!saved)
+            {
+                errors.Add($"Failed to save scene '{scene.name}' to '{finalPath}'.");
+                return;
+            }
+
+            savedScenes.Add(new
+            {
+                scene.name,
+                path = finalPath,
+                scene.handle,
+                wasDirty
+            });
+        }
+
+        static string NormalizeSavePath(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+                return null;
+
+            string normalized = path.Trim().Replace('\\', '/');
+            if (!normalized.EndsWith(".unity", StringComparison.OrdinalIgnoreCase))
+                normalized += ".unity";
+            if (!normalized.StartsWith("Assets/", StringComparison.OrdinalIgnoreCase))
+                normalized = "Assets/" + normalized.TrimStart('/');
+            return normalized;
+        }
+
+        static void EnsureAssetDirectory(string assetPath)
+        {
+            string directory = Path.GetDirectoryName(assetPath)?.Replace('\\', '/');
+            if (string.IsNullOrWhiteSpace(directory))
+                return;
+
+            string projectRoot = Application.dataPath.Substring(0, Application.dataPath.Length - "Assets".Length);
+            string fullDirectory = Path.Combine(projectRoot, directory);
+            if (!Directory.Exists(fullDirectory))
+                Directory.CreateDirectory(fullDirectory);
+        }
+
+        static string GetString(JObject parameters, params string[] names)
+        {
+            foreach (string name in names)
+            {
+                if (parameters.TryGetValue(name, StringComparison.OrdinalIgnoreCase, out JToken token))
+                    return token?.Type == JTokenType.Null ? null : token?.ToString();
+            }
+
+            return null;
+        }
+
+        static bool GetBool(JObject parameters, bool defaultValue, params string[] names)
+        {
+            foreach (string name in names)
+            {
+                if (parameters.TryGetValue(name, StringComparison.OrdinalIgnoreCase, out JToken token))
+                    return token.Type == JTokenType.Boolean ? token.Value<bool>() : bool.TryParse(token.ToString(), out bool parsed) ? parsed : defaultValue;
+            }
+
+            return defaultValue;
         }
     }
 }

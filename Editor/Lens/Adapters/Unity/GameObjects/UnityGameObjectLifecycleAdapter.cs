@@ -9,6 +9,8 @@ using Becool.UnityMcpLens.Editor.Models.GameObjects;
 using UnityEditor;
 using UnityEditorInternal;
 using UnityEngine;
+using UnityEngine.EventSystems;
+using UnityEngine.UI;
 
 namespace Becool.UnityMcpLens.Editor.Adapters.Unity.GameObjects
 {
@@ -269,6 +271,26 @@ namespace Becool.UnityMcpLens.Editor.Adapters.Unity.GameObjects
                         return UnityGameObjectCreateApplyStatus.Error($"Failed to create primitive '{request.primitiveType}': {ex.Message}", "create_failed");
                     }
                 }
+                else if (string.Equals(request.objectKind, "camera", StringComparison.Ordinal))
+                {
+                    newGo = new GameObject(request.name, typeof(Camera), typeof(AudioListener));
+                    source = "camera";
+                }
+                else if (string.Equals(request.objectKind, "light", StringComparison.Ordinal))
+                {
+                    newGo = new GameObject(request.name, typeof(Light));
+                    source = "light";
+                }
+                else if (string.Equals(request.objectKind, "canvas", StringComparison.Ordinal))
+                {
+                    newGo = new GameObject(request.name, typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
+                    source = "canvas";
+                }
+                else if (string.Equals(request.objectKind, "eventSystem", StringComparison.Ordinal))
+                {
+                    newGo = new GameObject(request.name, typeof(EventSystem), typeof(StandaloneInputModule));
+                    source = "eventSystem";
+                }
                 else
                 {
                     newGo = new GameObject(request.name);
@@ -280,6 +302,7 @@ namespace Becool.UnityMcpLens.Editor.Adapters.Unity.GameObjects
 
                 createdNewObject = true;
                 Undo.RegisterCreatedObjectUndo(newGo, $"Create GameObject '{newGo.name}'");
+                ConfigureTemplateDefaults(newGo, request.objectKind);
             }
 
             if (newGo == null)
@@ -454,6 +477,24 @@ namespace Becool.UnityMcpLens.Editor.Adapters.Unity.GameObjects
         {
             if (gameObject != null)
                 UnityEngine.Object.DestroyImmediate(gameObject);
+        }
+
+        static void ConfigureTemplateDefaults(GameObject gameObject, string objectKind)
+        {
+            if (gameObject == null)
+                return;
+
+            if (string.Equals(objectKind, "light", StringComparison.Ordinal) &&
+                gameObject.TryGetComponent<Light>(out var light))
+            {
+                light.type = LightType.Directional;
+            }
+
+            if (string.Equals(objectKind, "canvas", StringComparison.Ordinal) &&
+                gameObject.TryGetComponent<Canvas>(out var canvas))
+            {
+                canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            }
         }
 
         static bool TrySetTag(GameObject targetGo, string tagToSet, out string error)

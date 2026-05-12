@@ -4,6 +4,7 @@ using Becool.UnityMcpLens.Editor.Adapters.Unity.UI;
 using Becool.UnityMcpLens.Editor.Models.UI;
 using Becool.UnityMcpLens.Editor.Services;
 using Becool.UnityMcpLens.Editor.Helpers;
+using Becool.UnityMcpLens.Editor.Utils.Scene;
 using UnityEditor.SceneManagement;
 
 namespace Becool.UnityMcpLens.Editor.Services.UI
@@ -173,6 +174,7 @@ namespace Becool.UnityMcpLens.Editor.Services.UI
                 return false;
             }
 
+            object dirtyStateBefore = SceneDirtyStateUtility.CaptureLoadedScenes();
             using (timing.Measure("adapter"))
             {
                 if (!m_Adapter.TryEnsureHierarchy(request, previewOnly, out var targetRoot, out var nodes, out var applied, out var error))
@@ -187,9 +189,9 @@ namespace Becool.UnityMcpLens.Editor.Services.UI
                 if (!previewOnly && applied)
                 {
                     EditorSceneManager.MarkSceneDirty(targetRoot.scene);
-                    EditorSceneManager.SaveOpenScenes();
                 }
 
+                object dirtyStateAfter = SceneDirtyStateUtility.CaptureLoadedScenes();
                 result = UiOperationResult.Ok(
                     previewOnly
                         ? $"Previewed UI hierarchy under '{UiDiagnosticsHelper.GetHierarchyPath(targetRoot.transform)}'."
@@ -201,7 +203,10 @@ namespace Becool.UnityMcpLens.Editor.Services.UI
                         target = UiDiagnosticsHelper.GetHierarchyPath(targetRoot.transform),
                         applied = !previewOnly && applied,
                         willModify = applied,
-                        nodes = nodes.ToArray()
+                        nodes = nodes.ToArray(),
+                        dirtyStateBefore,
+                        dirtyStateAfter,
+                        saveState = SceneDirtyStateUtility.BuildSaveState()
                     });
                 return true;
             }
@@ -214,6 +219,7 @@ namespace Becool.UnityMcpLens.Editor.Services.UI
                 return UiOperationResult.Error("target is required.", "target_required");
             }
 
+            object dirtyStateBefore = SceneDirtyStateUtility.CaptureLoadedScenes();
             using (timing.Measure("adapter"))
             {
                 if (!m_Adapter.TryApplyLayoutProperties(request, previewOnly, out var targetRoot, out var targetTransform, out var changes, out var applied, out var error))
@@ -227,9 +233,9 @@ namespace Becool.UnityMcpLens.Editor.Services.UI
                 if (!previewOnly && applied)
                 {
                     EditorSceneManager.MarkSceneDirty(targetRoot.scene);
-                    EditorSceneManager.SaveOpenScenes();
                 }
 
+                object dirtyStateAfter = SceneDirtyStateUtility.CaptureLoadedScenes();
                 string hierarchyPath = UiDiagnosticsHelper.GetHierarchyPath(targetTransform);
                 return UiOperationResult.Ok(
                     previewOnly
@@ -242,7 +248,10 @@ namespace Becool.UnityMcpLens.Editor.Services.UI
                         target = hierarchyPath,
                         applied = !previewOnly && applied,
                         willModify = applied,
-                        changes = changes.ToArray()
+                        changes = changes.ToArray(),
+                        dirtyStateBefore,
+                        dirtyStateAfter,
+                        saveState = SceneDirtyStateUtility.BuildSaveState()
                     });
             }
         }

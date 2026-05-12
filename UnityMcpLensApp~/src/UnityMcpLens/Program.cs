@@ -19,7 +19,12 @@ sealed class UnityMcpLensHost
     static readonly HashSet<string> s_ReadOnlyTools = new(StringComparer.OrdinalIgnoreCase)
     {
         "Unity_GameObject_Inspect",
+        "Unity_GameObject_ListComponents",
+        "Unity_GameObject_GetComponent",
         "Unity_GameObject_PreviewChanges",
+        "Unity_GameObject_PreviewComponentChanges",
+        "Unity_GameObject_PreviewCreate",
+        "Unity_GameObject_PreviewDelete",
         "Unity_GetLensHealth",
         "Unity_ListToolPacks",
         "Unity_Bridge_ListConnections",
@@ -39,8 +44,10 @@ sealed class UnityMcpLensHost
         "Unity_UI_PreviewCreateCanvasPrefab",
         "Unity_UI_VerifyRaycastAndLayout",
         "Unity_Scene_PreviewBindSerializedReferences",
+        "Unity_Scene_PreviewAssignObjectReferences",
         "Unity_Scene_PreviewInstantiatePrefabAndBind",
         "Unity_Scene_VerifySerializedReferences",
+        "Unity_Scene_GetDirtyState",
         "Unity_Asset_PreviewImportSpriteSheetAndBind",
         "Unity_Asset_VerifySpriteArrayBinding",
         "Unity_Runtime_QueryObjects",
@@ -59,6 +66,9 @@ sealed class UnityMcpLensHost
     static readonly HashSet<string> s_MutatingTools = new(StringComparer.OrdinalIgnoreCase)
     {
         "Unity_GameObject_ApplyChanges",
+        "Unity_GameObject_ApplyComponentChanges",
+        "Unity_GameObject_Create",
+        "Unity_GameObject_Delete",
         "Unity_ManageGameObject",
         "Unity_ManageScene",
         "Unity_ManageAsset",
@@ -83,6 +93,8 @@ sealed class UnityMcpLensHost
         "Unity_Prefab_SetSerializedProperties",
         "Unity_Scene_SetSerializedProperties",
         "Unity_Scene_ApplyBindSerializedReferences",
+        "Unity_Scene_ApplyAssignObjectReferences",
+        "Unity_Scene_Save",
         "Unity_Editor_ScriptUpdatingConsentModal",
         "Unity_Editor_SyncScripts",
         "Unity_Editor_SetPlayMode",

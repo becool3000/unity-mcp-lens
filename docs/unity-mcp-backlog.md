@@ -117,12 +117,12 @@ Still needed:
 
 ## Current Baselines
 
-- `foundation` exports `17` tools, including `Unity.Tools.Menu`, `Unity.Tools.Describe`, `Unity.Tools.ActivateAndVerify`, and the host-local Script Updating Consent modal recovery tool.
-- `foundation + scene` now targets `41` tools.
-- `foundation + ui` now targets `33` tools, including `Unity.UI.QueryRuntimeLayout` and `Unity.UI.InvokeControl`.
-- `foundation + runtime` now targets `23` tools, including `Unity.Editor.SetPlayMode`.
-- Latest expected metadata audit baseline keeps `project=26` and observes `debug=28`.
-- Phase 18 plus the static-all menu work set the `foundation+assets=30` metadata audit baseline for asset/resource workflows and sprite-sheet binding tools.
+- `foundation` exports `18` tools, including `Unity.Tools.Menu`, `Unity.Tools.Describe`, `Unity.Tools.ActivateAndVerify`, and the host-local Script Updating Consent modal recovery tool.
+- `foundation + scene` now targets `47` tools.
+- `foundation + ui` now targets `35` tools, including `Unity.UI.QueryRuntimeLayout` and `Unity.UI.InvokeControl`.
+- `foundation + runtime` now targets `29` tools, including `Unity.Editor.SetPlayMode`.
+- Latest expected metadata audit baseline keeps `project=27` and observes `debug=28`.
+- Phase 18 plus the static-all menu work set the `foundation+assets=31` metadata audit baseline for asset/resource workflows and sprite-sheet binding tools.
 - `UNITY_MCP_LENS_TOOL_SURFACE_MODE=static_all` starts the host at `foundation+full`; `Unity.SetToolPacks` is then a no-op and agents should use `Unity.Tools.Menu` for compact navigation while calling real tools directly.
 - Phase 8 split GameObject tools are in the `scene` pack.
 - Phase 12 scene serialized-reference preview/apply binding tools are in the `scene` pack.

@@ -19,6 +19,8 @@ namespace Becool.UnityMcpLens.Editor.Tools
     {
         const string PreviewToolName = "Unity.Scene.PreviewBindSerializedReferences";
         const string ApplyToolName = "Unity.Scene.ApplyBindSerializedReferences";
+        const string PreviewAssignToolName = "Unity.Scene.PreviewAssignObjectReferences";
+        const string ApplyAssignToolName = "Unity.Scene.ApplyAssignObjectReferences";
         const string PreviewInstantiatePrefabToolName = "Unity.Scene.PreviewInstantiatePrefabAndBind";
         const string ApplyInstantiatePrefabToolName = "Unity.Scene.ApplyInstantiatePrefabAndBind";
         const string VerifySerializedReferencesToolName = "Unity.Scene.VerifySerializedReferences";
@@ -27,15 +29,23 @@ namespace Becool.UnityMcpLens.Editor.Tools
 
 Supports single ObjectReference fields and object-reference arrays/lists only.";
 
-        const string ApplyDescription = @"Applies serialized object-reference bindings on scene components and saves open scenes when changes are required.
+        const string ApplyDescription = @"Applies serialized object-reference bindings on scene components without saving scenes.
 
 Supports single ObjectReference fields and object-reference arrays/lists only.";
+
+        const string PreviewAssignDescription = @"Previews serialized object-reference assignments on scene components without mutation.
+
+This is the preferred authoring name for scene object-reference binding. Supports single ObjectReference fields and object-reference arrays/lists only.";
+
+        const string ApplyAssignDescription = @"Applies serialized object-reference assignments on scene components without saving scenes.
+
+This is the preferred authoring name for scene object-reference binding. Supports single ObjectReference fields and object-reference arrays/lists only.";
 
         const string PreviewInstantiatePrefabDescription = @"Previews scene prefab instantiation plus serialized reference binding without mutation.
 
 Use this when a durable scene instance should exist and have component object-reference fields bound.";
 
-        const string ApplyInstantiatePrefabDescription = @"Applies scene prefab instantiation plus serialized reference binding and saves open scenes when changes are required.
+        const string ApplyInstantiatePrefabDescription = @"Applies scene prefab instantiation plus serialized reference binding without saving scenes.
 
 Use this when a durable scene instance should exist and have component object-reference fields bound.";
 
@@ -54,6 +64,18 @@ Reports effective values, prefab-inherited source values, local override status,
 
         [McpSchema(ApplyToolName)]
         public static object GetApplySchema()
+        {
+            return BuildSchema();
+        }
+
+        [McpSchema(PreviewAssignToolName)]
+        public static object GetPreviewAssignSchema()
+        {
+            return BuildSchema();
+        }
+
+        [McpSchema(ApplyAssignToolName)]
+        public static object GetApplyAssignSchema()
         {
             return BuildSchema();
         }
@@ -86,6 +108,18 @@ Reports effective values, prefab-inherited source values, local override status,
         public static object Apply(JObject @params)
         {
             return HandleTool(ApplyToolName, "apply_bind_serialized_references", @params, apply: true);
+        }
+
+        [McpTool(PreviewAssignToolName, PreviewAssignDescription, "Preview Assign Object References", Groups = new[] { "scene" }, EnabledByDefault = true)]
+        public static object PreviewAssignObjectReferences(JObject @params)
+        {
+            return HandleTool(PreviewAssignToolName, "preview_assign_object_references", @params, apply: false);
+        }
+
+        [McpTool(ApplyAssignToolName, ApplyAssignDescription, "Apply Assign Object References", Groups = new[] { "scene" }, EnabledByDefault = true)]
+        public static object ApplyAssignObjectReferences(JObject @params)
+        {
+            return HandleTool(ApplyAssignToolName, "apply_assign_object_references", @params, apply: true);
         }
 
         [McpTool(PreviewInstantiatePrefabToolName, PreviewInstantiatePrefabDescription, "Preview Instantiate Prefab And Bind", Groups = new[] { "scene" }, EnabledByDefault = true)]
@@ -383,6 +417,9 @@ Reports effective values, prefab-inherited source values, local override status,
                 target = root["target"],
                 applied = root["applied"],
                 willModify = root["willModify"],
+                dirtyStateBefore = root["dirtyStateBefore"],
+                dirtyStateAfter = root["dirtyStateAfter"],
+                saveState = root["saveState"],
                 bindingCount = bindings.Count,
                 bindingTypeCounts,
                 changedBindingCount = changedBindings.Count,
@@ -471,6 +508,9 @@ Reports effective values, prefab-inherited source values, local override status,
                 exists = root["exists"],
                 applied = root["applied"],
                 willModify = root["willModify"],
+                dirtyStateBefore = root["dirtyStateBefore"],
+                dirtyStateAfter = root["dirtyStateAfter"],
+                saveState = root["saveState"],
                 instanceChangeCount = (root["instanceChanges"] as JArray)?.Count ?? 0,
                 instanceChanges = root["instanceChanges"],
                 bindingCount = bindings.Count,

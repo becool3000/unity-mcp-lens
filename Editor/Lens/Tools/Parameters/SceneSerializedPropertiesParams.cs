@@ -35,7 +35,7 @@ namespace Becool.UnityMcpLens.Editor.Tools.Parameters
         [McpDescription("Include inactive scene objects when resolving the target.", Required = false)]
         public bool IncludeInactive { get; set; } = true;
 
-        [McpDescription("When true, validates and reports the assignments without saving the open scenes.", Required = false)]
+        [McpDescription("When true, validates and reports the assignments without mutating or saving the open scenes.", Required = false)]
         public bool PreviewOnly { get; set; } = false;
     }
 }

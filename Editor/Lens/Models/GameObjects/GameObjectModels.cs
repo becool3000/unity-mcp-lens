@@ -102,6 +102,7 @@ namespace Becool.UnityMcpLens.Editor.Models.GameObjects
     sealed class GameObjectCreateRequest
     {
         public string name { get; set; }
+        public string objectKind { get; set; }
         public string primitiveType { get; set; }
         public bool saveAsPrefab { get; set; }
         public string prefabPath { get; set; }
@@ -238,6 +239,9 @@ namespace Becool.UnityMcpLens.Editor.Models.GameObjects
         public List<ValidationMessage> validationMessages { get; set; }
         public GameObjectComponentInfo component { get; set; }
         public GameObjectInfo @object { get; set; }
+        public object dirtyStateBefore { get; set; }
+        public object dirtyStateAfter { get; set; }
+        public object saveState { get; set; }
     }
 
     sealed class GameObjectComponentMutationApplyResult
@@ -249,28 +253,39 @@ namespace Becool.UnityMcpLens.Editor.Models.GameObjects
         public List<ValidationMessage> validationMessages { get; set; }
         public GameObjectComponentInfo component { get; set; }
         public GameObjectInfo @object { get; set; }
+        public object dirtyStateBefore { get; set; }
+        public object dirtyStateAfter { get; set; }
+        public object saveState { get; set; }
     }
 
     sealed class GameObjectCreatePreviewResult
     {
         public bool willCreate { get; set; }
         public string source { get; set; }
+        public string objectKind { get; set; }
         public string prefabPath { get; set; }
         public GameObjectTargetSummary parent { get; set; }
         public GameObjectInfo plannedObject { get; set; }
         public List<GameObjectComponentInfo> components { get; set; }
         public List<ValidationMessage> validationMessages { get; set; }
+        public object dirtyStateBefore { get; set; }
+        public object dirtyStateAfter { get; set; }
+        public object saveState { get; set; }
     }
 
     sealed class GameObjectCreateApplyResult
     {
         public bool created { get; set; }
         public string source { get; set; }
+        public string objectKind { get; set; }
         public bool savedAsPrefab { get; set; }
         public string prefabPath { get; set; }
         public GameObjectInfo @object { get; set; }
         public List<GameObjectComponentInfo> components { get; set; }
         public List<ValidationMessage> validationMessages { get; set; }
+        public object dirtyStateBefore { get; set; }
+        public object dirtyStateAfter { get; set; }
+        public object saveState { get; set; }
     }
 
     sealed class GameObjectDeletePreviewResult
@@ -279,6 +294,9 @@ namespace Becool.UnityMcpLens.Editor.Models.GameObjects
         public int count { get; set; }
         public List<GameObjectTargetSummary> objects { get; set; }
         public List<ValidationMessage> validationMessages { get; set; }
+        public object dirtyStateBefore { get; set; }
+        public object dirtyStateAfter { get; set; }
+        public object saveState { get; set; }
     }
 
     sealed class GameObjectDeleteApplyResult
@@ -286,6 +304,10 @@ namespace Becool.UnityMcpLens.Editor.Models.GameObjects
         public bool deleted { get; set; }
         public int count { get; set; }
         public List<GameObjectTargetSummary> objects { get; set; }
+        public List<ValidationMessage> validationMessages { get; set; }
+        public object dirtyStateBefore { get; set; }
+        public object dirtyStateAfter { get; set; }
+        public object saveState { get; set; }
     }
 
     sealed class GameObjectChangeEntry
@@ -309,6 +331,9 @@ namespace Becool.UnityMcpLens.Editor.Models.GameObjects
         public List<GameObjectChangeEntry> changes { get; set; }
         public List<ValidationMessage> validationMessages { get; set; }
         public GameObjectInfo @object { get; set; }
+        public object dirtyStateBefore { get; set; }
+        public object dirtyStateAfter { get; set; }
+        public object saveState { get; set; }
     }
 
     sealed class GameObjectChangeApplyResult
@@ -316,7 +341,11 @@ namespace Becool.UnityMcpLens.Editor.Models.GameObjects
         public GameObjectTargetSummary target { get; set; }
         public bool applied { get; set; }
         public List<GameObjectChangeEntry> changes { get; set; }
+        public List<ValidationMessage> validationMessages { get; set; }
         public GameObjectInfo @object { get; set; }
+        public object dirtyStateBefore { get; set; }
+        public object dirtyStateAfter { get; set; }
+        public object saveState { get; set; }
     }
 
     sealed class GameObjectOperationResult

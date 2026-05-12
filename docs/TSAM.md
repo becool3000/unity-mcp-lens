@@ -87,7 +87,8 @@ Apply tools:
 
 - perform the planned mutation
 - report whether anything changed
-- persist scene changes when the tool contract says it does
+- dirty durable editor state when content changes
+- save scenes/assets only when the tool contract exposes an explicit save request
 - return compact readback or validation data
 
 Read-only diagnostic tools should stay read-only. Project/package diagnosis,
@@ -102,7 +103,7 @@ agent should inspect first instead of running custom editor code.
 
 Pack-specific TSAM work is used to keep the MCP surface small:
 
-- `scene`: split GameObject tools, scene serialized-reference binding, prefab instantiate/bind workflows, and read-only serialized-reference verification.
+- `scene`: split GameObject tools, scene serialized-reference/object-reference assignment, explicit dirty/save tools, prefab instantiate/bind workflows, and read-only serialized-reference verification.
 - `project`: package/import diagnostics, Input System diagnostics, input-action asset inspection, and active input handler tools.
 - `ui`: uGUI hierarchy/layout preview/apply authoring, canvas prefab authoring, raycast/layout verification, runtime UI query/invoke tools, and screen-layout or resolution-matrix verification.
 - `runtime`: play-mode runtime probes, visual bounds snapshots, pointer/scroll input smoke verification, and explicit play-mode exit.
@@ -111,12 +112,12 @@ Pack-specific TSAM work is used to keep the MCP surface small:
 
 Current metadata baselines are:
 
-- `foundation`: `17` exported tools.
-- `foundation + scene`: `41` exported tools.
-- `foundation + ui`: `33` exported tools.
-- `foundation + runtime`: `23` exported tools.
-- `project`: `26` exported tools.
-- `foundation + assets`: `30` exported tools.
+- `foundation`: `18` exported tools.
+- `foundation + scene`: `47` exported tools.
+- `foundation + ui`: `35` exported tools.
+- `foundation + runtime`: `29` exported tools.
+- `project`: `27` exported tools.
+- `foundation + assets`: `31` exported tools.
 - `debug`: `28` exported tools.
 
 Pack membership changes should update metadata audit expectations and workflow
