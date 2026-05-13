@@ -16,7 +16,7 @@ Use a relative path if your project and package checkout live near each other:
 
 ## Configure the MCP server
 
-Open **Tools > Unity MCP Lens > Open Settings**.
+Open **Tools > Unity MCP Lens > Open Command Center**.
 
 The Lens server installs to:
 

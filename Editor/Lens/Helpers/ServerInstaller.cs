@@ -31,6 +31,7 @@ namespace Becool.UnityMcpLens.Editor.Helpers
             }
 
             InstallOrUpdateOwnedMcpServer(forceRefresh);
+            InstallOrUpdateCommandCenter(forceRefresh);
         }
 
         static string ReadVersionFromMetadata(string metadataPath)
@@ -143,6 +144,72 @@ namespace Becool.UnityMcpLens.Editor.Helpers
             }
         }
 
+        static void InstallOrUpdateCommandCenter(bool forceRefresh)
+        {
+            if (!PlatformUtils.IsWindows)
+                return;
+
+            try
+            {
+                string sourceDir = Path.GetFullPath(MCPConstants.unityMcpLensAppPath);
+                if (!Directory.Exists(sourceDir))
+                {
+                    McpLog.Warning($"Unity MCP Lens source directory not found at {sourceDir}");
+                    return;
+                }
+
+                DateTime installedWriteUtc = File.Exists(MCPConstants.LensInstalledCommandCenterMainFile)
+                    ? File.GetLastWriteTimeUtc(MCPConstants.LensInstalledCommandCenterMainFile)
+                    : DateTime.MinValue;
+                DateTime prebuiltWriteUtc = GetCommandCenterPrebuiltWriteUtc(sourceDir);
+                DateTime sourceWriteUtc = GetCommandCenterSourceNewestWriteUtc();
+                bool sourceNewerThanPrebuilt = sourceWriteUtc > prebuiltWriteUtc.AddSeconds(1);
+                bool bundledNewerThanInstalled = prebuiltWriteUtc > installedWriteUtc.AddSeconds(1) ||
+                    sourceWriteUtc > installedWriteUtc.AddSeconds(1);
+
+                if (!forceRefresh && !bundledNewerThanInstalled && File.Exists(MCPConstants.LensInstalledCommandCenterMainFile))
+                {
+                    McpLog.Log("Unity MCP Lens Command Center is up to date.");
+                    return;
+                }
+
+                if (!Directory.Exists(MCPConstants.UnityMcpBaseDirectory))
+                    Directory.CreateDirectory(MCPConstants.UnityMcpBaseDirectory);
+
+                string stagingDirectory = Path.Combine(Path.GetTempPath(), $"unity-mcp-lens-command-center-{Guid.NewGuid():N}");
+                try
+                {
+                    PublishCommandCenter(stagingDirectory, preferSourcePublish: sourceNewerThanPrebuilt);
+                    CopyDirectoryContents(stagingDirectory, MCPConstants.UnityMcpBaseDirectory);
+
+                    string reason = forceRefresh
+                        ? "explicit refresh"
+                        : sourceNewerThanPrebuilt
+                            ? "source newer than prebuilt"
+                            : bundledNewerThanInstalled
+                                ? "bundled command center newer than installed command center"
+                                : "missing install";
+                    McpLog.Log($"Unity MCP Lens Command Center installed to {MCPConstants.UnityMcpBaseDirectory} (reason: {reason})");
+                }
+                finally
+                {
+                    try
+                    {
+                        if (Directory.Exists(stagingDirectory))
+                            Directory.Delete(stagingDirectory, true);
+                    }
+                    catch
+                    {
+                        // Best-effort cleanup only.
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                McpLog.Warning($"Could not install Unity MCP Lens Command Center: {ex.Message}");
+            }
+        }
+
         static DateTime GetRuntimePrebuiltNewestWriteUtc(string sourceDir)
         {
             string runtimeIdentifier = GetCurrentRuntimeIdentifier();
@@ -153,6 +220,20 @@ namespace Becool.UnityMcpLens.Editor.Helpers
         static DateTime GetServerSourceNewestWriteUtc()
         {
             string projectFile = MCPConstants.BundledLensProjectFile;
+            string projectDirectory = Path.GetDirectoryName(projectFile);
+            return GetNewestWriteUtc(projectDirectory, ShouldIncludeSourceFile);
+        }
+
+        static DateTime GetCommandCenterPrebuiltWriteUtc(string sourceDir)
+        {
+            string runtimeIdentifier = GetCurrentRuntimeIdentifier();
+            string commandCenterPath = Path.Combine(sourceDir, "prebuilt", runtimeIdentifier, Path.GetFileName(MCPConstants.LensInstalledCommandCenterMainFile));
+            return File.Exists(commandCenterPath) ? File.GetLastWriteTimeUtc(commandCenterPath) : DateTime.MinValue;
+        }
+
+        static DateTime GetCommandCenterSourceNewestWriteUtc()
+        {
+            string projectFile = MCPConstants.BundledCommandCenterProjectFile;
             string projectDirectory = Path.GetDirectoryName(projectFile);
             return GetNewestWriteUtc(projectDirectory, ShouldIncludeSourceFile);
         }
@@ -281,6 +362,58 @@ namespace Becool.UnityMcpLens.Editor.Helpers
             ReconcileOwnedServerBinary(stagingDirectory);
         }
 
+        static void PublishCommandCenter(string stagingDirectory, bool preferSourcePublish)
+        {
+            string runtimeIdentifier = GetCurrentRuntimeIdentifier();
+            string commandCenterFileName = Path.GetFileName(MCPConstants.LensInstalledCommandCenterMainFile);
+            string prebuiltPath = Path.Combine(Path.GetFullPath(MCPConstants.unityMcpLensAppPath), "prebuilt", runtimeIdentifier, commandCenterFileName);
+            if (!preferSourcePublish && File.Exists(prebuiltPath))
+            {
+                Directory.CreateDirectory(stagingDirectory);
+                File.Copy(prebuiltPath, Path.Combine(stagingDirectory, commandCenterFileName), true);
+                return;
+            }
+
+            string projectFile = MCPConstants.BundledCommandCenterProjectFile;
+            if (!File.Exists(projectFile))
+                throw new FileNotFoundException("Unity MCP Lens Command Center project file not found.", projectFile);
+
+            string dotnetExecutable = ResolveDotNetExecutable();
+            if (string.IsNullOrWhiteSpace(dotnetExecutable))
+                throw new InvalidOperationException("dotnet SDK/runtime executable was not found. Install .NET SDK 8+ or bundle a prebuilt Unity MCP Lens Command Center binary.");
+
+            Directory.CreateDirectory(stagingDirectory);
+            string arguments =
+                $"publish \"{projectFile}\" -c Release -r {runtimeIdentifier} --self-contained true /p:PublishSingleFile=true /p:DebugType=None /p:DebugSymbols=false -o \"{stagingDirectory}\"";
+
+            var startInfo = new ProcessStartInfo
+            {
+                FileName = dotnetExecutable,
+                Arguments = arguments,
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true,
+                WorkingDirectory = Path.GetDirectoryName(projectFile)
+            };
+
+            using var process = Process.Start(startInfo);
+            if (process == null)
+                throw new InvalidOperationException("Failed to start dotnet publish for Unity MCP Lens Command Center.");
+
+            string standardOutput = process.StandardOutput.ReadToEnd();
+            string standardError = process.StandardError.ReadToEnd();
+            process.WaitForExit();
+
+            if (process.ExitCode != 0)
+            {
+                throw new InvalidOperationException(
+                    $"dotnet publish failed for Unity MCP Lens Command Center (exit {process.ExitCode}).\n{standardOutput}\n{standardError}".Trim());
+            }
+
+            ReconcileCommandCenterBinary(stagingDirectory);
+        }
+
         static string ResolveDotNetExecutable()
         {
             string bundledPath = Environment.GetEnvironmentVariable("DOTNET_ROOT");
@@ -331,6 +464,25 @@ namespace Becool.UnityMcpLens.Editor.Helpers
             string installedExpectedPath = Path.Combine(outputDirectory, expectedFileName);
 
             string publishedDefaultPath = Path.Combine(outputDirectory, GetPublishedDefaultServerBinaryName());
+            if (!File.Exists(publishedDefaultPath))
+                return;
+
+            if (!File.Exists(installedExpectedPath) ||
+                File.GetLastWriteTimeUtc(publishedDefaultPath) >= File.GetLastWriteTimeUtc(installedExpectedPath))
+            {
+                File.Copy(publishedDefaultPath, installedExpectedPath, true);
+            }
+
+            if (!string.Equals(publishedDefaultPath, installedExpectedPath, StringComparison.OrdinalIgnoreCase))
+                File.Delete(publishedDefaultPath);
+        }
+
+        static void ReconcileCommandCenterBinary(string outputDirectory)
+        {
+            string expectedFileName = Path.GetFileName(MCPConstants.LensInstalledCommandCenterMainFile);
+            string installedExpectedPath = Path.Combine(outputDirectory, expectedFileName);
+
+            string publishedDefaultPath = Path.Combine(outputDirectory, $"{MCPConstants.commandCenterProjectName}.exe");
             if (!File.Exists(publishedDefaultPath))
                 return;
 

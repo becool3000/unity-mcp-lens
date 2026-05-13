@@ -2,7 +2,7 @@
 
 ## Lens server does not install
 
-Open **Tools > Unity MCP Lens > Install/Refresh Lens Server**. If no prebuilt binary is bundled for your platform, the package publishes the server from `UnityMcpLensApp~` and requires a local .NET SDK 8 or newer. Codex-side access should not require .NET once the native binary exists under `~/.unity/unity-mcp-lens/`.
+Open **Tools > Unity MCP Lens > Open Command Center**, then use **Refresh Server**. If no prebuilt binary is bundled for your platform, the package publishes the server from `UnityMcpLensApp~` and requires a local .NET SDK 8 or newer. Codex-side access should not require .NET once the native binary exists under `~/.unity/unity-mcp-lens/`.
 
 ## MCP client cannot connect
 

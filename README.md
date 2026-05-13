@@ -71,7 +71,9 @@ TSAM reduces that with:
 ```
 
 3. In Unity:  
-**Tools > Unity MCP Lens > Install/Refresh Lens Server**
+**Tools > Unity MCP Lens > Open Command Center**
+
+Use the Command Center's **Refresh Server** action to install or update the Lens server.
 
 4. Point your MCP client to:
 

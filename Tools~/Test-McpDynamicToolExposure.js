@@ -75,6 +75,7 @@ const assetToolNames = [
 ];
 
 let nextPipeId = 1;
+const processStartUtc = () => new Date(Date.now() - process.uptime() * 1000).toISOString();
 
 function rpcFrame(message) {
   const body = Buffer.from(JSON.stringify(message), "utf8");
@@ -374,6 +375,36 @@ function writeStatus(statusPath, connectionPath, projectRoot, options) {
     last_heartbeat: options.heartbeat.toISOString(),
     protocol_version: "2.0",
     editor_pid: process.pid,
+  }, null, 2));
+
+  writeHealth(path.join(path.dirname(statusPath), `editor-health-${nextPipeId++}.json`), projectRoot, {
+    heartbeat: options.heartbeat,
+    editorPid: process.pid,
+  });
+}
+
+function writeHealth(healthPath, projectRoot, options) {
+  const heartbeat = options.heartbeat || new Date();
+  fs.writeFileSync(healthPath, JSON.stringify({
+    health_schema_version: 1,
+    editor_heartbeat_utc: heartbeat.toISOString(),
+    state_captured_utc: heartbeat.toISOString(),
+    editor_pid: options.editorPid ?? process.pid,
+    editor_process_start_utc: processStartUtc(),
+    project_path: path.join(projectRoot, "Assets"),
+    project_root: projectRoot,
+    unity_version: "test-unity",
+    lifecycle_state: "active",
+    is_compiling: false,
+    is_importing: false,
+    is_updating: false,
+    is_playing: false,
+    is_paused: false,
+    is_playing_or_will_change_playmode: false,
+    is_building_player: false,
+    active_scene_name: "TestScene",
+    active_scene_path: "Assets/TestScene.unity",
+    capture_error: null,
   }, null, 2));
 }
 

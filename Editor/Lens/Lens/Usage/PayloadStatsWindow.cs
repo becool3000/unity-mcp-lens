@@ -21,7 +21,7 @@ namespace Becool.UnityMcpLens.Editor.Lens.Usage
         bool m_ShowMissingFileHelp;
         DateTime m_LastRefreshUtc;
 
-        [MenuItem("Tools/Unity MCP Lens/Usage Report", false, 1040)]
+        [MenuItem("Window/Unity MCP Lens/Usage Report", false, 1040)]
         static PayloadStatsWindow ShowWindow()
         {
             var window = GetWindow<PayloadStatsWindow>();
@@ -348,7 +348,7 @@ namespace Becool.UnityMcpLens.Editor.Lens.Usage
                 EditorGUILayout.LabelField("Check", EditorStyles.boldLabel);
                 EditorGUILayout.LabelField("1. Packages/manifest.json points com.becool3000.unity-mcp-lens at this local fork.");
                 EditorGUILayout.LabelField("2. Unity finished recompiling after the package change.");
-                EditorGUILayout.LabelField("3. Tools/Unity MCP Lens/Usage Report opens in this project.");
+                EditorGUILayout.LabelField("3. Window/Unity MCP Lens/Usage Report opens in this project.");
                 EditorGUILayout.LabelField("4. You trigger MCP bridge activity or an instrumented Lens tool call at least once.");
             }
         }

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using UnityMcpLens.Shared;
 
 namespace UnityMcpLens;
 
@@ -13,6 +14,8 @@ sealed class BridgeDiscoveryResult
     public required bool IsFresh { get; init; }
     public required bool IsProjectMatch { get; init; }
     public required bool EditorPidAlive { get; init; }
+    public required string BasicHealth { get; init; }
+    public EditorHealthCandidate? EditorHealth { get; init; }
     public int EditorPid => StatusFile.EditorPid;
 }
 
@@ -30,6 +33,8 @@ sealed class BridgeDiscoveryCandidate
     public required bool SupportsToolSyncLens { get; init; }
     public required bool IsQuarantined { get; init; }
     public required bool IsSelectable { get; init; }
+    public required string BasicHealth { get; init; }
+    public EditorHealthCandidate? EditorHealth { get; init; }
     public int EditorPid { get; init; }
     public string? Error { get; init; }
     public string[] ExclusionReasons { get; init; } = [];
@@ -42,6 +47,8 @@ sealed class BridgeDiscoverySnapshot
     public required bool RequireProjectMatch { get; init; }
     public BridgeDiscoveryResult? Selected { get; init; }
     public required BridgeDiscoveryCandidate[] Candidates { get; init; }
+    public required EditorHealthCandidate[] EditorHealthCandidates { get; init; }
+    public required EditorHealthCandidate[] UnmatchedEditorHealthCandidates { get; init; }
 }
 
 static class BridgeDiscovery
@@ -71,17 +78,24 @@ static class BridgeDiscovery
                 ProjectPathHint = normalizedCwd,
                 RequireProjectMatch = requireProjectMatch,
                 Selected = null,
-                Candidates = []
+                Candidates = [],
+                EditorHealthCandidates = [],
+                UnmatchedEditorHealthCandidates = []
             };
         }
 
         HashSet<string> quarantine = NormalizeQuarantine(quarantinedBridgeIds);
         DateTime nowUtc = DateTime.UtcNow;
+        EditorHealthCandidate[] editorHealthCandidates = EditorHealthDiscovery.Scan(statusDirectory, normalizedCwd, nowUtc);
+        var matchedHealthPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var candidates = new List<(BridgeDiscoveryCandidate Candidate, BridgeDiscoveryResult? Result)>();
 
         foreach (string statusPath in Directory.GetFiles(statusDirectory, "bridge-status-*.json"))
         {
-            candidates.Add(CreateCandidate(statusPath, normalizedCwd, requireProjectMatch, quarantine, nowUtc));
+            var candidate = CreateCandidate(statusPath, normalizedCwd, requireProjectMatch, quarantine, nowUtc, editorHealthCandidates);
+            candidates.Add(candidate);
+            if (candidate.Candidate.EditorHealth != null)
+                matchedHealthPaths.Add(candidate.Candidate.EditorHealth.HealthPath);
         }
 
         BridgeDiscoveryResult? selected = candidates
@@ -111,7 +125,11 @@ static class BridgeDiscovery
             ProjectPathHint = normalizedCwd,
             RequireProjectMatch = requireProjectMatch,
             Selected = selected,
-            Candidates = orderedCandidates
+            Candidates = orderedCandidates,
+            EditorHealthCandidates = editorHealthCandidates,
+            UnmatchedEditorHealthCandidates = editorHealthCandidates
+                .Where(candidate => (candidate.IsProjectMatch || candidate.Error != null) && !matchedHealthPaths.Contains(candidate.HealthPath))
+                .ToArray()
         };
     }
 
@@ -120,7 +138,8 @@ static class BridgeDiscovery
         string normalizedProjectPathHint,
         bool requireProjectMatch,
         HashSet<string> quarantine,
-        DateTime nowUtc)
+        DateTime nowUtc,
+        EditorHealthCandidate[] editorHealthCandidates)
     {
         try
         {
@@ -141,6 +160,7 @@ static class BridgeDiscovery
                     SupportsToolSyncLens = status?.SupportsToolSyncLens == true,
                     IsQuarantined = false,
                     IsSelectable = false,
+                    BasicHealth = "malformed_status",
                     EditorPid = status?.EditorPid ?? 0,
                     Error = "Status file is missing connection_path or project_root/project_path.",
                     ExclusionReasons = ["missing_connection_or_project"]
@@ -149,6 +169,7 @@ static class BridgeDiscovery
 
             string connectionPath = status.ConnectionPath;
             string projectRoot = NormalizeProjectRoot(status.ProjectRoot, status.ProjectPath);
+            EditorHealthCandidate? editorHealth = EditorHealthDiscovery.FindBestForBridge(editorHealthCandidates, projectRoot, status.EditorPid);
             bool isQuarantined = IsQuarantined(statusPath, connectionPath, quarantine);
             bool isProjectMatch = IsPathMatch(projectRoot, normalizedProjectPathHint);
             DateTime heartbeatUtc = ParseUtc(status.LastHeartbeat);
@@ -157,6 +178,13 @@ static class BridgeDiscovery
                 heartbeatAge = TimeSpan.Zero;
             bool editorPidAlive = IsEditorPidAlive(status.EditorPid);
             bool isFresh = heartbeatAge <= FreshHeartbeatThreshold && editorPidAlive;
+            string basicHealth = EditorHealthDiscovery.ClassifyBridgeHealth(
+                bridgeStatusValid: true,
+                bridgeHeartbeatUtc: heartbeatUtc,
+                bridgeHeartbeatAge: heartbeatAge,
+                bridgeFresh: isFresh,
+                bridgeEditorPidAlive: editorPidAlive,
+                editorHealth: editorHealth);
 
             var exclusionReasons = new List<string>();
             if (isQuarantined)
@@ -181,6 +209,8 @@ static class BridgeDiscovery
                 SupportsToolSyncLens = status.SupportsToolSyncLens,
                 IsQuarantined = isQuarantined,
                 IsSelectable = isSelectable,
+                BasicHealth = basicHealth,
+                EditorHealth = editorHealth,
                 EditorPid = status.EditorPid,
                 ExclusionReasons = exclusionReasons.ToArray()
             };
@@ -198,7 +228,9 @@ static class BridgeDiscovery
                 HeartbeatAge = heartbeatAge,
                 IsFresh = isFresh,
                 IsProjectMatch = isProjectMatch,
-                EditorPidAlive = editorPidAlive
+                EditorPidAlive = editorPidAlive,
+                BasicHealth = basicHealth,
+                EditorHealth = editorHealth
             });
         }
         catch (Exception ex)
@@ -214,6 +246,7 @@ static class BridgeDiscovery
                 SupportsToolSyncLens = false,
                 IsQuarantined = false,
                 IsSelectable = false,
+                BasicHealth = "malformed_status",
                 Error = ex.Message,
                 ExclusionReasons = ["malformed_status_file"]
             }, null);

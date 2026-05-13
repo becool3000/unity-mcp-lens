@@ -15,8 +15,7 @@ namespace Becool.UnityMcpLens.Editor.Settings
     {
         const string k_LegacyPackageName = "com.unity.ai.assistant";
 
-        static readonly string k_SettingsPath =
-            Path.Combine("ProjectSettings", "Packages", MCPConstants.packageName, "Settings.json");
+        static readonly string k_SettingsPath = MCPConstants.ProjectSettingsJsonPath;
 
         static readonly string k_LegacySettingsPath =
             Path.Combine("ProjectSettings", "Packages", k_LegacyPackageName, "Settings.json");
@@ -87,7 +86,7 @@ namespace Becool.UnityMcpLens.Editor.Settings
             try
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(k_SettingsPath) ?? "ProjectSettings");
-                s_RawSettings ??= File.Exists(k_SettingsPath)
+                s_RawSettings = File.Exists(k_SettingsPath)
                     ? JObject.Parse(File.ReadAllText(k_SettingsPath))
                     : new JObject();
                 s_RawSettings[nameof(McpLensProjectSettings.LegacyRelayEnabled)] = s_Settings.LegacyRelayEnabled;

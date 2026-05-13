@@ -11,6 +11,7 @@ const hostPath =
   path.join(repoRoot, "UnityMcpLensApp~", "src", "UnityMcpLens", "bin", "Debug", "net8.0", "UnityMcpLens.exe");
 
 let nextPipeId = 1;
+const processStartUtc = () => new Date(Date.now() - process.uptime() * 1000).toISOString();
 
 function rpcFrame(message) {
   const body = Buffer.from(JSON.stringify(message), "utf8");
@@ -240,22 +241,33 @@ class ScenarioContext {
     writeStatus(staleStatus, stalePipe, this.projectRoot, {
       status: "ready",
       heartbeat: new Date(Date.now() - 120000),
+      healthHeartbeat: new Date(),
       toolCount: 999,
     });
+    return staleStatus;
   }
 
   writeForeignStatus(options = {}) {
-    const foreignRoot = options.projectRoot || path.join(this.root, "ForeignProject");
+    const foreignRoot = options.projectRoot || path.join(this.root, `ForeignProject-${nextPipeId++}`);
     fs.mkdirSync(foreignRoot, { recursive: true });
     const foreignPipe = makePipePath();
     const foreignStatus = path.join(this.statusDir, `bridge-status-foreign-${nextPipeId++}.json`);
     writeStatus(foreignStatus, foreignPipe, foreignRoot, {
       status: "ready",
       heartbeat: options.stale ? new Date(Date.now() - 120000) : new Date(),
+      healthHeartbeat: options.healthHeartbeat,
       toolCount: 999,
-      editorPid: options.deadPid ? 99999999 : process.pid,
+      editorPid: options.deadPid ? 99999999 : (options.editorPid ?? process.pid),
+      processStart: options.processStart,
+      writeHealth: options.writeHealth,
     });
     return { foreignRoot, foreignPipe, foreignStatus };
+  }
+
+  writeMalformedHealth() {
+    const healthPath = path.join(this.statusDir, `editor-health-malformed-${nextPipeId++}.json`);
+    fs.writeFileSync(healthPath, "{ not json");
+    return healthPath;
   }
 
   async dispose() {
@@ -298,7 +310,44 @@ function writeStatus(statusPath, connectionPath, projectRoot, options) {
     project_root: projectRoot,
     last_heartbeat: options.heartbeat.toISOString(),
     protocol_version: "2.0",
-    editor_pid: options.editorPid || process.pid,
+    editor_pid: options.editorPid ?? process.pid,
+  }, null, 2));
+
+  let healthPath = null;
+  if (options.writeHealth !== false) {
+    healthPath = path.join(path.dirname(statusPath), `editor-health-${nextPipeId++}.json`);
+    writeHealth(healthPath, projectRoot, {
+      heartbeat: options.healthHeartbeat || options.heartbeat,
+      editorPid: options.editorPid ?? process.pid,
+      processStart: options.processStart,
+    });
+  }
+
+  return { statusPath, healthPath };
+}
+
+function writeHealth(healthPath, projectRoot, options) {
+  const heartbeat = options.heartbeat || new Date();
+  fs.writeFileSync(healthPath, JSON.stringify({
+    health_schema_version: 1,
+    editor_heartbeat_utc: heartbeat.toISOString(),
+    state_captured_utc: heartbeat.toISOString(),
+    editor_pid: options.editorPid ?? process.pid,
+    editor_process_start_utc: options.processStart || processStartUtc(),
+    project_path: path.join(projectRoot, "Assets"),
+    project_root: projectRoot,
+    unity_version: "test-unity",
+    lifecycle_state: "active",
+    is_compiling: false,
+    is_importing: false,
+    is_updating: false,
+    is_playing: false,
+    is_paused: false,
+    is_playing_or_will_change_playmode: false,
+    is_building_player: false,
+    active_scene_name: "TestScene",
+    active_scene_path: "Assets/TestScene.unity",
+    capture_error: null,
   }, null, 2));
 }
 
@@ -418,11 +467,19 @@ async function main() {
 
   await withScenario("normal", null, async (_context, client) => {
     await assertFullTools(client);
+    const diagnostic = await client.callTool("Unity_Bridge_ListConnections", {});
+    assert.strictEqual(diagnostic.structuredContent.data.selected.basicHealth, "fresh");
+    assert.strictEqual(diagnostic.structuredContent.data.selected.editorHealth.basicHealth, "fresh");
+    assert.strictEqual(diagnostic.structuredContent.data.selected.editorHealth.pidStartMatches, true);
   });
 
   await withScenario("stale-ignored", null, async (context, client) => {
-    context.writeStaleStatus();
+    const staleStatus = context.writeStaleStatus();
     await assertFullTools(client);
+    const diagnostic = await client.callTool("Unity_Bridge_ListConnections", {});
+    const staleCandidate = diagnostic.structuredContent.data.candidates.find((candidate) => candidate.statusPath === staleStatus);
+    assert(staleCandidate, "stale bridge candidate should be listed");
+    assert.strictEqual(staleCandidate.basicHealth, "bridge_stale_unity_alive");
   });
 
   await withScenario("matching-project-beats-foreign", null, async (context, client) => {
@@ -433,15 +490,45 @@ async function main() {
     const foreignCandidate = diagnostic.structuredContent.data.candidates.find((candidate) => candidate.statusPath === foreign.foreignStatus);
     assert(foreignCandidate, "foreign bridge candidate should be listed");
     assert.strictEqual(foreignCandidate.projectRootMatch, false);
+    assert.strictEqual(foreignCandidate.basicHealth, "fresh");
     assert(foreignCandidate.exclusionReasons.includes("project_mismatch"));
     await assertFullTools(client);
   });
 
   await withScenario("stale-dead-foreign-never-selected", null, async (context, client) => {
-    context.writeForeignStatus({ stale: true, deadPid: true });
+    const foreign = context.writeForeignStatus({ stale: true, deadPid: true });
     await assertFullTools(client);
     const diagnostic = await client.callTool("Unity_Bridge_ListConnections", {});
     assert.strictEqual(diagnostic.structuredContent.data.selected.projectRoot, context.projectRoot);
+    const foreignCandidate = diagnostic.structuredContent.data.candidates.find((candidate) => candidate.statusPath === foreign.foreignStatus);
+    assert.strictEqual(foreignCandidate.basicHealth, "process_missing");
+  });
+
+  await withScenario("health-edge-diagnostics", null, async (context, client) => {
+    const missingHealth = context.writeForeignStatus({ writeHealth: false, editorPid: 0 });
+    const staleHealth = context.writeForeignStatus({ healthHeartbeat: new Date(Date.now() - 120000) });
+    const pidReused = context.writeForeignStatus({ processStart: new Date(0).toISOString() });
+    const malformedHealth = context.writeMalformedHealth();
+    const diagnostic = await client.callTool("Unity_Bridge_ListConnections", {});
+    const candidates = diagnostic.structuredContent.data.candidates;
+
+    const missingHealthCandidate = candidates.find((candidate) => candidate.statusPath === missingHealth.foreignStatus);
+    assert(missingHealthCandidate, "missing-health bridge candidate should be listed");
+    assert.strictEqual(missingHealthCandidate.editorHealth ?? null, null);
+    assert.strictEqual(missingHealthCandidate.basicHealth, "fresh");
+
+    const staleHealthCandidate = candidates.find((candidate) => candidate.statusPath === staleHealth.foreignStatus);
+    assert(staleHealthCandidate, "stale-health bridge candidate should be listed");
+    assert.strictEqual(staleHealthCandidate.basicHealth, "unity_silent");
+
+    const pidReusedCandidate = candidates.find((candidate) => candidate.statusPath === pidReused.foreignStatus);
+    assert(pidReusedCandidate, "pid-reused bridge candidate should be listed");
+    assert.strictEqual(pidReusedCandidate.basicHealth, "pid_reused");
+
+    const malformedCandidate = diagnostic.structuredContent.data.unmatchedEditorHealthCandidates
+      .find((candidate) => candidate.healthPath === malformedHealth);
+    assert(malformedCandidate, "malformed editor health candidate should be listed");
+    assert.strictEqual(malformedCandidate.basicHealth, "malformed_status");
   });
 
   {

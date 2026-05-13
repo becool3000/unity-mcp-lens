@@ -43,6 +43,14 @@ namespace Becool.UnityMcpLens.Editor.Settings
         /// </summary>
         public static string unityMcpLensAppPath = $"Packages/{packageName}/UnityMcpLensApp~";
 
+        public static string commandCenterProjectName = "UnityMcpLens.CommandCenter";
+
+        public static string ProjectSettingsPackageDirectory =>
+            Path.Combine("ProjectSettings", "Packages", packageName);
+
+        public static string ProjectSettingsJsonPath =>
+            Path.Combine(ProjectSettingsPackageDirectory, "Settings.json");
+
         /// <summary>
         /// Path to the UI template files for settings.
         /// </summary>
@@ -166,8 +174,24 @@ namespace Becool.UnityMcpLens.Editor.Settings
             }
         }
 
+        public static string LensInstalledCommandCenterMainFile
+        {
+            get
+            {
+                string serverPath = UnityMcpBaseDirectory;
+
+                if (PlatformUtils.IsWindows)
+                    return Path.Combine(serverPath, "unity_mcp_lens_command_center_win.exe");
+
+                return Path.Combine(serverPath, "unity_mcp_lens_command_center");
+            }
+        }
+
         internal static string BundledLensProjectFile =>
             Path.Combine(Path.GetFullPath(unityMcpLensAppPath), "src", "UnityMcpLens", "UnityMcpLens.csproj");
+
+        internal static string BundledCommandCenterProjectFile =>
+            Path.Combine(Path.GetFullPath(unityMcpLensAppPath), "src", commandCenterProjectName, $"{commandCenterProjectName}.csproj");
 
         internal static string BundledLensMetadataFile =>
             Path.Combine(Path.GetFullPath(unityMcpLensAppPath), LensMetadataFileName);

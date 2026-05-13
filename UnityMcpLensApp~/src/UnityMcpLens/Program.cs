@@ -1611,9 +1611,15 @@ sealed class UnityMcpLensHost
                 statusDirectory = snapshot.StatusDirectory,
                 selected = snapshot.Selected == null ? null : CreateBridgeDiscoveryResultDiagnostics(snapshot.Selected),
                 candidateCount = snapshot.Candidates.Length,
+                editorHealthCandidateCount = snapshot.EditorHealthCandidates.Length,
+                unmatchedEditorHealthCandidateCount = snapshot.UnmatchedEditorHealthCandidates.Length,
                 returnedCandidateCount = visibleCandidates.Length,
                 includeStale,
-                candidates = visibleCandidates.Select(CreateBridgeCandidateDiagnostics).ToArray()
+                candidates = visibleCandidates.Select(CreateBridgeCandidateDiagnostics).ToArray(),
+                unmatchedEditorHealthCandidates = snapshot.UnmatchedEditorHealthCandidates
+                    .Take(maxEntries)
+                    .Select(CreateEditorHealthDiagnostics)
+                    .ToArray()
             }
         }, m_JsonOptions);
     }
@@ -3047,8 +3053,14 @@ sealed class UnityMcpLensHost
             statusDirectory = snapshot.StatusDirectory,
             selected = snapshot.Selected == null ? null : CreateBridgeDiscoveryResultDiagnostics(snapshot.Selected),
             candidateCount = snapshot.Candidates.Length,
+            editorHealthCandidateCount = snapshot.EditorHealthCandidates.Length,
+            unmatchedEditorHealthCandidateCount = snapshot.UnmatchedEditorHealthCandidates.Length,
             returnedCandidateCount = candidates.Length,
-            candidates = candidates.Select(CreateBridgeCandidateDiagnostics).ToArray()
+            candidates = candidates.Select(CreateBridgeCandidateDiagnostics).ToArray(),
+            unmatchedEditorHealthCandidates = snapshot.UnmatchedEditorHealthCandidates
+                .Take(Math.Max(1, maxCandidates))
+                .Select(CreateEditorHealthDiagnostics)
+                .ToArray()
         };
     }
 
@@ -3066,6 +3078,8 @@ sealed class UnityMcpLensHost
             editorPid = result.EditorPid,
             editorPidAlive = result.EditorPidAlive,
             fresh = result.IsFresh,
+            basicHealth = result.BasicHealth,
+            editorHealth = result.EditorHealth == null ? null : CreateEditorHealthDiagnostics(result.EditorHealth),
             supportsToolSyncLens = result.StatusFile.SupportsToolSyncLens,
             bridgeSessionId = result.StatusFile.BridgeSessionId,
             manifestVersion = result.StatusFile.ManifestVersion
@@ -3086,10 +3100,44 @@ sealed class UnityMcpLensHost
             editorPid = candidate.EditorPid,
             editorPidAlive = candidate.EditorPidAlive,
             fresh = candidate.IsFresh,
+            basicHealth = candidate.BasicHealth,
+            editorHealth = candidate.EditorHealth == null ? null : CreateEditorHealthDiagnostics(candidate.EditorHealth),
             supportsToolSyncLens = candidate.SupportsToolSyncLens,
             quarantined = candidate.IsQuarantined,
             selectable = candidate.IsSelectable,
             exclusionReasons = candidate.ExclusionReasons,
+            error = candidate.Error
+        };
+    }
+
+    static object CreateEditorHealthDiagnostics(UnityMcpLens.Shared.EditorHealthCandidate candidate)
+    {
+        return new
+        {
+            healthPath = candidate.HealthPath,
+            projectRoot = candidate.ProjectRoot,
+            projectRootMatch = candidate.IsProjectMatch,
+            basicHealth = candidate.BasicHealth,
+            heartbeatAgeSeconds = candidate.HeartbeatAge == TimeSpan.MaxValue ? (double?)null : Math.Round(candidate.HeartbeatAge.TotalSeconds, 3),
+            editorHeartbeatUtc = candidate.EditorHeartbeatUtc == DateTime.MinValue ? null : candidate.EditorHeartbeatUtc.ToString("O"),
+            stateCapturedUtc = candidate.StateCapturedUtc == DateTime.MinValue ? null : candidate.StateCapturedUtc.ToString("O"),
+            editorPid = candidate.EditorPid,
+            editorPidAlive = candidate.EditorPidAlive,
+            editorProcessStartUtc = candidate.EditorProcessStartUtc == DateTime.MinValue ? null : candidate.EditorProcessStartUtc.ToString("O"),
+            pidStartMatches = candidate.PidStartMatches,
+            fresh = candidate.IsFresh,
+            lifecycleState = candidate.HealthFile?.LifecycleState,
+            unityVersion = candidate.HealthFile?.UnityVersion,
+            isCompiling = candidate.HealthFile?.IsCompiling,
+            isImporting = candidate.HealthFile?.IsImporting,
+            isUpdating = candidate.HealthFile?.IsUpdating,
+            isPlaying = candidate.HealthFile?.IsPlaying,
+            isPaused = candidate.HealthFile?.IsPaused,
+            isPlayingOrWillChangePlaymode = candidate.HealthFile?.IsPlayingOrWillChangePlaymode,
+            isBuildingPlayer = candidate.HealthFile?.IsBuildingPlayer,
+            activeSceneName = candidate.HealthFile?.ActiveSceneName,
+            activeScenePath = candidate.HealthFile?.ActiveScenePath,
+            captureError = candidate.HealthFile?.CaptureError,
             error = candidate.Error
         };
     }
