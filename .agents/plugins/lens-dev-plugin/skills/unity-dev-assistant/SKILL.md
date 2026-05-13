@@ -20,6 +20,18 @@ Helper script selection:
 - On Windows, prefer `-StepsPath` for multi-line batch JSON. The PowerShell batch wrapper accepts `-StepsJson`, but generated temp JSON files avoid shell quote damage.
 - Windows helper boolean parameters accept normal nested-call values such as `-WaitForEditorIdle true`, `-WaitForEditorIdle 1`, `-IncludeInactive $true`, or `-IncludeInactive:$true`.
 
+## Authoring-First Policy
+
+For durable Unity work, prefer existing authored surfaces before generating scripts.
+
+- Inspect existing scene objects, prefabs, project scripts, package components, presets, and missing-package capabilities before authoring new behavior.
+- Use `Unity.Authoring.SuggestReusePlan`, `Unity.Component.Search`, `Unity.Component.ResolveCapability`, `Unity.Component.InspectSchema`, and `Unity.Scene.FindComponents` before custom script generation.
+- A custom script requires a reuse insufficiency report covering scene objects, prefabs, project scripts, built-in components, installed package components, compatible presets, and relevant missing packages.
+- Use edit-mode tools for durable scene, prefab, serialized-field, object-reference, preset, importer, and package-backed authoring.
+- Use play-mode tools only for verification: snapshots, safe method invocation, temporary smoke harnesses, console deltas, and Game view captures.
+- Runtime-created objects are gameplay or smoke-test equipment; do not use them as a substitute for production scene or prefab authoring.
+- Preview edit-mode mutations before applying them. Report scene, prefab, and asset dirty state separately. Save only through an explicit save tool or an explicit save contract.
+
 ## Phase 8 GameObject Tool Preference
 
 For covered GameObject workflows, prefer the split Phase 8 tools over `Unity.ManageGameObject`.
@@ -28,9 +40,10 @@ For covered GameObject workflows, prefer the split Phase 8 tools over `Unity.Man
 - Simple GameObject mutation: `Unity.GameObject.PreviewChanges`, then `Unity.GameObject.ApplyChanges`
 - Component mutation: `Unity.GameObject.PreviewComponentChanges`, then `Unity.GameObject.ApplyComponentChanges`
 - Lifecycle: `Unity.GameObject.PreviewCreate`, `Unity.GameObject.Create`, `Unity.GameObject.PreviewDelete`, `Unity.GameObject.Delete`
+- Scene authoring templates: use `objectKind=empty`, `primitive`, `camera`, `light`, `canvas`, or `eventSystem` instead of generating setup scripts.
 - Legacy fallback: use `Unity.ManageGameObject` only for compatibility paths or uncovered behavior.
 
-With `foundation` plus `scene` active, the current Phase 8 scene surface exports `30` tools. Keep `foundation` as the default and activate `scene` only when scene/GameObject work is needed.
+With `foundation` plus `scene` active, the current scene baseline exports `50` tools. Keep `foundation` as the default and activate `scene` only when scene/GameObject work is needed.
 
 ## Phase 11 Project/Package Tool Preference
 
@@ -46,6 +59,17 @@ or YAML edits.
 - Use `Unity.RunCommand` only for project-specific probes not covered by Lens tools.
 - For play-mode UI state and interaction, prefer `Unity.UI.QueryRuntimeLayout` and `Unity.UI.InvokeControl` before project-specific `Unity.RunCommand` snippets.
 - Treat active input handler changes as editor-authored ProjectSettings mutations that may need script reload or editor restart before defines and devices settle.
+
+## Authoring-First Tool Preference
+
+Use the Phase 1-6 authoring surfaces as the first path for durable work:
+
+- Scene authoring: `Unity.GameObject.PreviewCreate`/`Create`, object/change/component preview/apply tools, `Unity.Scene.SetSerializedProperties`, `Unity.Scene.PreviewAssignObjectReferences`, `Unity.Scene.ApplyAssignObjectReferences`, `Unity.Scene.GetDirtyState`, and `Unity.Scene.Save`.
+- Component reuse: `Unity.Component.Search`, `Unity.Component.ResolveCapability`, `Unity.Component.InspectSchema`, `Unity.Scene.FindComponents`, and `Unity.Authoring.SuggestReusePlan`.
+- Prefabs and overrides: `Unity.Prefab.Inspect`, `Unity.Prefab.Instantiate`, `Unity.Prefab.CreateFromSceneObject`, `Unity.Prefab.GetOverrides`, selected preview/apply or preview/revert override tools, and `Unity.Prefab.SetSerializedProperties`.
+- Presets and copy-from-existing: `Unity.Preset.Search`, `Unity.Preset.Inspect`, preset preview/apply tools, and scene/prefab component serialized-value copy tools with explicit `referencePolicy`.
+- Package capabilities: `Unity.Package.ResolveCapability` and `Unity.Package.PreviewInstallForCapability`; installation remains preview-only until the user explicitly approves.
+- Workflow wrappers: `Unity.Workflow.AuthorSceneObject`, `Unity.Workflow.AuthorPrefab`, `Unity.Workflow.ConfigureExistingComponent`, and `Unity.Workflow.RunPlayModeVerification` when a higher-level authoring flow is useful. These wrappers still preserve discovery, preview/apply, dirty-state, and verification evidence.
 
 ## Quick Flow
 
@@ -165,6 +189,7 @@ Prefer a scene-owned debugger component when a project needs fast UI or state it
 
 ## Read Next When Needed
 
+- `docs/authoring-first-phase-7.md` for authoring-first policy, examples, dogfood prompts, smoke workflows, and metadata baselines
 - `references/workflow.md` for the end-to-end Unity task flow
 - `references/playmode.md` for idle gating, play entry, runtime-advancement checks, and warmup rules
 - `references/runtime-probes.md` for reusable `RunCommand` patterns and deterministic state-lock guidance
@@ -180,14 +205,16 @@ Prefer a scene-owned debugger component when a project needs fast UI or state it
 - Mandatory first step for Unity work in a fresh chat: `scripts/Check-UnityDevSession.js` on macOS/Linux or `scripts/Check-UnityDevSession.ps1` on Windows
 - Preferred transport: `unity-mcp-lens`
 - Default Codex exported tool surface: `static_all` (`foundation+full`); raw host default remains `dynamic_packs`
-- Current `foundation` surface: `17` tools
-- Current `foundation` + `scene` surface: `41` tools
-- Current `foundation` + `ui` surface: `33` tools
+- Current `foundation` surface: `18` tools
+- Current `foundation` + `scene` surface: `50` tools
+- Current `foundation` + `ui` surface: `35` tools
 - Current `foundation` + `runtime` surface: `29` tools
-- Current `foundation` + `project` surface: `26` tools
-- Current `foundation` + `assets` surface: `30` tools
+- Current `foundation` + `project` surface: `37` tools
+- Current `foundation` + `assets` surface: `45` tools
+- Prefer authoring-first discovery and reuse checks before generating scripts
 - Prefer split GameObject TSAM tools before legacy `Unity.ManageGameObject`
 - Prefer Phase 11 `project` tools for package/import/Input System diagnostics and active input handler changes
+- Prefer component reuse discovery, package capability resolution, presets, copy-from-existing, prefab override tools, and workflow wrappers before custom editor-side probes
 - Prefer Phase 12 `ui` and scene-binding tools for persistent HUD authoring, scene reference binding, and screen-layout verification before custom editor-side `Unity_RunCommand`
 - Prefer `Invoke-UnityMcpBatch` for repeated multi-step smoke/workflow checks that span packs
 - In `static_all`, start with `Unity.Tools.Menu` and call real native tools directly; `Unity.SetToolPacks` is a compatibility no-op, not a required step

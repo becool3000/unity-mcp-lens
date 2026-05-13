@@ -16,6 +16,8 @@ TSAM turns broad Unity MCP tools into compact, typed, auditable workflows:
 
 The result is less custom `Unity.RunCommand` code, fewer oversized Unity payloads, and more predictable agent behavior while Unity recompiles, reloads domains, enters play mode, imports packages, or mutates serialized scene state.
 
+Authoring-first guidance is tracked in [docs/authoring-first-phase-7.md](docs/authoring-first-phase-7.md): agents should discover existing Unity, project, package, prefab, and preset surfaces before generating scripts; preview durable edit-mode changes before applying them; report dirty/save state; and verify behavior separately in Play Mode.
+
 ---
 
 ## Package

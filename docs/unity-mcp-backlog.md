@@ -118,17 +118,20 @@ Still needed:
 ## Current Baselines
 
 - `foundation` exports `18` tools, including `Unity.Tools.Menu`, `Unity.Tools.Describe`, `Unity.Tools.ActivateAndVerify`, and the host-local Script Updating Consent modal recovery tool.
-- `foundation + scene` now targets `48` tools, including `Unity.Scene.FindComponents` for read-only scene component reuse discovery.
+- `foundation + scene` now targets `50` tools, including scene authoring primitives, object-reference assignment, explicit dirty/save tools, prefab instantiate/bind, and `Unity.Scene.FindComponents` for read-only scene component reuse discovery.
 - `foundation + ui` now targets `35` tools, including `Unity.UI.QueryRuntimeLayout` and `Unity.UI.InvokeControl`.
 - `foundation + runtime` now targets `29` tools, including `Unity.Editor.SetPlayMode`.
-- Latest expected metadata audit baseline keeps `project=31` with Phase 2 component reuse discovery and observes `debug=28`.
-- Phase 18 plus the static-all menu work set the `foundation+assets=31` metadata audit baseline for asset/resource workflows and sprite-sheet binding tools.
+- Latest expected metadata audit baseline keeps `foundation + project=37` with component reuse discovery, package capability awareness, workflow wrappers, and active project diagnostics.
+- Latest expected metadata audit baseline keeps `foundation + assets=45` with prefab authoring/overrides, presets, copy workflows, asset/resource workflows, and sprite-sheet binding tools.
+- `debug` remains observed at `28` tools.
 - `UNITY_MCP_LENS_TOOL_SURFACE_MODE=static_all` starts the host at `foundation+full`; `Unity.SetToolPacks` is then a no-op and agents should use `Unity.Tools.Menu` for compact navigation while calling real tools directly.
 - Phase 8 split GameObject tools are in the `scene` pack.
 - Phase 12 scene serialized-reference preview/apply binding tools are in the `scene` pack.
 - Phase 12 UI hierarchy/layout preview/apply tools and `Unity.UI.VerifyScreenLayout` are in the `ui` pack.
 - Phase 11 package/import/Input System diagnostics and active input handler tools are in the `project` pack.
-- Phase 2 Authoring-First component reuse tools are in the `project` pack: `Unity.Component.Search`, `Unity.Component.ResolveCapability`, `Unity.Component.InspectSchema`, and `Unity.Authoring.SuggestReusePlan`.
+- Authoring-First component reuse tools are in the `project` pack: `Unity.Component.Search`, `Unity.Component.ResolveCapability`, `Unity.Component.InspectSchema`, `Unity.Scene.FindComponents`, and `Unity.Authoring.SuggestReusePlan`.
+- Authoring-First package capability and workflow tools are in the `project` pack.
+- Authoring-First prefab, preset, and copy-from-existing tools are in the `assets` pack.
 - Project-pack additions must not widen the default `foundation` surface.
 - TSAM tools must emit `normalization`, `service`, `adapter`, and `result_shaping` coverage rows.
 - The helper path now distinguishes direct MCP health from wrapper degradation, and `Invoke-UnityRunCommand` can bypass idle wait in healthy play mode.

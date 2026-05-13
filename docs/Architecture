@@ -38,21 +38,26 @@ The repo is now a mixed architecture:
 
 Current TSAM-covered surfaces include:
 
+- Authoring-First Phase 1 scene tools: object-kind create templates for empty objects, primitives, cameras, lights, canvases, and EventSystems; scene serialized-field mutation; object-reference assignment; explicit dirty-state reads; and explicit scene saves.
+- Authoring-First Phase 2 discovery tools: component search, capability resolution, serialized schema inspection, scene component finding, and reuse-plan suggestions before custom scripts.
+- Authoring-First Phase 3 prefab tools: prefab inspection, instantiation, create-from-scene-object, override listing, selected apply/revert preview/apply, and prefab serialized-field mutation.
+- Authoring-First Phase 4 preset and copy tools: preset search/inspection/application and scene/prefab component serialized-value copy workflows.
+- Authoring-First Phase 5 package tools: capability resolution and preview-only package install planning for package-backed components.
+- Authoring-First Phase 6 workflow wrappers: scene object authoring, prefab authoring, existing component configuration, and Play Mode verification wrappers that preserve discovery, preview/apply, dirty-state, and verification evidence.
 - Phase 8 scene/GameObject tools: inspect, list components, get component, preview/apply object changes, preview/apply component changes, create, and delete.
 - Phase 11 project/package/import tools: package compatibility, input-action asset inspection, Input System diagnostics, active input handler preview, and active input handler apply.
 - Phase 12 UI tools: preview/apply hierarchy authoring, preview/apply layout authoring, and read-only screen-layout verification.
 - Phase 12 scene binding tools: preview/apply serialized object-reference binding for scene components.
 - Phase 17 UI/scene/runtime tools: canvas prefab preview/apply, scene prefab instantiate/bind preview/apply, UI raycast/layout verification, and play-mode pointer-input smoke verification.
-- Authoring-First Phase 2 tools: component search, capability resolution, serialized schema inspection, scene component finding, and reuse-plan suggestions before custom scripts.
 
 Current baselines:
 
 - `foundation`: `18` exported tools.
-- `foundation + scene`: `48` exported tools.
+- `foundation + scene`: `50` exported tools.
 - `foundation + ui`: `35` exported tools.
 - `foundation + runtime`: `29` exported tools.
-- `project`: `31` exported tools.
-- `foundation + assets`: `31` exported tools.
+- `foundation + project`: `37` exported tools.
+- `foundation + assets`: `45` exported tools.
 - `debug`: `28` exported tools.
 
 Pack additions must not widen the default `foundation` surface. Any deliberate
@@ -106,12 +111,12 @@ is selected as an administrative escape hatch.
 Important packs:
 
 - `console`: console reads, editor health, and lightweight troubleshooting.
-- `project`: project/package/import metadata, validation, component reuse discovery, missing script/reference checks, Input System diagnostics/settings, package compatibility, and input-action inspection.
-- `scene`: scene hierarchy, GameObject operations, serialized-reference binding, scene component discovery, and prefab instantiate/bind workflows.
+- `project`: project/package/import metadata, validation, component reuse discovery, package capability awareness, workflow wrappers, missing script/reference checks, Input System diagnostics/settings, package compatibility, and input-action inspection.
+- `scene`: scene hierarchy, GameObject operations, serialized-reference binding, scene component discovery, explicit dirty/save tools, and prefab instantiate/bind workflows.
 - `ui`: UI Toolkit reads, uGUI hierarchy/layout authoring, canvas prefab authoring, raycast/layout verification, and screen-layout verification.
 - `runtime`: play-mode runtime probes, visual bounds snapshots, and pointer-input smoke verification.
 - `scripting`: script/resource reads, edits, validation, and `Unity.RunCommand`.
-- `assets`: asset, prefab, import, and generation operations.
+- `assets`: asset, prefab, preset, copy-from-existing, import, and generation operations.
 - `debug`: profiler, usage reports, and deeper diagnostics.
 
 ---
@@ -142,7 +147,7 @@ The current dogfood data points to these high-value fixes:
 - Some large editor-state and tool-snapshot payloads are not shaped enough.
 - `Unity.RunCommand` now supports structured `ReturnResult(...)` payloads, but failure-stage and detail-ref behavior still need more dogfood.
 - Restart/reload orchestration cannot rely only on in-editor tools because Unity loses transport during process exit and domain reload.
-- Prefab authoring still needs first-class inspect/preview/apply workflows.
+- Prefab variant and nested-prefab mutation workflows need deeper follow-up beyond the current selected override apply/revert safety tools.
 - Existing missing-script and reference-validation tools should move toward TSAM shape after the package/import cluster.
 
 ---

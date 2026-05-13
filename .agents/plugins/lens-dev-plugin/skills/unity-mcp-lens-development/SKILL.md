@@ -41,12 +41,39 @@ Build like a human Unity developer would:
 
 Do not rely on runtime-only bootstrap creation for durable project structure unless the user explicitly asks for runtime generation architecture.
 
+## Authoring-First Phase 7 Truth
+
+The current authoring-first surface makes durable scene, component, prefab,
+preset, package, and workflow authoring the default agent path.
+
+- Use discovery before mutation: `Unity.Authoring.SuggestReusePlan`,
+  component search/capability/schema tools, scene component search, prefab and
+  preset inspection, and package capability resolution.
+- Generate custom scripts only after a reuse insufficiency report covers
+  existing scene objects, prefabs, project scripts, built-in components,
+  installed package components, compatible presets, and relevant missing
+  packages.
+- Preview edit-mode mutations before applying them. Report changed objects,
+  components, fields, references, warnings, stable ids, dirty state, and save
+  state.
+- Scene saves must be explicit through `Unity.Scene.Save`. Prefab writes save
+  only where the prefab tool contract explicitly says apply persists the prefab
+  asset.
+- Runtime temporary components are verification equipment only and must not save
+  scenes, prefabs, or production assets.
+- Current metadata audit baselines are `foundation=18`, `foundation+scene=50`,
+  `foundation+ui=35`, `foundation+runtime=29`, `foundation+project=37`, and
+  `foundation+assets=45`.
+
 ## Phase 8 Tool Truth
 
-The current Phase 8 scene surface is the split GameObject TSAM surface. With `foundation` plus `scene` active, the smoke baseline is `30` exported tools.
+The current Phase 8 scene surface is the split GameObject TSAM surface, now extended by authoring-first scene dirty/save and object-reference tools. With `foundation` plus `scene` active, the smoke baseline is `50` exported tools.
 
 - Prefer `Unity.GameObject.Inspect`, `ListComponents`, and `GetComponent` for reads.
 - Prefer preview/apply pairs for mutation: `PreviewChanges`/`ApplyChanges`, `PreviewComponentChanges`/`ApplyComponentChanges`, `PreviewCreate`/`Create`, and `PreviewDelete`/`Delete`.
+- Use `PreviewCreate`/`Create` with `objectKind=empty`, `primitive`, `camera`, `light`, `canvas`, or `eventSystem` before setup scripts.
+- Prefer `Unity.Scene.PreviewAssignObjectReferences` and `Unity.Scene.ApplyAssignObjectReferences` over legacy serialized-reference binding aliases.
+- Use `Unity.Scene.GetDirtyState` after scene mutations and `Unity.Scene.Save` only on explicit save requests.
 - Keep `Unity.ManageGameObject` compatible as the legacy facade and fallback for uncovered behavior.
 - Use `debug` plus `Unity.GetLensUsageReport` for telemetry baselines and appended-row smoke reporting.
 
@@ -59,7 +86,7 @@ The current Phase 11 project surface includes package/import/Input System diagno
 - Prefer `Unity.InputSystem.Diagnostics` for one-call Input System package, assembly, device, `.inputactions`, define, compatibility, and editor-log signals.
 - Prefer `Unity.ProjectSettings.PreviewActiveInputHandler` before changing the active input backend.
 - Use `Unity.ProjectSettings.SetActiveInputHandler` for editor-authored active input backend changes; do not hand-edit `ProjectSettings.asset` as the first path.
-- `foundation` now targets `17` tools, `foundation + scene` now targets `41` tools, `foundation + ui` now targets `33`, `foundation + runtime` targets `23`, and the current `project` smoke baseline is `26` tools.
+- `foundation` now targets `18` tools, `foundation + scene` now targets `50` tools, `foundation + ui` now targets `35`, `foundation + runtime` targets `29`, and `foundation + project` now targets `37` tools.
 
 ## Phase 12 UI And Scene Binding Truth
 
@@ -78,7 +105,7 @@ Phase 14 keeps the public tool surface stable and makes high-volume TSAM results
 - Compact default results are expected for `Unity.InputSystem.Diagnostics`, UI hierarchy preview/apply, scene serialized-reference binding preview/apply, and `Unity.UI.VerifyScreenLayout`.
 - Full bulky data should remain available through `detailRef` when the bridge detail store is available.
 - Use `Invoke-UnityMcpBatch` for focused smoke/workflow sequences that need multiple project/ui/scene/debug calls in one Lens session.
-- Pack baselines after the runtime action push: `foundation=18`, `foundation+scene=43`, `foundation+ui=35`, `foundation+runtime=29`, `project=27`, `foundation+assets=31`, and live `debug=33`.
+- Pack baselines after the authoring-first workflow push: `foundation=18`, `foundation+scene=50`, `foundation+ui=35`, `foundation+runtime=29`, `foundation+project=37`, and `foundation+assets=45`.
 - Current Phase 14 smoke baseline: `NoShapingRecorded=false`, `7` saving rows, `50,566` raw bytes -> `24,025` shaped bytes, `3` connections, `6` schema requests, and `4` pack transitions.
 
 ## Phase 15 RunCommand And Console Truth
@@ -130,7 +157,7 @@ Phase 18 addresses the BeeSurvivors Roach BeeCool sprite-upgrade workflow.
 - Use `Unity.Asset.ApplyImportSpriteSheetAndBind` to persist importer metadata and ScriptableObject Sprite-array bindings after the preview plan is acceptable.
 - `Unity.Asset.ImportSpriteSheetAndBind` is a compatibility facade; it previews by default and applies only with `mode=apply` or `apply=true`.
 - Prefer `Unity.Asset.VerifySpriteArrayBinding` over custom `Unity.RunCommand` or YAML reads when verifying Sprite-array counts, names, texture names, or texture GUIDs.
-- The `assets` pack metadata-audit baseline is `foundation+assets=30`.
+- The `assets` pack metadata-audit baseline is `foundation+assets=45`.
 - Phase 18 asset tools must keep pass/fail and changed-count data inline while storing full importer metadata, sprite rows, and serialized-field readback behind `detailRef`.
 
 ## BeeSurvivors Reliability Follow-Up Truth
@@ -164,12 +191,13 @@ This batch addresses the BeeSurvivors Lens dogfood findings from 2026-05-07.
 ## Maintenance Rules
 
 - Any pack membership change must update the metadata audit expected counts and required-tool assertions.
+- Any authoring-first tool change must update `docs/authoring-first-phase-7.md`, the Lens workflow skills, and the dogfood prompt list when agent behavior expectations change.
 - Any TSAM-covered tool path must emit `normalization`, `service`, `adapter`, and `result_shaping` telemetry rows.
 - `Unity.RunCommand` result metadata must distinguish validation, compilation, execution, result serialization, and transport/unknown failures.
 - `Unity.RunCommand` log previews must preserve enough inline summary data to decide pass/fail without forcing full detail reads.
 - `Unity.ManageEditor WaitForStableEditor` should keep inline output compact and store full attempt/state detail behind detail refs.
 - New compact-result work should preserve pass/fail decision data inline and move only bulky evidence/readback arrays behind detail refs.
-- Smoke prompts must cover split tools, the legacy facade, metadata annotations, usage telemetry, and the `MeshFilter.mesh` edit-mode warning regression.
+- Smoke prompts must cover authoring-first reuse checks, split tools, the legacy facade, metadata annotations, usage telemetry, dirty/save discipline, prefab override safety, package capability awareness, preset/copy workflows, Play Mode verification, and the `MeshFilter.mesh` edit-mode warning regression.
 - Commit package behavior fixes separately from skill/plugin hygiene changes.
 
 ## Missing Tool Rule
