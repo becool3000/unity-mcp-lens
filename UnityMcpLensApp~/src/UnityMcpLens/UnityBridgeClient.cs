@@ -10,12 +10,14 @@ sealed class BridgeTransportException : IOException
 {
     public string CommandType { get; }
     public bool RequestSent { get; }
+    public bool TimedOut { get; }
 
-    public BridgeTransportException(string commandType, bool requestSent, string message, Exception? innerException = null)
+    public BridgeTransportException(string commandType, bool requestSent, string message, Exception? innerException = null, bool timedOut = false)
         : base(message, innerException)
     {
         CommandType = commandType;
         RequestSent = requestSent;
+        TimedOut = timedOut;
     }
 }
 
@@ -189,6 +191,11 @@ sealed class UnityBridgeClient : IAsyncDisposable
         return SendCommandAsync<JsonElement>(toolName, arguments, null, cancellationToken);
     }
 
+    public Task<BridgeEnvelope<JsonElement>> CallToolAsync(string toolName, JsonElement arguments, TimeSpan? timeout, CancellationToken cancellationToken)
+    {
+        return SendCommandAsync<JsonElement>(toolName, arguments, timeout, cancellationToken);
+    }
+
     public async ValueTask DisposeAsync()
     {
         m_IsConnected = false;
@@ -345,7 +352,11 @@ sealed class UnityBridgeClient : IAsyncDisposable
             catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
             {
                 m_PendingResponses.TryRemove(requestId, out _);
-                throw new BridgeTransportException(type, pendingRequest.RequestSent, $"Unity bridge request '{type}' timed out after {delay.TotalSeconds} seconds.");
+                throw new BridgeTransportException(
+                    type,
+                    pendingRequest.RequestSent,
+                    $"Unity bridge request '{type}' timed out after {delay.TotalSeconds} seconds.",
+                    timedOut: true);
             }
         }
         else

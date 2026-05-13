@@ -550,7 +550,7 @@ Returns:
 
             object targetSnapshot = BuildGameObjectSnapshot(target);
             string action = NormalizeControlAction(parameters.Action);
-            int beforeConsoleErrors = parameters.CaptureConsoleDelta ? EditorToolStateHelpers.CountConsoleErrors() : 0;
+            ConsoleCursorSnapshot consoleBefore = parameters.CaptureConsoleDelta ? ConsoleCursorDelta.Capture() : null;
             object actionResult;
             switch (action)
             {
@@ -573,7 +573,6 @@ Returns:
                 await Task.Delay(20);
             }
 
-            int afterConsoleErrors = parameters.CaptureConsoleDelta ? EditorToolStateHelpers.CountConsoleErrors() : beforeConsoleErrors;
             bool actionSucceeded = GetActionSucceeded(actionResult);
             object selectedObject = EventSystem.current != null
                 ? BuildGameObjectSnapshot(EventSystem.current.currentSelectedGameObject)
@@ -587,14 +586,7 @@ Returns:
                 selectedObject,
                 waitFrames,
                 actionResult,
-                consoleDelta = parameters.CaptureConsoleDelta
-                    ? new
-                    {
-                        beforeErrors = beforeConsoleErrors,
-                        afterErrors = afterConsoleErrors,
-                        newErrorCount = Math.Max(0, afterConsoleErrors - beforeConsoleErrors)
-                    }
-                    : null
+                consoleDelta = BuildConsoleDelta(parameters.CaptureConsoleDelta, consoleBefore, "invoke_control")
             };
 
             return actionSucceeded
@@ -630,7 +622,7 @@ Returns:
 
             bool wasPlaying = EditorApplication.isPlaying;
             bool wasPaused = EditorApplication.isPaused;
-            int beforeConsoleErrors = parameters.CaptureConsoleDelta ? EditorToolStateHelpers.CountConsoleErrors() : 0;
+            ConsoleCursorSnapshot consoleBefore = parameters.CaptureConsoleDelta ? ConsoleCursorDelta.Capture() : null;
             object initialDiagnostics = BuildCaptureDiagnostics("initial", null);
 
             try
@@ -652,7 +644,7 @@ Returns:
                         initialDiagnostics: initialDiagnostics,
                         captureDiagnostics: BuildCaptureDiagnostics("require_playing_failed", null),
                         finalDiagnostics: null,
-                        consoleDelta: BuildConsoleDelta(parameters.CaptureConsoleDelta, beforeConsoleErrors),
+                        consoleDelta: BuildConsoleDelta(parameters.CaptureConsoleDelta, consoleBefore, "capture_game_view"),
                         fallback: null));
                 }
 
@@ -694,7 +686,7 @@ Returns:
                         initialDiagnostics: initialDiagnostics,
                         captureDiagnostics: BuildCaptureDiagnostics("game_view_unavailable", focusInfo),
                         finalDiagnostics: null,
-                        consoleDelta: BuildConsoleDelta(parameters.CaptureConsoleDelta, beforeConsoleErrors),
+                        consoleDelta: BuildConsoleDelta(parameters.CaptureConsoleDelta, consoleBefore, "capture_game_view"),
                         fallback: null));
                 }
 
@@ -726,7 +718,7 @@ Returns:
                             capture = captureDiagnostics,
                             final = BuildCaptureDiagnostics("final", focusInfo)
                         },
-                        consoleDelta = BuildConsoleDelta(parameters.CaptureConsoleDelta, beforeConsoleErrors)
+                        consoleDelta = BuildConsoleDelta(parameters.CaptureConsoleDelta, consoleBefore, "capture_game_view")
                     });
                 }
 
@@ -765,7 +757,7 @@ Returns:
                                 capture = captureDiagnostics,
                                 final = BuildCaptureDiagnostics("final", focusInfo)
                             },
-                            consoleDelta = BuildConsoleDelta(parameters.CaptureConsoleDelta, beforeConsoleErrors),
+                            consoleDelta = BuildConsoleDelta(parameters.CaptureConsoleDelta, consoleBefore, "capture_game_view"),
                             fallback
                         });
                     }
@@ -785,7 +777,7 @@ Returns:
                     initialDiagnostics: initialDiagnostics,
                     captureDiagnostics: captureDiagnostics,
                     finalDiagnostics: BuildCaptureDiagnostics("final", focusInfo),
-                    consoleDelta: BuildConsoleDelta(parameters.CaptureConsoleDelta, beforeConsoleErrors),
+                    consoleDelta: BuildConsoleDelta(parameters.CaptureConsoleDelta, consoleBefore, "capture_game_view"),
                     fallback: fallback));
             }
             finally
@@ -885,19 +877,13 @@ Returns:
             };
         }
 
-        static object BuildConsoleDelta(bool enabled, int beforeConsoleErrors)
+        static object BuildConsoleDelta(bool enabled, ConsoleCursorSnapshot before, string operation)
         {
-            if (!enabled)
-                return null;
-
-            int afterConsoleErrors = EditorToolStateHelpers.CountConsoleErrors();
-            return new
-            {
-                beforeErrors = beforeConsoleErrors,
-                afterErrors = afterConsoleErrors,
-                newErrorCount = Math.Max(0, afterConsoleErrors - beforeConsoleErrors),
-                consoleErrorsDetected = afterConsoleErrors > beforeConsoleErrors
-            };
+            return ConsoleCursorDelta.BuildDelta(
+                enabled,
+                before,
+                operation == "capture_game_view" ? "Unity.UI.CaptureGameView" : "Unity.UI.InvokeControl",
+                new { kind = "ui_diagnostics_console_delta", operation });
         }
 
         static object BuildCaptureDiagnostics(string stage, object focusInfo)

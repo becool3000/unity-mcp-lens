@@ -214,7 +214,7 @@ namespace Becool.UnityMcpLens.Editor.Tools
             if (!TryResolveMethod(component.GetType(), methodName, args, requireLensCallable, allowedMethodMarkers, out MethodInfo method, out object[] convertedArgs, out object markerInfo, out string methodError))
                 return Failed("method_not_found", methodError);
 
-            int initialConsoleErrorCount = captureConsoleDelta ? EditorToolStateHelpers.CountConsoleErrors() : -1;
+            ConsoleCursorSnapshot consoleBefore = captureConsoleDelta ? ConsoleCursorDelta.Capture() : null;
             object beforeFrameCounts = EditorToolStateHelpers.BuildRuntimeProbeData();
             object beforeState = ComponentSummarySerializer.GetSafeComponentData(component, includeNonPublicSerializedFields: true);
             object returnValue = method.Invoke(component, convertedArgs);
@@ -224,10 +224,11 @@ namespace Becool.UnityMcpLens.Editor.Tools
 
             object afterFrameCounts = EditorToolStateHelpers.BuildRuntimeProbeData();
             object afterState = ComponentSummarySerializer.GetSafeComponentData(component, includeNonPublicSerializedFields: true);
-            int finalConsoleErrorCount = captureConsoleDelta ? EditorToolStateHelpers.CountConsoleErrors() : -1;
-            int newConsoleErrorCount = captureConsoleDelta && initialConsoleErrorCount >= 0 && finalConsoleErrorCount >= 0
-                ? Math.Max(0, finalConsoleErrorCount - initialConsoleErrorCount)
-                : 0;
+            object consoleDelta = ConsoleCursorDelta.BuildDelta(
+                captureConsoleDelta,
+                consoleBefore,
+                ToolName,
+                new { kind = "runtime_invoke_component_method_console_delta", methodName });
             string beforeJson = JsonConvert.SerializeObject(beforeState, Formatting.None);
             string afterJson = JsonConvert.SerializeObject(afterState, Formatting.None);
 
@@ -280,16 +281,8 @@ namespace Becool.UnityMcpLens.Editor.Tools
                 },
                 beforeState,
                 afterState,
-                consoleDelta = captureConsoleDelta
-                    ? new
-                    {
-                        initialConsoleErrorCount,
-                        finalConsoleErrorCount,
-                        newConsoleErrorCount,
-                        consoleErrorsDetected = newConsoleErrorCount > 0
-                    }
-                    : null,
-                consoleErrorsDetected = newConsoleErrorCount > 0
+                consoleDelta,
+                consoleErrorsDetected = ConsoleDeltaHasErrors(consoleDelta)
             };
         }
 
@@ -313,6 +306,18 @@ namespace Becool.UnityMcpLens.Editor.Tools
                 consoleDelta = root["consoleDelta"],
                 consoleErrorsDetected = root["consoleErrorsDetected"]
             };
+        }
+
+        static bool ConsoleDeltaHasErrors(object consoleDelta)
+        {
+            try
+            {
+                return JObject.FromObject(consoleDelta ?? new { }).Value<bool?>("consoleErrorsDetected") == true;
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         static bool TryResolveMethod(

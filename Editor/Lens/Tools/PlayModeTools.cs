@@ -240,6 +240,7 @@ When called through the Lens host, this workflow survives reconnect-prone domain
 
         static async Task<object> RequestSetPlayModeAsync(SetPlayModeParams parameters)
         {
+            ConsoleCursorSnapshot consoleBefore = ConsoleCursorDelta.Capture();
             if (parameters.Mode != "enter" && parameters.Mode != "exit")
             {
                 return BuildSetPlayModeResult(
@@ -251,7 +252,8 @@ When called through the Lens host, this workflow survives reconnect-prone domain
                     transitionRecoveryNotes: "mode must be 'enter' or 'exit'.",
                     runtimeAdvance: null,
                     exitResult: null,
-                    attempts: Array.Empty<object>());
+                    attempts: Array.Empty<object>(),
+                    consoleBefore: consoleBefore);
             }
 
             if (BuildPipeline.isBuildingPlayer || EditorApplication.isCompiling || EditorApplication.isUpdating)
@@ -265,7 +267,8 @@ When called through the Lens host, this workflow survives reconnect-prone domain
                     transitionRecoveryNotes: "Unity is busy; play-mode transitions are refused while building, compiling, or importing.",
                     runtimeAdvance: null,
                     exitResult: null,
-                    attempts: Array.Empty<object>());
+                    attempts: Array.Empty<object>(),
+                    consoleBefore: consoleBefore);
             }
 
             object exitResult = null;
@@ -292,7 +295,7 @@ When called through the Lens host, this workflow survives reconnect-prone domain
                 transitionState = JsonConvert.SerializeObject(exitResult).IndexOf("\"waitTimedOut\":true", StringComparison.OrdinalIgnoreCase) >= 0
                     ? "exit_timed_out"
                     : "exited_play_mode";
-                return BuildSetPlayModeResult(parameters, false, requested, requested, transitionState, transitionRecoveryNotes, runtimeAdvance, exitResult, attempts);
+                return BuildSetPlayModeResult(parameters, false, requested, requested, transitionState, transitionRecoveryNotes, runtimeAdvance, exitResult, attempts, consoleBefore);
             }
 
             if (parameters.StopFirst && (EditorApplication.isPlaying || EditorApplication.isPlayingOrWillChangePlaymode))
@@ -315,7 +318,7 @@ When called through the Lens host, this workflow survives reconnect-prone domain
                 runtimeAdvance = parameters.WaitForRuntimeAdvance
                     ? await WaitForRuntimeAdvanceAsync(parameters.TimeoutSeconds, parameters.WarmupSeconds, attempts)
                     : null;
-                return BuildSetPlayModeResult(parameters, false, false, false, transitionState, transitionRecoveryNotes, runtimeAdvance, exitResult, attempts);
+                return BuildSetPlayModeResult(parameters, false, false, false, transitionState, transitionRecoveryNotes, runtimeAdvance, exitResult, attempts, consoleBefore);
             }
 
             BridgeStatusTracker.MarkTransition("entering_play_mode", "set_play_mode_enter", Math.Max(5.0, parameters.TimeoutSeconds));
@@ -340,7 +343,7 @@ When called through the Lens host, this workflow survives reconnect-prone domain
                 transitionRecoveryNotes = "Play mode is scheduled after this response; a reconnect and follow-up readiness poll may be needed.";
             }
 
-            return BuildSetPlayModeResult(parameters, false, requested, reconnectExpected, transitionState, transitionRecoveryNotes, runtimeAdvance, exitResult, attempts);
+            return BuildSetPlayModeResult(parameters, false, requested, reconnectExpected, transitionState, transitionRecoveryNotes, runtimeAdvance, exitResult, attempts, consoleBefore);
         }
 
         static object BuildSetPlayModeResult(
@@ -352,10 +355,18 @@ When called through the Lens host, this workflow survives reconnect-prone domain
             string transitionRecoveryNotes,
             object runtimeAdvance,
             object exitResult,
-            IReadOnlyCollection<object> attempts)
+            IReadOnlyCollection<object> attempts,
+            ConsoleCursorSnapshot consoleBefore = null)
         {
-            int consoleErrorCount = EditorToolStateHelpers.CountConsoleErrors();
-            bool consoleErrorsDetected = consoleErrorCount > 0;
+            object consoleDelta = ConsoleCursorDelta.BuildDelta(
+                true,
+                consoleBefore,
+                ToolPackCatalog.EditorSetPlayModeToolName,
+                new { kind = "set_play_mode_console_delta", requestedMode = parameters.Mode, transitionState });
+            int consoleErrorCount = GetConsoleDeltaInt(consoleDelta, "finalConsoleErrorCount");
+            int newConsoleErrorCount = GetConsoleDeltaInt(consoleDelta, "newErrors");
+            bool consoleErrorsDetected = GetConsoleDeltaBool(consoleDelta, "consoleErrorsDetected");
+            bool staleConsoleErrorsPresent = GetConsoleDeltaBool(consoleDelta, "staleErrorsPresent");
             bool runtimeAdvanced = RuntimeAdvanceSucceeded(runtimeAdvance);
             bool timedOut = JsonConvert.SerializeObject(runtimeAdvance ?? new { }).IndexOf("\"timedOut\":true", StringComparison.OrdinalIgnoreCase) >= 0 ||
                 transitionState?.IndexOf("timed_out", StringComparison.OrdinalIgnoreCase) >= 0;
@@ -393,6 +404,9 @@ When called through the Lens host, this workflow survives reconnect-prone domain
                 exitResult,
                 timedOut,
                 consoleErrorCount,
+                newConsoleErrorCount,
+                staleConsoleErrorsPresent,
+                consoleDelta,
                 consoleErrorsDetected,
                 finalState = EditorToolStateHelpers.BuildEditorState(),
                 attempts = attempts?.ToArray() ?? Array.Empty<object>()
@@ -416,6 +430,9 @@ When called through the Lens host, this workflow survives reconnect-prone domain
                 rawData.runtimeAdvance,
                 rawData.timedOut,
                 rawData.consoleErrorCount,
+                rawData.newConsoleErrorCount,
+                rawData.staleConsoleErrorsPresent,
+                rawData.consoleDelta,
                 rawData.consoleErrorsDetected,
                 rawData.finalState,
                 attemptCount = attempts?.Count ?? 0
@@ -448,6 +465,30 @@ When called through the Lens host, this workflow survives reconnect-prone domain
                 return "set_play_mode_pending";
 
             return "set_play_mode_not_ready";
+        }
+
+        static int GetConsoleDeltaInt(object consoleDelta, string name, int defaultValue = 0)
+        {
+            try
+            {
+                return JObject.FromObject(consoleDelta ?? new { }).Value<int?>(name) ?? defaultValue;
+            }
+            catch
+            {
+                return defaultValue;
+            }
+        }
+
+        static bool GetConsoleDeltaBool(object consoleDelta, string name, bool defaultValue = false)
+        {
+            try
+            {
+                return JObject.FromObject(consoleDelta ?? new { }).Value<bool?>(name) ?? defaultValue;
+            }
+            catch
+            {
+                return defaultValue;
+            }
         }
 
         static bool IsSetPlayModeTransitionPending(string transitionState)

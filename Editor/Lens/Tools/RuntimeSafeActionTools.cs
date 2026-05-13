@@ -291,7 +291,7 @@ namespace Becool.UnityMcpLens.Editor.Tools
                 return Failed("value_conversion_failed", conversionError, requirePlayMode);
 
             bool sceneDirtyBefore = targetObject.scene.isDirty;
-            int initialConsoleErrorCount = captureConsoleDelta ? EditorToolStateHelpers.CountConsoleErrors() : -1;
+            ConsoleCursorSnapshot consoleBefore = captureConsoleDelta ? ConsoleCursorDelta.Capture() : null;
             object beforeFrameCounts = EditorToolStateHelpers.BuildRuntimeProbeData();
             object beforeValue = member.CanRead ? DescribeValue(member.GetValue(component)) : null;
             object beforeSnapshot = ComponentSummarySerializer.GetSafeComponentData(component, includeNonPublicSerializedFields: true);
@@ -304,10 +304,7 @@ namespace Becool.UnityMcpLens.Editor.Tools
             object afterFrameCounts = EditorToolStateHelpers.BuildRuntimeProbeData();
             object afterValue = member.CanRead ? DescribeValue(member.GetValue(component)) : null;
             object afterSnapshot = ComponentSummarySerializer.GetSafeComponentData(component, includeNonPublicSerializedFields: true);
-            int finalConsoleErrorCount = captureConsoleDelta ? EditorToolStateHelpers.CountConsoleErrors() : -1;
-            int newConsoleErrorCount = captureConsoleDelta && initialConsoleErrorCount >= 0 && finalConsoleErrorCount >= 0
-                ? Math.Max(0, finalConsoleErrorCount - initialConsoleErrorCount)
-                : 0;
+            object consoleDelta = BuildConsoleDelta(captureConsoleDelta, consoleBefore, "set_component_property");
 
             return new
             {
@@ -343,8 +340,8 @@ namespace Becool.UnityMcpLens.Editor.Tools
                 },
                 beforeSnapshot,
                 afterSnapshot,
-                consoleDelta = BuildConsoleDelta(captureConsoleDelta, initialConsoleErrorCount, finalConsoleErrorCount, newConsoleErrorCount),
-                consoleErrorsDetected = newConsoleErrorCount > 0
+                consoleDelta,
+                consoleErrorsDetected = ConsoleDeltaHasErrors(consoleDelta)
             };
         }
 
@@ -377,7 +374,7 @@ namespace Becool.UnityMcpLens.Editor.Tools
                 return Failed("component_already_present", $"Target already has {beforeComponents.Length} component(s) assignable to '{componentTypeName}'. Set allowDuplicate=true to add another.", requirePlayMode);
 
             bool sceneDirtyBefore = targetObject.scene.isDirty;
-            int initialConsoleErrorCount = captureConsoleDelta ? EditorToolStateHelpers.CountConsoleErrors() : -1;
+            ConsoleCursorSnapshot consoleBefore = captureConsoleDelta ? ConsoleCursorDelta.Capture() : null;
             object beforeFrameCounts = EditorToolStateHelpers.BuildRuntimeProbeData();
 
             Component component = targetObject.AddComponent(componentType);
@@ -389,10 +386,7 @@ namespace Becool.UnityMcpLens.Editor.Tools
 
             object afterFrameCounts = EditorToolStateHelpers.BuildRuntimeProbeData();
             object componentSnapshot = ComponentSummarySerializer.GetSafeComponentData(component, includeNonPublicSerializedFields: true);
-            int finalConsoleErrorCount = captureConsoleDelta ? EditorToolStateHelpers.CountConsoleErrors() : -1;
-            int newConsoleErrorCount = captureConsoleDelta && initialConsoleErrorCount >= 0 && finalConsoleErrorCount >= 0
-                ? Math.Max(0, finalConsoleErrorCount - initialConsoleErrorCount)
-                : 0;
+            object consoleDelta = BuildConsoleDelta(captureConsoleDelta, consoleBefore, "add_temporary_component");
 
             return new
             {
@@ -423,8 +417,8 @@ namespace Becool.UnityMcpLens.Editor.Tools
                     after = targetObject.scene.isDirty
                 },
                 componentSnapshot,
-                consoleDelta = BuildConsoleDelta(captureConsoleDelta, initialConsoleErrorCount, finalConsoleErrorCount, newConsoleErrorCount),
-                consoleErrorsDetected = newConsoleErrorCount > 0
+                consoleDelta,
+                consoleErrorsDetected = ConsoleDeltaHasErrors(consoleDelta)
             };
         }
 
@@ -732,17 +726,25 @@ namespace Becool.UnityMcpLens.Editor.Tools
             };
         }
 
-        static object BuildConsoleDelta(bool captureConsoleDelta, int initialConsoleErrorCount, int finalConsoleErrorCount, int newConsoleErrorCount)
+        static object BuildConsoleDelta(bool captureConsoleDelta, ConsoleCursorSnapshot before, string operation)
         {
-            return captureConsoleDelta
-                ? new
-                {
-                    initialConsoleErrorCount,
-                    finalConsoleErrorCount,
-                    newConsoleErrorCount,
-                    consoleErrorsDetected = newConsoleErrorCount > 0
-                }
-                : null;
+            return ConsoleCursorDelta.BuildDelta(
+                captureConsoleDelta,
+                before,
+                operation == "add_temporary_component" ? AddTemporaryComponentToolName : SetComponentPropertyToolName,
+                new { kind = "runtime_safe_action_console_delta", operation });
+        }
+
+        static bool ConsoleDeltaHasErrors(object consoleDelta)
+        {
+            try
+            {
+                return JObject.FromObject(consoleDelta ?? new { }).Value<bool?>("consoleErrorsDetected") == true;
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         static object Failed(string reason, string message, bool requirePlayMode)

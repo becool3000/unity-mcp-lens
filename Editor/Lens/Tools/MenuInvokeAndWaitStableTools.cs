@@ -135,7 +135,7 @@ namespace Becool.UnityMcpLens.Editor.Tools
             if (k_MenuPathBlacklist.Contains(menuPath))
                 return Failed("menu_path_blocked", $"Execution of menu item '{menuPath}' is blocked for safety reasons.");
 
-            int initialConsoleErrorCount = captureConsoleDelta ? EditorToolStateHelpers.CountConsoleErrors() : -1;
+            ConsoleCursorSnapshot consoleBefore = captureConsoleDelta ? ConsoleCursorDelta.Capture() : null;
             bool invoked = EditorApplication.ExecuteMenuItem(menuPath);
             var attempts = new List<object>();
             bool timedOut = false;
@@ -172,10 +172,14 @@ namespace Becool.UnityMcpLens.Editor.Tools
             string normalizedExpectedScenePath = NormalizeScenePath(expectedScenePath);
             bool expectedSceneLoaded = string.IsNullOrWhiteSpace(normalizedExpectedScenePath) ||
                 GetLoadedScenePaths().Contains(normalizedExpectedScenePath, StringComparer.OrdinalIgnoreCase);
-            int finalConsoleErrorCount = captureConsoleDelta ? EditorToolStateHelpers.CountConsoleErrors() : -1;
-            int newConsoleErrorCount = captureConsoleDelta && initialConsoleErrorCount >= 0 && finalConsoleErrorCount >= 0
-                ? Math.Max(0, finalConsoleErrorCount - initialConsoleErrorCount)
-                : 0;
+            object consoleDelta = captureConsoleDelta
+                ? ConsoleCursorDelta.BuildDelta(
+                    true,
+                    consoleBefore,
+                    ToolName,
+                    new { kind = "menu_invoke_wait_stable_console_delta", menuPath })
+                : null;
+            int newConsoleErrorCount = GetConsoleDeltaInt(consoleDelta, "newErrors");
 
             return new
             {
@@ -193,15 +197,7 @@ namespace Becool.UnityMcpLens.Editor.Tools
                 sceneDirtyClear,
                 dirtyScenePaths = GetDirtyScenePaths(),
                 loadedScenePaths = GetLoadedScenePaths(),
-                consoleDelta = captureConsoleDelta
-                    ? new
-                    {
-                        initialConsoleErrorCount,
-                        finalConsoleErrorCount,
-                        newConsoleErrorCount,
-                        consoleErrorsDetected = newConsoleErrorCount > 0
-                    }
-                    : null,
+                consoleDelta,
                 consoleErrorsDetected = newConsoleErrorCount > 0,
                 finalState = EditorToolStateHelpers.BuildEditorState(),
                 attempts = attempts.ToArray()
@@ -255,6 +251,18 @@ namespace Becool.UnityMcpLens.Editor.Tools
             catch
             {
                 return null;
+            }
+        }
+
+        static int GetConsoleDeltaInt(object consoleDelta, string name, int defaultValue = 0)
+        {
+            try
+            {
+                return JObject.FromObject(consoleDelta ?? new { }).Value<int?>(name) ?? defaultValue;
+            }
+            catch
+            {
+                return defaultValue;
             }
         }
 

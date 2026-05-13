@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.Json.Serialization;
 using System.Diagnostics;
 using System.Reflection;
 
@@ -10,10 +11,14 @@ sealed class UnityMcpLensHost
     static readonly TimeSpan s_BridgeQuarantineTtl = TimeSpan.FromSeconds(30);
     static readonly TimeSpan s_BridgeDiscoveryReloadRetryWindow = TimeSpan.FromSeconds(4);
     static readonly TimeSpan s_BridgeDiscoveryReloadRetryPollInterval = TimeSpan.FromMilliseconds(250);
+    static readonly TimeSpan s_WrapperBridgeCallTimeout = TimeSpan.FromSeconds(10);
+    static readonly TimeSpan s_RunCommandDefaultTimeout = TimeSpan.FromSeconds(30);
+    static readonly TimeSpan s_RunCommandWatchdogPollInterval = TimeSpan.FromMilliseconds(500);
     static readonly string s_HostVersion = ResolveHostVersion();
     const string ToolSurfaceModeEnvVar = "UNITY_MCP_LENS_TOOL_SURFACE_MODE";
     const string DynamicPacksToolSurfaceMode = "dynamic_packs";
     const string StaticAllToolSurfaceMode = "static_all";
+    const int SessionRetryBudgetLimit = 2;
     static readonly string s_ToolSurfaceMode = ResolveToolSurfaceMode();
 
     static readonly HashSet<string> s_ReadOnlyTools = new(StringComparer.OrdinalIgnoreCase)
@@ -40,6 +45,7 @@ sealed class UnityMcpLensHost
         "Unity_Prefab_PreviewRevertOverrides",
         "Unity_Prefab_PreviewCopyComponentSerializedValues",
         "Unity_GetLensHealth",
+        "Unity_Editor_HealthCheckFast",
         "Unity_ListToolPacks",
         "Unity_Bridge_ListConnections",
         "Unity_ReadDetailRef",
@@ -126,6 +132,10 @@ sealed class UnityMcpLensHost
         "Unity_Editor_SyncScripts",
         "Unity_Editor_SetPlayMode",
         "Unity_PlayMode_EnterReady",
+        "Unity_PlayMode_StepVerifier",
+        "Unity_Editor_RecoverFromHang",
+        "Unity_Workflow_RunGpuSimulationProbe",
+        "Unity_Workflow_VerifyRuntimePackSelection",
         "Unity_Tile_BuildSet",
         "Unity_Tilemap_Setup",
         "Unity_Tilemap_Paint",
@@ -205,6 +215,51 @@ sealed class UnityMcpLensHost
         public string? FailedStatusPath { get; set; }
     }
 
+    sealed class SessionSafetyState
+    {
+        public bool Unsafe { get; set; }
+        public int FailureCount { get; set; }
+        public string? LastFailureCode { get; set; }
+        public string? LastFailureReason { get; set; }
+        public DateTime LastFailureUtc { get; set; }
+        public string? LastProjectPath { get; set; }
+        public string? LastStatusPath { get; set; }
+        public string? LastConnectionPath { get; set; }
+    }
+
+    sealed class HostStopContract
+    {
+        public required string State { get; init; }
+        public required bool SafeToContinue { get; init; }
+
+        [JsonPropertyName("agent_should_stop")]
+        public required bool AgentShouldStop { get; init; }
+
+        [JsonPropertyName("user_action_required")]
+        public required bool UserActionRequired { get; init; }
+
+        public required string RecommendedNextAction { get; init; }
+
+        [JsonPropertyName("safe_next_actions")]
+        public required string[] SafeNextActions { get; init; }
+
+        [JsonPropertyName("unsafe_next_actions")]
+        public required string[] UnsafeNextActions { get; init; }
+
+        public required string Reason { get; init; }
+    }
+
+    sealed class HostHealthEvaluation
+    {
+        public required HostStopContract Contract { get; init; }
+        public required BridgeDiscoverySnapshot Snapshot { get; init; }
+        public BridgeDiscoveryResult? SelectedBridge { get; init; }
+        public UnityMcpLens.Shared.EditorHealthCandidate? EditorHealth { get; init; }
+        public required bool EditorBusy { get; init; }
+        public required bool UsableBridge { get; init; }
+        public required TimeSpan Elapsed { get; init; }
+    }
+
     sealed class BridgeDiscoveryException : InvalidOperationException
     {
         public BridgeDiscoveryException(string message, BridgeDiscoverySnapshot snapshot)
@@ -268,6 +323,7 @@ sealed class UnityMcpLensHost
     string[] m_ActiveToolPacks = GetDefaultActivePacksForSurfaceMode();
     bool m_ClientInitialized;
     readonly Dictionary<string, DateTime> m_BridgeQuarantine = new(StringComparer.OrdinalIgnoreCase);
+    readonly SessionSafetyState m_SessionSafety = new();
 
     public async Task RunAsync(CancellationToken cancellationToken)
     {
@@ -377,13 +433,20 @@ sealed class UnityMcpLensHost
 
     async Task HandleToolsListAsync(JsonElement? idElement, CancellationToken cancellationToken)
     {
-        try
+        if (!IsSessionUnsafe())
         {
-            await EnsureBridgeReadyWithRecoveryAsync("tools/list", cancellationToken).ConfigureAwait(false);
+            try
+            {
+                await EnsureBridgeReadyWithRecoveryAsync("tools/list", cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[unity-mcp-lens] tools/list bridge bootstrap failed: {ex.Message}");
+                EnsureBootstrapToolsAvailable();
+            }
         }
-        catch (Exception ex)
+        else
         {
-            Console.Error.WriteLine($"[unity-mcp-lens] tools/list bridge bootstrap failed: {ex.Message}");
             EnsureBootstrapToolsAvailable();
         }
 
@@ -531,6 +594,93 @@ sealed class UnityMcpLensHost
             }
         }, m_JsonOptions);
 
+        JsonElement healthCheckFastInputSchema = JsonSerializer.SerializeToElement(new
+        {
+            type = "object",
+            properties = new
+            {
+                projectPath = new
+                {
+                    type = "string",
+                    description = "Optional Unity project root filter. Defaults to UNITY_MCP_PROJECT_PATH or the current Unity project root if discoverable."
+                },
+                includeCandidates = new
+                {
+                    type = "boolean",
+                    description = "Include compact bridge and editor-health candidate diagnostics. Defaults to false."
+                },
+                maxEntries = new
+                {
+                    type = "integer",
+                    description = "Maximum candidate rows to return when includeCandidates is true. Defaults to 8."
+                },
+                timeoutMs = new
+                {
+                    type = "integer",
+                    description = "Hard local scan timeout in milliseconds. Defaults to 2000 and is clamped to 250-3000."
+                }
+            }
+        }, m_JsonOptions);
+
+        JsonElement stepVerifierInputSchema = JsonSerializer.SerializeToElement(new
+        {
+            type = "object",
+            properties = new
+            {
+                scenePath = new { type = "string", description = "Optional Assets-relative .unity scene path to load before entering Play Mode." },
+                steps = new { type = "integer", description = "Paused verification steps to run after warmup. Defaults to 1." },
+                warmupSteps = new { type = "integer", description = "Paused warmup steps before counted verification steps. Defaults to 0." },
+                exitAfter = new { type = "boolean", description = "Exit Play Mode after stepping. Defaults to true." },
+                restorePreviousState = new { type = "boolean", description = "Restore the previous play/pause state instead of always exiting. Defaults to false." },
+                captureConsoleDelta = new { type = "boolean", description = "Capture only console entries emitted during the verifier. Defaults to true." },
+                failOnNewConsoleErrors = new { type = "boolean", description = "Fail when new console errors appear. Defaults to true." },
+                allowRealtimeRun = new { type = "boolean", description = "Explicit opt-in for any unpaused wall-clock runtime. Defaults to false." },
+                timeoutMs = new { type = "integer", description = "Hard workflow timeout in milliseconds. Defaults to 30000." }
+            }
+        }, m_JsonOptions);
+
+        JsonElement recoverFromHangInputSchema = JsonSerializer.SerializeToElement(new
+        {
+            type = "object",
+            properties = new
+            {
+                projectPath = new { type = "string", description = "Optional Unity project root. Defaults to the selected/project-hint path." },
+                diagnoseOnly = new { type = "boolean", description = "Only diagnose health and recovery options. Defaults to true." },
+                allowKillUnity = new { type = "boolean", description = "Explicitly allow killing the matching Unity process when it is stale/unresponsive." },
+                allowRestartUnity = new { type = "boolean", description = "Explicitly allow restarting Unity with the same project path." },
+                allowScratchCleanup = new { type = "boolean", description = "Clean only registered Lens scratch artifacts for the project." },
+                waitMs = new { type = "integer", description = "Bounded wait after restart before final file-backed health scan. Defaults to 15000." }
+            }
+        }, m_JsonOptions);
+
+        JsonElement gpuProbeInputSchema = JsonSerializer.SerializeToElement(new
+        {
+            type = "object",
+            properties = new
+            {
+                packId = new { type = "string", description = "FallingSands element pack id. Defaults to garden." },
+                scenePath = new { type = "string", description = "Optional Assets-relative .unity scene path to load before Play Mode." },
+                fixture = new { type = "string", description = "Deterministic fixture id. Defaults to sparse_nectar_bee." },
+                steps = new { type = "integer", description = "Deterministic ticks to step. Defaults to 240." },
+                maxWallMs = new { type = "integer", description = "Wall-clock cap for the probe. Defaults to 5000." },
+                caps = new { type = "object", description = "Safety caps such as beeCountMax, steamCountMax, dispatchMsMax, readbackMsMax." },
+                summaryIds = new { type = "array", items = new { type = "string" }, description = "Summary ids to count." },
+                exitAfter = new { type = "boolean", description = "Exit Play Mode after the probe. Defaults to true." }
+            }
+        }, m_JsonOptions);
+
+        JsonElement packVerifyInputSchema = JsonSerializer.SerializeToElement(new
+        {
+            type = "object",
+            properties = new
+            {
+                selectedPackId = new { type = "string", description = "Expected FallingSands pack id." },
+                scenePath = new { type = "string", description = "Optional Assets-relative .unity scene path to load before Play Mode." },
+                requirePlayMode = new { type = "boolean", description = "Require runtime verification in Play Mode. Defaults to true." },
+                timeoutMs = new { type = "integer", description = "Host workflow timeout in milliseconds. Defaults to 30000." }
+            }
+        }, m_JsonOptions);
+
         JsonElement selectProjectInputSchema = JsonSerializer.SerializeToElement(new
         {
             type = "object",
@@ -588,6 +738,36 @@ sealed class UnityMcpLensHost
                 "Returns a compact Lens health summary for the current Unity bridge connection, including active packs, exported tool count, bridge status, editor stability, and the recommended next action.",
                 emptyInputSchema,
                 readOnlyHint: true),
+            BuildBootstrapTool(
+                "Unity_Editor_HealthCheckFast",
+                "Unity Editor Health Check Fast",
+                "Returns file-backed Unity editor and bridge health without connecting to Unity, including the stop/continue contract agents should follow before broader Lens calls.",
+                healthCheckFastInputSchema,
+                readOnlyHint: true),
+            BuildBootstrapTool(
+                "Unity_PlayMode_StepVerifier",
+                "Play Mode Step Verifier",
+                "Enters Play Mode through Lens, pauses immediately, runs a bounded number of editor/player steps, captures compact evidence, and exits or restores state.",
+                stepVerifierInputSchema,
+                readOnlyHint: false),
+            BuildBootstrapTool(
+                "Unity_Editor_RecoverFromHang",
+                "Recover Unity Editor From Hang",
+                "Runs a bounded file-backed diagnose/recovery workflow. Kill, restart, and scratch cleanup require explicit arguments.",
+                recoverFromHangInputSchema,
+                readOnlyHint: false),
+            BuildBootstrapTool(
+                "Unity_Workflow_RunGpuSimulationProbe",
+                "Run FallingSands GPU Simulation Probe",
+                "Runs a bounded deterministic FallingSands GPU simulation probe through the project test API with compact counts and caps.",
+                gpuProbeInputSchema,
+                readOnlyHint: false),
+            BuildBootstrapTool(
+                "Unity_Workflow_VerifyRuntimePackSelection",
+                "Verify FallingSands Runtime Pack Selection",
+                "Selects a FallingSands pack, loads the scene when requested, enters runtime if needed, and verifies the active runtime pack.",
+                packVerifyInputSchema,
+                readOnlyHint: false),
             BuildBootstrapTool(
                 "Unity_ListToolPacks",
                 "List Unity Tool Packs",
@@ -719,6 +899,10 @@ sealed class UnityMcpLensHost
                 catch (Exception recoveryEx)
                 {
                     recoveryState.RecoveryError = recoveryEx.Message;
+                    RecordSessionFailure(
+                        "bridge_recovery_failed",
+                        recoveryEx.Message,
+                        unsafeSession: true);
                     JsonElement payload = CreateTransportErrorPayload(recoveryEx, canonicalToolName, recoveryState);
                     await WriteRpcAsync(new
                     {
@@ -746,6 +930,13 @@ sealed class UnityMcpLensHost
                     };
                     QuarantineCurrentBridge();
                     await ResetBridgeClientAsync(preserveActivePacks: true, clearToolCache: true).ConfigureAwait(false);
+                    if (BridgeRequestWasSent(ex))
+                    {
+                        RecordSessionFailure(
+                            "bridge_transport_error",
+                            ex.Message,
+                            unsafeSession: true);
+                    }
                     payload = CreateTransportErrorPayload(ex, canonicalToolName, finalRecoveryState);
                 }
                 else
@@ -771,12 +962,48 @@ sealed class UnityMcpLensHost
         if (ToolNamesMatch(canonicalToolName, "Unity.SetToolPacks") && IsStaticAllToolSurface)
             return BuildToolCallResult(CreateStaticAllSetToolPacksNoopPayload(argumentsElement));
 
+        if (ToolNamesMatch(canonicalToolName, "Unity.Editor.HealthCheckFast"))
+        {
+            JsonElement payload = await CreateHealthCheckFastPayloadAsync(argumentsElement, cancellationToken).ConfigureAwait(false);
+            return BuildToolCallResult(payload, IsToolLevelError(payload));
+        }
+
         if (ToolNamesMatch(canonicalToolName, "Unity.Bridge.ListConnections"))
             return BuildToolCallResult(CreateBridgeListConnectionsPayload(argumentsElement));
 
         if (ToolNamesMatch(canonicalToolName, "Unity.Session.SelectProject"))
         {
+            if (IsSessionUnsafe() && ExtractBool(argumentsElement, true, "connect", "Connect"))
+            {
+                return BuildToolCallResult(
+                    CreateSessionUnsafePayload(canonicalToolName, "Unity.Session.SelectProject can run while unsafe only when connect is false."),
+                    isError: true);
+            }
+
             JsonElement payload = await CreateSelectProjectPayloadAsync(argumentsElement, cancellationToken).ConfigureAwait(false);
+            return BuildToolCallResult(payload, IsToolLevelError(payload));
+        }
+
+        if (ToolNamesMatch(canonicalToolName, "Unity.Editor.RecoverFromHang"))
+        {
+            JsonElement payload = await CreateRecoverFromHangPayloadAsync(argumentsElement, cancellationToken).ConfigureAwait(false);
+            return BuildToolCallResult(payload, IsToolLevelError(payload));
+        }
+
+        if (ToolNamesMatch(canonicalToolName, "Unity.RunCommand") && IsRunCommandPreflightMode(argumentsElement))
+        {
+            JsonElement payload = CreateRunCommandPreflightPayload(argumentsElement);
+            return BuildToolCallResult(payload, IsToolLevelError(payload));
+        }
+
+        if (IsSessionUnsafe())
+        {
+            return BuildToolCallResult(CreateSessionUnsafePayload(canonicalToolName), isError: true);
+        }
+
+        if (ToolNamesMatch(canonicalToolName, "Unity.RunCommand"))
+        {
+            JsonElement payload = await CallRunCommandWithWatchdogAsync(toolName, canonicalToolName, argumentsElement, cancellationToken).ConfigureAwait(false);
             return BuildToolCallResult(payload, IsToolLevelError(payload));
         }
 
@@ -785,6 +1012,24 @@ sealed class UnityMcpLensHost
         if (ToolNamesMatch(canonicalToolName, "Unity.PlayMode.EnterReady"))
         {
             JsonElement payload = await CreatePlayModeEnterReadyPayloadAsync(argumentsElement, cancellationToken).ConfigureAwait(false);
+            return BuildToolCallResult(payload, IsToolLevelError(payload));
+        }
+
+        if (ToolNamesMatch(canonicalToolName, "Unity.PlayMode.StepVerifier"))
+        {
+            JsonElement payload = await CreatePlayModeStepVerifierPayloadAsync(argumentsElement, cancellationToken).ConfigureAwait(false);
+            return BuildToolCallResult(payload, IsToolLevelError(payload));
+        }
+
+        if (ToolNamesMatch(canonicalToolName, "Unity.Workflow.RunGpuSimulationProbe"))
+        {
+            JsonElement payload = await CreateGpuSimulationProbePayloadAsync(argumentsElement, cancellationToken).ConfigureAwait(false);
+            return BuildToolCallResult(payload, IsToolLevelError(payload));
+        }
+
+        if (ToolNamesMatch(canonicalToolName, "Unity.Workflow.VerifyRuntimePackSelection"))
+        {
+            JsonElement payload = await CreateVerifyRuntimePackSelectionPayloadAsync(argumentsElement, cancellationToken).ConfigureAwait(false);
             return BuildToolCallResult(payload, IsToolLevelError(payload));
         }
 
@@ -1624,6 +1869,924 @@ sealed class UnityMcpLensHost
         }, m_JsonOptions);
     }
 
+    async Task<JsonElement> CreateHealthCheckFastPayloadAsync(JsonElement argumentsElement, CancellationToken cancellationToken)
+    {
+        string? explicitProjectPath = ExtractString(argumentsElement, "projectPath", "ProjectPath");
+        string projectPathHint;
+        bool requireProjectMatch;
+        if (!string.IsNullOrWhiteSpace(explicitProjectPath))
+        {
+            projectPathHint = NormalizeProjectPathHint(explicitProjectPath);
+            requireProjectMatch = true;
+        }
+        else
+        {
+            projectPathHint = ResolveProjectPathHint(out requireProjectMatch);
+        }
+
+        bool includeCandidates = ExtractBool(argumentsElement, false, "includeCandidates", "IncludeCandidates");
+        int maxEntries = Math.Clamp(ExtractInt(argumentsElement, 8, "maxEntries", "MaxEntries"), 1, 100);
+        int timeoutMs = Math.Clamp(ExtractInt(argumentsElement, 2000, "timeoutMs", "TimeoutMs"), 250, 3000);
+        string[] quarantineIds = GetActiveQuarantineIds();
+        Stopwatch stopwatch = Stopwatch.StartNew();
+
+        Task<HostHealthEvaluation> scanTask = Task.Run(() => BuildHostHealthEvaluation(
+            projectPathHint,
+            requireProjectMatch,
+            quarantineIds,
+            stopwatch));
+        Task timeoutTask = Task.Delay(timeoutMs, cancellationToken);
+        Task completedTask = await Task.WhenAny(scanTask, timeoutTask).ConfigureAwait(false);
+        if (completedTask != scanTask)
+        {
+            string reason = $"File-backed Unity health scan exceeded {timeoutMs}ms.";
+            RecordSessionFailure("health_check_timeout", reason, unsafeSession: true);
+            HostStopContract timeoutContract = CreateStopContract(
+                "unity_alive_stale_unresponsive",
+                safeToContinue: false,
+                agentShouldStop: true,
+                userActionRequired: false,
+                recommendedNextAction: "Stop calling Unity tools and inspect Lens status files or Command Center before retrying.",
+                safeNextActions: DefaultSafeRecoveryActions(),
+                unsafeNextActions: DefaultUnsafeUnityActions(),
+                reason: reason);
+            return CreateStopContractErrorPayload(
+                reason,
+                "health_check_timeout",
+                timeoutContract,
+                new
+                {
+                    projectPathHint,
+                    requireProjectMatch,
+                    timeoutMs,
+                    elapsedMs = stopwatch.ElapsedMilliseconds,
+                    sessionSafety = CreateSessionSafetyDiagnostics()
+                });
+        }
+
+        HostHealthEvaluation evaluation;
+        try
+        {
+            evaluation = await scanTask.ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            string reason = $"File-backed Unity health scan failed: {ex.Message}";
+            RecordSessionFailure("malformed_status", reason, unsafeSession: false);
+            HostStopContract errorContract = CreateStopContract(
+                "malformed_status",
+                safeToContinue: false,
+                agentShouldStop: true,
+                userActionRequired: false,
+                recommendedNextAction: "Inspect or clear malformed Lens status files before retrying Unity tools.",
+                safeNextActions: DefaultSafeRecoveryActions(),
+                unsafeNextActions: DefaultUnsafeUnityActions(),
+                reason: reason);
+            return CreateStopContractErrorPayload(
+                reason,
+                "malformed_status",
+                errorContract,
+                new
+                {
+                    projectPathHint,
+                    requireProjectMatch,
+                    timeoutMs,
+                    elapsedMs = stopwatch.ElapsedMilliseconds,
+                    sessionSafety = CreateSessionSafetyDiagnostics()
+                });
+        }
+
+        m_LastBridgeDiscoverySnapshot = evaluation.Snapshot;
+        ApplyHealthEvaluationToSessionSafety(evaluation);
+        return CreateHealthCheckFastPayload(evaluation, includeCandidates, maxEntries, timeoutMs);
+    }
+
+    HostHealthEvaluation BuildHostHealthEvaluation(
+        string projectPathHint,
+        bool requireProjectMatch,
+        IReadOnlyCollection<string>? quarantineIds,
+        Stopwatch stopwatch)
+    {
+        BridgeDiscoverySnapshot snapshot = BridgeDiscovery.FindBridgeSnapshot(projectPathHint, quarantineIds, requireProjectMatch);
+        BridgeDiscoveryResult? selected = snapshot.Selected;
+        UnityMcpLens.Shared.EditorHealthCandidate? editorHealth =
+            selected?.EditorHealth ?? SelectBestEditorHealth(snapshot, requireProjectMatch);
+        bool editorBusy = IsEditorBusy(editorHealth);
+        bool usableBridge = selected is { IsFresh: true };
+        HostStopContract contract = ClassifyHealth(snapshot, selected, editorHealth, editorBusy, usableBridge);
+
+        return new HostHealthEvaluation
+        {
+            Contract = contract,
+            Snapshot = snapshot,
+            SelectedBridge = selected,
+            EditorHealth = editorHealth,
+            EditorBusy = editorBusy,
+            UsableBridge = usableBridge,
+            Elapsed = stopwatch.Elapsed
+        };
+    }
+
+    UnityMcpLens.Shared.EditorHealthCandidate? SelectBestEditorHealth(BridgeDiscoverySnapshot snapshot, bool requireProjectMatch)
+    {
+        IEnumerable<UnityMcpLens.Shared.EditorHealthCandidate> candidates = snapshot.EditorHealthCandidates;
+        if (requireProjectMatch)
+            candidates = candidates.Where(candidate => candidate.IsProjectMatch || candidate.Error != null);
+
+        return candidates
+            .OrderByDescending(candidate => candidate.IsProjectMatch)
+            .ThenByDescending(candidate => candidate.IsFresh)
+            .ThenByDescending(candidate => candidate.EditorHeartbeatUtc)
+            .FirstOrDefault();
+    }
+
+    HostStopContract ClassifyHealth(
+        BridgeDiscoverySnapshot snapshot,
+        BridgeDiscoveryResult? selected,
+        UnityMcpLens.Shared.EditorHealthCandidate? editorHealth,
+        bool editorBusy,
+        bool usableBridge)
+    {
+        if (snapshot.Candidates.Length == 0 && snapshot.EditorHealthCandidates.Length == 0)
+        {
+            return CreateStopContract(
+                "no_status_file",
+                safeToContinue: false,
+                agentShouldStop: true,
+                userActionRequired: true,
+                recommendedNextAction: "Open Unity for this project or launch the Lens Command Center so status files can be created.",
+                safeNextActions: DefaultSafeRecoveryActions(),
+                unsafeNextActions: DefaultUnsafeUnityActions(),
+                reason: "No bridge-status or editor-health files exist for this project.");
+        }
+
+        string? basicHealth = editorHealth?.BasicHealth ?? selected?.BasicHealth;
+        if (string.Equals(basicHealth, "malformed_status", StringComparison.OrdinalIgnoreCase) ||
+            snapshot.Candidates.Any(candidate => string.Equals(candidate.BasicHealth, "malformed_status", StringComparison.OrdinalIgnoreCase)) ||
+            snapshot.EditorHealthCandidates.Any(candidate => string.Equals(candidate.BasicHealth, "malformed_status", StringComparison.OrdinalIgnoreCase)))
+        {
+            return CreateStopContract(
+                "malformed_status",
+                safeToContinue: false,
+                agentShouldStop: true,
+                userActionRequired: false,
+                recommendedNextAction: "Inspect Lens status files and rerun Unity.Editor.HealthCheckFast after malformed files are corrected or expire.",
+                safeNextActions: DefaultSafeRecoveryActions(),
+                unsafeNextActions: DefaultUnsafeUnityActions(),
+                reason: "At least one matching Lens status file could not be parsed or had an invalid shape.");
+        }
+
+        if (string.Equals(basicHealth, "process_missing", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(basicHealth, "pid_reused", StringComparison.OrdinalIgnoreCase))
+        {
+            return CreateStopContract(
+                "unity_missing",
+                safeToContinue: false,
+                agentShouldStop: true,
+                userActionRequired: true,
+                recommendedNextAction: "Start or focus the correct Unity editor, then rerun Unity.Editor.HealthCheckFast.",
+                safeNextActions: DefaultSafeRecoveryActions(),
+                unsafeNextActions: DefaultUnsafeUnityActions(),
+                reason: "The recorded Unity process is missing or its PID appears to have been reused.");
+        }
+
+        if (string.Equals(basicHealth, "unity_silent", StringComparison.OrdinalIgnoreCase) ||
+            (string.Equals(basicHealth, "no_recent_heartbeat", StringComparison.OrdinalIgnoreCase) &&
+                (editorHealth?.EditorPidAlive == true || snapshot.Candidates.Any(candidate => candidate.EditorPidAlive))))
+        {
+            return CreateStopContract(
+                "unity_alive_stale_unresponsive",
+                safeToContinue: false,
+                agentShouldStop: true,
+                userActionRequired: false,
+                recommendedNextAction: "Stop calling Unity tools until the editor heartbeat becomes fresh again.",
+                safeNextActions: DefaultSafeRecoveryActions(),
+                unsafeNextActions: DefaultUnsafeUnityActions(),
+                reason: "Unity appears to be alive, but Lens has no fresh editor heartbeat.");
+        }
+
+        if (selected is { IsFresh: true } && editorHealth == null)
+        {
+            return CreateStopContract(
+                "bridge_alive_no_editor_heartbeat",
+                safeToContinue: false,
+                agentShouldStop: false,
+                userActionRequired: false,
+                recommendedNextAction: "Wait for the Phase 0 editor-health publisher to create a fresh heartbeat, then rerun Unity.Editor.HealthCheckFast.",
+                safeNextActions: DefaultSafeRecoveryActions(),
+                unsafeNextActions: DefaultUnsafeUnityActions(),
+                reason: "A fresh Lens bridge exists, but no matching editor-health heartbeat file was found.");
+        }
+
+        if (editorHealth is { IsFresh: true } && editorBusy)
+        {
+            return CreateStopContract(
+                "editor_busy_healthy",
+                safeToContinue: false,
+                agentShouldStop: false,
+                userActionRequired: false,
+                recommendedNextAction: "Wait for compiling/importing/building/play-mode transition to finish before calling broader Unity tools.",
+                safeNextActions: ["Unity.Editor.HealthCheckFast", "Unity.Bridge.ListConnections", "Open Command Center"],
+                unsafeNextActions: DefaultUnsafeUnityActions(),
+                reason: "Unity is heartbeating, but the editor is currently busy.");
+        }
+
+        if (editorHealth is { IsFresh: true } && !usableBridge)
+        {
+            return CreateStopContract(
+                "bridge_unavailable",
+                safeToContinue: false,
+                agentShouldStop: IsRetryBudgetExhausted(),
+                userActionRequired: false,
+                recommendedNextAction: "Refresh or restart the Lens bridge, then rerun Unity.Editor.HealthCheckFast.",
+                safeNextActions: DefaultSafeRecoveryActions(),
+                unsafeNextActions: DefaultUnsafeUnityActions(),
+                reason: "Unity editor health is fresh, but no selectable bridge status is available.");
+        }
+
+        if (selected is { IsFresh: true } && !editorBusy)
+        {
+            return CreateStopContract(
+                "unity_alive_fresh",
+                safeToContinue: true,
+                agentShouldStop: false,
+                userActionRequired: false,
+                recommendedNextAction: "Proceed with Lens tools. Use Unity.Editor.HealthCheckFast again if Unity becomes slow or unstable.",
+                safeNextActions: ["Proceed with needed Lens tools", "Unity.Bridge.ListConnections"],
+                unsafeNextActions: [],
+                reason: "Unity editor health and bridge heartbeat are fresh.");
+        }
+
+        return CreateStopContract(
+            "bridge_unavailable",
+            safeToContinue: false,
+            agentShouldStop: IsRetryBudgetExhausted(),
+            userActionRequired: false,
+            recommendedNextAction: "Use Unity.Bridge.ListConnections for details, then refresh the bridge or wait for fresh status files.",
+            safeNextActions: DefaultSafeRecoveryActions(),
+            unsafeNextActions: DefaultUnsafeUnityActions(),
+            reason: "No selectable fresh bridge was found for the requested project.");
+    }
+
+    JsonElement CreateHealthCheckFastPayload(HostHealthEvaluation evaluation, bool includeCandidates, int maxEntries, int timeoutMs)
+    {
+        HostStopContract contract = evaluation.Contract;
+        object? candidates = includeCandidates
+            ? new
+            {
+                bridge = evaluation.Snapshot.Candidates
+                    .Take(maxEntries)
+                    .Select(CreateBridgeCandidateDiagnostics)
+                    .ToArray(),
+                editorHealth = evaluation.Snapshot.EditorHealthCandidates
+                    .Take(maxEntries)
+                    .Select(CreateEditorHealthDiagnostics)
+                    .ToArray(),
+                unmatchedEditorHealth = evaluation.Snapshot.UnmatchedEditorHealthCandidates
+                    .Take(maxEntries)
+                    .Select(CreateEditorHealthDiagnostics)
+                    .ToArray()
+            }
+            : null;
+
+        return CreateStopContractSuccessPayload(
+            "Unity editor health checked from file-backed status only.",
+            contract,
+            new
+            {
+                elapsedMs = Math.Round(evaluation.Elapsed.TotalMilliseconds, 3),
+                timeoutMs,
+                projectPathHint = evaluation.Snapshot.ProjectPathHint,
+                requireProjectMatch = evaluation.Snapshot.RequireProjectMatch,
+                statusDirectory = evaluation.Snapshot.StatusDirectory,
+                selected = evaluation.SelectedBridge == null ? null : CreateBridgeDiscoveryResultDiagnostics(evaluation.SelectedBridge),
+                editorHealth = evaluation.EditorHealth == null ? null : CreateEditorHealthDiagnostics(evaluation.EditorHealth),
+                editorBusy = evaluation.EditorBusy,
+                usableBridge = evaluation.UsableBridge,
+                bridgeCandidateCount = evaluation.Snapshot.Candidates.Length,
+                editorHealthCandidateCount = evaluation.Snapshot.EditorHealthCandidates.Length,
+                unmatchedEditorHealthCandidateCount = evaluation.Snapshot.UnmatchedEditorHealthCandidates.Length,
+                sessionSafety = CreateSessionSafetyDiagnostics(),
+                candidates
+            });
+    }
+
+    static bool IsEditorBusy(UnityMcpLens.Shared.EditorHealthCandidate? editorHealth)
+    {
+        var health = editorHealth?.HealthFile;
+        return health != null && (
+            health.IsCompiling ||
+            health.IsImporting ||
+            health.IsUpdating ||
+            health.IsPlayingOrWillChangePlaymode ||
+            health.IsBuildingPlayer);
+    }
+
+    static string[] DefaultSafeRecoveryActions() =>
+        ["Unity.Editor.HealthCheckFast", "Unity.Bridge.ListConnections", "Unity.Session.SelectProject(connect=false)", "Open Command Center"];
+
+    static string[] DefaultUnsafeUnityActions() =>
+        ["Unity.RunCommand", "enter Play Mode", "mutating Unity tools", "recovery or restart without explicit user permission"];
+
+    HostStopContract CreateStopContract(
+        string state,
+        bool safeToContinue,
+        bool agentShouldStop,
+        bool userActionRequired,
+        string recommendedNextAction,
+        string[] safeNextActions,
+        string[] unsafeNextActions,
+        string reason)
+    {
+        if (!safeToContinue && IsRetryBudgetExhausted())
+            agentShouldStop = true;
+
+        return new HostStopContract
+        {
+            State = state,
+            SafeToContinue = safeToContinue,
+            AgentShouldStop = agentShouldStop,
+            UserActionRequired = userActionRequired,
+            RecommendedNextAction = recommendedNextAction,
+            SafeNextActions = safeNextActions,
+            UnsafeNextActions = unsafeNextActions,
+            Reason = reason
+        };
+    }
+
+    JsonElement CreateStopContractSuccessPayload(string message, HostStopContract contract, object? data = null)
+    {
+        return JsonSerializer.SerializeToElement(new
+        {
+            success = true,
+            message,
+            state = contract.State,
+            safeToContinue = contract.SafeToContinue,
+            agent_should_stop = contract.AgentShouldStop,
+            user_action_required = contract.UserActionRequired,
+            recommendedNextAction = contract.RecommendedNextAction,
+            safe_next_actions = contract.SafeNextActions,
+            unsafe_next_actions = contract.UnsafeNextActions,
+            reason = contract.Reason,
+            data
+        }, m_JsonOptions);
+    }
+
+    JsonElement CreateStopContractErrorPayload(string message, string code, HostStopContract contract, object? data = null)
+    {
+        return JsonSerializer.SerializeToElement(new
+        {
+            success = false,
+            error = message,
+            code,
+            state = contract.State,
+            safeToContinue = contract.SafeToContinue,
+            agent_should_stop = contract.AgentShouldStop,
+            user_action_required = contract.UserActionRequired,
+            recommendedNextAction = contract.RecommendedNextAction,
+            safe_next_actions = contract.SafeNextActions,
+            unsafe_next_actions = contract.UnsafeNextActions,
+            reason = contract.Reason,
+            data
+        }, m_JsonOptions);
+    }
+
+    void ApplyHealthEvaluationToSessionSafety(HostHealthEvaluation evaluation)
+    {
+        if (evaluation.Contract.SafeToContinue && evaluation.UsableBridge && !evaluation.EditorBusy)
+        {
+            ClearSessionSafety();
+            return;
+        }
+
+        if (evaluation.Contract.State is "unity_alive_stale_unresponsive" or "unity_missing" or "malformed_status")
+        {
+            RecordSessionFailure(evaluation.Contract.State, evaluation.Contract.Reason, unsafeSession: evaluation.Contract.AgentShouldStop);
+        }
+    }
+
+    bool IsSessionUnsafe() => m_SessionSafety.Unsafe || IsRetryBudgetExhausted();
+
+    bool IsRetryBudgetExhausted() => m_SessionSafety.FailureCount >= SessionRetryBudgetLimit;
+
+    void RecordSessionFailure(string code, string reason, bool unsafeSession)
+    {
+        m_SessionSafety.FailureCount += 1;
+        m_SessionSafety.LastFailureCode = code;
+        m_SessionSafety.LastFailureReason = reason;
+        m_SessionSafety.LastFailureUtc = DateTime.UtcNow;
+        m_SessionSafety.LastProjectPath = m_SelectedProjectPathHint ?? m_BridgeConnection?.ProjectRoot;
+        m_SessionSafety.LastStatusPath = m_BridgeConnection?.StatusPath;
+        m_SessionSafety.LastConnectionPath = m_BridgeConnection?.ConnectionPath;
+        if (unsafeSession || IsRetryBudgetExhausted())
+            m_SessionSafety.Unsafe = true;
+    }
+
+    void ClearSessionSafety()
+    {
+        m_SessionSafety.Unsafe = false;
+        m_SessionSafety.FailureCount = 0;
+        m_SessionSafety.LastFailureCode = null;
+        m_SessionSafety.LastFailureReason = null;
+        m_SessionSafety.LastFailureUtc = DateTime.MinValue;
+        m_SessionSafety.LastProjectPath = null;
+        m_SessionSafety.LastStatusPath = null;
+        m_SessionSafety.LastConnectionPath = null;
+    }
+
+    object CreateSessionSafetyDiagnostics()
+    {
+        return new
+        {
+            unsafeSession = IsSessionUnsafe(),
+            failureCount = m_SessionSafety.FailureCount,
+            retryBudget = SessionRetryBudgetLimit,
+            lastFailureCode = m_SessionSafety.LastFailureCode,
+            lastFailureReason = m_SessionSafety.LastFailureReason,
+            lastFailureUtc = m_SessionSafety.LastFailureUtc == DateTime.MinValue ? null : m_SessionSafety.LastFailureUtc.ToString("O"),
+            lastProjectPath = m_SessionSafety.LastProjectPath,
+            lastStatusPath = m_SessionSafety.LastStatusPath,
+            lastConnectionPath = m_SessionSafety.LastConnectionPath
+        };
+    }
+
+    JsonElement CreateSessionUnsafePayload(string requestedToolName, string? extraReason = null)
+    {
+        string reason = string.IsNullOrWhiteSpace(extraReason)
+            ? $"Lens marked this session unsafe after {m_SessionSafety.FailureCount} failed health, recovery, or probe attempts."
+            : extraReason;
+        HostStopContract contract = CreateStopContract(
+            "unity_alive_stale_unresponsive",
+            safeToContinue: false,
+            agentShouldStop: true,
+            userActionRequired: false,
+            recommendedNextAction: "Run Unity.Editor.HealthCheckFast and wait for fresh health before calling Unity tools again.",
+            safeNextActions: DefaultSafeRecoveryActions(),
+            unsafeNextActions: [requestedToolName, ..DefaultUnsafeUnityActions()],
+            reason: reason);
+
+        return CreateStopContractErrorPayload(
+            "Lens session is unsafe for Unity tool calls.",
+            "UNITY_MCP_SESSION_UNSAFE",
+            contract,
+            new
+            {
+                requestedToolName,
+                sessionSafety = CreateSessionSafetyDiagnostics()
+            });
+    }
+
+    async Task<JsonElement> CreateRecoverFromHangPayloadAsync(JsonElement argumentsElement, CancellationToken cancellationToken)
+    {
+        string? explicitProjectPath = ExtractString(argumentsElement, "projectPath", "ProjectPath");
+        string projectPathHint;
+        bool requireProjectMatch;
+        if (!string.IsNullOrWhiteSpace(explicitProjectPath))
+        {
+            projectPathHint = NormalizeProjectPathHint(explicitProjectPath);
+            requireProjectMatch = true;
+        }
+        else
+        {
+            projectPathHint = ResolveProjectPathHint(out requireProjectMatch);
+        }
+
+        bool diagnoseOnly = ExtractBool(argumentsElement, true, "diagnoseOnly", "DiagnoseOnly");
+        bool allowKillUnity = ExtractBool(argumentsElement, false, "allowKillUnity", "AllowKillUnity");
+        bool allowRestartUnity = ExtractBool(argumentsElement, false, "allowRestartUnity", "AllowRestartUnity");
+        bool allowScratchCleanup = ExtractBool(argumentsElement, false, "allowScratchCleanup", "AllowScratchCleanup");
+        int waitMs = Math.Clamp(ExtractInt(argumentsElement, 15000, "waitMs", "WaitMs"), 0, 120000);
+        Stopwatch stopwatch = Stopwatch.StartNew();
+        var actions = new List<object>();
+        HostHealthEvaluation before = BuildHostHealthEvaluation(projectPathHint, requireProjectMatch, GetActiveQuarantineIds(), Stopwatch.StartNew());
+        m_LastBridgeDiscoverySnapshot = before.Snapshot;
+
+        int? pid = before.EditorHealth?.EditorPid ?? before.SelectedBridge?.EditorPid;
+        string? unityExecutable = TryResolveUnityExecutable(pid);
+        bool staleOrMissing = before.Contract.State is "unity_alive_stale_unresponsive" or "unity_missing" or "no_status_file" or "bridge_unavailable";
+        string terminalState = diagnoseOnly ? "user_action_required" : "failed";
+        string? killedPid = null;
+        object? restart = null;
+        object? scratchCleanup = null;
+        string? failure = null;
+
+        if (diagnoseOnly)
+        {
+            terminalState = before.Contract.SafeToContinue ? "recovered" : "user_action_required";
+            return CreateRecoveryPayload(
+                terminalState,
+                before,
+                before,
+                projectPathHint,
+                diagnoseOnly,
+                allowKillUnity,
+                allowRestartUnity,
+                allowScratchCleanup,
+                killedPid,
+                restart,
+                scratchCleanup,
+                actions,
+                failure,
+                stopwatch);
+        }
+
+        if (allowScratchCleanup)
+        {
+            scratchCleanup = CleanupRegisteredScratchArtifacts(projectPathHint, dryRun: false);
+            actions.Add(new { action = "scratch_cleanup", result = scratchCleanup });
+        }
+
+        if (staleOrMissing && allowKillUnity && pid.GetValueOrDefault() > 0)
+        {
+            try
+            {
+                int pidValue = pid.GetValueOrDefault();
+                using Process process = Process.GetProcessById(pidValue);
+                if (!process.HasExited)
+                {
+                    process.Kill(entireProcessTree: true);
+                    killedPid = pidValue.ToString();
+                    actions.Add(new { action = "kill_unity", pid = pidValue, killed = true });
+                }
+            }
+            catch (Exception ex)
+            {
+                failure = $"Failed to kill Unity pid {pid}: {ex.Message}";
+                actions.Add(new { action = "kill_unity", pid, killed = false, error = ex.Message });
+            }
+        }
+        else if (staleOrMissing && !allowKillUnity)
+        {
+            actions.Add(new { action = "kill_unity", skipped = true, reason = "allowKillUnity_false", pid });
+        }
+
+        if (allowRestartUnity)
+        {
+            if (string.IsNullOrWhiteSpace(unityExecutable) || !File.Exists(unityExecutable))
+            {
+                failure ??= "Unity executable path was unavailable; relaunch from Unity Hub or provide a fresh editor health file.";
+                restart = new { attempted = false, reason = "unity_executable_unavailable", unityExecutable };
+                actions.Add(new { action = "restart_unity", restart });
+            }
+            else
+            {
+                try
+                {
+                    var startInfo = new ProcessStartInfo(unityExecutable)
+                    {
+                        UseShellExecute = false
+                    };
+                    startInfo.ArgumentList.Add("-projectPath");
+                    startInfo.ArgumentList.Add(projectPathHint);
+                    Process? process = Process.Start(startInfo);
+                    restart = new
+                    {
+                        attempted = true,
+                        unityExecutable,
+                        projectPath = projectPathHint,
+                        pid = process?.Id
+                    };
+                    actions.Add(new { action = "restart_unity", restart });
+                }
+                catch (Exception ex)
+                {
+                    failure ??= $"Failed to restart Unity: {ex.Message}";
+                    restart = new { attempted = true, unityExecutable, projectPath = projectPathHint, error = ex.Message };
+                    actions.Add(new { action = "restart_unity", restart });
+                }
+            }
+        }
+        else
+        {
+            actions.Add(new { action = "restart_unity", skipped = true, reason = "allowRestartUnity_false" });
+        }
+
+        HostHealthEvaluation after = before;
+        if (waitMs > 0)
+        {
+            DateTime deadlineUtc = DateTime.UtcNow.AddMilliseconds(waitMs);
+            while (DateTime.UtcNow < deadlineUtc)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                after = BuildHostHealthEvaluation(projectPathHint, requireProjectMatch, GetActiveQuarantineIds(), Stopwatch.StartNew());
+                if (after.Contract.SafeToContinue || after.EditorHealth?.IsFresh == true)
+                    break;
+
+                await Task.Delay(500, cancellationToken).ConfigureAwait(false);
+            }
+        }
+        else
+        {
+            after = BuildHostHealthEvaluation(projectPathHint, requireProjectMatch, GetActiveQuarantineIds(), Stopwatch.StartNew());
+        }
+
+        if (after.Contract.SafeToContinue)
+        {
+            terminalState = "recovered";
+            ClearSessionSafety();
+        }
+        else if (restart != null && failure == null)
+        {
+            terminalState = "still_opening";
+        }
+        else if (!allowKillUnity && !allowRestartUnity && staleOrMissing)
+        {
+            terminalState = "user_action_required";
+        }
+        else
+        {
+            terminalState = "failed";
+        }
+
+        return CreateRecoveryPayload(
+            terminalState,
+            before,
+            after,
+            projectPathHint,
+            diagnoseOnly,
+            allowKillUnity,
+            allowRestartUnity,
+            allowScratchCleanup,
+            killedPid,
+            restart,
+            scratchCleanup,
+            actions,
+            failure,
+            stopwatch);
+    }
+
+    JsonElement CreateRecoveryPayload(
+        string terminalState,
+        HostHealthEvaluation before,
+        HostHealthEvaluation after,
+        string projectPath,
+        bool diagnoseOnly,
+        bool allowKillUnity,
+        bool allowRestartUnity,
+        bool allowScratchCleanup,
+        string? killedPid,
+        object? restart,
+        object? scratchCleanup,
+        IReadOnlyCollection<object> actions,
+        string? failure,
+        Stopwatch stopwatch)
+    {
+        bool success = terminalState is "recovered" or "still_opening" or "user_action_required";
+        HostStopContract contract = terminalState == "recovered"
+            ? CreateStopContract(
+                "unity_alive_fresh",
+                safeToContinue: true,
+                agentShouldStop: false,
+                userActionRequired: false,
+                recommendedNextAction: "Proceed with Lens tools.",
+                safeNextActions: ["Proceed with needed Lens tools", "Unity.Editor.HealthCheckFast"],
+                unsafeNextActions: [],
+                reason: "Unity health recovered.")
+            : CreateStopContract(
+                after.Contract.State,
+                safeToContinue: false,
+                agentShouldStop: terminalState != "still_opening",
+                userActionRequired: terminalState == "user_action_required",
+                recommendedNextAction: terminalState == "still_opening"
+                    ? "Wait for Unity to finish opening, then rerun Unity.Editor.HealthCheckFast."
+                    : "Use the Command Center or manually restart Unity, then rerun Unity.Editor.HealthCheckFast.",
+                safeNextActions: DefaultSafeRecoveryActions(),
+                unsafeNextActions: DefaultUnsafeUnityActions(),
+                reason: failure ?? after.Contract.Reason);
+
+        return JsonSerializer.SerializeToElement(new
+        {
+            success,
+            state = terminalState,
+            safeToContinue = contract.SafeToContinue,
+            agent_should_stop = contract.AgentShouldStop,
+            user_action_required = contract.UserActionRequired,
+            recommendedNextAction = contract.RecommendedNextAction,
+            safe_next_actions = contract.SafeNextActions,
+            unsafe_next_actions = contract.UnsafeNextActions,
+            reason = contract.Reason,
+            message = $"Unity recovery workflow ended in state '{terminalState}'.",
+            data = new
+            {
+                terminalState,
+                projectPath,
+                diagnoseOnly,
+                allowKillUnity,
+                allowRestartUnity,
+                allowScratchCleanup,
+                killedPid,
+                restart,
+                scratchCleanup,
+                actionCount = actions.Count,
+                actions = actions.ToArray(),
+                modalHandling = new { knownDialogsOnly = true, handled = Array.Empty<string>() },
+                elapsedMs = Math.Round(stopwatch.Elapsed.TotalMilliseconds, 3),
+                beforeHealth = CreateHealthEvaluationDiagnostics(before),
+                finalHealth = CreateHealthEvaluationDiagnostics(after),
+                sessionSafety = CreateSessionSafetyDiagnostics()
+            }
+        }, m_JsonOptions);
+    }
+
+    string? TryResolveUnityExecutable(int? pid)
+    {
+        if (pid.GetValueOrDefault() <= 0)
+            return Environment.GetEnvironmentVariable("UNITY_EXE_PATH");
+
+        try
+        {
+            using Process process = Process.GetProcessById(pid!.Value);
+            if (!process.HasExited)
+                return process.MainModule?.FileName;
+        }
+        catch
+        {
+        }
+
+        return Environment.GetEnvironmentVariable("UNITY_EXE_PATH");
+    }
+
+    object CleanupRegisteredScratchArtifacts(string projectPath, bool dryRun)
+    {
+        string registryPath = Path.Combine(projectPath, "ProjectSettings", "Packages", "com.becool3000.unity-mcp-lens", "ScratchRegistry.json");
+        if (!File.Exists(registryPath))
+        {
+            return new
+            {
+                dryRun,
+                registryPath,
+                deletedCount = 0,
+                skippedCount = 0,
+                reason = "registry_missing"
+            };
+        }
+
+        JsonNode? root = JsonNode.Parse(File.ReadAllText(registryPath));
+        JsonArray? artifacts = root?["artifacts"] as JsonArray;
+        if (artifacts == null)
+        {
+            return new
+            {
+                dryRun,
+                registryPath,
+                deletedCount = 0,
+                skippedCount = 0,
+                reason = "registry_malformed"
+            };
+        }
+
+        var deleted = new List<object>();
+        var skipped = new List<object>();
+        foreach (JsonNode? artifactNode in artifacts)
+        {
+            if (artifactNode is not JsonObject artifact)
+                continue;
+
+            bool cleanupEligible = artifact["cleanupEligible"]?.GetValue<bool>() == true;
+            string status = artifact["status"]?.GetValue<string>() ?? "registered";
+            string relativePath = artifact["path"]?.GetValue<string>() ?? string.Empty;
+            string id = artifact["id"]?.GetValue<string>() ?? string.Empty;
+            if (!cleanupEligible || !string.Equals(status, "registered", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            string normalizedPath = NormalizeScratchRelativePath(relativePath);
+            if (!IsApprovedScratchPath(normalizedPath))
+            {
+                skipped.Add(new { id, path = relativePath, reason = "not_approved_scratch_path" });
+                continue;
+            }
+
+            string fullPath = Path.GetFullPath(Path.Combine(projectPath, normalizedPath.Replace('/', Path.DirectorySeparatorChar)));
+            if (!File.Exists(fullPath) && !Directory.Exists(fullPath))
+            {
+                artifact["status"] = "missing";
+                skipped.Add(new { id, path = normalizedPath, reason = "missing" });
+                continue;
+            }
+
+            if (!dryRun)
+            {
+                if (Directory.Exists(fullPath))
+                    Directory.Delete(fullPath, recursive: true);
+                else
+                    File.Delete(fullPath);
+                artifact["status"] = "deleted";
+            }
+
+            deleted.Add(new { id, path = normalizedPath, dryRun });
+        }
+
+        if (!dryRun)
+        {
+            string tempPath = registryPath + ".tmp";
+            File.WriteAllText(tempPath, root!.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+            File.Copy(tempPath, registryPath, overwrite: true);
+            File.Delete(tempPath);
+        }
+
+        return new
+        {
+            dryRun,
+            registryPath,
+            deletedCount = deleted.Count,
+            skippedCount = skipped.Count,
+            deleted = deleted.ToArray(),
+            skipped = skipped.ToArray()
+        };
+    }
+
+    static string NormalizeScratchRelativePath(string path)
+    {
+        return (path ?? string.Empty).Trim().Replace('\\', '/').TrimStart('/');
+    }
+
+    static bool IsApprovedScratchPath(string normalizedPath)
+    {
+        return normalizedPath.Equals("Assets/__LensScratch", StringComparison.OrdinalIgnoreCase) ||
+            normalizedPath.StartsWith("Assets/__LensScratch/", StringComparison.OrdinalIgnoreCase) ||
+            normalizedPath.Equals("Temp/LensProbes", StringComparison.OrdinalIgnoreCase) ||
+            normalizedPath.StartsWith("Temp/LensProbes/", StringComparison.OrdinalIgnoreCase);
+    }
+
+    static bool IsRunCommandPreflightMode(JsonElement argumentsElement)
+    {
+        string? mode = ExtractString(argumentsElement, "mode", "Mode");
+        return string.Equals(mode, "preflight", StringComparison.OrdinalIgnoreCase) ||
+            ExtractBool(argumentsElement, false, "preflightOnly", "PreflightOnly", "validationOnly", "ValidationOnly");
+    }
+
+    JsonElement CreateRunCommandPreflightPayload(JsonElement argumentsElement)
+    {
+        string code = ExtractString(argumentsElement, "code", "Code") ?? string.Empty;
+        string title = ExtractString(argumentsElement, "title", "Title") ?? "Unity.RunCommand";
+        string[] labels = ClassifyRunCommandRiskLabels(code);
+        bool dangerous = labels.Any(label => label is "may_trigger_domain_reload" or "does_sync_gpu_readback" or "uses_full_grid_getdata" or "may_block_main_thread");
+        return JsonSerializer.SerializeToElement(new
+        {
+            success = true,
+            message = "Unity.RunCommand preflight completed without touching Unity.",
+            data = new
+            {
+                title,
+                mode = "preflight",
+                riskLabels = labels,
+                dangerousPatternDetected = dangerous,
+                requiresExplicitOptIn = dangerous,
+                safeAlternativeHints = BuildRunCommandSafeAlternativeHints(labels),
+                bridgeTouched = false,
+                unityTouched = false
+            }
+        }, m_JsonOptions);
+    }
+
+    static string[] ClassifyRunCommandRiskLabels(string code)
+    {
+        var labels = new List<string>();
+        string text = code ?? string.Empty;
+        AddIf(labels, "requires_play_mode", ContainsAny(text, "EditorApplication.isPlaying = true", "EnterPlaymode", "PlayMode"));
+        AddIf(labels, "requires_edit_mode", ContainsAny(text, "EditorApplication.isPlaying = false", "ExitPlaymode"));
+        AddIf(labels, "may_trigger_domain_reload", ContainsAny(text, "AssetDatabase.Refresh", "CompilationPipeline", "RequestScriptReload", "EditorUtility.RequestScriptReload", "AssemblyReloadEvents"));
+        AddIf(labels, "loads_scene", ContainsAny(text, "EditorSceneManager.OpenScene", "SceneManager.LoadScene", "UnityEditor.SceneManagement"));
+        AddIf(labels, "touches_assets", ContainsAny(text, "AssetDatabase.", "PrefabUtility.", "File.WriteAll", "File.Delete", "Directory.Delete", "Resources.Load"));
+        AddIf(labels, "does_sync_gpu_readback", ContainsAny(text, ".GetData(", "AsyncGPUReadback.Request"));
+        AddIf(labels, "uses_full_grid_getdata", ContainsAny(text, "IdRead.GetData", "GridState.IdRead", ".GetData(ids", ".GetData(data"));
+        AddIf(labels, "may_block_main_thread", ContainsAny(text, "Thread.Sleep", ".Wait()", ".Result", "while (true)", "while(true)", "SpinWait", "GetData("));
+        AddIf(labels, "may_enter_realtime_play", ContainsAny(text, "yield return null", "WaitForSeconds", "Time.deltaTime"));
+        return labels.Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(label => label, StringComparer.Ordinal).ToArray();
+    }
+
+    static void AddIf(ICollection<string> labels, string label, bool condition)
+    {
+        if (condition)
+            labels.Add(label);
+    }
+
+    static bool ContainsAny(string text, params string[] needles)
+    {
+        return needles.Any(needle => text.IndexOf(needle, StringComparison.OrdinalIgnoreCase) >= 0);
+    }
+
+    static string[] BuildRunCommandSafeAlternativeHints(string[] labels)
+    {
+        var hints = new List<string>();
+        if (labels.Contains("does_sync_gpu_readback", StringComparer.OrdinalIgnoreCase) ||
+            labels.Contains("uses_full_grid_getdata", StringComparer.OrdinalIgnoreCase))
+        {
+            hints.Add("Use Unity.Workflow.RunGpuSimulationProbe for FallingSands GPU summaries.");
+        }
+
+        if (labels.Contains("requires_play_mode", StringComparer.OrdinalIgnoreCase) ||
+            labels.Contains("may_enter_realtime_play", StringComparer.OrdinalIgnoreCase))
+        {
+            hints.Add("Use Unity.PlayMode.StepVerifier for bounded paused Play Mode verification.");
+        }
+
+        if (labels.Contains("loads_scene", StringComparer.OrdinalIgnoreCase))
+            hints.Add("Use Unity.Workflow.VerifyRuntimePackSelection or scene helpers for scene handoff checks.");
+
+        return hints.ToArray();
+    }
+
     async Task<JsonElement> CreateSelectProjectPayloadAsync(JsonElement argumentsElement, CancellationToken cancellationToken)
     {
         string? explicitProjectPath = ExtractString(argumentsElement, "projectPath", "ProjectPath");
@@ -1752,6 +2915,12 @@ sealed class UnityMcpLensHost
                 nativeData,
                 Math.Max(0, nativeFinalConsoleErrorCount - initialConsoleErrorCount),
                 "newConsoleErrorCount");
+            int? nativeConsoleCursor = null;
+            if (TryGetNestedProperty(nativeData, out var nativeConsoleDelta, "consoleDelta"))
+            {
+                nativeConsoleCursor = GetJsonNullableInt(nativeConsoleDelta, "cursorAfter") ??
+                    GetJsonNullableInt(nativeConsoleDelta, "cursorBefore");
+            }
 
             bool nativeBusyButWaitable =
                 string.Equals(nativeStatus, "busy", StringComparison.OrdinalIgnoreCase) ||
@@ -1773,6 +2942,7 @@ sealed class UnityMcpLensHost
                     postStableDelayMs,
                     initialConsoleErrorCount,
                     nativeFinalConsoleErrorCount,
+                    nativeConsoleCursor,
                     captureConsoleDelta,
                     cancellationToken).ConfigureAwait(false);
             }
@@ -2007,6 +3177,7 @@ sealed class UnityMcpLensHost
 
             if (captureConsoleDelta)
                 preConsole = await TryReadConsoleErrorSummaryAsync(cancellationToken).ConfigureAwait(false);
+            int? preConsoleCursor = ExtractConsoleCursor(preConsole);
 
             if (!string.IsNullOrWhiteSpace(scenePath))
             {
@@ -2078,28 +3249,33 @@ sealed class UnityMcpLensHost
                 cancellationToken).ConfigureAwait(false);
 
             if (captureConsoleDelta)
-                postConsole = await TryReadConsoleErrorSummaryAsync(cancellationToken).ConfigureAwait(false);
+                postConsole = await TryReadConsoleErrorSummaryAsync(cancellationToken, preConsoleCursor).ConfigureAwait(false);
 
             int? preConsoleErrors = ExtractConsoleErrorCount(preConsole);
             int? postConsoleErrors = ExtractConsoleErrorCount(postConsole);
             int? consoleErrorDelta = preConsoleErrors.HasValue && postConsoleErrors.HasValue
                 ? Math.Max(0, postConsoleErrors.Value - preConsoleErrors.Value)
                 : null;
+            int? newConsoleErrorCount = ExtractConsoleNewErrorCount(postConsole) ?? consoleErrorDelta;
+            bool newConsoleErrorsDetected = newConsoleErrorCount.GetValueOrDefault() > 0;
+            bool finalSuccess = ready.Success && !newConsoleErrorsDetected;
             int elapsedMs = (int)Math.Round((DateTime.UtcNow - startedUtc).TotalMilliseconds);
 
             return JsonSerializer.SerializeToElement(new
             {
-                success = ready.Success,
-                message = ready.Success
+                success = finalSuccess,
+                message = finalSuccess
                     ? "Play mode entered and runtime is ready for runtime tools."
-                    : "Play mode did not become ready for runtime tools before timeout.",
+                    : newConsoleErrorsDetected
+                        ? "Play mode entered, but new console errors were detected during readiness checks."
+                        : "Play mode did not become ready for runtime tools before timeout.",
                 data = new
                 {
                     requestAccepted,
                     editorStable = ready.EditorIdle,
                     isPlaying = ready.IsPlaying,
                     runtimeAdvanced = ready.RuntimeAdvanced,
-                    readyForRuntimeTools = ready.Success,
+                    readyForRuntimeTools = finalSuccess,
                     activeScene = ready.ActiveScene,
                     frameCounts = new
                     {
@@ -2131,6 +3307,12 @@ sealed class UnityMcpLensHost
                             beforeErrors = preConsoleErrors,
                             afterErrors = postConsoleErrors,
                             errorDelta = consoleErrorDelta,
+                            newErrors = newConsoleErrorCount,
+                            newConsoleErrorCount,
+                            newConsoleErrorsDetected,
+                            cursorBefore = preConsoleCursor,
+                            cursorAfter = ExtractConsoleCursor(postConsole),
+                            staleErrorsPresent = ExtractConsoleBool(postConsole, "staleErrorsPresent"),
                             before = preConsole,
                             after = postConsole
                         }
@@ -2167,6 +3349,306 @@ sealed class UnityMcpLensHost
                     runtimePackActivation,
                     startingActivePacks,
                     activeToolPacks = m_ActiveToolPacks,
+                    host = CreateHostDiagnostics()
+                });
+        }
+    }
+
+    async Task<JsonElement> CreatePlayModeStepVerifierPayloadAsync(JsonElement argumentsElement, CancellationToken cancellationToken)
+    {
+        int timeoutMs = Math.Clamp(ExtractInt(argumentsElement, 30000, "timeoutMs", "TimeoutMs"), 1000, 120000);
+        DateTime startedUtc = DateTime.UtcNow;
+        string? scenePath = ExtractString(argumentsElement, "scenePath", "ScenePath");
+        bool exitAfter = ExtractBool(argumentsElement, true, "exitAfter", "ExitAfter");
+        bool restorePreviousState = ExtractBool(argumentsElement, false, "restorePreviousState", "RestorePreviousState");
+        HostHealthEvaluation beforeHealth = BuildCurrentHostHealthEvaluation();
+        if (!beforeHealth.Contract.SafeToContinue)
+        {
+            return CreateStopContractErrorPayload(
+                $"StepVerifier preflight blocked because editor health is '{beforeHealth.Contract.State}'.",
+                "UNITY_MCP_UNSAFE_EDITOR_STATE",
+                beforeHealth.Contract,
+                new
+                {
+                    timeoutMs,
+                    beforeHealth = CreateHealthEvaluationDiagnostics(beforeHealth),
+                    sessionSafety = CreateSessionSafetyDiagnostics()
+                });
+        }
+
+        object? enter = null;
+        JsonElement verifier = default;
+        try
+        {
+            var enterArgs = new
+            {
+                scenePath,
+                timeoutMs = Math.Max(1000, timeoutMs),
+                pollIntervalMs = 250,
+                warmupFrames = 0,
+                warmupSeconds = 0d,
+                stopFirst = false,
+                clearPause = true,
+                captureConsoleDelta = false
+            };
+            enter = await CreatePlayModeEnterReadyPayloadAsync(JsonSerializer.SerializeToElement(enterArgs, m_JsonOptions), cancellationToken).ConfigureAwait(false);
+            if (enter is JsonElement enterElement && IsToolLevelError(enterElement))
+            {
+                return CreateErrorPayload(
+                    "StepVerifier could not enter Play Mode safely.",
+                    "UNITY_MCP_STEP_VERIFIER_ENTER_FAILED",
+                    new { enter, timeoutMs, scenePath });
+            }
+
+            int remainingMs = Math.Max(1000, timeoutMs - (int)Math.Round((DateTime.UtcNow - startedUtc).TotalMilliseconds));
+            JsonObject verifierArgs = JsonNode.Parse(argumentsElement.GetRawText()) as JsonObject ?? new JsonObject();
+            verifierArgs.Remove("scenePath");
+            verifierArgs.Remove("ScenePath");
+            verifierArgs["timeoutMs"] = remainingMs;
+            verifierArgs["exitAfter"] = exitAfter;
+            verifierArgs["restorePreviousState"] = restorePreviousState;
+            if (!verifierArgs.ContainsKey("allowRealtimeRun") && !verifierArgs.ContainsKey("AllowRealtimeRun"))
+                verifierArgs["allowRealtimeRun"] = false;
+            JsonElement verifierArguments = JsonSerializer.SerializeToElement(verifierArgs, m_JsonOptions);
+            verifier = await CallBridgeToolResultAsync(
+                "Unity.PlayMode.StepVerifier",
+                verifierArguments,
+                cancellationToken,
+                TimeSpan.FromMilliseconds(remainingMs)).ConfigureAwait(false);
+
+            HostHealthEvaluation afterHealth = BuildCurrentHostHealthEvaluation();
+            bool verifierSuccess = GetJsonBool(verifier, false, "success") && !IsToolLevelError(verifier);
+            bool editorResponsiveAfter = afterHealth.Contract.State is "unity_alive_fresh" or "editor_busy_healthy" or "bridge_alive_no_editor_heartbeat";
+            return JsonSerializer.SerializeToElement(new
+            {
+                success = verifierSuccess && !IsCommandHealthUnresponsive(afterHealth),
+                message = verifierSuccess
+                    ? "Play Mode StepVerifier completed."
+                    : "Play Mode StepVerifier did not complete cleanly.",
+                data = new
+                {
+                    enteredPlayMode = true,
+                    timedOut = GetJsonBool(verifier, false, "data", "timedOut"),
+                    editorResponsiveAfter,
+                    timeoutMs,
+                    elapsedMs = Math.Round((DateTime.UtcNow - startedUtc).TotalMilliseconds, 3),
+                    scenePath,
+                    exitAfter,
+                    restorePreviousState,
+                    enter,
+                    verifier,
+                    beforeHealth = CreateHealthEvaluationDiagnostics(beforeHealth),
+                    afterHealth = CreateHealthEvaluationDiagnostics(afterHealth),
+                    host = CreateHostDiagnostics()
+                }
+            }, m_JsonOptions);
+        }
+        catch (Exception ex)
+        {
+            return CreateErrorPayload(
+                $"Play Mode StepVerifier host workflow failed: {ex.Message}",
+                "UNITY_MCP_STEP_VERIFIER_FAILED",
+                new
+                {
+                    exceptionType = ex.GetType().Name,
+                    timeoutMs,
+                    scenePath,
+                    enter,
+                    verifier,
+                    host = CreateHostDiagnostics()
+                });
+        }
+    }
+
+    async Task<JsonElement> CreateGpuSimulationProbePayloadAsync(JsonElement argumentsElement, CancellationToken cancellationToken)
+    {
+        int timeoutMs = Math.Clamp(ExtractInt(argumentsElement, ExtractInt(argumentsElement, 5000, "maxWallMs", "MaxWallMs") + 30000, "timeoutMs", "TimeoutMs"), 1000, 180000);
+        bool exitAfter = ExtractBool(argumentsElement, true, "exitAfter", "ExitAfter");
+        DateTime startedUtc = DateTime.UtcNow;
+        JsonElement entry = default;
+        JsonElement probe = default;
+        JsonElement exit = default;
+
+        try
+        {
+            JsonObject entryArgs = new()
+            {
+                ["scenePath"] = ExtractString(argumentsElement, "scenePath", "ScenePath"),
+                ["steps"] = 0,
+                ["warmupSteps"] = 0,
+                ["exitAfter"] = false,
+                ["restorePreviousState"] = false,
+                ["captureConsoleDelta"] = false,
+                ["failOnNewConsoleErrors"] = false,
+                ["timeoutMs"] = Math.Min(timeoutMs, 30000)
+            };
+            entry = await CreatePlayModeStepVerifierPayloadAsync(JsonSerializer.SerializeToElement(entryArgs, m_JsonOptions), cancellationToken).ConfigureAwait(false);
+            if (IsToolLevelError(entry))
+            {
+                return CreateErrorPayload(
+                    "FallingSands GPU probe could not enter paused Play Mode.",
+                    "UNITY_MCP_GPU_PROBE_ENTER_FAILED",
+                    new { entry, timeoutMs });
+            }
+
+            int remainingMs = Math.Max(1000, timeoutMs - (int)Math.Round((DateTime.UtcNow - startedUtc).TotalMilliseconds));
+            probe = await CallBridgeToolResultAsync(
+                "Unity.Workflow.RunGpuSimulationProbe",
+                argumentsElement,
+                cancellationToken,
+                TimeSpan.FromMilliseconds(remainingMs)).ConfigureAwait(false);
+
+            if (exitAfter)
+            {
+                int exitTimeoutMs = Math.Max(1000, Math.Min(30000, timeoutMs - (int)Math.Round((DateTime.UtcNow - startedUtc).TotalMilliseconds)));
+                exit = await CallBridgeToolResultAsync(
+                    "Unity.PlayMode.StepVerifier",
+                    new
+                    {
+                        steps = 0,
+                        warmupSteps = 0,
+                        exitAfter = true,
+                        restorePreviousState = false,
+                        captureConsoleDelta = false,
+                        failOnNewConsoleErrors = false,
+                        timeoutMs = exitTimeoutMs
+                    },
+                    cancellationToken,
+                    TimeSpan.FromMilliseconds(exitTimeoutMs)).ConfigureAwait(false);
+            }
+
+            bool success = GetJsonBool(probe, false, "success") && !IsToolLevelError(probe);
+            return JsonSerializer.SerializeToElement(new
+            {
+                success,
+                message = success
+                    ? "FallingSands GPU simulation probe completed."
+                    : "FallingSands GPU simulation probe failed.",
+                data = new
+                {
+                    timeoutMs,
+                    elapsedMs = Math.Round((DateTime.UtcNow - startedUtc).TotalMilliseconds, 3),
+                    exitAfter,
+                    entry,
+                    probe,
+                    exit,
+                    host = CreateHostDiagnostics()
+                }
+            }, m_JsonOptions);
+        }
+        catch (Exception ex)
+        {
+            return CreateErrorPayload(
+                $"FallingSands GPU simulation probe host workflow failed: {ex.Message}",
+                "UNITY_MCP_GPU_PROBE_FAILED",
+                new
+                {
+                    exceptionType = ex.GetType().Name,
+                    timeoutMs,
+                    exitAfter,
+                    entry,
+                    probe,
+                    exit,
+                    host = CreateHostDiagnostics()
+                });
+        }
+    }
+
+    async Task<JsonElement> CreateVerifyRuntimePackSelectionPayloadAsync(JsonElement argumentsElement, CancellationToken cancellationToken)
+    {
+        int timeoutMs = Math.Clamp(ExtractInt(argumentsElement, 30000, "timeoutMs", "TimeoutMs"), 1000, 120000);
+        bool requirePlayMode = ExtractBool(argumentsElement, true, "requirePlayMode", "RequirePlayMode");
+        bool exitAfter = ExtractBool(argumentsElement, true, "exitAfter", "ExitAfter");
+        DateTime startedUtc = DateTime.UtcNow;
+        JsonElement entry = default;
+        JsonElement verify = default;
+        JsonElement exit = default;
+
+        try
+        {
+            if (requirePlayMode)
+            {
+                JsonObject entryArgs = new()
+                {
+                    ["scenePath"] = ExtractString(argumentsElement, "scenePath", "ScenePath"),
+                    ["steps"] = 0,
+                    ["warmupSteps"] = 0,
+                    ["exitAfter"] = false,
+                    ["restorePreviousState"] = false,
+                    ["captureConsoleDelta"] = false,
+                    ["failOnNewConsoleErrors"] = false,
+                    ["timeoutMs"] = Math.Min(timeoutMs, 30000)
+                };
+                entry = await CreatePlayModeStepVerifierPayloadAsync(JsonSerializer.SerializeToElement(entryArgs, m_JsonOptions), cancellationToken).ConfigureAwait(false);
+                if (IsToolLevelError(entry))
+                {
+                    return CreateErrorPayload(
+                        "Runtime pack verification could not enter paused Play Mode.",
+                        "UNITY_MCP_PACK_VERIFY_ENTER_FAILED",
+                        new { entry, timeoutMs });
+                }
+            }
+
+            int remainingMs = Math.Max(1000, timeoutMs - (int)Math.Round((DateTime.UtcNow - startedUtc).TotalMilliseconds));
+            verify = await CallBridgeToolResultAsync(
+                "Unity.Workflow.VerifyRuntimePackSelection",
+                argumentsElement,
+                cancellationToken,
+                TimeSpan.FromMilliseconds(remainingMs)).ConfigureAwait(false);
+
+            if (requirePlayMode && exitAfter)
+            {
+                int exitTimeoutMs = Math.Max(1000, Math.Min(30000, timeoutMs - (int)Math.Round((DateTime.UtcNow - startedUtc).TotalMilliseconds)));
+                exit = await CallBridgeToolResultAsync(
+                    "Unity.PlayMode.StepVerifier",
+                    new
+                    {
+                        steps = 0,
+                        warmupSteps = 0,
+                        exitAfter = true,
+                        restorePreviousState = false,
+                        captureConsoleDelta = false,
+                        failOnNewConsoleErrors = false,
+                        timeoutMs = exitTimeoutMs
+                    },
+                    cancellationToken,
+                    TimeSpan.FromMilliseconds(exitTimeoutMs)).ConfigureAwait(false);
+            }
+
+            bool success = GetJsonBool(verify, false, "success") && !IsToolLevelError(verify);
+            return JsonSerializer.SerializeToElement(new
+            {
+                success,
+                message = success
+                    ? "Runtime pack selection verified."
+                    : "Runtime pack selection verification failed.",
+                data = new
+                {
+                    timeoutMs,
+                    elapsedMs = Math.Round((DateTime.UtcNow - startedUtc).TotalMilliseconds, 3),
+                    requirePlayMode,
+                    exitAfter,
+                    entry,
+                    verify,
+                    exit,
+                    host = CreateHostDiagnostics()
+                }
+            }, m_JsonOptions);
+        }
+        catch (Exception ex)
+        {
+            return CreateErrorPayload(
+                $"Runtime pack verification host workflow failed: {ex.Message}",
+                "UNITY_MCP_PACK_VERIFY_FAILED",
+                new
+                {
+                    exceptionType = ex.GetType().Name,
+                    timeoutMs,
+                    requirePlayMode,
+                    exitAfter,
+                    entry,
+                    verify,
+                    exit,
                     host = CreateHostDiagnostics()
                 });
         }
@@ -2271,14 +3753,254 @@ sealed class UnityMcpLensHost
             cancellationToken).ConfigureAwait(false);
     }
 
+    async Task<JsonElement> CallRunCommandWithWatchdogAsync(
+        string requestedToolName,
+        string canonicalToolName,
+        JsonElement argumentsElement,
+        CancellationToken cancellationToken)
+    {
+        int timeoutMs = ExtractRunCommandTimeoutMs(argumentsElement);
+        TimeSpan timeout = TimeSpan.FromMilliseconds(timeoutMs);
+        Stopwatch stopwatch = Stopwatch.StartNew();
+        HostHealthEvaluation beforeHealth = BuildCurrentHostHealthEvaluation();
+        m_LastBridgeDiscoverySnapshot = beforeHealth.Snapshot;
+        if (!beforeHealth.Contract.SafeToContinue)
+        {
+            return CreateStopContractErrorPayload(
+                $"Unity.RunCommand preflight blocked because editor health is '{beforeHealth.Contract.State}'.",
+                "UNITY_MCP_UNSAFE_EDITOR_STATE",
+                beforeHealth.Contract,
+                new
+                {
+                    requestedToolName,
+                    timeoutMs,
+                    beforeHealth = CreateHealthEvaluationDiagnostics(beforeHealth),
+                    sessionSafety = CreateSessionSafetyDiagnostics()
+                });
+        }
+
+        await EnsureBridgeReadyAsync(cancellationToken).ConfigureAwait(false);
+        string title = ExtractString(argumentsElement, "title", "Title") ?? canonicalToolName;
+        string mode = ExtractString(argumentsElement, "mode", "Mode") ?? "execute";
+        Task<BridgeEnvelope<JsonElement>> callTask = m_BridgeClient!.CallToolAsync(canonicalToolName, argumentsElement, timeout, cancellationToken);
+
+        while (true)
+        {
+            Task completedTask = await Task.WhenAny(callTask, Task.Delay(s_RunCommandWatchdogPollInterval, cancellationToken)).ConfigureAwait(false);
+            if (completedTask == callTask)
+            {
+                try
+                {
+                    var envelope = await callTask.ConfigureAwait(false);
+                    HostHealthEvaluation afterHealth = BuildCurrentHostHealthEvaluation();
+                    m_LastBridgeDiscoverySnapshot = afterHealth.Snapshot;
+                    if (!string.Equals(envelope.Status, "success", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return CreateErrorPayload(envelope.Error ?? $"Tool '{requestedToolName}' failed.");
+                    }
+
+                    if (IsCommandHealthUnresponsive(afterHealth))
+                    {
+                        RecordSessionFailure(
+                            "editor_hung_during_command",
+                            afterHealth.Contract.Reason,
+                            unsafeSession: true);
+                        QuarantineCurrentBridge();
+                        await ResetBridgeClientAsync(preserveActivePacks: true, clearToolCache: true).ConfigureAwait(false);
+                        return CreateCommandWatchdogFailurePayload(
+                            title,
+                            "editor_health_stale_after_command",
+                            stopwatch,
+                            timeout,
+                            beforeHealth,
+                            afterHealth,
+                            afterHealth.Contract.Reason);
+                    }
+
+                    if (afterHealth.Contract.SafeToContinue)
+                        ClearSessionSafety();
+
+                    return envelope.Result.Clone();
+                }
+                catch (BridgeTransportException ex) when (ex.TimedOut)
+                {
+                    HostHealthEvaluation afterHealth = BuildCurrentHostHealthEvaluation();
+                    RecordSessionFailure(
+                        "editor_hung_during_command",
+                        ex.Message,
+                        unsafeSession: true);
+                    QuarantineCurrentBridge();
+                    await ResetBridgeClientAsync(preserveActivePacks: true, clearToolCache: true).ConfigureAwait(false);
+                    return CreateCommandWatchdogFailurePayload(
+                        title,
+                        "hard_deadline_elapsed",
+                        stopwatch,
+                        timeout,
+                        beforeHealth,
+                        afterHealth,
+                        ex.Message);
+                }
+            }
+
+            if (stopwatch.Elapsed >= timeout)
+            {
+                HostHealthEvaluation afterHealth = BuildCurrentHostHealthEvaluation();
+                RecordSessionFailure(
+                    "editor_hung_during_command",
+                    $"Unity.RunCommand exceeded its hard deadline of {timeout.TotalSeconds:0.###} seconds.",
+                    unsafeSession: true);
+                QuarantineCurrentBridge();
+                await ResetBridgeClientAsync(preserveActivePacks: true, clearToolCache: true).ConfigureAwait(false);
+                return CreateCommandWatchdogFailurePayload(
+                    title,
+                    "hard_deadline_elapsed",
+                    stopwatch,
+                    timeout,
+                    beforeHealth,
+                    afterHealth,
+                    $"Unity.RunCommand exceeded its hard deadline of {timeout.TotalSeconds:0.###} seconds.");
+            }
+
+            HostHealthEvaluation currentHealth = BuildCurrentHostHealthEvaluation();
+            if (IsCommandHealthUnresponsive(currentHealth))
+            {
+                RecordSessionFailure(
+                    "editor_hung_during_command",
+                    currentHealth.Contract.Reason,
+                    unsafeSession: true);
+                QuarantineCurrentBridge();
+                await ResetBridgeClientAsync(preserveActivePacks: true, clearToolCache: true).ConfigureAwait(false);
+                return CreateCommandWatchdogFailurePayload(
+                    title,
+                    "editor_health_stale_during_command",
+                    stopwatch,
+                    timeout,
+                    beforeHealth,
+                    currentHealth,
+                    currentHealth.Contract.Reason);
+            }
+        }
+    }
+
+    HostHealthEvaluation BuildCurrentHostHealthEvaluation()
+    {
+        string projectPathHint = ResolveProjectPathHint(out bool requireProjectMatch);
+        return BuildHostHealthEvaluation(
+            projectPathHint,
+            requireProjectMatch,
+            GetActiveQuarantineIds(),
+            Stopwatch.StartNew());
+    }
+
+    static int ExtractRunCommandTimeoutMs(JsonElement argumentsElement)
+    {
+        int timeoutMs = 30000;
+        if (argumentsElement.ValueKind == JsonValueKind.Object)
+        {
+            if (argumentsElement.TryGetProperty("timeoutMs", out var timeoutMsElement) && timeoutMsElement.ValueKind == JsonValueKind.Number)
+                timeoutMs = timeoutMsElement.GetInt32();
+            else if (argumentsElement.TryGetProperty("TimeoutMs", out var pascalTimeoutMsElement) && pascalTimeoutMsElement.ValueKind == JsonValueKind.Number)
+                timeoutMs = pascalTimeoutMsElement.GetInt32();
+        }
+
+        return Math.Clamp(timeoutMs, 1000, 120000);
+    }
+
+    static bool IsCommandHealthUnresponsive(HostHealthEvaluation health)
+    {
+        return health.Contract.State is
+            "unity_alive_stale_unresponsive" or
+            "unity_missing" or
+            "malformed_status" or
+            "no_status_file";
+    }
+
+    JsonElement CreateCommandWatchdogFailurePayload(
+        string commandTitle,
+        string failureKind,
+        Stopwatch stopwatch,
+        TimeSpan? timeout,
+        HostHealthEvaluation? beforeHealth,
+        HostHealthEvaluation? afterHealth,
+        string reason)
+    {
+        HostStopContract contract = CreateStopContract(
+            "unity_alive_stale_unresponsive",
+            safeToContinue: false,
+            agentShouldStop: true,
+            userActionRequired: false,
+            recommendedNextAction: "Stop calling Unity tools until Unity.Editor.HealthCheckFast reports fresh health again.",
+            safeNextActions: DefaultSafeRecoveryActions(),
+            unsafeNextActions: DefaultUnsafeUnityActions(),
+            reason: reason);
+
+        return CreateStopContractErrorPayload(
+            "Unity editor stopped responding during command execution.",
+            "editor_hung_during_command",
+            contract,
+            new
+            {
+                commandTitle,
+                failureKind,
+                elapsedMs = Math.Round(stopwatch.Elapsed.TotalMilliseconds, 3),
+                timeoutMs = timeout.HasValue ? (int)Math.Round(timeout.Value.TotalMilliseconds) : (int?)null,
+                maybeApplied = true,
+                beforeHealth = beforeHealth == null ? null : CreateHealthEvaluationDiagnostics(beforeHealth),
+                afterHealth = afterHealth == null ? null : CreateHealthEvaluationDiagnostics(afterHealth),
+                sessionSafety = CreateSessionSafetyDiagnostics()
+            });
+    }
+
+    object CreateHealthEvaluationDiagnostics(HostHealthEvaluation health)
+    {
+        return new
+        {
+            state = health.Contract.State,
+            safeToContinue = health.Contract.SafeToContinue,
+            agent_should_stop = health.Contract.AgentShouldStop,
+            reason = health.Contract.Reason,
+            selected = health.SelectedBridge == null ? null : CreateBridgeDiscoveryResultDiagnostics(health.SelectedBridge),
+            editorHealth = health.EditorHealth == null ? null : CreateEditorHealthDiagnostics(health.EditorHealth),
+            editorBusy = health.EditorBusy,
+            usableBridge = health.UsableBridge,
+            elapsedMs = Math.Round(health.Elapsed.TotalMilliseconds, 3)
+        };
+    }
+
     async Task<JsonElement> CallBridgeToolResultAsync(string toolName, JsonElement argumentsElement, CancellationToken cancellationToken)
     {
-        await EnsureBridgeReadyAsync(cancellationToken).ConfigureAwait(false);
-        var envelope = await m_BridgeClient!.CallToolAsync(toolName, argumentsElement, cancellationToken).ConfigureAwait(false);
-        if (!string.Equals(envelope.Status, "success", StringComparison.OrdinalIgnoreCase))
-            return CreateErrorPayload(envelope.Error ?? $"Tool '{toolName}' failed.");
+        return await CallBridgeToolResultAsync(toolName, argumentsElement, cancellationToken, s_WrapperBridgeCallTimeout).ConfigureAwait(false);
+    }
 
-        return envelope.Result.Clone();
+    async Task<JsonElement> CallBridgeToolResultAsync(string toolName, JsonElement argumentsElement, CancellationToken cancellationToken, TimeSpan? timeout)
+    {
+        Stopwatch stopwatch = Stopwatch.StartNew();
+        await EnsureBridgeReadyAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var envelope = await m_BridgeClient!.CallToolAsync(toolName, argumentsElement, timeout, cancellationToken).ConfigureAwait(false);
+            if (!string.Equals(envelope.Status, "success", StringComparison.OrdinalIgnoreCase))
+                return CreateErrorPayload(envelope.Error ?? $"Tool '{toolName}' failed.");
+
+            return envelope.Result.Clone();
+        }
+        catch (BridgeTransportException ex) when (ex.TimedOut)
+        {
+            RecordSessionFailure(
+                "editor_hung_during_command",
+                ex.Message,
+                unsafeSession: true);
+            QuarantineCurrentBridge();
+            await ResetBridgeClientAsync(preserveActivePacks: true, clearToolCache: true).ConfigureAwait(false);
+            return CreateCommandWatchdogFailurePayload(
+                toolName,
+                "bridge_request_timeout",
+                stopwatch,
+                timeout,
+                null,
+                null,
+                ex.Message);
+        }
     }
 
     async Task<JsonElement> CallBridgeToolResultAsync(string toolName, object arguments, CancellationToken cancellationToken)
@@ -2288,7 +4010,14 @@ sealed class UnityMcpLensHost
         return await CallBridgeToolResultAsync(toolName, argumentElement, cancellationToken).ConfigureAwait(false);
     }
 
-    async Task<object> TryReadConsoleErrorSummaryAsync(CancellationToken cancellationToken)
+    async Task<JsonElement> CallBridgeToolResultAsync(string toolName, object arguments, CancellationToken cancellationToken, TimeSpan? timeout)
+    {
+        await EnsureBridgeReadyAsync(cancellationToken).ConfigureAwait(false);
+        JsonElement argumentElement = JsonSerializer.SerializeToElement(arguments, m_JsonOptions);
+        return await CallBridgeToolResultAsync(toolName, argumentElement, cancellationToken, timeout).ConfigureAwait(false);
+    }
+
+    async Task<object> TryReadConsoleErrorSummaryAsync(CancellationToken cancellationToken, int? cursor = null)
     {
         try
         {
@@ -2297,8 +4026,9 @@ sealed class UnityMcpLensHost
                 new
                 {
                     action = "Get",
-                    types = new[] { "Error" },
+                    types = new[] { "Error", "Warning", "Exception", "Assert" },
                     count = 100,
+                    cursor,
                     format = "Summary",
                     excludeMcpNoise = true,
                     includeStacktrace = false
@@ -2323,6 +4053,7 @@ sealed class UnityMcpLensHost
         int postStableDelayMs,
         int initialConsoleErrorCount,
         int fallbackFinalConsoleErrorCount,
+        int? consoleCursor,
         bool captureConsoleDelta,
         CancellationToken cancellationToken)
     {
@@ -2361,13 +4092,35 @@ sealed class UnityMcpLensHost
                     bool consoleCheckSucceeded = true;
                     if (captureConsoleDelta)
                     {
-                        finalConsole = await TryReadConsoleErrorSummaryAsync(cancellationToken).ConfigureAwait(false);
+                        finalConsole = await TryReadConsoleErrorSummaryAsync(cancellationToken, consoleCursor).ConfigureAwait(false);
                         int? extractedFinalConsoleErrorCount = ExtractConsoleErrorCount(finalConsole);
+                        int? extractedNewConsoleErrorCount = ExtractConsoleNewErrorCount(finalConsole);
                         JsonElement finalConsoleElement = JsonSerializer.SerializeToElement(finalConsole, m_JsonOptions);
                         consoleCheckSucceeded = GetJsonBool(finalConsoleElement, false, "success") &&
-                            extractedFinalConsoleErrorCount.HasValue;
+                            (extractedFinalConsoleErrorCount.HasValue || extractedNewConsoleErrorCount.HasValue);
                         if (extractedFinalConsoleErrorCount.HasValue)
                             finalConsoleErrorCount = extractedFinalConsoleErrorCount.Value;
+                        if (extractedNewConsoleErrorCount.HasValue)
+                        {
+                            int newConsoleErrorCountFromCursor = extractedNewConsoleErrorCount.Value;
+                            bool cursorCheckSuccess = consoleCheckSucceeded && newConsoleErrorCountFromCursor == 0;
+                            return new HostSyncReadyResult
+                            {
+                                Success = cursorCheckSuccess,
+                                Message = cursorCheckSuccess
+                                    ? "Editor is idle and no new console errors were detected after script sync."
+                                    : "Editor is idle, but new console errors were detected after script sync.",
+                                EditorIdle = true,
+                                TimedOut = false,
+                                ConsoleCheckSucceeded = consoleCheckSucceeded,
+                                FinalConsoleErrorCount = finalConsoleErrorCount,
+                                NewConsoleErrorCount = newConsoleErrorCountFromCursor,
+                                FinalConsole = finalConsole,
+                                Attempts = attempts,
+                                LastState = lastState,
+                                LastError = lastError
+                            };
+                        }
                     }
 
                     int newConsoleErrorCount = Math.Max(0, finalConsoleErrorCount - initialConsoleErrorCount);
@@ -2848,6 +4601,15 @@ sealed class UnityMcpLensHost
             : fallback;
     }
 
+    static int? GetJsonNullableInt(JsonElement element, params string[] names)
+    {
+        return TryGetPropertyIgnoreCase(element, out var value, names) &&
+            value.ValueKind == JsonValueKind.Number &&
+            value.TryGetInt32(out int result)
+            ? result
+            : null;
+    }
+
     static double GetJsonDouble(JsonElement element, double fallback, params string[] names)
     {
         return TryGetPropertyIgnoreCase(element, out var value, names) &&
@@ -2885,6 +4647,58 @@ sealed class UnityMcpLensHost
         }
 
         return null;
+    }
+
+    static int? ExtractConsoleNewErrorCount(object? consoleSummary)
+    {
+        if (consoleSummary == null)
+            return null;
+
+        JsonElement element = JsonSerializer.SerializeToElement(consoleSummary);
+        if (TryGetNestedProperty(element, out var newErrors, "data", "newErrors") &&
+            newErrors.ValueKind == JsonValueKind.Number &&
+            newErrors.TryGetInt32(out int count))
+        {
+            return count;
+        }
+
+        if (TryGetNestedProperty(element, out var newConsoleErrorCount, "data", "newConsoleErrorCount") &&
+            newConsoleErrorCount.ValueKind == JsonValueKind.Number &&
+            newConsoleErrorCount.TryGetInt32(out count))
+        {
+            return count;
+        }
+
+        return null;
+    }
+
+    static int? ExtractConsoleCursor(object? consoleSummary)
+    {
+        if (consoleSummary == null)
+            return null;
+
+        JsonElement element = JsonSerializer.SerializeToElement(consoleSummary);
+        if (TryGetNestedProperty(element, out var cursor, "data", "cursor") &&
+            cursor.ValueKind == JsonValueKind.Number &&
+            cursor.TryGetInt32(out int value))
+        {
+            return value;
+        }
+
+        return null;
+    }
+
+    static bool? ExtractConsoleBool(object? consoleSummary, string name)
+    {
+        if (consoleSummary == null)
+            return null;
+
+        JsonElement element = JsonSerializer.SerializeToElement(consoleSummary);
+        return TryGetNestedProperty(element, out var value, "data", name) && value.ValueKind == JsonValueKind.True
+            ? true
+            : TryGetNestedProperty(element, out value, "data", name) && value.ValueKind == JsonValueKind.False
+                ? false
+                : null;
     }
 
     static string CanonicalizeToolName(string toolName)
@@ -2955,9 +4769,22 @@ sealed class UnityMcpLensHost
 
         m_LastRecoveryState = recoveryState;
         PruneBridgeQuarantine();
-        return CreateErrorPayload(
+        HostStopContract contract = CreateStopContract(
+            "bridge_unavailable",
+            safeToContinue: false,
+            agentShouldStop: IsSessionUnsafe(),
+            userActionRequired: false,
+            recommendedNextAction: IsSessionUnsafe()
+                ? "Stop retrying Unity tools until Unity.Editor.HealthCheckFast reports fresh health."
+                : "Check Unity.Editor.HealthCheckFast or Unity.Bridge.ListConnections before retrying this tool.",
+            safeNextActions: DefaultSafeRecoveryActions(),
+            unsafeNextActions: DefaultUnsafeUnityActions(),
+            reason: message);
+
+        return CreateStopContractErrorPayload(
             message,
             "UNITY_MCP_TRANSPORT_ERROR",
+            contract,
             new
             {
                 transportFailure = true,
@@ -2973,7 +4800,8 @@ sealed class UnityMcpLensHost
                 {
                     ttlSeconds = (int)s_BridgeQuarantineTtl.TotalSeconds,
                     count = m_BridgeQuarantine.Count
-                }
+                },
+                sessionSafety = CreateSessionSafetyDiagnostics()
             });
     }
 
@@ -3011,13 +4839,25 @@ sealed class UnityMcpLensHost
 
     JsonElement CreateBridgeDiscoveryErrorPayload(BridgeDiscoveryException exception)
     {
-        return CreateErrorPayload(
+        HostStopContract contract = CreateStopContract(
+            "bridge_unavailable",
+            safeToContinue: false,
+            agentShouldStop: IsSessionUnsafe(),
+            userActionRequired: false,
+            recommendedNextAction: "Run Unity.Editor.HealthCheckFast or open the Lens Command Center to inspect bridge and editor-health status.",
+            safeNextActions: DefaultSafeRecoveryActions(),
+            unsafeNextActions: DefaultUnsafeUnityActions(),
+            reason: exception.Message);
+
+        return CreateStopContractErrorPayload(
             exception.Message,
             "UNITY_MCP_NO_MATCHING_BRIDGE",
+            contract,
             new
             {
                 host = CreateHostDiagnostics(),
-                discovery = BuildBridgeDiscoveryDiagnostics(exception.Snapshot, maxCandidates: 12)
+                discovery = BuildBridgeDiscoveryDiagnostics(exception.Snapshot, maxCandidates: 12),
+                sessionSafety = CreateSessionSafetyDiagnostics()
             });
     }
 

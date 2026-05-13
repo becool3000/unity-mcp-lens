@@ -10,7 +10,7 @@ namespace Becool.UnityMcpLens.Editor.Tools.Parameters
         /// <summary>
         /// Gets or sets whether the command should only be validated or compiled and executed.
         /// </summary>
-        [McpDescription("Execution mode: 'execute' compiles and runs the command; 'validate' compiles only and does not execute.", Required = false)]
+        [McpDescription("Execution mode: 'execute' compiles and runs the command; 'validate' compiles only and does not execute; 'preflight' reports static risk labels without compiling or executing.", Required = false)]
         public string Mode { get; set; } = "execute";
 
         /// <summary>
@@ -48,5 +48,11 @@ namespace Becool.UnityMcpLens.Editor.Tools.Parameters
         /// </summary>
         [McpDescription("Include the locally rewritten command code inline on successful execution. Defaults to false; use detailRef when available.", Required = false)]
         public bool IncludeLocalFixedCode { get; set; } = false;
+
+        /// <summary>
+        /// Gets or sets the host-side hard deadline for the command.
+        /// </summary>
+        [McpDescription("Host-side hard deadline in milliseconds for the command. Defaults to 30000 and is clamped by the host to 1000-120000.", Required = false)]
+        public int TimeoutMs { get; set; } = 30000;
     }
 }

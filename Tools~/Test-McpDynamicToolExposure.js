@@ -19,6 +19,7 @@ const requiredAssetTools = [
 
 const foundationToolNames = [
   "Unity_GetLensHealth",
+  "Unity_Editor_HealthCheckFast",
   "Unity_ListToolPacks",
   "Unity_Bridge_ListConnections",
   "Unity_SetToolPacks",
@@ -612,6 +613,17 @@ function schemaFor(name) {
         projectPath: { type: "string" },
         includeStale: { type: "boolean" },
         maxEntries: { type: "integer" },
+      },
+    };
+  }
+  if (name === "Unity_Editor_HealthCheckFast") {
+    return {
+      type: "object",
+      properties: {
+        projectPath: { type: "string" },
+        includeCandidates: { type: "boolean" },
+        maxEntries: { type: "integer" },
+        timeoutMs: { type: "integer" },
       },
     };
   }

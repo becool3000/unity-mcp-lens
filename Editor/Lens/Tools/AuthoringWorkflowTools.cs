@@ -469,6 +469,7 @@ Workflow wrappers preserve partial results, run reuse discovery before mutation,
             var steps = new List<object>();
             string failurePoint = null;
 
+            ConsoleCursorSnapshot consoleBeforeSnapshot = ConsoleCursorDelta.Capture();
             object consoleBefore = ReadConsoleSummary(consoleCount);
             steps.Add(BuildSyntheticStep("Unity.ReadConsole", "runtime_verification", "console_before", new { consoleCount }, consoleBefore));
 
@@ -506,8 +507,13 @@ Workflow wrappers preserve partial results, run reuse discovery before mutation,
                 capture = await CallToolAsync("Unity.UI.CaptureGameView", "runtime_capture", captureParams, _ => UiDiagnosticsTools.CaptureGameView(captureGameViewParams), steps, required: false, failurePointSetter: value => failurePoint = value);
             }
 
-            object consoleAfter = ReadConsoleSummary(consoleCount);
-            steps.Add(BuildSyntheticStep("Unity.ReadConsole", "runtime_verification", "console_after", new { consoleCount }, consoleAfter));
+            object consoleAfter = ReadConsoleSummary(consoleCount, consoleBeforeSnapshot.Cursor);
+            steps.Add(BuildSyntheticStep("Unity.ReadConsole", "runtime_verification", "console_after", new { consoleCount, cursor = consoleBeforeSnapshot.Cursor }, consoleAfter));
+            object consoleDelta = ConsoleCursorDelta.BuildDelta(
+                true,
+                consoleBeforeSnapshot,
+                RunPlayModeVerificationToolName,
+                new { kind = "authoring_play_mode_verification_console_delta" });
 
             object exitResult = null;
             if (exitAfter)
@@ -528,7 +534,8 @@ Workflow wrappers preserve partial results, run reuse discovery before mutation,
                     pointerSmoke,
                     capture,
                     capturePaths = ExtractCapturePaths(capture),
-                    consoleDelta = new
+                    consoleDelta,
+                    consoleSnapshots = new
                     {
                         before = consoleBefore,
                         after = consoleAfter
@@ -650,13 +657,14 @@ Workflow wrappers preserve partial results, run reuse discovery before mutation,
             return result;
         }
 
-        static object ReadConsoleSummary(int count)
+        static object ReadConsoleSummary(int count, int? cursor = null)
         {
             return ReadConsole.HandleCommand(new ReadConsoleParams
             {
                 Action = ConsoleAction.Get,
                 Types = new[] { ConsoleLogType.Error, ConsoleLogType.Warning, ConsoleLogType.Exception, ConsoleLogType.Assert },
                 Count = count,
+                Cursor = cursor,
                 Format = ConsoleOutputFormat.Summary,
                 ExcludeMcpNoise = true,
                 IncludeStacktrace = false

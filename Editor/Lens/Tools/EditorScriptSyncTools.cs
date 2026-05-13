@@ -11,6 +11,7 @@ using Becool.UnityMcpLens.Editor.Services;
 using Becool.UnityMcpLens.Editor.ToolRegistry;
 using Becool.UnityMcpLens.Editor.Utils;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using UnityEditor;
 
 namespace Becool.UnityMcpLens.Editor.Tools
@@ -132,7 +133,8 @@ namespace Becool.UnityMcpLens.Editor.Tools
             bool editorIdle = EditorToolStateHelpers.IsStable();
             var attempts = new List<object>();
             bool refreshScheduledAfterResponse = false;
-            int initialConsoleErrorCount = EditorToolStateHelpers.CountConsoleErrors();
+            ConsoleCursorSnapshot consoleBefore = ConsoleCursorDelta.Capture();
+            int initialConsoleErrorCount = consoleBefore.ErrorCount;
 
             if (BuildPipeline.isBuildingPlayer)
                 return BuildRefusedResult("Unity is building a player; script sync was refused.", "building_player");
@@ -142,7 +144,16 @@ namespace Becool.UnityMcpLens.Editor.Tools
 
             if (noChangesDetected)
             {
-                var noChangeConsoleWarnings = BuildConsoleWarnings(initialConsoleErrorCount, initialConsoleErrorCount);
+                object noChangeConsoleDelta = ConsoleCursorDelta.BuildDelta(
+                    true,
+                    consoleBefore,
+                    ToolPackCatalog.EditorSyncScriptsToolName,
+                    new { kind = "editor_sync_scripts_console_delta", status = "no_changes" });
+                int noChangeFinalConsoleErrorCount = GetConsoleDeltaInt(noChangeConsoleDelta, "finalConsoleErrorCount", initialConsoleErrorCount);
+                int noChangeNewConsoleErrorCount = GetConsoleDeltaInt(noChangeConsoleDelta, "newErrors");
+                bool noChangeNewConsoleErrorsDetected = noChangeNewConsoleErrorCount > 0;
+                bool noChangeStaleConsoleErrorsPresent = GetConsoleDeltaBool(noChangeConsoleDelta, "staleErrorsPresent");
+                var noChangeConsoleWarnings = BuildConsoleWarnings(noChangeConsoleDelta);
                 return new
                 {
                     status = editorIdle ? "ready" : "busy",
@@ -157,12 +168,13 @@ namespace Becool.UnityMcpLens.Editor.Tools
                     editorIdle,
                     timedOut = false,
                     initialConsoleErrorCount,
-                    finalConsoleErrorCount = initialConsoleErrorCount,
-                    consoleErrorCount = initialConsoleErrorCount,
-                    newConsoleErrorCount = 0,
-                    newConsoleErrorsDetected = false,
-                    staleConsoleErrorsPresent = initialConsoleErrorCount > 0,
-                    consoleErrorsDetected = false,
+                    finalConsoleErrorCount = noChangeFinalConsoleErrorCount,
+                    consoleErrorCount = noChangeFinalConsoleErrorCount,
+                    newConsoleErrorCount = noChangeNewConsoleErrorCount,
+                    newConsoleErrorsDetected = noChangeNewConsoleErrorsDetected,
+                    staleConsoleErrorsPresent = noChangeStaleConsoleErrorsPresent,
+                    consoleErrorsDetected = noChangeNewConsoleErrorsDetected,
+                    consoleDelta = noChangeConsoleDelta,
                     elapsedMs = stopwatch.ElapsedMilliseconds,
                     finalState = EditorToolStateHelpers.BuildEditorState(),
                     warningCount = noChangeConsoleWarnings.Count,
@@ -231,11 +243,16 @@ namespace Becool.UnityMcpLens.Editor.Tools
                 });
             }
 
-            int finalConsoleErrorCount = EditorToolStateHelpers.CountConsoleErrors();
-            int newConsoleErrorCount = CountNewConsoleErrors(initialConsoleErrorCount, finalConsoleErrorCount);
-            bool newConsoleErrorsDetected = newConsoleErrorCount > 0;
-            bool staleConsoleErrorsPresent = finalConsoleErrorCount > 0 && !newConsoleErrorsDetected;
-            warnings.AddRange(BuildConsoleWarnings(initialConsoleErrorCount, finalConsoleErrorCount));
+            object consoleDelta = ConsoleCursorDelta.BuildDelta(
+                true,
+                consoleBefore,
+                ToolPackCatalog.EditorSyncScriptsToolName,
+                new { kind = "editor_sync_scripts_console_delta", status = "completed" });
+            int finalConsoleErrorCount = GetConsoleDeltaInt(consoleDelta, "finalConsoleErrorCount", initialConsoleErrorCount);
+            int newConsoleErrorCount = GetConsoleDeltaInt(consoleDelta, "newErrors");
+            bool newConsoleErrorsDetected = GetConsoleDeltaBool(consoleDelta, "consoleErrorsDetected");
+            bool staleConsoleErrorsPresent = GetConsoleDeltaBool(consoleDelta, "staleErrorsPresent");
+            warnings.AddRange(BuildConsoleWarnings(consoleDelta));
             string status = ResolveStatus(refreshScheduledAfterResponse, timedOut, newConsoleErrorsDetected, editorIdle);
             bool readyForFollowUp = string.Equals(status, "ready", StringComparison.Ordinal);
 
@@ -261,6 +278,7 @@ namespace Becool.UnityMcpLens.Editor.Tools
                 newConsoleErrorsDetected,
                 staleConsoleErrorsPresent,
                 consoleErrorsDetected = newConsoleErrorsDetected,
+                consoleDelta,
                 elapsedMs = stopwatch.ElapsedMilliseconds,
                 warningCount = warnings.Count,
                 warnings = warnings.ToArray(),
@@ -297,6 +315,7 @@ namespace Becool.UnityMcpLens.Editor.Tools
                 rawData.newConsoleErrorsDetected,
                 rawData.staleConsoleErrorsPresent,
                 rawData.consoleErrorsDetected,
+                rawData.consoleDelta,
                 rawData.elapsedMs,
                 rawData.warningCount,
                 rawData.warnings,
@@ -322,8 +341,13 @@ namespace Becool.UnityMcpLens.Editor.Tools
 
             object BuildRefusedResult(string message, string kind)
             {
-                int finalConsoleErrorCount = EditorToolStateHelpers.CountConsoleErrors();
-                int newConsoleErrorCount = CountNewConsoleErrors(initialConsoleErrorCount, finalConsoleErrorCount);
+                object refusedConsoleDelta = ConsoleCursorDelta.BuildDelta(
+                    true,
+                    consoleBefore,
+                    ToolPackCatalog.EditorSyncScriptsToolName,
+                    new { kind = "editor_sync_scripts_console_delta", status = "refused" });
+                int finalConsoleErrorCount = GetConsoleDeltaInt(refusedConsoleDelta, "finalConsoleErrorCount", initialConsoleErrorCount);
+                int newConsoleErrorCount = GetConsoleDeltaInt(refusedConsoleDelta, "newErrors");
                 return new
                 {
                     status = "refused",
@@ -343,8 +367,9 @@ namespace Becool.UnityMcpLens.Editor.Tools
                     consoleErrorCount = finalConsoleErrorCount,
                     newConsoleErrorCount,
                     newConsoleErrorsDetected = newConsoleErrorCount > 0,
-                    staleConsoleErrorsPresent = finalConsoleErrorCount > 0 && newConsoleErrorCount == 0,
+                    staleConsoleErrorsPresent = GetConsoleDeltaBool(refusedConsoleDelta, "staleErrorsPresent"),
                     consoleErrorsDetected = newConsoleErrorCount > 0,
+                    consoleDelta = refusedConsoleDelta,
                     elapsedMs = stopwatch.ElapsedMilliseconds,
                     warningCount = 1,
                     warnings = new object[]
@@ -375,10 +400,15 @@ namespace Becool.UnityMcpLens.Editor.Tools
             return Math.Max(0, finalConsoleErrorCount - initialConsoleErrorCount);
         }
 
-        static List<object> BuildConsoleWarnings(int initialConsoleErrorCount, int finalConsoleErrorCount)
+        static List<object> BuildConsoleWarnings(object consoleDelta)
         {
             var warnings = new List<object>();
-            int newConsoleErrorCount = CountNewConsoleErrors(initialConsoleErrorCount, finalConsoleErrorCount);
+            int newConsoleErrorCount = GetConsoleDeltaInt(consoleDelta, "newErrors");
+            int newConsoleWarningCount = GetConsoleDeltaInt(consoleDelta, "newWarnings");
+            int initialConsoleErrorCount = GetConsoleDeltaInt(consoleDelta, "initialConsoleErrorCount");
+            int finalConsoleErrorCount = GetConsoleDeltaInt(consoleDelta, "finalConsoleErrorCount", initialConsoleErrorCount + newConsoleErrorCount);
+            bool staleConsoleErrorsPresent = GetConsoleDeltaBool(consoleDelta, "staleErrorsPresent");
+            bool staleConsoleWarningsPresent = GetConsoleDeltaBool(consoleDelta, "staleWarningsPresent");
             if (newConsoleErrorCount > 0)
             {
                 warnings.Add(new
@@ -390,19 +420,61 @@ namespace Becool.UnityMcpLens.Editor.Tools
                     finalCount = finalConsoleErrorCount
                 });
             }
-            else if (finalConsoleErrorCount > 0)
+            else if (staleConsoleErrorsPresent)
             {
                 warnings.Add(new
                 {
                     kind = "stale_console_errors_present",
-                    message = $"Unity console already contained {finalConsoleErrorCount} error-classified entr{(finalConsoleErrorCount == 1 ? "y" : "ies")} before script sync; no new errors were detected by count.",
-                    count = finalConsoleErrorCount,
+                    message = $"Unity console already contained {initialConsoleErrorCount} error-classified entr{(initialConsoleErrorCount == 1 ? "y" : "ies")} before script sync; no new errors were detected.",
+                    count = initialConsoleErrorCount,
                     initialCount = initialConsoleErrorCount,
                     finalCount = finalConsoleErrorCount
                 });
             }
 
+            if (newConsoleWarningCount > 0)
+            {
+                warnings.Add(new
+                {
+                    kind = "new_console_warnings_detected",
+                    message = $"Unity console gained {newConsoleWarningCount} warning entr{(newConsoleWarningCount == 1 ? "y" : "ies")} during script sync.",
+                    count = newConsoleWarningCount
+                });
+            }
+            else if (staleConsoleWarningsPresent)
+            {
+                warnings.Add(new
+                {
+                    kind = "stale_console_warnings_present",
+                    message = "Unity console already contained warnings before script sync; no new warnings were detected."
+                });
+            }
+
             return warnings;
+        }
+
+        static int GetConsoleDeltaInt(object consoleDelta, string name, int defaultValue = 0)
+        {
+            try
+            {
+                return JObject.FromObject(consoleDelta ?? new { }).Value<int?>(name) ?? defaultValue;
+            }
+            catch
+            {
+                return defaultValue;
+            }
+        }
+
+        static bool GetConsoleDeltaBool(object consoleDelta, string name, bool defaultValue = false)
+        {
+            try
+            {
+                return JObject.FromObject(consoleDelta ?? new { }).Value<bool?>(name) ?? defaultValue;
+            }
+            catch
+            {
+                return defaultValue;
+            }
         }
 
         static void ScheduleRefreshAfterResponse(string[] relevantChangedPaths, bool force, int timeoutSeconds)

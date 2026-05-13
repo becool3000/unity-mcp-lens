@@ -135,6 +135,7 @@ class FakeBridge {
     this.context = context;
     this.options = options;
     this.server = null;
+    this.sockets = new Set();
     this.connectionPath = makePipePath();
     this.statusPath = path.join(context.statusDir, `bridge-status-${nextPipeId++}.json`);
     this.commandCounts = context.commandCounts;
@@ -152,17 +153,24 @@ class FakeBridge {
     writeStatus(this.statusPath, this.connectionPath, this.context.projectRoot, {
       status: "ready",
       heartbeat: new Date(),
+      healthHeartbeat: this.options.healthHeartbeat,
       toolCount: 3,
+      writeHealth: this.options.writeHealth,
     });
   }
 
   async stop() {
     if (!this.server) return;
+    for (const socket of this.sockets) {
+      socket.destroy();
+    }
     await new Promise((resolve) => this.server.close(resolve));
     this.server = null;
   }
 
   handleSocket(socket) {
+    this.sockets.add(socket);
+    socket.on("close", () => this.sockets.delete(socket));
     socket.setEncoding("utf8");
     socket.write(JSON.stringify({ type: "handshake" }) + "\n");
     let buffer = "";
@@ -193,6 +201,10 @@ class FakeBridge {
       return;
     }
 
+    if (this.options.hangOn === type) {
+      return;
+    }
+
     this.respond(socket, command.requestId, resultFor(type, command.params));
   }
 
@@ -211,6 +223,7 @@ class ScenarioContext {
     this.failOnceOn = failOnceOn;
     this.failed = false;
     this.bridge = null;
+    this.bridges = [];
     fs.mkdirSync(this.statusDir, { recursive: true });
     fs.mkdirSync(this.projectRoot, { recursive: true });
     fs.mkdirSync(path.join(this.projectRoot, "Assets"), { recursive: true });
@@ -227,6 +240,7 @@ class ScenarioContext {
 
   async startBridge(options = {}) {
     this.bridge = new FakeBridge(this, options);
+    this.bridges.push(this.bridge);
     await this.bridge.start();
     return this.bridge;
   }
@@ -270,8 +284,21 @@ class ScenarioContext {
     return healthPath;
   }
 
+  writeHealthOnly(options = {}) {
+    const healthPath = path.join(this.statusDir, `editor-health-only-${nextPipeId++}.json`);
+    writeHealth(healthPath, this.projectRoot, {
+      heartbeat: options.heartbeat || new Date(),
+      editorPid: options.deadPid ? 99999999 : (options.editorPid ?? process.pid),
+      processStart: options.processStart,
+      flags: options.flags,
+    });
+    return healthPath;
+  }
+
   async dispose() {
-    if (this.bridge) await this.bridge.stop().catch(() => {});
+    for (const bridge of this.bridges.reverse()) {
+      await bridge.stop().catch(() => {});
+    }
     fs.rmSync(this.root, { recursive: true, force: true });
   }
 }
@@ -328,6 +355,7 @@ function writeStatus(statusPath, connectionPath, projectRoot, options) {
 
 function writeHealth(healthPath, projectRoot, options) {
   const heartbeat = options.heartbeat || new Date();
+  const flags = options.flags || {};
   fs.writeFileSync(healthPath, JSON.stringify({
     health_schema_version: 1,
     editor_heartbeat_utc: heartbeat.toISOString(),
@@ -338,13 +366,13 @@ function writeHealth(healthPath, projectRoot, options) {
     project_root: projectRoot,
     unity_version: "test-unity",
     lifecycle_state: "active",
-    is_compiling: false,
-    is_importing: false,
-    is_updating: false,
-    is_playing: false,
-    is_paused: false,
-    is_playing_or_will_change_playmode: false,
-    is_building_player: false,
+    is_compiling: !!flags.isCompiling,
+    is_importing: !!flags.isImporting,
+    is_updating: !!flags.isUpdating,
+    is_playing: !!flags.isPlaying,
+    is_paused: !!flags.isPaused,
+    is_playing_or_will_change_playmode: !!flags.isPlayingOrWillChangePlaymode,
+    is_building_player: !!flags.isBuildingPlayer,
     active_scene_name: "TestScene",
     active_scene_path: "Assets/TestScene.unity",
     capture_error: null,
@@ -457,20 +485,139 @@ async function assertFullTools(client) {
   const response = await client.listTools();
   const names = response.tools.map((tool) => tool.name);
   assert(names.includes("Unity_GetLensHealth"), "tools/list should include dynamic health tool");
+  assert(names.includes("Unity_Editor_HealthCheckFast"), "tools/list should include file-backed fast health tool");
   assert(names.includes("Unity_ListToolPacks"), "tools/list should include dynamic pack tool");
   assert(names.includes("Unity_RunCommand"), `tools/list should include dynamic mutating tool; got ${names.join(", ")}; stderr=${client.stderr}`);
   assert(response.tools.length >= 4, "tools/list should include dynamic tools plus local bootstrap helpers");
 }
 
+function commandTotal(commandCounts) {
+  return Object.values(commandCounts).reduce((sum, value) => sum + value, 0);
+}
+
 async function main() {
   assert(fs.existsSync(hostPath), `Host path does not exist: ${hostPath}`);
 
-  await withScenario("normal", null, async (_context, client) => {
+  await withScenario("normal", null, async (context, client) => {
     await assertFullTools(client);
     const diagnostic = await client.callTool("Unity_Bridge_ListConnections", {});
     assert.strictEqual(diagnostic.structuredContent.data.selected.basicHealth, "fresh");
     assert.strictEqual(diagnostic.structuredContent.data.selected.editorHealth.basicHealth, "fresh");
     assert.strictEqual(diagnostic.structuredContent.data.selected.editorHealth.pidStartMatches, true);
+
+    const beforeFastHealthCount = commandTotal(context.commandCounts);
+    const fastHealth = await client.callTool("Unity_Editor_HealthCheckFast", {});
+    assert.strictEqual(fastHealth.structuredContent.success, true, "fast health should succeed");
+    assert.strictEqual(fastHealth.structuredContent.state, "unity_alive_fresh");
+    assert.strictEqual(fastHealth.structuredContent.safeToContinue, true);
+    assert.strictEqual(fastHealth.structuredContent.agent_should_stop, false);
+    assert.strictEqual(commandTotal(context.commandCounts), beforeFastHealthCount, "fast health must not call the bridge");
+  });
+
+  {
+    const context = new ScenarioContext("health-no-status");
+    let client = null;
+    try {
+      client = new McpHostClient(context.projectRoot, context.statusDir);
+      await client.initialize();
+      const result = await client.callTool("Unity_Editor_HealthCheckFast", {});
+      assert.strictEqual(result.structuredContent.state, "no_status_file");
+      assert.strictEqual(result.structuredContent.agent_should_stop, true);
+      assert.strictEqual(result.structuredContent.user_action_required, true);
+    } finally {
+      if (client) await client.dispose().catch(() => {});
+      await context.dispose();
+    }
+  }
+
+  {
+    const context = new ScenarioContext("health-only-fresh");
+    let client = null;
+    try {
+      context.writeHealthOnly();
+      client = new McpHostClient(context.projectRoot, context.statusDir);
+      await client.initialize();
+      const result = await client.callTool("Unity_Editor_HealthCheckFast", {});
+      assert.strictEqual(result.structuredContent.state, "bridge_unavailable");
+      assert.strictEqual(result.structuredContent.safeToContinue, false);
+      assert.strictEqual(result.structuredContent.agent_should_stop, false);
+    } finally {
+      if (client) await client.dispose().catch(() => {});
+      await context.dispose();
+    }
+  }
+
+  {
+    const context = new ScenarioContext("health-stale-live");
+    let client = null;
+    try {
+      context.writeHealthOnly({ heartbeat: new Date(Date.now() - 120000) });
+      client = new McpHostClient(context.projectRoot, context.statusDir);
+      await client.initialize();
+      const result = await client.callTool("Unity_Editor_HealthCheckFast", {});
+      assert.strictEqual(result.structuredContent.state, "unity_alive_stale_unresponsive");
+      assert.strictEqual(result.structuredContent.agent_should_stop, true);
+    } finally {
+      if (client) await client.dispose().catch(() => {});
+      await context.dispose();
+    }
+  }
+
+  {
+    const context = new ScenarioContext("health-dead-pid");
+    let client = null;
+    try {
+      context.writeHealthOnly({ deadPid: true });
+      client = new McpHostClient(context.projectRoot, context.statusDir);
+      await client.initialize();
+      const result = await client.callTool("Unity_Editor_HealthCheckFast", {});
+      assert.strictEqual(result.structuredContent.state, "unity_missing");
+      assert.strictEqual(result.structuredContent.user_action_required, true);
+    } finally {
+      if (client) await client.dispose().catch(() => {});
+      await context.dispose();
+    }
+  }
+
+  {
+    const context = new ScenarioContext("health-pid-reused");
+    let client = null;
+    try {
+      context.writeHealthOnly({ processStart: "2000-01-01T00:00:00.000Z" });
+      client = new McpHostClient(context.projectRoot, context.statusDir);
+      await client.initialize();
+      const result = await client.callTool("Unity_Editor_HealthCheckFast", {});
+      assert.strictEqual(result.structuredContent.state, "unity_missing");
+    } finally {
+      if (client) await client.dispose().catch(() => {});
+      await context.dispose();
+    }
+  }
+
+  {
+    const context = new ScenarioContext("health-malformed");
+    let client = null;
+    try {
+      context.writeMalformedHealth();
+      client = new McpHostClient(context.projectRoot, context.statusDir);
+      await client.initialize();
+      const result = await client.callTool("Unity_Editor_HealthCheckFast", {});
+      assert.strictEqual(result.structuredContent.state, "malformed_status");
+      assert.strictEqual(result.structuredContent.agent_should_stop, true);
+    } finally {
+      if (client) await client.dispose().catch(() => {});
+      await context.dispose();
+    }
+  }
+
+  await withScenario("fresh-bridge-missing-health", null, async (context, client) => {
+    await context.bridge.stop();
+    fs.rmSync(context.statusDir, { recursive: true, force: true });
+    fs.mkdirSync(context.statusDir, { recursive: true });
+    await context.startBridge({ writeHealth: false });
+    const result = await client.callTool("Unity_Editor_HealthCheckFast", {});
+    assert.strictEqual(result.structuredContent.state, "bridge_alive_no_editor_heartbeat");
+    assert.strictEqual(result.structuredContent.safeToContinue, false);
   });
 
   await withScenario("stale-ignored", null, async (context, client) => {
@@ -580,6 +727,43 @@ async function main() {
     assert.strictEqual(result.structuredContent.data.maybeApplied, true);
     assert.strictEqual(context.commandCounts.Unity_RunCommand, 1, "mutating tool must not be retried");
   });
+
+  {
+    const context = new ScenarioContext("runcommand-watchdog");
+    let client = null;
+    try {
+      await context.startBridge({ hangOn: "Unity_RunCommand" });
+      client = new McpHostClient(context.projectRoot, context.statusDir);
+      await client.initialize();
+      await assertFullTools(client);
+
+      const result = await client.callTool("Unity_RunCommand", {
+        code: "return;",
+        title: "hung fake command",
+        timeoutMs: 1000,
+      });
+      assert.strictEqual(result.isError, true, "hung RunCommand should return a tool error");
+      assert.strictEqual(result.structuredContent.code, "editor_hung_during_command");
+      assert.strictEqual(result.structuredContent.agent_should_stop, true);
+      assert.strictEqual(result.structuredContent.safeToContinue, false);
+      assert.strictEqual(result.structuredContent.data.maybeApplied, true);
+
+      const blocked = await client.callTool("Unity_ListToolPacks", {});
+      assert.strictEqual(blocked.isError, true, "unsafe session should block bridge-backed tools");
+      assert.strictEqual(blocked.structuredContent.code, "UNITY_MCP_SESSION_UNSAFE");
+
+      await context.startBridge();
+      const recovered = await client.callTool("Unity_Editor_HealthCheckFast", {});
+      assert.strictEqual(recovered.structuredContent.state, "unity_alive_fresh");
+      assert.strictEqual(recovered.structuredContent.safeToContinue, true);
+
+      const afterRecovery = await client.callTool("Unity_ListToolPacks", {});
+      assert.strictEqual(afterRecovery.structuredContent.success, true, "fresh health should clear unsafe session state");
+    } finally {
+      if (client) await client.dispose().catch(() => {});
+      await context.dispose();
+    }
+  }
 
   console.log("MCP host transport recovery tests passed.");
 }

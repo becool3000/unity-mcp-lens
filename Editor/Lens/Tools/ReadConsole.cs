@@ -59,7 +59,12 @@ Returns:
                         {
                             cursor = new { type = "integer", description = "Cursor to pass back on the next call" },
                             scannedFrom = new { type = "integer", description = "Console entry index where this read started" },
+                            cursorSupplied = new { type = "boolean", description = "Whether this read used an explicit cursor from a previous response" },
                             entryCount = new { type = "integer", description = "Number of scanned entries that matched the filters" },
+                            newErrors = new { type = "integer", description = "Error, exception, and assert entries found after the supplied cursor" },
+                            newWarnings = new { type = "integer", description = "Warning entries found after the supplied cursor" },
+                            staleErrorsPresent = new { description = "Reserved for stale-console context; null because Unity.ReadConsole cursor reads do not know previous totals" },
+                            staleWarningsPresent = new { description = "Reserved for stale-console context; null because Unity.ReadConsole cursor reads do not know previous totals" },
                             groupCount = new { type = "integer", description = "Number of grouped summary rows returned" },
                             typeCounts = new { type = "object", description = "Counts by Unity console log type" },
                             groups = new { type = "array", description = "Grouped summary rows for Format=Summary" },
@@ -311,7 +316,7 @@ Returns:
                         types = new List<string> { "error", "warning", "log", "exception", "assert" }; // Expand 'all'
                     }
 
-                    return GetConsoleEntries(types, count, filterText, format, includeStacktrace, excludeMcpNoise, startCursor);
+                    return GetConsoleEntries(types, count, filterText, format, includeStacktrace, excludeMcpNoise, startCursor, @params.Cursor.HasValue);
                 }
                 else
                 {
@@ -351,7 +356,8 @@ Returns:
             string format,
             bool includeStacktrace,
             bool excludeMcpNoise,
-            int startCursor
+            int startCursor,
+            bool cursorSupplied
         )
         {
             List<ConsoleLogEntry> formattedEntries = new List<ConsoleLogEntry>();
@@ -378,7 +384,9 @@ Returns:
                 int boundedWindow = format == "summary"
                     ? Math.Max(200, (count ?? 50) * 20)
                     : Math.Max(100, count ?? 100);
-                scanStart = Math.Max(startCursor, Math.Max(0, totalEntries - boundedWindow));
+                scanStart = cursorSupplied
+                    ? Math.Clamp(startCursor, 0, totalEntries)
+                    : Math.Max(0, totalEntries - boundedWindow);
 
                 for (int i = scanStart; i < totalEntries; i++)
                 {
@@ -537,6 +545,8 @@ Returns:
                     .ThenBy(group => group.type)
                     .Take(count ?? PayloadBudgetPolicy.MaxDiagnosticFindings)
                     .ToList();
+                int newErrors = cursorSupplied ? CountErrorClassEntries(formattedEntries) : 0;
+                int newWarnings = cursorSupplied ? CountWarningEntries(formattedEntries) : 0;
 
                 return Response.Success(
                     $"Retrieved {formattedEntries.Count} console entries in summary mode.",
@@ -546,14 +556,24 @@ Returns:
                         {
                             cursor = totalEntries,
                             scannedFrom = scanStart,
+                            cursorSupplied,
                             entryCount = formattedEntries.Count,
+                            newErrors,
+                            newWarnings,
+                            staleErrorsPresent = (bool?)null,
+                            staleWarningsPresent = (bool?)null,
                             entries = formattedEntries
                         },
                         new
                         {
                             cursor = totalEntries,
                             scannedFrom = scanStart,
+                            cursorSupplied,
                             entryCount = formattedEntries.Count,
+                            newErrors,
+                            newWarnings,
+                            staleErrorsPresent = (bool?)null,
+                            staleWarningsPresent = (bool?)null,
                             groupCount = grouped.Count,
                             typeCounts = BuildTypeCounts(formattedEntries),
                             groups = grouped
@@ -578,6 +598,11 @@ Returns:
                     {
                         cursor = totalEntries,
                         scannedFrom = scanStart,
+                        cursorSupplied,
+                        newErrors = cursorSupplied ? CountErrorClassEntries(formattedEntries) : 0,
+                        newWarnings = cursorSupplied ? CountWarningEntries(formattedEntries) : 0,
+                        staleErrorsPresent = (bool?)null,
+                        staleWarningsPresent = (bool?)null,
                         entries = formattedEntries
                     },
                     new
@@ -603,6 +628,30 @@ Returns:
                 assert = counts.TryGetValue(nameof(LogType.Assert), out var assertCount) ? assertCount : 0,
                 unknown = counts.TryGetValue("Unknown", out var unknownCount) ? unknownCount : 0
             };
+        }
+
+        static int CountErrorClassEntries(IEnumerable<ConsoleLogEntry> entries)
+        {
+            return entries?.Count(entry =>
+                string.Equals(entry.Type, nameof(LogType.Error), StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(entry.Type, nameof(LogType.Exception), StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(entry.Type, nameof(LogType.Assert), StringComparison.OrdinalIgnoreCase) ||
+                IsCompilerErrorMessage(entry.Message)) ?? 0;
+        }
+
+        static int CountWarningEntries(IEnumerable<ConsoleLogEntry> entries)
+        {
+            return entries?.Count(entry =>
+                string.Equals(entry.Type, nameof(LogType.Warning), StringComparison.OrdinalIgnoreCase)) ?? 0;
+        }
+
+        static bool IsCompilerErrorMessage(string message)
+        {
+            if (string.IsNullOrWhiteSpace(message))
+                return false;
+
+            return message.IndexOf(" error CS", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                message.IndexOf(": error CS", StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
         // --- Internal Helpers ---

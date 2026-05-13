@@ -167,9 +167,28 @@ internal class CommandScript : IRunCommand
             string mode = string.IsNullOrWhiteSpace(parameters?.Mode)
                 ? "execute"
                 : parameters.Mode.Trim().ToLowerInvariant();
-            if (mode != "execute" && mode != "validate")
+            if (mode != "execute" && mode != "validate" && mode != "preflight")
             {
-                return Task.FromResult<object>(Response.Error("INVALID_MODE: mode must be 'execute' or 'validate'."));
+                return Task.FromResult<object>(Response.Error("INVALID_MODE: mode must be 'execute', 'validate', or 'preflight'."));
+            }
+
+            if (mode == "preflight")
+            {
+                string[] riskLabels = ClassifyRiskLabels(code);
+                bool dangerous = riskLabels.Any(label => label == "may_trigger_domain_reload" ||
+                    label == "does_sync_gpu_readback" ||
+                    label == "uses_full_grid_getdata" ||
+                    label == "may_block_main_thread");
+                return Task.FromResult<object>(Response.Success("Command preflight completed without compiling or executing.", new
+                {
+                    mode,
+                    title = parameters?.Title,
+                    riskLabels,
+                    dangerousPatternDetected = dangerous,
+                    requiresExplicitOptIn = dangerous,
+                    bridgeTouched = false,
+                    unityStateMutated = false
+                }));
             }
 
             bool wasPlaying = EditorApplication.isPlaying;
@@ -622,6 +641,33 @@ internal class CommandScript : IRunCommand
             }
 
             return hints.ToArray();
+        }
+
+        static string[] ClassifyRiskLabels(string code)
+        {
+            var labels = new List<string>();
+            string text = code ?? string.Empty;
+            AddIf(labels, "requires_play_mode", ContainsAny(text, "EditorApplication.isPlaying = true", "EnterPlaymode", "PlayMode"));
+            AddIf(labels, "requires_edit_mode", ContainsAny(text, "EditorApplication.isPlaying = false", "ExitPlaymode"));
+            AddIf(labels, "may_trigger_domain_reload", ContainsAny(text, "AssetDatabase.Refresh", "CompilationPipeline", "RequestScriptReload", "EditorUtility.RequestScriptReload", "AssemblyReloadEvents"));
+            AddIf(labels, "loads_scene", ContainsAny(text, "EditorSceneManager.OpenScene", "SceneManager.LoadScene", "UnityEditor.SceneManagement"));
+            AddIf(labels, "touches_assets", ContainsAny(text, "AssetDatabase.", "PrefabUtility.", "File.WriteAll", "File.Delete", "Directory.Delete", "Resources.Load"));
+            AddIf(labels, "does_sync_gpu_readback", ContainsAny(text, ".GetData(", "AsyncGPUReadback.Request"));
+            AddIf(labels, "uses_full_grid_getdata", ContainsAny(text, "IdRead.GetData", "GridState.IdRead", ".GetData(ids", ".GetData(data"));
+            AddIf(labels, "may_block_main_thread", ContainsAny(text, "Thread.Sleep", ".Wait()", ".Result", "while (true)", "while(true)", "SpinWait", "GetData("));
+            AddIf(labels, "may_enter_realtime_play", ContainsAny(text, "yield return null", "WaitForSeconds", "Time.deltaTime"));
+            return labels.Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(label => label, StringComparer.Ordinal).ToArray();
+        }
+
+        static void AddIf(ICollection<string> labels, string label, bool condition)
+        {
+            if (condition)
+                labels.Add(label);
+        }
+
+        static bool ContainsAny(string text, params string[] needles)
+        {
+            return needles.Any(needle => text.IndexOf(needle, StringComparison.OrdinalIgnoreCase) >= 0);
         }
 
         static string GetLocalFixedCodeChangeKind(string originalCode, string localFixedCode)
