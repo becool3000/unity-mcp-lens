@@ -173,7 +173,7 @@ sealed class MetadataAudit(BenchmarkOptions options)
     const int ExpectedSceneToolCount = 50;
     const int ExpectedUiToolCount = 35;
     const int ExpectedRuntimeToolCount = 29;
-    const int ExpectedProjectToolCount = 33;
+    const int ExpectedProjectToolCount = 37;
     const int ExpectedAssetsToolCount = 45;
 
     static readonly string[] k_RequiredFoundationTools =
@@ -289,7 +289,11 @@ sealed class MetadataAudit(BenchmarkOptions options)
         "Unity_Component_InspectSchema",
         "Unity_Authoring_SuggestReusePlan",
         "Unity_Package_ResolveCapability",
-        "Unity_Package_PreviewInstallForCapability"
+        "Unity_Package_PreviewInstallForCapability",
+        "Unity_Workflow_AuthorSceneObject",
+        "Unity_Workflow_AuthorPrefab",
+        "Unity_Workflow_ConfigureExistingComponent",
+        "Unity_Workflow_RunPlayModeVerification"
     ];
 
     static readonly string[] k_RequiredAssetsTools =
@@ -454,6 +458,10 @@ sealed class MetadataAudit(BenchmarkOptions options)
         ValidateReadOnlyHint(projectTools, "Unity_Authoring_SuggestReusePlan", expected: true, failures);
         ValidateReadOnlyHint(projectTools, "Unity_Package_ResolveCapability", expected: true, failures);
         ValidateReadOnlyHint(projectTools, "Unity_Package_PreviewInstallForCapability", expected: true, failures);
+        ValidateReadOnlyHint(projectTools, "Unity_Workflow_AuthorSceneObject", expected: false, failures);
+        ValidateReadOnlyHint(projectTools, "Unity_Workflow_AuthorPrefab", expected: false, failures);
+        ValidateReadOnlyHint(projectTools, "Unity_Workflow_ConfigureExistingComponent", expected: false, failures);
+        ValidateReadOnlyHint(projectTools, "Unity_Workflow_RunPlayModeVerification", expected: false, failures);
         ValidateReadOnlyHint(assetsTools, "Unity_Asset_Search", expected: true, failures);
         ValidateReadOnlyHint(assetsTools, "Unity_Asset_ConfigureSpriteImport", expected: false, failures);
         ValidateReadOnlyHint(assetsTools, "Unity_Asset_ImportSpriteSheetAndBind", expected: false, failures);
@@ -784,6 +792,30 @@ sealed class MetadataAudit(BenchmarkOptions options)
             tools,
             "Unity_Package_PreviewInstallForCapability",
             ["intent", "context", "packageId", "version", "includeFallbackPlan"],
+            [],
+            failures);
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_Workflow_AuthorSceneObject",
+            ["intent", "context", "apply", "name", "objectKind", "primitiveType", "prefabPath", "parent", "tag", "layer", "position", "rotation", "scale", "componentsToAdd", "componentEdits", "serializedAssignments", "referenceBindings", "runVerification", "verification"],
+            ["intent"],
+            failures);
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_Workflow_AuthorPrefab",
+            ["intent", "context", "apply", "prefabPath", "sourceSceneObject", "sourceSearchMethod", "connect", "overwrite", "inspectAfter", "instantiateInScene", "instanceName", "parent", "position", "rotation", "scale"],
+            ["intent", "prefabPath"],
+            failures);
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_Workflow_ConfigureExistingComponent",
+            ["intent", "context", "apply", "target", "searchMethod", "includeInactive", "componentName", "componentIndex", "operation", "componentProperties", "serializedAssignments", "referenceBindings"],
+            ["intent", "target", "componentName"],
+            failures);
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_Workflow_RunPlayModeVerification",
+            ["enterPlayMode", "exitAfter", "scenePath", "waitMs", "consoleCount", "componentSnapshots", "pointerSmoke", "captureGameView"],
             [],
             failures);
     }
