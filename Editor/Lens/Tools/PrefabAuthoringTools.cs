@@ -40,6 +40,7 @@ namespace Becool.UnityMcpLens.Editor.Tools
             public string SourceAssetPath;
             public bool IsNested;
             public PropertyModification Modification;
+            public Object InstanceTarget;
             public object Row;
         }
 
@@ -604,7 +605,7 @@ namespace Becool.UnityMcpLens.Editor.Tools
             {
                 foreach (PrefabOverrideCandidate candidate in selected)
                 {
-                    if (!TryResolveOverrideProperty(candidate.Modification, out SerializedProperty property, out string propertyError))
+                    if (!TryResolveOverrideProperty(candidate, out SerializedProperty property, out string propertyError))
                     {
                         warnings.Add($"Skipped override '{candidate.Id}': {propertyError}");
                         continue;
@@ -623,13 +624,13 @@ namespace Becool.UnityMcpLens.Editor.Tools
                     appliedRows.Add(candidate.Row);
                 }
 
-                if (applyToAsset)
+                if (applyToAsset && appliedRows.Count > 0)
                 {
                     AssetDatabase.SaveAssets();
                     AssetDatabase.Refresh();
                     savedAsset = true;
                 }
-                else
+                else if (!applyToAsset && appliedRows.Count > 0)
                 {
                     SceneDirtyStateUtility.MarkSceneDirty(instanceRoot);
                 }
@@ -641,7 +642,7 @@ namespace Becool.UnityMcpLens.Editor.Tools
                     attempted: !previewOnly,
                     saved: savedAsset,
                     savedAssets: savedAsset ? new object[] { CaptureAssetState(sourcePrefabPath) } : Array.Empty<object>(),
-                    message: previewOnly ? "not_requested" : "prefab_override_apply_saved_asset_by_tool_contract")
+                    message: previewOnly ? "not_requested" : savedAsset ? "prefab_override_apply_saved_asset_by_tool_contract" : "no_overrides_applied")
                 : SceneDirtyStateUtility.BuildSaveState(message: "not_requested");
 
             object data = new
@@ -669,7 +670,7 @@ namespace Becool.UnityMcpLens.Editor.Tools
             string verb = applyToAsset ? "apply" : "revert";
             string message = previewOnly
                 ? $"Previewed {verb} for {selected.Count} prefab override(s)."
-                : $"{(applyToAsset ? "Applied" : "Reverted")} {selected.Count} prefab override(s).";
+                : $"{(applyToAsset ? "Applied" : "Reverted")} {appliedRows.Count} of {selected.Count} prefab override(s).";
             return (true, message, data, null);
         }
 
@@ -716,15 +717,19 @@ namespace Becool.UnityMcpLens.Editor.Tools
                 }
 
                 string classification = ClassifyOverride(modification, nested);
-                string targetPath = GetObjectPath(modification.target);
-                string id = BuildOverrideId(i, modification.target, modification.propertyPath);
+                Object instanceTarget = ResolvePrefabInstanceTarget(instanceRoot, modification.target);
+                Object identityTarget = instanceTarget != null ? instanceTarget : modification.target;
+                string targetPath = GetObjectPath(identityTarget);
+                string id = BuildOverrideId(i, identityTarget, modification.propertyPath);
                 object row = new
                 {
                     id,
                     classification,
                     kind = "property",
                     targetPath,
-                    target = DescribeObject(modification.target),
+                    target = DescribeObject(identityTarget),
+                    sourceTarget = DescribeObject(modification.target),
+                    instanceTargetResolved = instanceTarget != null,
                     sourceAssetPath = string.IsNullOrWhiteSpace(sourceAssetPath) ? rootSourcePath : sourceAssetPath,
                     propertyPath = modification.propertyPath,
                     value = modification.value,
@@ -742,6 +747,7 @@ namespace Becool.UnityMcpLens.Editor.Tools
                     SourceAssetPath = string.IsNullOrWhiteSpace(sourceAssetPath) ? rootSourcePath : sourceAssetPath,
                     IsNested = nested,
                     Modification = modification,
+                    InstanceTarget = instanceTarget,
                     Row = row
                 });
             }
@@ -752,11 +758,12 @@ namespace Becool.UnityMcpLens.Editor.Tools
             return candidates;
         }
 
-        static bool TryResolveOverrideProperty(PropertyModification modification, out SerializedProperty property, out string error)
+        static bool TryResolveOverrideProperty(PrefabOverrideCandidate candidate, out SerializedProperty property, out string error)
         {
             property = null;
             error = null;
 
+            PropertyModification modification = candidate?.Modification;
             if (modification == null)
             {
                 error = "Override modification was null.";
@@ -775,14 +782,84 @@ namespace Becool.UnityMcpLens.Editor.Tools
                 return false;
             }
 
-            var serializedObject = new SerializedObject(modification.target);
+            Object target = candidate?.InstanceTarget;
+            if (target == null)
+            {
+                error = "Override instance target could not be resolved from the prefab source target.";
+                return false;
+            }
+
+            var serializedObject = new SerializedObject(target);
             serializedObject.UpdateIfRequiredOrScript();
             property = serializedObject.FindProperty(modification.propertyPath);
             if (property != null)
                 return true;
 
-            error = $"Property '{modification.propertyPath}' could not be resolved on override target.";
+            error = $"Property '{modification.propertyPath}' could not be resolved on override instance target.";
             return false;
+        }
+
+        static Object ResolvePrefabInstanceTarget(GameObject instanceRoot, Object sourceOrInstanceTarget)
+        {
+            if (instanceRoot == null || sourceOrInstanceTarget == null)
+                return null;
+
+            if (IsObjectUnderRoot(instanceRoot, sourceOrInstanceTarget))
+                return sourceOrInstanceTarget;
+
+            foreach (Object candidate in EnumeratePrefabInstanceObjects(instanceRoot))
+            {
+                if (candidate == null)
+                    continue;
+
+                if (ReferenceEquals(candidate, sourceOrInstanceTarget) || candidate == sourceOrInstanceTarget)
+                    return candidate;
+
+                Object correspondingSource = PrefabUtility.GetCorrespondingObjectFromSource(candidate);
+                if (correspondingSource != null &&
+                    (ReferenceEquals(correspondingSource, sourceOrInstanceTarget) || correspondingSource == sourceOrInstanceTarget))
+                {
+                    return candidate;
+                }
+
+                Object originalSource = PrefabUtility.GetCorrespondingObjectFromOriginalSource(candidate);
+                if (originalSource != null &&
+                    (ReferenceEquals(originalSource, sourceOrInstanceTarget) || originalSource == sourceOrInstanceTarget))
+                {
+                    return candidate;
+                }
+            }
+
+            return null;
+        }
+
+        static IEnumerable<Object> EnumeratePrefabInstanceObjects(GameObject instanceRoot)
+        {
+            if (instanceRoot == null)
+                yield break;
+
+            foreach (Transform transform in instanceRoot.GetComponentsInChildren<Transform>(true))
+            {
+                if (transform == null)
+                    continue;
+
+                yield return transform.gameObject;
+                Component[] components = transform.GetComponents<Component>();
+                for (int i = 0; i < components.Length; i++)
+                {
+                    if (components[i] != null)
+                        yield return components[i];
+                }
+            }
+        }
+
+        static bool IsObjectUnderRoot(GameObject root, Object obj)
+        {
+            GameObject owner = GetOwnerGameObject(obj);
+            return root != null &&
+                owner != null &&
+                owner.scene.IsValid() &&
+                (ReferenceEquals(owner, root) || owner.transform.IsChildOf(root.transform));
         }
 
         static IEnumerable<object> BuildInheritedRows(GameObject instanceRoot, int maxRows)
@@ -1072,7 +1149,45 @@ namespace Becool.UnityMcpLens.Editor.Tools
                 return true;
             }
 
+            if (token.Type == JTokenType.String && TryParseVectorString(token.Value<string>(), out vector))
+                return true;
+
             return false;
+        }
+
+        static bool TryParseVectorString(string value, out Vector3 vector)
+        {
+            vector = default;
+            if (string.IsNullOrWhiteSpace(value))
+                return false;
+
+            string trimmed = value.Trim();
+            if ((trimmed.StartsWith("[", StringComparison.Ordinal) && trimmed.EndsWith("]", StringComparison.Ordinal)) ||
+                (trimmed.StartsWith("{", StringComparison.Ordinal) && trimmed.EndsWith("}", StringComparison.Ordinal)))
+            {
+                try
+                {
+                    return TryParseVector3(JToken.Parse(trimmed), out vector);
+                }
+                catch
+                {
+                    return false;
+                }
+            }
+
+            string[] parts = trimmed.Split(new[] { ',', ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length < 3)
+                return false;
+
+            if (!float.TryParse(parts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out float x) ||
+                !float.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out float y) ||
+                !float.TryParse(parts[2], NumberStyles.Float, CultureInfo.InvariantCulture, out float z))
+            {
+                return false;
+            }
+
+            vector = new Vector3(x, y, z);
+            return true;
         }
 
         static string ClassifyOverride(PropertyModification modification, bool nested)

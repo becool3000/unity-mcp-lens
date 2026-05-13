@@ -24,6 +24,8 @@ namespace Becool.UnityMcpLens.Editor.Tools
     {
         const string PresetSearchToolName = "Unity.Preset.Search";
         const string PresetInspectToolName = "Unity.Preset.Inspect";
+        const string PresetPreviewCreateToolName = "Unity.Preset.PreviewCreate";
+        const string PresetCreateToolName = "Unity.Preset.Create";
         const string PresetPreviewApplyToolName = "Unity.Preset.PreviewApplyToComponent";
         const string PresetApplyToolName = "Unity.Preset.ApplyToComponent";
         const string ScenePreviewCopyToolName = "Unity.Scene.PreviewCopyComponentSerializedValues";
@@ -78,6 +80,32 @@ namespace Becool.UnityMcpLens.Editor.Tools
                     maxFields = new { type = "integer", description = "Maximum serialized preset fields to return inline. Defaults to 120." }
                 },
                 required = new[] { "presetPath" }
+            };
+        }
+
+        [McpSchema(PresetPreviewCreateToolName)]
+        public static object GetPresetPreviewCreateSchema() => GetPresetCreateSchema();
+
+        [McpSchema(PresetCreateToolName)]
+        public static object GetPresetCreateSchema()
+        {
+            return new
+            {
+                type = "object",
+                properties = new
+                {
+                    presetPath = new { type = "string", description = "Destination Preset asset path under Assets/." },
+                    target = new { description = "Scene target root when creating from a loaded scene component." },
+                    searchMethod = new { type = "string", description = "How to find scene target. Defaults to by_id_or_name_or_path." },
+                    includeInactive = new { type = "boolean", description = "Include inactive scene objects. Defaults to true." },
+                    prefabPath = new { type = "string", description = "Prefab asset path when creating from a prefab asset component." },
+                    targetPath = new { type = "string", description = "Relative child path under target or prefab root. Defaults to '.'." },
+                    componentType = new { type = "string", description = "Component type on the target GameObject." },
+                    componentIndex = new { type = "integer", description = "0-based component index when multiple matching components exist. Defaults to 0." },
+                    overwrite = new { type = "boolean", description = "Allow replacing an existing Preset asset at presetPath. Defaults to false." },
+                    maxFields = new { type = "integer", description = "Maximum source component fields to include. Defaults to 120." }
+                },
+                required = new[] { "presetPath", "componentType" }
             };
         }
 
@@ -177,6 +205,18 @@ namespace Becool.UnityMcpLens.Editor.Tools
         public static object InspectPreset(JObject @params)
         {
             return Handle(PresetInspectToolName, "inspect", @params, ExecutePresetInspect);
+        }
+
+        [McpTool(PresetPreviewCreateToolName, "Previews creating a Preset asset from a scene or prefab component without saving assets.", "Preview Create Preset", Groups = new[] { "assets" }, EnabledByDefault = true)]
+        public static object PreviewCreatePreset(JObject @params)
+        {
+            return Handle(PresetPreviewCreateToolName, "preview_create", @params, p => ExecutePresetCreate(p, previewOnly: true));
+        }
+
+        [McpTool(PresetCreateToolName, "Creates a Preset asset from a scene or prefab component. This persists the Preset asset by explicit tool contract.", "Create Preset", Groups = new[] { "assets" }, EnabledByDefault = true)]
+        public static object CreatePreset(JObject @params)
+        {
+            return Handle(PresetCreateToolName, "create", @params, p => ExecutePresetCreate(p, previewOnly: false));
         }
 
         [McpTool(PresetPreviewApplyToolName, "Previews whether a Preset asset can be applied to a scene or prefab component without mutating or saving.", "Preview Apply Preset To Component", Groups = new[] { "assets" }, EnabledByDefault = true)]
@@ -362,6 +402,128 @@ namespace Becool.UnityMcpLens.Editor.Tools
             };
 
             return (true, $"Inspected preset '{presetPath}'.", data, null);
+        }
+
+        static (bool success, string message, object data, string errorKind) ExecutePresetCreate(JObject parameters, bool previewOnly)
+        {
+            string presetPath = NormalizeAssetPath(GetString(parameters, "presetPath", "PresetPath", "path", "Path"), allowPackages: false);
+            if (string.IsNullOrWhiteSpace(presetPath) ||
+                !presetPath.StartsWith("Assets/", StringComparison.OrdinalIgnoreCase) ||
+                !presetPath.EndsWith(".preset", StringComparison.OrdinalIgnoreCase))
+            {
+                return Failure("INVALID_PRESET_PATH", "presetPath must point to a .preset asset under Assets/.", new { status = "failed", presetPath });
+            }
+
+            bool overwrite = GetBool(parameters, false, "overwrite", "Overwrite");
+            Object existing = AssetDatabase.LoadMainAssetAtPath(presetPath);
+            if (existing != null && !overwrite)
+            {
+                return Failure("PRESET_EXISTS", $"Preset asset '{presetPath}' already exists. Set overwrite=true to replace it.", new
+                {
+                    status = "failed",
+                    presetPath,
+                    existing = DescribeObject(existing)
+                });
+            }
+
+            if (existing != null && existing is not Preset)
+            {
+                return Failure("PRESET_PATH_OCCUPIED", $"Asset '{presetPath}' exists but is not a Preset asset.", new
+                {
+                    status = "failed",
+                    presetPath,
+                    existing = DescribeObject(existing)
+                });
+            }
+
+            int maxFields = GetInt(parameters, 120, "maxFields", "MaxFields");
+            string prefabPath = NormalizeAssetPath(GetString(parameters, "prefabPath", "PrefabPath"), allowPackages: false);
+            bool prefabMode = !string.IsNullOrWhiteSpace(prefabPath);
+            object dirtyStateBefore = SceneDirtyStateUtility.CaptureLoadedScenes();
+            object assetStateBefore = CaptureAssetState(presetPath);
+            object prefabStateBefore = prefabMode ? CaptureAssetState(prefabPath) : null;
+            GameObject prefabRoot = null;
+
+            try
+            {
+                ComponentTarget target = prefabMode
+                    ? ResolvePrefabComponent(parameters, prefabPath, out prefabRoot)
+                    : ResolveSceneComponent(parameters, targetPropertyName: "target", searchMethodProperty: "searchMethod");
+
+                object[] fields = ReadComponentFields(target.Component, maxFields, null);
+                bool created = false;
+                Preset createdPreset = null;
+                var warnings = new List<string>();
+                if (existing != null && overwrite)
+                    warnings.Add("Existing Preset asset will be replaced by explicit overwrite=true.");
+
+                if (!previewOnly)
+                {
+                    EnsureAssetDirectory(presetPath);
+                    if (existing != null && !AssetDatabase.DeleteAsset(presetPath))
+                    {
+                        return Failure("PRESET_DELETE_FAILED", $"Existing Preset asset '{presetPath}' could not be removed before overwrite.", new
+                        {
+                            status = "failed",
+                            presetPath,
+                            target = DescribeComponentTarget(target),
+                            dirtyStateBefore,
+                            dirtyStateAfter = SceneDirtyStateUtility.CaptureLoadedScenes(),
+                            assetStateBefore,
+                            assetStateAfter = CaptureAssetState(presetPath),
+                            saveState = BuildAssetSaveState(requested: true, attempted: true, saved: false, message: "preset_overwrite_delete_failed")
+                        });
+                    }
+
+                    Preset preset = new(target.Component);
+                    AssetDatabase.CreateAsset(preset, presetPath);
+                    AssetDatabase.SaveAssets();
+                    AssetDatabase.Refresh();
+                    createdPreset = AssetDatabase.LoadAssetAtPath<Preset>(presetPath);
+                    created = createdPreset != null;
+                    if (!created)
+                        warnings.Add("Preset asset creation was attempted but the asset could not be loaded afterward.");
+                }
+
+                object data = new
+                {
+                    status = previewOnly ? "preview" : created ? "created" : "failed",
+                    previewOnly,
+                    presetPath,
+                    preset = previewOnly
+                        ? new { name = Path.GetFileNameWithoutExtension(presetPath), presetPath, targetTypeName = target.ComponentTypeName }
+                        : DescribePreset(createdPreset, presetPath, target.Component?.GetType()),
+                    target = DescribeComponentTarget(target),
+                    sourceFields = fields,
+                    changedObjects = Array.Empty<object>(),
+                    createdAssets = !previewOnly && created ? new object[] { CaptureAssetState(presetPath) } : Array.Empty<object>(),
+                    warnings = warnings.ToArray(),
+                    dirtyStateBefore,
+                    dirtyStateAfter = SceneDirtyStateUtility.CaptureLoadedScenes(),
+                    prefabStateBefore,
+                    prefabStateAfter = prefabMode ? CaptureAssetState(prefabPath) : null,
+                    assetStateBefore,
+                    assetStateAfter = CaptureAssetState(presetPath),
+                    saveState = BuildAssetSaveState(
+                        requested: !previewOnly,
+                        attempted: !previewOnly,
+                        saved: !previewOnly && created,
+                        savedAssets: !previewOnly && created ? new object[] { CaptureAssetState(presetPath) } : Array.Empty<object>(),
+                        message: previewOnly ? "not_requested" : created ? "preset_asset_saved_by_tool_contract" : "preset_asset_create_failed")
+                };
+
+                if (!previewOnly && !created)
+                    return Failure("PRESET_CREATE_FAILED", $"Preset asset '{presetPath}' could not be created.", data);
+
+                return (true, previewOnly
+                    ? $"Previewed Preset creation at '{presetPath}'."
+                    : $"Created Preset asset '{presetPath}'.", data, null);
+            }
+            finally
+            {
+                if (prefabRoot != null)
+                    PrefabUtility.UnloadPrefabContents(prefabRoot);
+            }
         }
 
         static (bool success, string message, object data, string errorKind) ExecutePresetApply(JObject parameters, bool previewOnly)
@@ -1357,6 +1519,7 @@ namespace Becool.UnityMcpLens.Editor.Tools
             JObject root = JObject.FromObject(data ?? new { });
             TruncateArray(root, "results", 20);
             TruncateArray(root, "fields", 24);
+            TruncateArray(root, "sourceFields", 24);
             TruncateArray(root, "beforeFields", 12);
             TruncateArray(root, "afterFields", 12);
             TruncateArray(root, "changedObjects", 8);
@@ -1440,6 +1603,16 @@ namespace Becool.UnityMcpLens.Editor.Tools
                 return normalized;
 
             return "Assets/" + normalized.TrimStart('/');
+        }
+
+        static void EnsureAssetDirectory(string assetPath)
+        {
+            string directory = Path.GetDirectoryName(assetPath)?.Replace('\\', '/');
+            if (string.IsNullOrWhiteSpace(directory) || AssetDatabase.IsValidFolder(directory))
+                return;
+
+            Directory.CreateDirectory(Path.Combine(Directory.GetCurrentDirectory(), directory));
+            AssetDatabase.Refresh();
         }
 
         static object CaptureAssetState(string assetPath)

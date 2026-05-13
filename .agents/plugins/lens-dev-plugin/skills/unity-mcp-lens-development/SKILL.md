@@ -63,7 +63,7 @@ preset, package, and workflow authoring the default agent path.
   scenes, prefabs, or production assets.
 - Current metadata audit baselines are `foundation=18`, `foundation+scene=50`,
   `foundation+ui=35`, `foundation+runtime=29`, `foundation+project=37`, and
-  `foundation+assets=45`.
+  `foundation+assets=47`.
 
 ## Phase 8 Tool Truth
 
@@ -105,7 +105,7 @@ Phase 14 keeps the public tool surface stable and makes high-volume TSAM results
 - Compact default results are expected for `Unity.InputSystem.Diagnostics`, UI hierarchy preview/apply, scene serialized-reference binding preview/apply, and `Unity.UI.VerifyScreenLayout`.
 - Full bulky data should remain available through `detailRef` when the bridge detail store is available.
 - Use `Invoke-UnityMcpBatch` for focused smoke/workflow sequences that need multiple project/ui/scene/debug calls in one Lens session.
-- Pack baselines after the authoring-first workflow push: `foundation=18`, `foundation+scene=50`, `foundation+ui=35`, `foundation+runtime=29`, `foundation+project=37`, and `foundation+assets=45`.
+- Pack baselines after the authoring-first workflow push: `foundation=18`, `foundation+scene=50`, `foundation+ui=35`, `foundation+runtime=29`, `foundation+project=37`, and `foundation+assets=47`.
 - Current Phase 14 smoke baseline: `NoShapingRecorded=false`, `7` saving rows, `50,566` raw bytes -> `24,025` shaped bytes, `3` connections, `6` schema requests, and `4` pack transitions.
 
 ## Phase 15 RunCommand And Console Truth
@@ -149,6 +149,14 @@ Phase 17 addresses the highest TintPaint dogfood pain without widening `foundati
 - Prefer `Unity.UI.QueryRuntimeLayout` for runtime UI layout/state readback and `Unity.UI.InvokeControl` for play-mode button/slider/toggle actions before writing custom `Unity.RunCommand` snippets.
 - Prefer `Unity.UI.CaptureGameView` for Game view screenshots; its capture result should include readiness diagnostics, play/pause state, Game view size, camera/canvas counts, console delta, and fallback evidence when requested.
 
+## Phase 8 Dogfood Hardening Truth
+
+Phase 8 hardens the authoring-first dogfood gaps from the LensTest scene.
+
+- Prefer `Unity.Preset.PreviewCreate` and `Unity.Preset.Create` when a reusable component preset is needed; do not fall back to `Unity.RunCommand` just to create a `.preset` asset.
+- `Unity.Prefab.ApplyOverrides` and `Unity.Prefab.RevertOverrides` resolve selected override properties against the scene prefab instance target before mutating, so selected apply/revert flows should no longer require serialized-property fallbacks.
+- `Unity.Workflow.AuthorPrefab` normalizes structured or stringified vector payloads before optional scene instantiation.
+
 ## Phase 18 Asset Sprite Pipeline Truth
 
 Phase 18 addresses the BeeSurvivors Roach BeeCool sprite-upgrade workflow.
@@ -157,7 +165,7 @@ Phase 18 addresses the BeeSurvivors Roach BeeCool sprite-upgrade workflow.
 - Use `Unity.Asset.ApplyImportSpriteSheetAndBind` to persist importer metadata and ScriptableObject Sprite-array bindings after the preview plan is acceptable.
 - `Unity.Asset.ImportSpriteSheetAndBind` is a compatibility facade; it previews by default and applies only with `mode=apply` or `apply=true`.
 - Prefer `Unity.Asset.VerifySpriteArrayBinding` over custom `Unity.RunCommand` or YAML reads when verifying Sprite-array counts, names, texture names, or texture GUIDs.
-- The `assets` pack metadata-audit baseline is `foundation+assets=45`.
+- The `assets` pack metadata-audit baseline is `foundation+assets=47`.
 - Phase 18 asset tools must keep pass/fail and changed-count data inline while storing full importer metadata, sprite rows, and serialized-field readback behind `detailRef`.
 
 ## BeeSurvivors Reliability Follow-Up Truth

@@ -174,7 +174,7 @@ sealed class MetadataAudit(BenchmarkOptions options)
     const int ExpectedUiToolCount = 35;
     const int ExpectedRuntimeToolCount = 29;
     const int ExpectedProjectToolCount = 37;
-    const int ExpectedAssetsToolCount = 45;
+    const int ExpectedAssetsToolCount = 47;
 
     static readonly string[] k_RequiredFoundationTools =
     [
@@ -308,6 +308,8 @@ sealed class MetadataAudit(BenchmarkOptions options)
         "Unity_ManageAsset",
         "Unity_Preset_Search",
         "Unity_Preset_Inspect",
+        "Unity_Preset_PreviewCreate",
+        "Unity_Preset_Create",
         "Unity_Preset_PreviewApplyToComponent",
         "Unity_Preset_ApplyToComponent",
         "Unity_Prefab_Inspect",
@@ -470,6 +472,8 @@ sealed class MetadataAudit(BenchmarkOptions options)
         ValidateReadOnlyHint(assetsTools, "Unity_Asset_VerifySpriteArrayBinding", expected: true, failures);
         ValidateReadOnlyHint(assetsTools, "Unity_Preset_Search", expected: true, failures);
         ValidateReadOnlyHint(assetsTools, "Unity_Preset_Inspect", expected: true, failures);
+        ValidateReadOnlyHint(assetsTools, "Unity_Preset_PreviewCreate", expected: true, failures);
+        ValidateReadOnlyHint(assetsTools, "Unity_Preset_Create", expected: false, failures);
         ValidateReadOnlyHint(assetsTools, "Unity_Preset_PreviewApplyToComponent", expected: true, failures);
         ValidateReadOnlyHint(assetsTools, "Unity_Preset_ApplyToComponent", expected: false, failures);
         ValidateReadOnlyHint(assetsTools, "Unity_Prefab_Inspect", expected: true, failures);
@@ -857,6 +861,18 @@ sealed class MetadataAudit(BenchmarkOptions options)
             "Unity_Preset_Inspect",
             ["presetPath", "componentName", "maxFields"],
             ["presetPath"],
+            failures);
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_Preset_PreviewCreate",
+            ["presetPath", "target", "searchMethod", "includeInactive", "prefabPath", "targetPath", "componentType", "componentIndex", "overwrite", "maxFields"],
+            ["presetPath", "componentType"],
+            failures);
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_Preset_Create",
+            ["presetPath", "target", "searchMethod", "includeInactive", "prefabPath", "targetPath", "componentType", "componentIndex", "overwrite", "maxFields"],
+            ["presetPath", "componentType"],
             failures);
         ValidateSplitGameObjectSchema(
             tools,

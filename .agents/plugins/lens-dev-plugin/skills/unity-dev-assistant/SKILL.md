@@ -67,7 +67,7 @@ Use the Phase 1-6 authoring surfaces as the first path for durable work:
 - Scene authoring: `Unity.GameObject.PreviewCreate`/`Create`, object/change/component preview/apply tools, `Unity.Scene.SetSerializedProperties`, `Unity.Scene.PreviewAssignObjectReferences`, `Unity.Scene.ApplyAssignObjectReferences`, `Unity.Scene.GetDirtyState`, and `Unity.Scene.Save`.
 - Component reuse: `Unity.Component.Search`, `Unity.Component.ResolveCapability`, `Unity.Component.InspectSchema`, `Unity.Scene.FindComponents`, and `Unity.Authoring.SuggestReusePlan`.
 - Prefabs and overrides: `Unity.Prefab.Inspect`, `Unity.Prefab.Instantiate`, `Unity.Prefab.CreateFromSceneObject`, `Unity.Prefab.GetOverrides`, selected preview/apply or preview/revert override tools, and `Unity.Prefab.SetSerializedProperties`.
-- Presets and copy-from-existing: `Unity.Preset.Search`, `Unity.Preset.Inspect`, preset preview/apply tools, and scene/prefab component serialized-value copy tools with explicit `referencePolicy`.
+- Presets and copy-from-existing: `Unity.Preset.Search`, `Unity.Preset.Inspect`, `Unity.Preset.PreviewCreate`/`Create` for reusable component preset assets, preset preview/apply tools, and scene/prefab component serialized-value copy tools with explicit `referencePolicy`.
 - Package capabilities: `Unity.Package.ResolveCapability` and `Unity.Package.PreviewInstallForCapability`; installation remains preview-only until the user explicitly approves.
 - Workflow wrappers: `Unity.Workflow.AuthorSceneObject`, `Unity.Workflow.AuthorPrefab`, `Unity.Workflow.ConfigureExistingComponent`, and `Unity.Workflow.RunPlayModeVerification` when a higher-level authoring flow is useful. These wrappers still preserve discovery, preview/apply, dirty-state, and verification evidence.
 

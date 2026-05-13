@@ -91,9 +91,10 @@ component preview/apply tools.
 ### Preset Or Copy-From-Existing
 
 For "make this like that one" requests, search presets with
-`Unity.Preset.Search`, inspect compatible presets, and preview application with
-`Unity.Preset.PreviewApplyToComponent`. For object-to-object copying, use
-`Unity.Scene.PreviewCopyComponentSerializedValues` or
+`Unity.Preset.Search`, inspect compatible presets, preview reusable preset
+creation with `Unity.Preset.PreviewCreate` when no compatible preset exists, and
+preview application with `Unity.Preset.PreviewApplyToComponent`. For
+object-to-object copying, use `Unity.Scene.PreviewCopyComponentSerializedValues` or
 `Unity.Prefab.PreviewCopyComponentSerializedValues`, then apply only accepted
 field changes with an explicit reference policy.
 
@@ -118,7 +119,9 @@ custom script before a reuse check and reuse insufficiency report.
   preview, and explicit nested-risk reporting.
 - "Make this light match the hallway light."
   Expected first path: component schema inspection plus preset or copy
-  serialized values workflow with an explicit object-reference policy.
+  serialized values workflow with an explicit object-reference policy. If a
+  reusable preset should be captured first, use preset preview/create rather
+  than `Unity.RunCommand`.
 - "Use Cinemachine for a follow camera if available."
   Expected first path: component/package capability resolution, missing package
   preview if absent, component schema inspection, then authoring tools.
@@ -163,9 +166,11 @@ custom script before a reuse check and reuse insufficiency report.
 
 1. Search and inspect compatible presets for a camera, light, renderer, layout,
    or button.
-2. Preview preset application or serialized-value copy.
-3. Verify incompatible fields are skipped with explanations.
-4. Apply only accepted fields and report reference handling through
+2. When capturing a reusable component setup, preview/create the Preset asset
+   with `Unity.Preset.PreviewCreate` and `Unity.Preset.Create`.
+3. Preview preset application or serialized-value copy.
+4. Verify incompatible fields are skipped with explanations.
+5. Apply only accepted fields and report reference handling through
    `referencePolicy`.
 
 ### Play Mode Verification

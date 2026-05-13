@@ -1,6 +1,7 @@
 #nullable disable
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Threading.Tasks;
 using Becool.UnityMcpLens.Editor.Helpers;
@@ -348,6 +349,7 @@ Workflow wrappers preserve partial results, run reuse discovery before mutation,
             if (apply && instantiateInScene)
             {
                 JObject instantiateParams = Pick(parameters, "prefabPath", "instanceName", "parent", "position", "rotation", "scale");
+                NormalizeVectorTokens(instantiateParams, "position", "rotation", "scale");
                 instantiateResult = CallTool("Unity.Prefab.Instantiate", "apply_scene_instance", instantiateParams, PrefabAuthoringTools.Instantiate, steps, true, ref failurePoint);
                 if (failurePoint != null)
                     return Failed("Prefab scene instantiation failed after partial prefab workflow.", failurePoint, intent, apply, steps, dirtyStateBefore, reusePlan);
@@ -685,6 +687,50 @@ Workflow wrappers preserve partial results, run reuse discovery before mutation,
                     result[name] = value.DeepClone();
             }
             return result;
+        }
+
+        static void NormalizeVectorTokens(JObject parameters, params string[] names)
+        {
+            if (parameters == null || names == null)
+                return;
+
+            foreach (string name in names)
+            {
+                if (!parameters.TryGetValue(name, StringComparison.OrdinalIgnoreCase, out JToken token) ||
+                    token == null ||
+                    token.Type != JTokenType.String)
+                {
+                    continue;
+                }
+
+                string value = token.Value<string>()?.Trim();
+                if (string.IsNullOrWhiteSpace(value))
+                    continue;
+
+                if ((value.StartsWith("[", StringComparison.Ordinal) && value.EndsWith("]", StringComparison.Ordinal)) ||
+                    (value.StartsWith("{", StringComparison.Ordinal) && value.EndsWith("}", StringComparison.Ordinal)))
+                {
+                    try
+                    {
+                        parameters[name] = JToken.Parse(value);
+                        continue;
+                    }
+                    catch
+                    {
+                    }
+                }
+
+                string[] parts = value.Split(new[] { ',', ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length < 3)
+                    continue;
+
+                if (float.TryParse(parts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out float x) &&
+                    float.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out float y) &&
+                    float.TryParse(parts[2], NumberStyles.Float, CultureInfo.InvariantCulture, out float z))
+                {
+                    parameters[name] = new JArray(x, y, z);
+                }
+            }
         }
 
         static object BuildStep(string tool, string phase, JObject parameters, object result)

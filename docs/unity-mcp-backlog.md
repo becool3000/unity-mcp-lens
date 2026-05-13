@@ -122,7 +122,7 @@ Still needed:
 - `foundation + ui` now targets `35` tools, including `Unity.UI.QueryRuntimeLayout` and `Unity.UI.InvokeControl`.
 - `foundation + runtime` now targets `29` tools, including `Unity.Editor.SetPlayMode`.
 - Latest expected metadata audit baseline keeps `foundation + project=37` with component reuse discovery, package capability awareness, workflow wrappers, and active project diagnostics.
-- Latest expected metadata audit baseline keeps `foundation + assets=45` with prefab authoring/overrides, presets, copy workflows, asset/resource workflows, and sprite-sheet binding tools.
+- Latest expected metadata audit baseline keeps `foundation + assets=47` with prefab authoring/overrides, preset create/apply workflows, copy workflows, asset/resource workflows, and sprite-sheet binding tools.
 - `debug` remains observed at `28` tools.
 - `UNITY_MCP_LENS_TOOL_SURFACE_MODE=static_all` starts the host at `foundation+full`; `Unity.SetToolPacks` is then a no-op and agents should use `Unity.Tools.Menu` for compact navigation while calling real tools directly.
 - Phase 8 split GameObject tools are in the `scene` pack.
