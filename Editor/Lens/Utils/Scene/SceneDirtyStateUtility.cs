@@ -4,8 +4,9 @@ using System.Collections.Generic;
 using System.Linq;
 using UnityEditor;
 using UnityEditor.SceneManagement;
-using UnityEngine;
-using UnityEngine.SceneManagement;
+using UnityGameObject = UnityEngine.GameObject;
+using UnityScene = UnityEngine.SceneManagement.Scene;
+using UnitySceneManager = UnityEngine.SceneManagement.SceneManager;
 
 namespace Becool.UnityMcpLens.Editor.Utils.Scene
 {
@@ -63,13 +64,13 @@ namespace Becool.UnityMcpLens.Editor.Utils.Scene
             };
         }
 
-        public static void MarkSceneDirty(GameObject gameObject)
+        public static void MarkSceneDirty(UnityGameObject gameObject)
         {
             if (gameObject != null && gameObject.scene.IsValid())
                 EditorSceneManager.MarkSceneDirty(gameObject.scene);
         }
 
-        public static bool TryResolveScene(string sceneTarget, out Scene scene, out string error)
+        public static bool TryResolveScene(string sceneTarget, out UnityScene scene, out string error)
         {
             error = null;
             scene = default;
@@ -85,7 +86,7 @@ namespace Becool.UnityMcpLens.Editor.Utils.Scene
             }
 
             string normalized = NormalizeScenePath(sceneTarget);
-            foreach (Scene loadedScene in EnumerateLoadedScenes())
+            foreach (UnityScene loadedScene in EnumerateLoadedScenes())
             {
                 if (string.Equals(loadedScene.path, normalized, StringComparison.OrdinalIgnoreCase) ||
                     string.Equals(loadedScene.name, sceneTarget, StringComparison.OrdinalIgnoreCase) ||
@@ -122,7 +123,7 @@ namespace Becool.UnityMcpLens.Editor.Utils.Scene
             return normalized;
         }
 
-        public static SceneDirtyStateRow ToSceneState(Scene scene)
+        public static SceneDirtyStateRow ToSceneState(UnityScene scene)
         {
             return new SceneDirtyStateRow
             {
@@ -136,18 +137,18 @@ namespace Becool.UnityMcpLens.Editor.Utils.Scene
             };
         }
 
-        public static IReadOnlyList<Scene> GetDirtyLoadedScenes()
+        public static IReadOnlyList<UnityScene> GetDirtyLoadedScenes()
         {
             return EnumerateLoadedScenes()
                 .Where(scene => scene.isDirty)
                 .ToArray();
         }
 
-        static IEnumerable<Scene> EnumerateLoadedScenes()
+        static IEnumerable<UnityScene> EnumerateLoadedScenes()
         {
-            for (int index = 0; index < SceneManager.sceneCount; index++)
+            for (int index = 0; index < UnitySceneManager.sceneCount; index++)
             {
-                Scene scene = SceneManager.GetSceneAt(index);
+                UnityScene scene = UnitySceneManager.GetSceneAt(index);
                 if (scene.IsValid() && scene.isLoaded)
                     yield return scene;
             }

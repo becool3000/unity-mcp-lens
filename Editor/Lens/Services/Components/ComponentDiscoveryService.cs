@@ -7,8 +7,8 @@ using System.Reflection;
 using Becool.UnityMcpLens.Editor.Adapters.Unity;
 using Becool.UnityMcpLens.Editor.Helpers;
 using UnityEditor;
-using UnityEditor.PackageManager;
 using UnityEngine;
+using PackageManagerPackageInfo = UnityEditor.PackageManager.PackageInfo;
 
 namespace Becool.UnityMcpLens.Editor.Services.Components
 {
@@ -402,7 +402,7 @@ namespace Becool.UnityMcpLens.Editor.Services.Components
         };
 
         static Dictionary<Type, string> s_ScriptPathByType;
-        static PackageInfo[] s_Packages;
+        static PackageManagerPackageInfo[] s_Packages;
         static MethodInfo s_FindPackageForAssemblyMethod;
 
         public object Search(ComponentSearchRequest request)
@@ -449,7 +449,7 @@ namespace Becool.UnityMcpLens.Editor.Services.Components
 
         public object ResolveCapability(ComponentResolveCapabilityRequest request)
         {
-            var data = ResolveCapabilityData(request);
+            var data = BuildResolveCapabilityData(request);
             return new
             {
                 intent = data.intent,
@@ -762,7 +762,7 @@ namespace Becool.UnityMcpLens.Editor.Services.Components
                 maxAssetScans = 120
             };
 
-            var resolved = ResolveCapabilityData(resolveRequest);
+            var resolved = BuildResolveCapabilityData(resolveRequest);
             object sceneFind = null;
             int sceneMatchCount = 0;
             if (request.includeSceneSearch && !string.IsNullOrWhiteSpace(request.intent))
@@ -867,7 +867,7 @@ namespace Becool.UnityMcpLens.Editor.Services.Components
             };
         }
 
-        ResolveCapabilityData ResolveCapabilityData(ComponentResolveCapabilityRequest request)
+        ResolveCapabilityData BuildResolveCapabilityData(ComponentResolveCapabilityRequest request)
         {
             request ??= new ComponentResolveCapabilityRequest();
             int maxResults = Math.Clamp(request.maxResults, 1, 100);
@@ -1131,7 +1131,7 @@ namespace Becool.UnityMcpLens.Editor.Services.Components
             MissingPackageSpec spec = definition.missingPackages
                 .FirstOrDefault(package => string.Equals(package.packageId, packageId, StringComparison.OrdinalIgnoreCase))
                 ?? BuildKnownPackageSpec(packageId, definition);
-            PackageInfo package = FindPackageById(packageId);
+            PackageManagerPackageInfo package = FindPackageById(packageId);
             CapabilityComponent[] components = definition.components
                 .Where(component => string.Equals(component.packageId, packageId, StringComparison.OrdinalIgnoreCase))
                 .ToArray();
@@ -1196,7 +1196,7 @@ namespace Becool.UnityMcpLens.Editor.Services.Components
                 terms = Array.Empty<string>(),
                 fallbackPlan = "Inspect installed project, prefab, preset, and package surfaces before considering a custom script."
             });
-            PackageInfo package = FindPackageById(packageId);
+            PackageManagerPackageInfo package = FindPackageById(packageId);
             bool installed = package != null;
             return new Candidate
             {
@@ -1376,7 +1376,7 @@ namespace Becool.UnityMcpLens.Editor.Services.Components
             string intentText = FirstNonEmpty(intent, query);
             if (!string.IsNullOrWhiteSpace(intentText))
             {
-                var resolved = ResolveCapabilityData(new ComponentResolveCapabilityRequest
+                var resolved = BuildResolveCapabilityData(new ComponentResolveCapabilityRequest
                 {
                     intent = intentText,
                     includePrefabs = false,
@@ -1604,7 +1604,7 @@ namespace Becool.UnityMcpLens.Editor.Services.Components
         {
             string assemblyName = type?.Assembly.GetName().Name;
             string scriptPath = TryGetScriptPath(type);
-            PackageInfo package = TryFindPackage(type, scriptPath);
+            PackageManagerPackageInfo package = TryFindPackage(type, scriptPath);
 
             if (!string.IsNullOrWhiteSpace(scriptPath) && scriptPath.StartsWith("Assets/", StringComparison.OrdinalIgnoreCase))
             {
@@ -1671,17 +1671,17 @@ namespace Becool.UnityMcpLens.Editor.Services.Components
             };
         }
 
-        PackageInfo TryFindPackage(Type type, string scriptPath)
+        PackageManagerPackageInfo TryFindPackage(Type type, string scriptPath)
         {
             if (type == null)
                 return null;
 
             try
             {
-                s_FindPackageForAssemblyMethod ??= typeof(PackageInfo).GetMethod("FindForAssembly", BindingFlags.Public | BindingFlags.Static);
+                s_FindPackageForAssemblyMethod ??= typeof(PackageManagerPackageInfo).GetMethod("FindForAssembly", BindingFlags.Public | BindingFlags.Static);
                 if (s_FindPackageForAssemblyMethod != null)
                 {
-                    var package = s_FindPackageForAssemblyMethod.Invoke(null, new object[] { type.Assembly }) as PackageInfo;
+                    var package = s_FindPackageForAssemblyMethod.Invoke(null, new object[] { type.Assembly }) as PackageManagerPackageInfo;
                     if (package != null)
                         return package;
                 }
@@ -1693,7 +1693,7 @@ namespace Becool.UnityMcpLens.Editor.Services.Components
 
             if (!string.IsNullOrWhiteSpace(scriptPath))
             {
-                foreach (PackageInfo package in GetPackages())
+                foreach (PackageManagerPackageInfo package in GetPackages())
                 {
                     string assetPath = (package.assetPath ?? string.Empty).Replace('\\', '/').TrimEnd('/');
                     if (!string.IsNullOrWhiteSpace(assetPath) &&
@@ -1710,7 +1710,7 @@ namespace Becool.UnityMcpLens.Editor.Services.Components
             return null;
         }
 
-        static PackageInfo TryFindKnownPackageForAssembly(string assemblyName)
+        static PackageManagerPackageInfo TryFindKnownPackageForAssembly(string assemblyName)
         {
             string packageId = assemblyName switch
             {
@@ -1729,24 +1729,24 @@ namespace Becool.UnityMcpLens.Editor.Services.Components
                 : GetPackages().FirstOrDefault(package => string.Equals(package.name, packageId, StringComparison.OrdinalIgnoreCase));
         }
 
-        static PackageInfo[] GetPackages()
+        static PackageManagerPackageInfo[] GetPackages()
         {
             if (s_Packages != null)
                 return s_Packages;
 
             try
             {
-                s_Packages = PackageInfo.GetAllRegisteredPackages() ?? Array.Empty<PackageInfo>();
+                s_Packages = PackageManagerPackageInfo.GetAllRegisteredPackages() ?? Array.Empty<PackageManagerPackageInfo>();
             }
             catch
             {
-                s_Packages = Array.Empty<PackageInfo>();
+                s_Packages = Array.Empty<PackageManagerPackageInfo>();
             }
 
             return s_Packages;
         }
 
-        static PackageInfo FindPackageById(string packageId)
+        static PackageManagerPackageInfo FindPackageById(string packageId)
         {
             return string.IsNullOrWhiteSpace(packageId)
                 ? null
