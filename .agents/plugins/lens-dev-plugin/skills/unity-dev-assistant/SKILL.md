@@ -145,7 +145,7 @@ Use the Phase 1-6 authoring surfaces as the first path for durable work:
    - sprite import or serialized reference binding
    - motion or presentation retuning
    Do not mix both concerns in one broad probe unless you already know the ownership chain.
-   Until `Unity.Asset.ImportSpriteSheetAndBind` and `Unity.Asset.VerifySpriteArrayBinding` exist, use the narrow recipe: import/configure the PNG with `scripts/Import-UnitySpriteAsset.ps1`, bind the project-specific sprite array with one focused `Unity.RunCommand`/helper probe, then verify readback with a dedicated narrow probe or serialized-field verification helper.
+   Prefer `Unity.Asset.PreviewImportSpriteSheetAndBind`, `Unity.Asset.ApplyImportSpriteSheetAndBind`, and `Unity.Asset.VerifySpriteArrayBinding` before importer scripts, YAML reads, or project-specific `Unity.RunCommand` binding probes.
 18. When authored scale, tint, sprite assignment, or motion does not stick, use the visual-ownership triage path before changing values again:
    - prefab local scale
    - child renderer local scale
@@ -155,7 +155,7 @@ Use the Phase 1-6 authoring surfaces as the first path for durable work:
 19. When the user wants to resize, reposition, or restyle HUD/layout objects directly, prefer persistent scene-owned UI groups over runtime `Ensure*Hierarchy` fallbacks:
    - ensure the authored subtree exists in the scene
    - bind serialized scene refs deterministically
-   - save the scene
+   - save the scene through `Unity.Scene.Save` only when the user has accepted the durable edit or explicitly requested persistence
    - verify the subtree exists on disk before removing or disabling fallback creation
 20. For deterministic sprite importer changes, use `scripts/Import-UnitySpriteAsset.ps1`.
 21. For narrow prefab field verification after a sprite or property mutation, use `scripts/Verify-UnityPrefabSerializedFields.ps1`.

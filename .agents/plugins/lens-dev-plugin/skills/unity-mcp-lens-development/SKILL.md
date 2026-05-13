@@ -33,7 +33,7 @@ Do not bypass Lens by inventing runtime bootstrap code, temporary scene construc
 Build like a human Unity developer would:
 
 - Create or edit scene objects in edit mode.
-- Save scenes and prefabs.
+- Save scenes and prefabs only through explicit save tools, accepted workflow steps, or tool contracts that clearly say apply persists the asset.
 - Bind serialized references.
 - Update importer settings.
 - Create assets on disk.
