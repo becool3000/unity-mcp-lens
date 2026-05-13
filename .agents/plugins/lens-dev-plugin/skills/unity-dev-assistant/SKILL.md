@@ -157,12 +157,12 @@ Use the Phase 1-6 authoring surfaces as the first path for durable work:
    - bind serialized scene refs deterministically
    - save the scene through `Unity.Scene.Save` only when the user has accepted the durable edit or explicitly requested persistence
    - verify the subtree exists on disk before removing or disabling fallback creation
-20. For deterministic sprite importer changes, use `scripts/Import-UnitySpriteAsset.ps1`.
-21. For narrow prefab field verification after a sprite or property mutation, use `scripts/Verify-UnityPrefabSerializedFields.ps1`.
+20. For deterministic sprite importer and binding changes, prefer `Unity.Asset.PreviewImportSpriteSheetAndBind`, `Unity.Asset.ApplyImportSpriteSheetAndBind`, and `Unity.Asset.VerifySpriteArrayBinding`; use importer helper scripts only when the native tool surface is unavailable.
+21. For narrow prefab field verification after a sprite or property mutation, prefer `Unity.Prefab.Inspect`, `Unity.Prefab.GetOverrides`, and prefab serialized-property tools; use `scripts/Verify-UnityPrefabSerializedFields.ps1` as a helper fallback.
 22. For runtime visual ownership inspection, use `scripts/Get-UnityVisualOwnership.ps1`, which wraps `Unity.Runtime.GetVisualBoundsSnapshot` with ownership output enabled.
-23. For scene object-reference fields or arrays that should bind to authored scene objects, use `scripts/Bind-UnitySceneSerializedReferences.ps1`.
-24. For persistent scene UI subtree repair or creation, use `scripts/Ensure-UnityUiHierarchy.ps1`, which now targets the split Phase 12 preview/apply UI hierarchy tools.
-25. For deterministic UI layout edits on authored scene objects, use `scripts/Set-UnityUiLayout.ps1`, which now targets the split Phase 12 preview/apply layout tools.
+23. For scene object-reference fields or arrays that should bind to authored scene objects, prefer `Unity.Scene.PreviewAssignObjectReferences` and `Unity.Scene.ApplyAssignObjectReferences`; use `scripts/Bind-UnitySceneSerializedReferences.ps1` only as a helper fallback.
+24. For persistent scene UI subtree repair or creation, prefer `Unity.UI.PreviewEnsureHierarchy` and `Unity.UI.ApplyEnsureHierarchy`; use `scripts/Ensure-UnityUiHierarchy.ps1` only as a helper fallback.
+25. For deterministic UI layout edits on authored scene objects, prefer `Unity.UI.PreviewLayoutProperties` and `Unity.UI.ApplyLayoutProperties`; use `scripts/Set-UnityUiLayout.ps1` only as a helper fallback.
 26. For measured HUD/layout assertions such as inside-screen, right-of, below, below-center, or ordered-stack checks, use `scripts/Verify-UnityUiScreenLayout.ps1` or `Unity.UI.VerifyScreenLayout`; when a layout matrix is required, use `Unity.UI.VerifyScreenLayoutMatrix`.
    - Keep strict `right_of`, `left_of`, `above`, and `below` for non-overlap rect semantics.
    - Use `right_of_center`, `left_of_center`, `above_center`, or `below_center` for “visually higher/lower within the same card” cases such as count labels inside HUD slots.

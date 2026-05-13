@@ -17,7 +17,7 @@ Typical signals:
 
 1. Ensure the UI subtree exists as scene-owned objects.
 2. Bind serialized refs on the scene controller to those scene objects.
-3. Save the scene.
+3. Preview the durable edit, apply the accepted change, and save only when persistence is explicitly requested or accepted.
 4. Verify the subtree and refs exist on disk.
 5. Only then remove or disable runtime fallback creation.
 
@@ -28,20 +28,23 @@ Do not start by retuning layout values while fallback creation is still active.
 When a subtree is incomplete:
 
 - preserve complete authored subtrees
-- recreate only the missing or incomplete branch
-- rebind the controller refs deterministically
-- mark the scene dirty and save immediately
+- recreate only the missing or incomplete branch through UI or GameObject preview/apply tools
+- rebind the controller refs deterministically through scene reference assignment tools
+- report scene dirty state after the mutation and save only through `Unity.Scene.Save` when requested
 
 This is the shared pattern behind end-screen groups, leaderboard groups, pause overlays, and similar authored HUD clusters.
 
 ## Recommended tools
 
-- `Ensure-UnityUiHierarchy.ps1` to create or repair the named UI subtree under a scene root
-- `Bind-UnitySceneSerializedReferences.ps1` to bind serialized scene refs through the split Phase 12 preview/apply tools
+- `Unity.GameObject.PreviewCreate` / `Unity.GameObject.Create` with `objectKind=canvas` or `eventSystem` for missing scene-owned UI roots
+- `Unity.UI.PreviewEnsureHierarchy` / `Unity.UI.ApplyEnsureHierarchy` to create or repair named UI subtrees under a scene root
+- `Unity.Scene.PreviewAssignObjectReferences` / `Unity.Scene.ApplyAssignObjectReferences` to bind serialized scene refs
 - `Unity.Scene.VerifySerializedReferences` to verify nested prefab instance refs without confusing inherited prefab refs for nulls
-- `Set-UnityUiLayout.ps1` to move or resize authored UI after the hierarchy is persistent
+- `Unity.UI.PreviewLayoutProperties` / `Unity.UI.ApplyLayoutProperties` to move or resize authored UI after the hierarchy is persistent
 - `Verify-UnityUiScreenLayout.ps1`, `Unity.UI.VerifyScreenLayout`, or `Unity.UI.VerifyScreenLayoutMatrix` to verify authored layout assertions and screen rects
   Use strict `below`/`above` for non-overlap relations, and `below_center`/`above_center` for in-card label placement such as count text inside quick-slot HUD cards.
+
+Use the helper scripts only when direct tool exposure is unavailable in the current client session; the helpers should stay on the same Lens preview/apply path.
 
 ## Verification
 

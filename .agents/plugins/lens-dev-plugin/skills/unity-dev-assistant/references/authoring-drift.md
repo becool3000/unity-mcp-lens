@@ -23,7 +23,11 @@ Common owners:
 
 ## Fast path
 
-1. Compare the same object in edit mode and play mode with paired direct probes through `Invoke-UnityRunCommand.js` on macOS/Linux or `Invoke-UnityRunCommand.ps1` on Windows.
+1. Compare the same object in edit mode and play mode with paired Lens reads.
+   Prefer `Unity.GameObject.GetComponent`, `Unity.Runtime.GetComponentSnapshot`,
+   and `Unity.Runtime.QueryObjects` when they expose the needed fields. Use
+   `Invoke-UnityRunCommand.js` on macOS/Linux or `Invoke-UnityRunCommand.ps1` on
+   Windows only for project-specific fields that the native tools cannot read.
 
 ```powershell
 $code = @'
@@ -40,7 +44,8 @@ $script = Join-Path $PWD ".agents\plugins\lens-dev-plugin\skills\unity-dev-assis
 powershell -ExecutionPolicy Bypass -File $script -ProjectPath "$PWD" -Code $code
 ```
 
-Run the probe once in edit mode, then enter play mode and run the same probe again. Compare the logged values directly.
+Run the read once in edit mode, then enter play mode and run the same read or
+probe again. Compare the values directly.
 
 2. If the values differ, search the repo for writes to the drifting field:
    - `localPosition`
@@ -65,9 +70,9 @@ Use `Get-UnityVisualOwnership.ps1` for the quick snapshot when the package tool 
 
 If the issue is an art swap:
 
-1. import or reconfigure the sprite asset
-2. bind the serialized sprite reference
-3. verify the prefab field with `Verify-UnityPrefabSerializedFields.ps1`
+1. preview and apply sprite import or reconfiguration through asset tools
+2. bind the serialized sprite reference through scene, prefab, or asset reference tools
+3. verify the prefab field with `Unity.Prefab.Inspect` or the prefab serialized-property tools
 4. verify runtime tint separately
 5. only then retune pulse, rotation, or other presentation motion
 
@@ -86,7 +91,7 @@ If HUD or overlay layout changes do not stick:
 2. Confirm the desired UI subtree actually exists in the saved scene.
 3. If the subtree is missing or partial, repair it as scene-owned UI first.
 4. Rebind the controller's serialized refs to the scene objects.
-5. Save and verify the scene on disk before removing the runtime fallback.
+5. Save through `Unity.Scene.Save` only after the durable edit is accepted, then verify the scene on disk before removing the runtime fallback.
 
 For authorable UI, persistent scene ownership is usually the correct source of truth. Runtime fallback creation should be a last-resort repair path, not the primary authoring model.
 

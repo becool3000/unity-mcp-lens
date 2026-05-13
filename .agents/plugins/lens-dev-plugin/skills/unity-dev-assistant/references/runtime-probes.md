@@ -1,6 +1,10 @@
 # Runtime Probes
 
-Use `Invoke-UnityRunCommand.js` on macOS/Linux or `Invoke-UnityRunCommand.ps1` on Windows for short, reusable runtime probes.
+Use runtime Lens tools first for Play Mode verification: `Unity.Runtime.QueryObjects`,
+`Unity.Runtime.GetComponentSnapshot`, `Unity.Runtime.InvokeComponentMethod`,
+`Unity.Runtime.SetComponentProperty`, and `Unity.Runtime.AddTemporaryComponent`.
+Use `Invoke-UnityRunCommand.js` on macOS/Linux or `Invoke-UnityRunCommand.ps1`
+on Windows only when the native runtime tools cannot answer the question.
 
 Inside `ExecutionResult`, supported methods are `RegisterObjectCreation`, `RegisterObjectModification`, `DestroyObject`, `Log`, `LogWarning`, `LogError`, and `ReturnResult`. There is no `result.Fail(...)`; use `result.LogError(...)` and return, or throw an exception when execution should fail. Use `result.ReturnResult(...)` for structured probe data.
 
@@ -23,11 +27,14 @@ For game-state transitions such as death, victory, level-up, or milestone trigge
 
 If the UI shows a new state but the side effect did not happen, suspect that the transition was detected too early in the frame.
 
-For visual ownership diagnostics, prefer the helper wrappers before writing custom probe code:
+For visual ownership diagnostics, prefer authoring and runtime Lens tools before writing custom probe code:
 
-- `Import-UnitySpriteAsset.ps1` for deterministic importer settings
-- `Verify-UnityPrefabSerializedFields.ps1` for narrow serialized-field checks on prefab assets
+- `Unity.Asset.PreviewImportSpriteSheetAndBind`, `Unity.Asset.ApplyImportSpriteSheetAndBind`, and `Unity.Asset.VerifySpriteArrayBinding` for sprite-sheet import and binding workflows
+- `Unity.Prefab.Inspect`, `Unity.Prefab.GetOverrides`, and prefab serialized-property tools for narrow prefab asset checks
 - `Get-UnityVisualOwnership.ps1` for runtime scale, tint, sprite, bounds, and baseline inspection
+
+Helper scripts are acceptable when they wrap the Lens path or when the current
+client session cannot expose the native tool directly.
 
 After a mutating `Unity_RunCommand`, run one narrow verification probe first. Do not jump straight to a broad scene or playtest validation pass.
 
