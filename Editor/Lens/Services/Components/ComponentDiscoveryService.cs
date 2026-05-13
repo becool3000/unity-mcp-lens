@@ -1032,7 +1032,7 @@ namespace Becool.UnityMcpLens.Editor.Services.Components
                 if (string.IsNullOrWhiteSpace(path))
                     continue;
 
-                UnityEngine.Object preset = AssetDatabase.LoadMainAssetAtPath<UnityEngine.Object>(path);
+                UnityEngine.Object preset = AssetDatabase.LoadMainAssetAtPath(path);
                 string targetTypeName = TryReadPresetTargetTypeName(preset);
                 string searchText = $"{Path.GetFileNameWithoutExtension(path)} {path} {targetTypeName}";
                 double score = Math.Max(0.32, ScoreText(query, searchText));
@@ -2052,10 +2052,10 @@ namespace Becool.UnityMcpLens.Editor.Services.Components
         {
             return component switch
             {
-                Behaviour behaviour => behaviour.enabled,
-                Renderer renderer => renderer.enabled,
                 Collider collider => collider.enabled,
                 Collider2D collider2D => collider2D.enabled,
+                Renderer renderer => renderer.enabled,
+                Behaviour behaviour => behaviour.enabled,
                 _ => null
             };
         }

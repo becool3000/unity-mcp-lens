@@ -604,14 +604,20 @@ namespace Becool.UnityMcpLens.Editor.Tools
             {
                 foreach (PrefabOverrideCandidate candidate in selected)
                 {
+                    if (!TryResolveOverrideProperty(candidate.Modification, out SerializedProperty property, out string propertyError))
+                    {
+                        warnings.Add($"Skipped override '{candidate.Id}': {propertyError}");
+                        continue;
+                    }
+
                     if (applyToAsset)
                     {
                         string assetPath = string.IsNullOrWhiteSpace(candidate.SourceAssetPath) ? sourcePrefabPath : candidate.SourceAssetPath;
-                        PrefabUtility.ApplyPropertyOverride(candidate.Modification, assetPath, InteractionMode.UserAction);
+                        PrefabUtility.ApplyPropertyOverride(property, assetPath, InteractionMode.UserAction);
                     }
                     else
                     {
-                        PrefabUtility.RevertPropertyOverride(candidate.Modification, InteractionMode.UserAction);
+                        PrefabUtility.RevertPropertyOverride(property, InteractionMode.UserAction);
                     }
 
                     appliedRows.Add(candidate.Row);
@@ -744,6 +750,39 @@ namespace Becool.UnityMcpLens.Editor.Tools
                 warnings.Add($"Skipped {skippedNested} nested prefab override(s). Set includeNested=true to include them.");
 
             return candidates;
+        }
+
+        static bool TryResolveOverrideProperty(PropertyModification modification, out SerializedProperty property, out string error)
+        {
+            property = null;
+            error = null;
+
+            if (modification == null)
+            {
+                error = "Override modification was null.";
+                return false;
+            }
+
+            if (modification.target == null)
+            {
+                error = "Override target was null.";
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(modification.propertyPath))
+            {
+                error = "Override property path was empty.";
+                return false;
+            }
+
+            var serializedObject = new SerializedObject(modification.target);
+            serializedObject.UpdateIfRequiredOrScript();
+            property = serializedObject.FindProperty(modification.propertyPath);
+            if (property != null)
+                return true;
+
+            error = $"Property '{modification.propertyPath}' could not be resolved on override target.";
+            return false;
         }
 
         static IEnumerable<object> BuildInheritedRows(GameObject instanceRoot, int maxRows)
