@@ -29,6 +29,8 @@ sealed class UnityMcpLensHost
         "Unity_Component_ResolveCapability",
         "Unity_Component_InspectSchema",
         "Unity_Authoring_SuggestReusePlan",
+        "Unity_Package_ResolveCapability",
+        "Unity_Package_PreviewInstallForCapability",
         "Unity_Preset_Search",
         "Unity_Preset_Inspect",
         "Unity_Preset_PreviewApplyToComponent",

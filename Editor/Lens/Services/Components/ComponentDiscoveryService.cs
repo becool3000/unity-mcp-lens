@@ -20,6 +20,7 @@ namespace Becool.UnityMcpLens.Editor.Services.Components
         public bool includePrefabs { get; set; } = true;
         public bool includePresets { get; set; } = true;
         public bool includeMissingPackages { get; set; } = true;
+        public bool includePackageCapabilities { get; set; } = true;
         public int maxResults { get; set; } = 30;
         public int maxAssetScans { get; set; } = 120;
     }
@@ -31,6 +32,7 @@ namespace Becool.UnityMcpLens.Editor.Services.Components
         public bool includePrefabs { get; set; } = true;
         public bool includePresets { get; set; } = true;
         public bool includeMissingPackages { get; set; } = true;
+        public bool includePackageCapabilities { get; set; } = true;
         public int maxResults { get; set; } = 20;
         public int maxAssetScans { get; set; } = 120;
     }
@@ -66,7 +68,26 @@ namespace Becool.UnityMcpLens.Editor.Services.Components
         public bool includePrefabs { get; set; } = true;
         public bool includePresets { get; set; } = true;
         public bool includeMissingPackages { get; set; } = true;
+        public bool includePackageCapabilities { get; set; } = true;
         public int maxResults { get; set; } = 12;
+    }
+
+    sealed class PackageResolveCapabilityRequest
+    {
+        public string intent { get; set; }
+        public string context { get; set; }
+        public bool includeInstalled { get; set; } = true;
+        public bool includeMissing { get; set; } = true;
+        public int maxResults { get; set; } = 12;
+    }
+
+    sealed class PackagePreviewInstallForCapabilityRequest
+    {
+        public string intent { get; set; }
+        public string context { get; set; }
+        public string packageId { get; set; }
+        public string version { get; set; }
+        public bool includeFallbackPlan { get; set; } = true;
     }
 
     sealed class ComponentDiscoveryService
@@ -99,6 +120,10 @@ namespace Becool.UnityMcpLens.Editor.Services.Components
             public string installRisk { get; set; }
             public string compileImportImpact { get; set; }
             public string fallbackPlan { get; set; }
+            public string packageStatus { get; set; }
+            public bool packageInstalled { get; set; }
+            public bool requiresInstall { get; set; }
+            public bool previewInstallAvailable { get; set; }
             public double confidence { get; set; }
             public string reason { get; set; }
             public bool serializedSchemaAvailable { get; set; }
@@ -143,7 +168,7 @@ namespace Becool.UnityMcpLens.Editor.Services.Components
             new()
             {
                 id = "follow_camera",
-                terms = new[] { "follow camera", "camera follow", "third person camera", "chase camera", "tracking camera", "camera target" },
+                terms = new[] { "follow camera", "camera follow", "third person camera", "chase camera", "tracking camera", "camera target", "cinemachine", "virtual camera" },
                 components = new[]
                 {
                     new CapabilityComponent
@@ -194,7 +219,7 @@ namespace Becool.UnityMcpLens.Editor.Services.Components
             new()
             {
                 id = "input",
-                terms = new[] { "input", "controls", "player input", "gamepad", "keyboard input", "input actions" },
+                terms = new[] { "input", "controls", "player input", "gamepad", "keyboard input", "input actions", "input system" },
                 components = new[]
                 {
                     new CapabilityComponent
@@ -232,13 +257,13 @@ namespace Becool.UnityMcpLens.Editor.Services.Components
             new()
             {
                 id = "ui",
-                terms = new[] { "ui", "button", "canvas", "menu", "hud", "screen", "layout" },
+                terms = new[] { "ui", "button", "canvas", "menu", "hud", "screen", "layout", "ui toolkit", "uidocument", "visual element", "ugui", "unity ui" },
                 components = new[]
                 {
                     new CapabilityComponent { name = "Canvas", typeName = "UnityEngine.Canvas", packageId = "com.unity.ugui", confidence = 0.82, reason = "Durable uGUI root surface." },
                     new CapabilityComponent { name = "Button", typeName = "UnityEngine.UI.Button", packageId = "com.unity.ugui", confidence = 0.78, reason = "Durable uGUI button component." },
                     new CapabilityComponent { name = "Event System", typeName = "UnityEngine.EventSystems.EventSystem", packageId = "com.unity.ugui", confidence = 0.74, reason = "Scene-level UI event dispatcher." },
-                    new CapabilityComponent { name = "UIDocument", typeName = "UnityEngine.UIElements.UIDocument", confidence = 0.62, reason = "UI Toolkit scene entry component." }
+                    new CapabilityComponent { name = "UIDocument", typeName = "UnityEngine.UIElements.UIDocument", packageId = "com.unity.modules.uielements", confidence = 0.72, reason = "UI Toolkit scene entry component." }
                 },
                 missingPackages = new[]
                 {
@@ -283,7 +308,7 @@ namespace Becool.UnityMcpLens.Editor.Services.Components
             new()
             {
                 id = "navigation",
-                terms = new[] { "navmesh", "navigation", "pathfinding", "agent", "ai move" },
+                terms = new[] { "navmesh", "navigation", "pathfinding", "agent", "ai move", "ai navigation" },
                 components = new[]
                 {
                     new CapabilityComponent { name = "NavMesh Agent", typeName = "UnityEngine.AI.NavMeshAgent", confidence = 0.84, reason = "Built-in navigation agent component." },
@@ -354,7 +379,7 @@ namespace Becool.UnityMcpLens.Editor.Services.Components
             new()
             {
                 id = "render_pipeline",
-                terms = new[] { "urp", "universal render pipeline", "render pipeline", "post processing", "camera data" },
+                terms = new[] { "urp", "universal rp", "universal render pipeline", "render pipeline", "post processing", "camera data" },
                 components = new[]
                 {
                     new CapabilityComponent { name = "Universal Additional Camera Data", typeName = "UnityEngine.Rendering.Universal.UniversalAdditionalCameraData", packageId = "com.unity.render-pipelines.universal", confidence = 0.82, reason = "URP package component for camera rendering features." }
@@ -394,7 +419,9 @@ namespace Becool.UnityMcpLens.Editor.Services.Components
                 candidates.AddRange(SearchPrefabAssets(request.query, providerFilter, maxAssetScans));
             if (request.includePresets)
                 candidates.AddRange(SearchPresetAssets(request.query, providerFilter, maxAssetScans));
-            if (request.includeMissingPackages)
+            if (request.includePackageCapabilities)
+                candidates.AddRange(SearchPackageCapabilities(request.query, providerFilter, request.includeMissingPackages));
+            else if (request.includeMissingPackages)
                 candidates.AddRange(SearchMissingPackages(request.query, providerFilter));
 
             var ordered = candidates
@@ -414,6 +441,7 @@ namespace Becool.UnityMcpLens.Editor.Services.Components
                 includePrefabs = request.includePrefabs,
                 includePresets = request.includePresets,
                 includeMissingPackages = request.includeMissingPackages,
+                includePackageCapabilities = request.includePackageCapabilities,
                 resultCount = ordered.Length,
                 results = ordered
             };
@@ -430,6 +458,123 @@ namespace Becool.UnityMcpLens.Editor.Services.Components
                 results = data.results.Select(ToCandidateData).ToArray(),
                 newScriptAppearsNecessary = data.newScriptAppearsNecessary,
                 reuseInsufficiencyReport = data.reuseInsufficiencyReport
+            };
+        }
+
+        public object ResolvePackageCapability(PackageResolveCapabilityRequest request)
+        {
+            request ??= new PackageResolveCapabilityRequest();
+            int maxResults = Math.Clamp(request.maxResults, 1, 50);
+            string intent = request.intent ?? string.Empty;
+            var results = BuildPackageCapabilityCandidates(
+                    intent,
+                    includeInstalled: request.includeInstalled,
+                    includeMissing: request.includeMissing)
+                .OrderByDescending(candidate => candidate.confidence)
+                .ThenBy(candidate => candidate.packageId, StringComparer.OrdinalIgnoreCase)
+                .Take(maxResults)
+                .ToArray();
+
+            return new
+            {
+                intent,
+                context = request.context,
+                includeInstalled = request.includeInstalled,
+                includeMissing = request.includeMissing,
+                resultCount = results.Length,
+                packageCapabilities = results.Select(ToCandidateData).ToArray(),
+                standardCapabilities = new[]
+                {
+                    "Cinemachine",
+                    "Input System",
+                    "TextMeshPro",
+                    "Universal Render Pipeline",
+                    "UI Toolkit",
+                    "AI Navigation"
+                },
+                installPreviewTool = "Unity.Package.PreviewInstallForCapability"
+            };
+        }
+
+        public object PreviewInstallForCapability(PackagePreviewInstallForCapabilityRequest request)
+        {
+            request ??= new PackagePreviewInstallForCapabilityRequest();
+            string intent = request.intent ?? string.Empty;
+            string packageId = request.packageId?.Trim();
+            var candidates = BuildPackageCapabilityCandidates(intent, includeInstalled: true, includeMissing: true)
+                .OrderByDescending(candidate => candidate.confidence)
+                .ThenBy(candidate => candidate.packageId, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
+            Candidate selected = null;
+            if (!string.IsNullOrWhiteSpace(packageId))
+            {
+                selected = candidates.FirstOrDefault(candidate => string.Equals(candidate.packageId, packageId, StringComparison.OrdinalIgnoreCase));
+                if (selected == null)
+                    selected = BuildAdHocPackageCandidate(packageId, intent);
+            }
+            else
+            {
+                selected = candidates.FirstOrDefault(candidate => candidate.requiresInstall) ?? candidates.FirstOrDefault();
+            }
+
+            if (selected == null || string.IsNullOrWhiteSpace(selected.packageId))
+            {
+                return new
+                {
+                    status = "failed",
+                    errorKind = "package_capability_not_found",
+                    intent,
+                    packageId,
+                    error = "No package capability matched the requested intent or package id."
+                };
+            }
+
+            string version = string.IsNullOrWhiteSpace(request.version) ? selected.recommendedVersion : request.version.Trim();
+            string packageSpec = BuildPackageInstallSpec(selected.packageId, version);
+            var warnings = new List<string>();
+            if (selected.packageInstalled)
+                warnings.Add("Package appears available already; no install should be requested unless the user explicitly wants a version change.");
+            if (selected.packageId.StartsWith("com.unity.modules.", StringComparison.OrdinalIgnoreCase))
+                warnings.Add("Unity module packages are normally editor/player modules, not ordinary Package Manager installs.");
+            if (string.Equals(selected.installRisk, "High", StringComparison.OrdinalIgnoreCase))
+                warnings.Add("High install risk: preview render/settings migration and compile/import impact before approval.");
+
+            return new
+            {
+                status = selected.requiresInstall ? "preview_ready" : "already_available",
+                previewOnly = true,
+                mutates = false,
+                approvalRequired = selected.requiresInstall,
+                intent,
+                context = request.context,
+                selectedPackage = ToCandidateData(selected),
+                packageId = selected.packageId,
+                packageName = selected.packageName,
+                recommendedVersion = version,
+                packageSpec,
+                installed = selected.packageInstalled,
+                requiresInstall = selected.requiresInstall,
+                compatibility = selected.compatibility,
+                installRisk = selected.installRisk,
+                compileImportImpact = selected.compileImportImpact,
+                fallbackPlan = request.includeFallbackPlan ? selected.fallbackPlan : null,
+                installPlan = selected.requiresInstall
+                    ? new
+                    {
+                        tool = "Unity.Project.ManagePackages",
+                        action = "add",
+                        package = packageSpec,
+                        saveState = "not_saved",
+                        note = "This tool is preview-only. Package installation requires explicit user approval through the package mutation tool."
+                    }
+                    : null,
+                warnings = warnings.ToArray(),
+                saveState = new
+                {
+                    saved = false,
+                    reason = "Preview-only package capability check; no Package Manager request was made."
+                }
             };
         }
 
@@ -612,6 +757,7 @@ namespace Becool.UnityMcpLens.Editor.Services.Components
                 includePrefabs = request.includePrefabs,
                 includePresets = request.includePresets,
                 includeMissingPackages = request.includeMissingPackages,
+                includePackageCapabilities = request.includePackageCapabilities,
                 maxResults = maxResults,
                 maxAssetScans = 120
             };
@@ -771,6 +917,7 @@ namespace Becool.UnityMcpLens.Editor.Services.Components
                 includePrefabs = request.includePrefabs,
                 includePresets = request.includePresets,
                 includeMissingPackages = request.includeMissingPackages,
+                includePackageCapabilities = request.includePackageCapabilities,
                 maxResults = maxResults,
                 maxAssetScans = request.maxAssetScans
             });
@@ -930,6 +1077,154 @@ namespace Becool.UnityMcpLens.Editor.Services.Components
             }
         }
 
+        IEnumerable<Candidate> SearchPackageCapabilities(string query, string[] providerFilter, bool includeMissingPackages)
+        {
+            foreach (Candidate candidate in BuildPackageCapabilityCandidates(query, includeInstalled: true, includeMissing: includeMissingPackages))
+            {
+                if (MatchesProviderFilter(candidate.provider, providerFilter))
+                    yield return candidate;
+            }
+        }
+
+        IEnumerable<Candidate> BuildPackageCapabilityCandidates(string query, bool includeInstalled, bool includeMissing)
+        {
+            var byKey = new Dictionary<string, Candidate>(StringComparer.OrdinalIgnoreCase);
+            var matches = MatchCapabilities(query)
+                .OrderByDescending(match => match.score)
+                .ToArray();
+
+            foreach (var match in matches)
+            {
+                var packageIds = match.definition.components
+                    .Select(component => component.packageId)
+                    .Concat(match.definition.missingPackages.Select(package => package.packageId))
+                    .Where(value => !string.IsNullOrWhiteSpace(value))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+
+                foreach (string packageId in packageIds)
+                {
+                    Candidate candidate = BuildPackageCapabilityCandidate(match.definition, packageId, match.score, match.matchedTerms);
+                    if (candidate == null)
+                        continue;
+                    if (candidate.packageInstalled && !includeInstalled)
+                        continue;
+                    if (!candidate.packageInstalled && !includeMissing)
+                        continue;
+                    if (candidate.confidence <= 0 && !string.IsNullOrWhiteSpace(query))
+                        continue;
+
+                    string key = $"{match.definition.id}:{candidate.packageId}";
+                    if (!byKey.TryGetValue(key, out Candidate existing) || candidate.confidence > existing.confidence)
+                        byKey[key] = candidate;
+                }
+            }
+
+            return byKey.Values;
+        }
+
+        Candidate BuildPackageCapabilityCandidate(CapabilityDefinition definition, string packageId, double capabilityScore, string[] matchedTerms)
+        {
+            if (definition == null || string.IsNullOrWhiteSpace(packageId))
+                return null;
+
+            MissingPackageSpec spec = definition.missingPackages
+                .FirstOrDefault(package => string.Equals(package.packageId, packageId, StringComparison.OrdinalIgnoreCase))
+                ?? BuildKnownPackageSpec(packageId, definition);
+            PackageInfo package = FindPackageById(packageId);
+            CapabilityComponent[] components = definition.components
+                .Where(component => string.Equals(component.packageId, packageId, StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+            string[] availableTypes = components
+                .Select(component => component.typeName)
+                .Where(typeName => !string.IsNullOrWhiteSpace(typeName) && UnityComponentResolver.TryResolve(typeName, out _, out _))
+                .Distinct(StringComparer.Ordinal)
+                .ToArray();
+            string[] componentTypes = components
+                .Select(component => component.typeName)
+                .Where(typeName => !string.IsNullOrWhiteSpace(typeName))
+                .Distinct(StringComparer.Ordinal)
+                .OrderBy(typeName => typeName, StringComparer.Ordinal)
+                .ToArray();
+            bool isUnityModule = packageId.StartsWith("com.unity.modules.", StringComparison.OrdinalIgnoreCase);
+            bool packageInstalled = package != null || availableTypes.Length > 0;
+            bool packageAvailable = packageInstalled || availableTypes.Length > 0;
+            bool requiresInstall = !packageAvailable && !isUnityModule;
+            string provider = packageAvailable ? "installed package" : "missing package";
+            string status = packageAvailable
+                ? package != null ? "installed" : "available"
+                : requiresInstall ? "missing package" : "unavailable";
+            double componentConfidence = components.Length == 0 ? 0.45 : components.Max(component => component.confidence);
+            string displayName = FirstNonEmpty(spec.packageName, package?.displayName, NicifyPackageId(packageId));
+
+            return new Candidate
+            {
+                resultKind = "packageCapability",
+                provider = provider,
+                name = displayName,
+                displayName = displayName,
+                packageId = packageId,
+                packageName = displayName,
+                packageVersion = package?.version,
+                recommendedVersion = packageInstalled ? package?.version ?? spec.recommendedVersion : spec.recommendedVersion,
+                compatibility = packageAvailable ? $"Available in this project. {spec.compatibility}".Trim() : spec.compatibility,
+                installRisk = packageAvailable ? "None" : spec.installRisk,
+                compileImportImpact = packageAvailable ? "No package install/import required for this capability." : spec.compileImportImpact,
+                fallbackPlan = spec.fallbackPlan,
+                packageStatus = status,
+                packageInstalled = packageInstalled,
+                requiresInstall = requiresInstall,
+                previewInstallAvailable = requiresInstall,
+                confidence = Round(Math.Max(capabilityScore, componentConfidence)),
+                reason = packageAvailable
+                    ? $"Package-backed capability matched '{definition.id}' and is available in the project."
+                    : $"Package-backed standard Unity capability matched '{definition.id}' but the package is not available.",
+                serializedSchemaAvailable = availableTypes.Length > 0,
+                setupRequirements = packageAvailable
+                    ? new[] { "Inspect component serialized schemas before authoring.", "Configure scene/prefab object references through preview/apply tools." }
+                    : new[] { "Preview package installation and compile/import impact before installing.", "Use the fallback plan if package install is not approved." },
+                matchedTerms = matchedTerms ?? Array.Empty<string>(),
+                componentTypes = componentTypes
+            };
+        }
+
+        static Candidate BuildAdHocPackageCandidate(string packageId, string intent)
+        {
+            var spec = BuildKnownPackageSpec(packageId, new CapabilityDefinition
+            {
+                id = FirstNonEmpty(intent, packageId),
+                terms = Array.Empty<string>(),
+                fallbackPlan = "Inspect installed project, prefab, preset, and package surfaces before considering a custom script."
+            });
+            PackageInfo package = FindPackageById(packageId);
+            bool installed = package != null;
+            return new Candidate
+            {
+                resultKind = "packageCapability",
+                provider = installed ? "installed package" : "missing package",
+                name = FirstNonEmpty(spec.packageName, package?.displayName, NicifyPackageId(packageId)),
+                displayName = FirstNonEmpty(spec.packageName, package?.displayName, NicifyPackageId(packageId)),
+                packageId = packageId,
+                packageName = FirstNonEmpty(spec.packageName, package?.displayName, NicifyPackageId(packageId)),
+                packageVersion = package?.version,
+                recommendedVersion = installed ? package.version : spec.recommendedVersion,
+                compatibility = installed ? "Available in this project." : spec.compatibility,
+                installRisk = installed ? "None" : spec.installRisk,
+                compileImportImpact = installed ? "No package install/import required." : spec.compileImportImpact,
+                fallbackPlan = spec.fallbackPlan,
+                packageStatus = installed ? "installed" : "missing package",
+                packageInstalled = installed,
+                requiresInstall = !installed,
+                previewInstallAvailable = !installed,
+                confidence = string.IsNullOrWhiteSpace(intent) ? 0.45 : 0.5,
+                reason = installed ? "Package id is already available." : "Package id can be previewed for explicit installation.",
+                serializedSchemaAvailable = false,
+                setupRequirements = installed
+                    ? new[] { "Inspect package component schemas before authoring." }
+                    : new[] { "Preview package installation and compile/import impact before installing." }
+            };
+        }
+
         Candidate BuildTypeCandidate(Type type, string query, double score, string reason)
         {
             ProviderInfo provider = DescribeProvider(type);
@@ -945,6 +1240,10 @@ namespace Becool.UnityMcpLens.Editor.Services.Components
                 packageId = provider.packageId,
                 packageName = provider.packageName,
                 packageVersion = provider.packageVersion,
+                packageStatus = string.IsNullOrWhiteSpace(provider.packageId) ? null : "installed",
+                packageInstalled = !string.IsNullOrWhiteSpace(provider.packageId) && IsPackageInstalled(provider.packageId),
+                requiresInstall = false,
+                previewInstallAvailable = false,
                 confidence = Round(score),
                 reason = reason,
                 serializedSchemaAvailable = !type.IsAbstract && !type.ContainsGenericParameters,
@@ -968,6 +1267,10 @@ namespace Becool.UnityMcpLens.Editor.Services.Components
                 installRisk = spec.installRisk,
                 compileImportImpact = spec.compileImportImpact,
                 fallbackPlan = spec.fallbackPlan,
+                packageStatus = "missing package",
+                packageInstalled = false,
+                requiresInstall = true,
+                previewInstallAvailable = true,
                 confidence = Round(confidence),
                 reason = reason,
                 serializedSchemaAvailable = false,
@@ -998,6 +1301,10 @@ namespace Becool.UnityMcpLens.Editor.Services.Components
                 candidate.installRisk,
                 candidate.compileImportImpact,
                 candidate.fallbackPlan,
+                candidate.packageStatus,
+                candidate.packageInstalled,
+                candidate.requiresInstall,
+                candidate.previewInstallAvailable,
                 confidence = Round(candidate.confidence),
                 candidate.reason,
                 candidate.serializedSchemaAvailable,
@@ -1030,6 +1337,10 @@ namespace Becool.UnityMcpLens.Editor.Services.Components
                     installRisk = item.Value<string>("installRisk"),
                     compileImportImpact = item.Value<string>("compileImportImpact"),
                     fallbackPlan = item.Value<string>("fallbackPlan"),
+                    packageStatus = item.Value<string>("packageStatus"),
+                    packageInstalled = item.Value<bool?>("packageInstalled") ?? false,
+                    requiresInstall = item.Value<bool?>("requiresInstall") ?? false,
+                    previewInstallAvailable = item.Value<bool?>("previewInstallAvailable") ?? false,
                     confidence = item.Value<double?>("confidence") ?? 0,
                     reason = item.Value<string>("reason"),
                     serializedSchemaAvailable = item.Value<bool?>("serializedSchemaAvailable") ?? false,
@@ -1435,10 +1746,72 @@ namespace Becool.UnityMcpLens.Editor.Services.Components
             return s_Packages;
         }
 
+        static PackageInfo FindPackageById(string packageId)
+        {
+            return string.IsNullOrWhiteSpace(packageId)
+                ? null
+                : GetPackages().FirstOrDefault(package => string.Equals(package.name, packageId, StringComparison.OrdinalIgnoreCase));
+        }
+
         static bool IsPackageInstalled(string packageId)
         {
-            return !string.IsNullOrWhiteSpace(packageId) &&
-                GetPackages().Any(package => string.Equals(package.name, packageId, StringComparison.OrdinalIgnoreCase));
+            return FindPackageById(packageId) != null;
+        }
+
+        static MissingPackageSpec BuildKnownPackageSpec(string packageId, CapabilityDefinition definition)
+        {
+            string packageName = packageId switch
+            {
+                "com.unity.cinemachine" => "Cinemachine",
+                "com.unity.inputsystem" => "Input System",
+                "com.unity.textmeshpro" => "TextMeshPro",
+                "com.unity.ugui" => "Unity UI",
+                "com.unity.modules.uielements" => "UI Toolkit",
+                "com.unity.ai.navigation" => "AI Navigation",
+                "com.unity.render-pipelines.universal" => "Universal RP",
+                "com.unity.timeline" => "Timeline",
+                _ => NicifyPackageId(packageId)
+            };
+
+            bool isUnityModule = packageId?.StartsWith("com.unity.modules.", StringComparison.OrdinalIgnoreCase) ?? false;
+            return new MissingPackageSpec
+            {
+                packageId = packageId,
+                packageName = packageName,
+                recommendedVersion = isUnityModule ? "Unity editor built-in module" : "project-compatible latest",
+                compatibility = isUnityModule
+                    ? "UI Toolkit is provided by Unity editor/player modules in supported Unity versions."
+                    : "Preview package compatibility against the current Unity version before install.",
+                installRisk = isUnityModule ? "None" : "Medium",
+                compileImportImpact = isUnityModule
+                    ? "No Package Manager install is normally required; author UI Toolkit assets/components when available."
+                    : "Package import and assembly refresh; project scripts may recompile.",
+                fallbackPlan = definition?.fallbackPlan ?? "Use installed Unity, project, prefab, and preset surfaces before creating a custom script."
+            };
+        }
+
+        static string BuildPackageInstallSpec(string packageId, string version)
+        {
+            if (string.IsNullOrWhiteSpace(packageId))
+                return null;
+
+            if (string.IsNullOrWhiteSpace(version) ||
+                string.Equals(version, "project-compatible latest", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(version, "Unity editor built-in module", StringComparison.OrdinalIgnoreCase))
+            {
+                return packageId;
+            }
+
+            return $"{packageId}@{version}";
+        }
+
+        static string NicifyPackageId(string packageId)
+        {
+            if (string.IsNullOrWhiteSpace(packageId))
+                return null;
+
+            string tail = packageId.Split('.').LastOrDefault() ?? packageId;
+            return ObjectNames.NicifyVariableName(tail.Replace('-', ' '));
         }
 
         static string ResolvePackageIdFromAssetPath(string assetPath)

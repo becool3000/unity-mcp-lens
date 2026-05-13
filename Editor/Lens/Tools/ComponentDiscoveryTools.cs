@@ -22,7 +22,7 @@ namespace Becool.UnityMcpLens.Editor.Tools
 
         const string ComponentSearchDescription = @"Searches reusable Unity component surfaces before script generation.
 
-Returns built-in components, installed package components, compiled project components, prefab candidates, preset candidates, and missing-package hints with confidence and schema availability.";
+Returns built-in components, installed package components, compiled project components, prefab candidates, preset candidates, installed/missing package capabilities, and missing-package hints with confidence and schema availability.";
 
         const string ResolveCapabilityDescription = @"Resolves an authoring intent into existing Unity, project, package, prefab, preset, and missing-package reuse candidates.";
 
@@ -52,6 +52,7 @@ The plan checks existing components, scene instances, prefabs, presets, installe
                     includePrefabs = new { type = "boolean", description = "Include prefab asset candidates. Defaults to true." },
                     includePresets = new { type = "boolean", description = "Include preset asset candidates. Defaults to true." },
                     includeMissingPackages = new { type = "boolean", description = "Include missing package capability hints. Defaults to true." },
+                    includePackageCapabilities = new { type = "boolean", description = "Include package-capability rows for installed and missing standard Unity packages. Defaults to true." },
                     maxResults = new { type = "integer", description = "Maximum results to return. Defaults to 30." },
                     maxAssetScans = new { type = "integer", description = "Maximum prefab/preset assets to inspect. Defaults to 120." }
                 }
@@ -71,6 +72,7 @@ The plan checks existing components, scene instances, prefabs, presets, installe
                     includePrefabs = new { type = "boolean", description = "Include prefab asset candidates. Defaults to true." },
                     includePresets = new { type = "boolean", description = "Include preset asset candidates. Defaults to true." },
                     includeMissingPackages = new { type = "boolean", description = "Include missing package capability hints. Defaults to true." },
+                    includePackageCapabilities = new { type = "boolean", description = "Include package-capability rows for installed and missing standard Unity packages. Defaults to true." },
                     maxResults = new { type = "integer", description = "Maximum ranked results to return. Defaults to 20." },
                     maxAssetScans = new { type = "integer", description = "Maximum prefab/preset assets to inspect. Defaults to 120." }
                 },
@@ -137,6 +139,7 @@ The plan checks existing components, scene instances, prefabs, presets, installe
                     includePrefabs = new { type = "boolean", description = "Include prefab reuse candidates. Defaults to true." },
                     includePresets = new { type = "boolean", description = "Include preset reuse candidates. Defaults to true." },
                     includeMissingPackages = new { type = "boolean", description = "Include package-backed unavailable solutions. Defaults to true." },
+                    includePackageCapabilities = new { type = "boolean", description = "Include installed and missing package capability rows. Defaults to true." },
                     maxResults = new { type = "integer", description = "Maximum candidates to include. Defaults to 12." }
                 },
                 required = new[] { "intent" }
@@ -275,6 +278,7 @@ The plan checks existing components, scene instances, prefabs, presets, installe
                 includePrefabs = GetBool(parameters, true, "includePrefabs", "IncludePrefabs"),
                 includePresets = GetBool(parameters, true, "includePresets", "IncludePresets"),
                 includeMissingPackages = GetBool(parameters, true, "includeMissingPackages", "IncludeMissingPackages"),
+                includePackageCapabilities = GetBool(parameters, true, "includePackageCapabilities", "IncludePackageCapabilities"),
                 maxResults = GetInt(parameters, 30, "maxResults", "MaxResults", "limit", "Limit"),
                 maxAssetScans = GetInt(parameters, 120, "maxAssetScans", "MaxAssetScans")
             };
@@ -289,6 +293,7 @@ The plan checks existing components, scene instances, prefabs, presets, installe
                 includePrefabs = GetBool(parameters, true, "includePrefabs", "IncludePrefabs"),
                 includePresets = GetBool(parameters, true, "includePresets", "IncludePresets"),
                 includeMissingPackages = GetBool(parameters, true, "includeMissingPackages", "IncludeMissingPackages"),
+                includePackageCapabilities = GetBool(parameters, true, "includePackageCapabilities", "IncludePackageCapabilities"),
                 maxResults = GetInt(parameters, 20, "maxResults", "MaxResults", "limit", "Limit"),
                 maxAssetScans = GetInt(parameters, 120, "maxAssetScans", "MaxAssetScans")
             };
@@ -333,6 +338,7 @@ The plan checks existing components, scene instances, prefabs, presets, installe
                 includePrefabs = GetBool(parameters, true, "includePrefabs", "IncludePrefabs"),
                 includePresets = GetBool(parameters, true, "includePresets", "IncludePresets"),
                 includeMissingPackages = GetBool(parameters, true, "includeMissingPackages", "IncludeMissingPackages"),
+                includePackageCapabilities = GetBool(parameters, true, "includePackageCapabilities", "IncludePackageCapabilities"),
                 maxResults = GetInt(parameters, 12, "maxResults", "MaxResults", "limit", "Limit")
             };
         }

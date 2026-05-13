@@ -25,6 +25,8 @@ namespace Becool.UnityMcpLens.Editor.Lens
             NormalizeToolName("Unity.Component.ResolveCapability"),
             NormalizeToolName("Unity.Component.InspectSchema"),
             NormalizeToolName("Unity.Authoring.SuggestReusePlan"),
+            NormalizeToolName("Unity.Package.ResolveCapability"),
+            NormalizeToolName("Unity.Package.PreviewInstallForCapability"),
             NormalizeToolName("Unity.Preset.Search"),
             NormalizeToolName("Unity.Preset.Inspect"),
             NormalizeToolName("Unity.Preset.PreviewApplyToComponent"),
