@@ -101,13 +101,19 @@ public sealed class StatusScanner
             }
             catch
             {
+                MalformedStatusFileInfo malformed = EditorHealthDiscovery.InspectMalformedStatusFile(path, m_ProjectRoot, nowUtc);
                 rows.Add(new BridgeStatusItem
                 {
                     StatusPath = path,
-                    Status = "malformed",
-                    BasicHealth = "malformed_status",
-                    Freshness = "malformed_status",
-                    EditorPidAlive = false
+                    Status = malformed.IsIgnored ? "ignored malformed" : "malformed",
+                    BasicHealth = malformed.IsIgnored ? "ignored_malformed_status" : "malformed_status",
+                    Freshness = malformed.IsIgnored ? "ignored_malformed_status" : "malformed_status",
+                    ProjectMatch = malformed.IsProjectMatch,
+                    EditorPidAlive = false,
+                    IgnoredMalformed = malformed.IsIgnored,
+                    MalformedIgnoreReason = malformed.IgnoreReason ?? string.Empty,
+                    FileWriteUtc = malformed.FileWriteUtc == DateTime.MinValue ? string.Empty : malformed.FileWriteUtc.ToString("O"),
+                    FileAgeSeconds = malformed.FileAge == TimeSpan.MaxValue ? null : malformed.FileAge.TotalSeconds
                 });
             }
         }
@@ -124,6 +130,7 @@ public sealed class StatusScanner
             .OrderByDescending(row => row.ProjectMatch)
             .ThenByDescending(row => row.BasicHealth == "fresh")
             .ThenByDescending(row => row.BasicHealth == "bridge_stale_unity_alive")
+            .ThenBy(row => row.IgnoredMalformed)
             .ThenBy(row => row.HeartbeatAgeSeconds ?? double.MaxValue)
             .ToArray();
     }
@@ -134,18 +141,22 @@ public sealed class StatusScanner
         {
             HealthPath = health.HealthPath,
             ProjectRoot = health.ProjectRoot,
-            Status = "no bridge",
-            BasicHealth = health.BasicHealth,
+            Status = health.IsIgnoredMalformed ? "ignored malformed health" : "no bridge",
+            BasicHealth = health.IsIgnoredMalformed ? "ignored_malformed_status" : health.BasicHealth,
             CommandHealth = "n/a",
             LastHeartbeatUtc = health.EditorHeartbeatUtc == DateTime.MinValue ? string.Empty : health.EditorHeartbeatUtc.ToString("O"),
             HeartbeatAgeSeconds = health.HeartbeatAge == TimeSpan.MaxValue ? null : health.HeartbeatAge.TotalSeconds,
-            Freshness = health.BasicHealth,
+            Freshness = health.IsIgnoredMalformed ? "ignored_malformed_status" : health.BasicHealth,
             EditorPid = health.EditorPid,
             EditorPidAlive = health.EditorPidAlive,
             EditorProcessStartUtc = health.EditorProcessStartUtc == DateTime.MinValue ? string.Empty : health.EditorProcessStartUtc.ToString("O"),
             PidStartMatches = health.PidStartMatches,
             ProjectMatch = health.IsProjectMatch,
             HealthOnly = true,
+            IgnoredMalformed = health.IsIgnoredMalformed,
+            MalformedIgnoreReason = health.MalformedIgnoreReason ?? string.Empty,
+            FileWriteUtc = health.FileWriteUtc == DateTime.MinValue ? string.Empty : health.FileWriteUtc.ToString("O"),
+            FileAgeSeconds = health.FileAge == TimeSpan.MaxValue ? null : health.FileAge.TotalSeconds,
             LifecycleState = health.HealthFile?.LifecycleState ?? string.Empty,
             UnityVersion = health.HealthFile?.UnityVersion ?? string.Empty,
             IsCompiling = health.HealthFile?.IsCompiling == true,

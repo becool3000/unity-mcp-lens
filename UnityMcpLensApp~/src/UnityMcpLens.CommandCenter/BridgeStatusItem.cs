@@ -20,6 +20,10 @@ public sealed class BridgeStatusItem
     public int ToolCount { get; init; }
     public long ManifestVersion { get; init; }
     public bool HealthOnly { get; init; }
+    public bool IgnoredMalformed { get; init; }
+    public string MalformedIgnoreReason { get; init; } = string.Empty;
+    public string FileWriteUtc { get; init; } = string.Empty;
+    public double? FileAgeSeconds { get; init; }
     public string LifecycleState { get; init; } = string.Empty;
     public string UnityVersion { get; init; } = string.Empty;
     public bool IsCompiling { get; init; }
@@ -69,4 +73,8 @@ public sealed class BridgeStatusItem
     public string ActiveSceneDisplay => !string.IsNullOrWhiteSpace(ActiveSceneName)
         ? ActiveSceneName
         : !string.IsNullOrWhiteSpace(ActiveScenePath) ? ActiveScenePath : "unknown";
+
+    public string HealthDisplay => IgnoredMalformed
+        ? $"{BasicHealth} ({MalformedIgnoreReason})"
+        : BasicHealth;
 }

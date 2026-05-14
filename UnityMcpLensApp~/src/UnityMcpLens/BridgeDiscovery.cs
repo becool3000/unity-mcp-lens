@@ -38,6 +38,11 @@ sealed class BridgeDiscoveryCandidate
     public int EditorPid { get; init; }
     public string? Error { get; init; }
     public string[] ExclusionReasons { get; init; } = [];
+    public DateTime FileWriteUtc { get; init; } = DateTime.MinValue;
+    public TimeSpan FileAge { get; init; } = TimeSpan.MaxValue;
+    public bool IsIgnoredMalformed { get; init; }
+    public string? MalformedIgnoreReason { get; init; }
+    public bool ProjectHashMatch { get; init; }
 }
 
 sealed class BridgeDiscoverySnapshot
@@ -49,6 +54,32 @@ sealed class BridgeDiscoverySnapshot
     public required BridgeDiscoveryCandidate[] Candidates { get; init; }
     public required EditorHealthCandidate[] EditorHealthCandidates { get; init; }
     public required EditorHealthCandidate[] UnmatchedEditorHealthCandidates { get; init; }
+    public int FreshMalformedStatusCount =>
+        Candidates.Count(candidate => IsBlockingMalformed(candidate)) +
+        EditorHealthCandidates.Count(candidate => IsBlockingMalformed(candidate));
+    public int IgnoredMalformedStatusCount =>
+        Candidates.Count(candidate => candidate.IsIgnoredMalformed) +
+        EditorHealthCandidates.Count(candidate => candidate.IsIgnoredMalformed);
+    public string[] IgnoredMalformedStatusFiles =>
+        Candidates
+            .Where(candidate => candidate.IsIgnoredMalformed)
+            .Select(candidate => candidate.StatusPath)
+            .Concat(EditorHealthCandidates
+                .Where(candidate => candidate.IsIgnoredMalformed)
+                .Select(candidate => candidate.HealthPath))
+            .ToArray();
+
+    static bool IsBlockingMalformed(BridgeDiscoveryCandidate candidate)
+    {
+        return string.Equals(candidate.BasicHealth, "malformed_status", StringComparison.OrdinalIgnoreCase) &&
+            !candidate.IsIgnoredMalformed;
+    }
+
+    static bool IsBlockingMalformed(EditorHealthCandidate candidate)
+    {
+        return string.Equals(candidate.BasicHealth, "malformed_status", StringComparison.OrdinalIgnoreCase) &&
+            !candidate.IsIgnoredMalformed;
+    }
 }
 
 static class BridgeDiscovery
@@ -146,16 +177,26 @@ static class BridgeDiscovery
             var status = JsonSerializer.Deserialize<BridgeStatusFile>(File.ReadAllText(statusPath));
             if (status?.ConnectionPath == null || (status.ProjectRoot == null && status.ProjectPath == null))
             {
+                DateTime malformedHeartbeatUtc = ParseUtc(status?.LastHeartbeat);
+                TimeSpan malformedHeartbeatAge = malformedHeartbeatUtc == DateTime.MinValue ? TimeSpan.MaxValue : nowUtc - malformedHeartbeatUtc;
+                if (malformedHeartbeatAge < TimeSpan.Zero)
+                    malformedHeartbeatAge = TimeSpan.Zero;
+                string malformedProjectRoot = NormalizeProjectRoot(status?.ProjectRoot, status?.ProjectPath);
+                MalformedStatusFileInfo malformed = EditorHealthDiscovery.InspectMalformedStatusFile(
+                    statusPath,
+                    normalizedProjectPathHint,
+                    nowUtc,
+                    malformedProjectRoot);
                 return (new BridgeDiscoveryCandidate
                 {
                     StatusPath = statusPath,
                     ConnectionPath = status?.ConnectionPath,
                     Status = status?.Status,
-                    ProjectRoot = NormalizeProjectRoot(status?.ProjectRoot, status?.ProjectPath),
-                    LastHeartbeatUtc = DateTime.MinValue,
-                    HeartbeatAge = TimeSpan.MaxValue,
+                    ProjectRoot = malformedProjectRoot,
+                    LastHeartbeatUtc = malformedHeartbeatUtc,
+                    HeartbeatAge = malformedHeartbeatAge,
                     IsFresh = false,
-                    IsProjectMatch = false,
+                    IsProjectMatch = malformed.IsProjectMatch,
                     EditorPidAlive = false,
                     SupportsToolSyncLens = status?.SupportsToolSyncLens == true,
                     IsQuarantined = false,
@@ -163,7 +204,14 @@ static class BridgeDiscovery
                     BasicHealth = "malformed_status",
                     EditorPid = status?.EditorPid ?? 0,
                     Error = "Status file is missing connection_path or project_root/project_path.",
-                    ExclusionReasons = ["missing_connection_or_project"]
+                    ExclusionReasons = malformed.IsIgnored
+                        ? [malformed.IgnoreReason ?? "ignored_malformed_status"]
+                        : ["missing_connection_or_project"],
+                    FileWriteUtc = malformed.FileWriteUtc,
+                    FileAge = malformed.FileAge,
+                    IsIgnoredMalformed = malformed.IsIgnored,
+                    MalformedIgnoreReason = malformed.IgnoreReason,
+                    ProjectHashMatch = malformed.ProjectHashMatch
                 }, null);
             }
 
@@ -176,6 +224,10 @@ static class BridgeDiscovery
             TimeSpan heartbeatAge = heartbeatUtc == DateTime.MinValue ? TimeSpan.MaxValue : nowUtc - heartbeatUtc;
             if (heartbeatAge < TimeSpan.Zero)
                 heartbeatAge = TimeSpan.Zero;
+            DateTime fileWriteUtc = GetFileWriteUtc(statusPath);
+            TimeSpan fileAge = fileWriteUtc == DateTime.MinValue ? TimeSpan.MaxValue : nowUtc - fileWriteUtc;
+            if (fileAge < TimeSpan.Zero)
+                fileAge = TimeSpan.Zero;
             bool editorPidAlive = IsEditorPidAlive(status.EditorPid);
             bool isFresh = heartbeatAge <= FreshHeartbeatThreshold && editorPidAlive;
             string basicHealth = EditorHealthDiscovery.ClassifyBridgeHealth(
@@ -212,7 +264,9 @@ static class BridgeDiscovery
                 BasicHealth = basicHealth,
                 EditorHealth = editorHealth,
                 EditorPid = status.EditorPid,
-                ExclusionReasons = exclusionReasons.ToArray()
+                ExclusionReasons = exclusionReasons.ToArray(),
+                FileWriteUtc = fileWriteUtc,
+                FileAge = fileAge
             };
 
             if (!isSelectable)
@@ -235,20 +289,31 @@ static class BridgeDiscovery
         }
         catch (Exception ex)
         {
+            MalformedStatusFileInfo malformed = EditorHealthDiscovery.InspectMalformedStatusFile(
+                statusPath,
+                normalizedProjectPathHint,
+                nowUtc);
             return (new BridgeDiscoveryCandidate
             {
                 StatusPath = statusPath,
                 LastHeartbeatUtc = DateTime.MinValue,
                 HeartbeatAge = TimeSpan.MaxValue,
                 IsFresh = false,
-                IsProjectMatch = false,
+                IsProjectMatch = malformed.IsProjectMatch,
                 EditorPidAlive = false,
                 SupportsToolSyncLens = false,
                 IsQuarantined = false,
                 IsSelectable = false,
                 BasicHealth = "malformed_status",
                 Error = ex.Message,
-                ExclusionReasons = ["malformed_status_file"]
+                ExclusionReasons = malformed.IsIgnored
+                    ? [malformed.IgnoreReason ?? "ignored_malformed_status"]
+                    : ["malformed_status_file"],
+                FileWriteUtc = malformed.FileWriteUtc,
+                FileAge = malformed.FileAge,
+                IsIgnoredMalformed = malformed.IsIgnored,
+                MalformedIgnoreReason = malformed.IgnoreReason,
+                ProjectHashMatch = malformed.ProjectHashMatch
             }, null);
         }
     }
@@ -293,6 +358,18 @@ static class BridgeDiscovery
         catch
         {
             return false;
+        }
+    }
+
+    static DateTime GetFileWriteUtc(string path)
+    {
+        try
+        {
+            return File.Exists(path) ? File.GetLastWriteTimeUtc(path) : DateTime.MinValue;
+        }
+        catch
+        {
+            return DateTime.MinValue;
         }
     }
 

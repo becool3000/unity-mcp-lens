@@ -635,7 +635,7 @@ sealed class UnityMcpLensHost
                 captureConsoleDelta = new { type = "boolean", description = "Capture only console entries emitted during the verifier. Defaults to true." },
                 failOnNewConsoleErrors = new { type = "boolean", description = "Fail when new console errors appear. Defaults to true." },
                 allowRealtimeRun = new { type = "boolean", description = "Explicit opt-in for any unpaused wall-clock runtime. Defaults to false." },
-                timeoutMs = new { type = "integer", description = "Hard workflow timeout in milliseconds. Defaults to 30000." }
+                timeoutMs = new { type = "integer", description = "Hard workflow timeout in milliseconds. Defaults to 60000." }
             }
         }, m_JsonOptions);
 
@@ -677,7 +677,7 @@ sealed class UnityMcpLensHost
                 selectedPackId = new { type = "string", description = "Expected FallingSands pack id." },
                 scenePath = new { type = "string", description = "Optional Assets-relative .unity scene path to load before Play Mode." },
                 requirePlayMode = new { type = "boolean", description = "Require runtime verification in Play Mode. Defaults to true." },
-                timeoutMs = new { type = "integer", description = "Host workflow timeout in milliseconds. Defaults to 30000." }
+                timeoutMs = new { type = "integer", description = "Host workflow timeout in milliseconds. Defaults to 60000." }
             }
         }, m_JsonOptions);
 
@@ -1858,6 +1858,9 @@ sealed class UnityMcpLensHost
                 candidateCount = snapshot.Candidates.Length,
                 editorHealthCandidateCount = snapshot.EditorHealthCandidates.Length,
                 unmatchedEditorHealthCandidateCount = snapshot.UnmatchedEditorHealthCandidates.Length,
+                freshMalformedStatusCount = snapshot.FreshMalformedStatusCount,
+                ignoredMalformedStatusCount = snapshot.IgnoredMalformedStatusCount,
+                ignoredMalformedStatusFiles = snapshot.IgnoredMalformedStatusFiles,
                 returnedCandidateCount = visibleCandidates.Length,
                 includeStale,
                 candidates = visibleCandidates.Select(CreateBridgeCandidateDiagnostics).ToArray(),
@@ -1990,6 +1993,7 @@ sealed class UnityMcpLensHost
     UnityMcpLens.Shared.EditorHealthCandidate? SelectBestEditorHealth(BridgeDiscoverySnapshot snapshot, bool requireProjectMatch)
     {
         IEnumerable<UnityMcpLens.Shared.EditorHealthCandidate> candidates = snapshot.EditorHealthCandidates;
+        candidates = candidates.Where(candidate => !candidate.IsIgnoredMalformed);
         if (requireProjectMatch)
             candidates = candidates.Where(candidate => candidate.IsProjectMatch || candidate.Error != null);
 
@@ -2022,8 +2026,7 @@ sealed class UnityMcpLensHost
 
         string? basicHealth = editorHealth?.BasicHealth ?? selected?.BasicHealth;
         if (string.Equals(basicHealth, "malformed_status", StringComparison.OrdinalIgnoreCase) ||
-            snapshot.Candidates.Any(candidate => string.Equals(candidate.BasicHealth, "malformed_status", StringComparison.OrdinalIgnoreCase)) ||
-            snapshot.EditorHealthCandidates.Any(candidate => string.Equals(candidate.BasicHealth, "malformed_status", StringComparison.OrdinalIgnoreCase)))
+            snapshot.FreshMalformedStatusCount > 0)
         {
             return CreateStopContract(
                 "malformed_status",
@@ -2166,6 +2169,9 @@ sealed class UnityMcpLensHost
                 bridgeCandidateCount = evaluation.Snapshot.Candidates.Length,
                 editorHealthCandidateCount = evaluation.Snapshot.EditorHealthCandidates.Length,
                 unmatchedEditorHealthCandidateCount = evaluation.Snapshot.UnmatchedEditorHealthCandidates.Length,
+                freshMalformedStatusCount = evaluation.Snapshot.FreshMalformedStatusCount,
+                ignoredMalformedStatusCount = evaluation.Snapshot.IgnoredMalformedStatusCount,
+                ignoredMalformedStatusFiles = evaluation.Snapshot.IgnoredMalformedStatusFiles.Take(maxEntries).ToArray(),
                 sessionSafety = CreateSessionSafetyDiagnostics(),
                 candidates
             });
@@ -3356,7 +3362,7 @@ sealed class UnityMcpLensHost
 
     async Task<JsonElement> CreatePlayModeStepVerifierPayloadAsync(JsonElement argumentsElement, CancellationToken cancellationToken)
     {
-        int timeoutMs = Math.Clamp(ExtractInt(argumentsElement, 30000, "timeoutMs", "TimeoutMs"), 1000, 120000);
+        int timeoutMs = Math.Clamp(ExtractInt(argumentsElement, 60000, "timeoutMs", "TimeoutMs"), 1000, 120000);
         DateTime startedUtc = DateTime.UtcNow;
         string? scenePath = ExtractString(argumentsElement, "scenePath", "ScenePath");
         bool exitAfter = ExtractBool(argumentsElement, true, "exitAfter", "ExitAfter");
@@ -3400,7 +3406,9 @@ sealed class UnityMcpLensHost
                     new { enter, timeoutMs, scenePath });
             }
 
+            int entryTimeoutMs = Math.Max(1000, timeoutMs);
             int remainingMs = Math.Max(1000, timeoutMs - (int)Math.Round((DateTime.UtcNow - startedUtc).TotalMilliseconds));
+            int stepTimeoutMs = remainingMs;
             JsonObject verifierArgs = JsonNode.Parse(argumentsElement.GetRawText()) as JsonObject ?? new JsonObject();
             verifierArgs.Remove("scenePath");
             verifierArgs.Remove("ScenePath");
@@ -3431,6 +3439,8 @@ sealed class UnityMcpLensHost
                     timedOut = GetJsonBool(verifier, false, "data", "timedOut"),
                     editorResponsiveAfter,
                     timeoutMs,
+                    entryTimeoutMs,
+                    stepTimeoutMs,
                     elapsedMs = Math.Round((DateTime.UtcNow - startedUtc).TotalMilliseconds, 3),
                     scenePath,
                     exitAfter,
@@ -3462,12 +3472,13 @@ sealed class UnityMcpLensHost
 
     async Task<JsonElement> CreateGpuSimulationProbePayloadAsync(JsonElement argumentsElement, CancellationToken cancellationToken)
     {
-        int timeoutMs = Math.Clamp(ExtractInt(argumentsElement, ExtractInt(argumentsElement, 5000, "maxWallMs", "MaxWallMs") + 30000, "timeoutMs", "TimeoutMs"), 1000, 180000);
+        int timeoutMs = Math.Clamp(ExtractInt(argumentsElement, ExtractInt(argumentsElement, 5000, "maxWallMs", "MaxWallMs") + 60000, "timeoutMs", "TimeoutMs"), 1000, 180000);
         bool exitAfter = ExtractBool(argumentsElement, true, "exitAfter", "ExitAfter");
         DateTime startedUtc = DateTime.UtcNow;
         JsonElement entry = default;
         JsonElement probe = default;
         JsonElement exit = default;
+        int entryTimeoutMs = Math.Min(timeoutMs, 60000);
 
         try
         {
@@ -3480,7 +3491,7 @@ sealed class UnityMcpLensHost
                 ["restorePreviousState"] = false,
                 ["captureConsoleDelta"] = false,
                 ["failOnNewConsoleErrors"] = false,
-                ["timeoutMs"] = Math.Min(timeoutMs, 30000)
+                ["timeoutMs"] = entryTimeoutMs
             };
             entry = await CreatePlayModeStepVerifierPayloadAsync(JsonSerializer.SerializeToElement(entryArgs, m_JsonOptions), cancellationToken).ConfigureAwait(false);
             if (IsToolLevelError(entry))
@@ -3527,6 +3538,7 @@ sealed class UnityMcpLensHost
                 data = new
                 {
                     timeoutMs,
+                    entryTimeoutMs,
                     elapsedMs = Math.Round((DateTime.UtcNow - startedUtc).TotalMilliseconds, 3),
                     exitAfter,
                     entry,
@@ -3556,13 +3568,14 @@ sealed class UnityMcpLensHost
 
     async Task<JsonElement> CreateVerifyRuntimePackSelectionPayloadAsync(JsonElement argumentsElement, CancellationToken cancellationToken)
     {
-        int timeoutMs = Math.Clamp(ExtractInt(argumentsElement, 30000, "timeoutMs", "TimeoutMs"), 1000, 120000);
+        int timeoutMs = Math.Clamp(ExtractInt(argumentsElement, 60000, "timeoutMs", "TimeoutMs"), 1000, 120000);
         bool requirePlayMode = ExtractBool(argumentsElement, true, "requirePlayMode", "RequirePlayMode");
         bool exitAfter = ExtractBool(argumentsElement, true, "exitAfter", "ExitAfter");
         DateTime startedUtc = DateTime.UtcNow;
         JsonElement entry = default;
         JsonElement verify = default;
         JsonElement exit = default;
+        int entryTimeoutMs = Math.Min(timeoutMs, 60000);
 
         try
         {
@@ -3577,7 +3590,7 @@ sealed class UnityMcpLensHost
                     ["restorePreviousState"] = false,
                     ["captureConsoleDelta"] = false,
                     ["failOnNewConsoleErrors"] = false,
-                    ["timeoutMs"] = Math.Min(timeoutMs, 30000)
+                    ["timeoutMs"] = entryTimeoutMs
                 };
                 entry = await CreatePlayModeStepVerifierPayloadAsync(JsonSerializer.SerializeToElement(entryArgs, m_JsonOptions), cancellationToken).ConfigureAwait(false);
                 if (IsToolLevelError(entry))
@@ -3625,6 +3638,7 @@ sealed class UnityMcpLensHost
                 data = new
                 {
                     timeoutMs,
+                    entryTimeoutMs,
                     elapsedMs = Math.Round((DateTime.UtcNow - startedUtc).TotalMilliseconds, 3),
                     requirePlayMode,
                     exitAfter,
@@ -3963,6 +3977,9 @@ sealed class UnityMcpLensHost
             editorHealth = health.EditorHealth == null ? null : CreateEditorHealthDiagnostics(health.EditorHealth),
             editorBusy = health.EditorBusy,
             usableBridge = health.UsableBridge,
+            freshMalformedStatusCount = health.Snapshot.FreshMalformedStatusCount,
+            ignoredMalformedStatusCount = health.Snapshot.IgnoredMalformedStatusCount,
+            ignoredMalformedStatusFiles = health.Snapshot.IgnoredMalformedStatusFiles,
             elapsedMs = Math.Round(health.Elapsed.TotalMilliseconds, 3)
         };
     }
@@ -4941,6 +4958,11 @@ sealed class UnityMcpLensHost
             editorPidAlive = candidate.EditorPidAlive,
             fresh = candidate.IsFresh,
             basicHealth = candidate.BasicHealth,
+            ignoredMalformed = candidate.IsIgnoredMalformed,
+            malformedIgnoreReason = candidate.MalformedIgnoreReason,
+            projectHashMatch = candidate.ProjectHashMatch,
+            fileAgeSeconds = candidate.FileAge == TimeSpan.MaxValue ? (double?)null : Math.Round(candidate.FileAge.TotalSeconds, 3),
+            fileWriteUtc = candidate.FileWriteUtc == DateTime.MinValue ? null : candidate.FileWriteUtc.ToString("O"),
             editorHealth = candidate.EditorHealth == null ? null : CreateEditorHealthDiagnostics(candidate.EditorHealth),
             supportsToolSyncLens = candidate.SupportsToolSyncLens,
             quarantined = candidate.IsQuarantined,
@@ -4966,6 +4988,11 @@ sealed class UnityMcpLensHost
             editorProcessStartUtc = candidate.EditorProcessStartUtc == DateTime.MinValue ? null : candidate.EditorProcessStartUtc.ToString("O"),
             pidStartMatches = candidate.PidStartMatches,
             fresh = candidate.IsFresh,
+            ignoredMalformed = candidate.IsIgnoredMalformed,
+            malformedIgnoreReason = candidate.MalformedIgnoreReason,
+            projectHashMatch = candidate.ProjectHashMatch,
+            fileAgeSeconds = candidate.FileAge == TimeSpan.MaxValue ? (double?)null : Math.Round(candidate.FileAge.TotalSeconds, 3),
+            fileWriteUtc = candidate.FileWriteUtc == DateTime.MinValue ? null : candidate.FileWriteUtc.ToString("O"),
             lifecycleState = candidate.HealthFile?.LifecycleState,
             unityVersion = candidate.HealthFile?.UnityVersion,
             isCompiling = candidate.HealthFile?.IsCompiling,

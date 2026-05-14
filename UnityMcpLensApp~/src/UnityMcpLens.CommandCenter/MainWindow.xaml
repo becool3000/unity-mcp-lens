@@ -81,7 +81,7 @@
                                 <ListView x:Name="StatusList" MinHeight="240">
                                     <ListView.View>
                                         <GridView>
-                                            <GridViewColumn Header="Health" DisplayMemberBinding="{Binding BasicHealth}" Width="160" />
+                                            <GridViewColumn Header="Health" DisplayMemberBinding="{Binding HealthDisplay}" Width="220" />
                                             <GridViewColumn Header="Status" DisplayMemberBinding="{Binding Status}" Width="110" />
                                             <GridViewColumn Header="Project Match" DisplayMemberBinding="{Binding ProjectMatch}" Width="100" />
                                             <GridViewColumn Header="Heartbeat" DisplayMemberBinding="{Binding HeartbeatAgeDisplay}" Width="100" />

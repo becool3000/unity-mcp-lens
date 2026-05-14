@@ -1,7 +1,7 @@
 {
   "name": "lens-dev-plugin",
-  "version": "0.1.4",
-  "description": "Unity MCP Lens development workflow bundle for Codex.",
+  "version": "0.1.5",
+  "description": "Unity MCP Lens development workflow bundle for Codex. Plugin v0.1.5, aligned with Lens host 0.1.0-alpha.12+.",
   "author": {
     "name": "kanaw",
     "email": "",
@@ -19,9 +19,9 @@
   "skills": "./skills/",
   "mcpServers": "./.mcp.json",
   "interface": {
-    "displayName": "Lens Dev Plugin",
-    "shortDescription": "Unity MCP Lens development workflows and bridge access.",
-    "longDescription": "Bundles Unity MCP Bridge, Unity Dev Assistant, Unity MCP Lens Development, and the local Lens MCP server config for Codex.",
+    "displayName": "Lens Dev Plugin v0.1.5",
+    "shortDescription": "v0.1.5 Unity MCP Lens workflows with fast health, safe stepping, recovery diagnostics, and bridge access.",
+    "longDescription": "Lens Dev Plugin v0.1.5 bundles Unity MCP Bridge, Unity Dev Assistant, Unity MCP Lens Development, and the local Lens MCP server config for Codex. This plugin version teaches Codex to use Unity.Editor.HealthCheckFast first, paused Unity.PlayMode.StepVerifier for play-mode smoke checks, diagnose-only Unity.Editor.RecoverFromHang, FallingSands GPU probes, and status-file hygiene from Lens host 0.1.0-alpha.12+.",
     "developerName": "kanaw",
     "category": "Productivity",
     "capabilities": [

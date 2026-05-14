@@ -8,8 +8,32 @@
     <AssemblyName>UnityMcpLens</AssemblyName>
     <RootNamespace>UnityMcpLens</RootNamespace>
     <RuntimeIdentifiers>win-x64;win-arm64;osx-x64;osx-arm64;linux-x64;linux-arm64</RuntimeIdentifiers>
+    <GenerateAssemblyInformationalVersionAttribute>false</GenerateAssemblyInformationalVersionAttribute>
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="..\UnityMcpLens.Shared\EditorHealthDiscovery.cs" Link="Shared\EditorHealthDiscovery.cs" />
   </ItemGroup>
+  <Target Name="AdvanceLensHostVersion"
+          BeforeTargets="CoreCompile"
+          Condition="'$(SkipLensVersionBump)' != 'true' and '$(DesignTimeBuild)' != 'true' and '$(IsCrossTargetingBuild)' != 'true'">
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\..\..\..\Tools~\Advance-LensHostVersion.ps1&quot; -ProjectRoot &quot;$(MSBuildProjectDirectory)\..\..\..&quot;"
+          ConsoleToMSBuild="true"
+          StandardOutputImportance="Low">
+      <Output TaskParameter="ConsoleOutput" ItemName="LensHostVersionBumpOutput" />
+    </Exec>
+    <PropertyGroup>
+      <LensHostAdvancedVersion>@(LensHostVersionBumpOutput->'%(Identity)')</LensHostAdvancedVersion>
+      <Version>$(LensHostAdvancedVersion)</Version>
+      <PackageVersion>$(LensHostAdvancedVersion)</PackageVersion>
+      <InformationalVersion>$(LensHostAdvancedVersion)</InformationalVersion>
+      <LensHostVersionInfoFile>$(IntermediateOutputPath)LensHostVersionInfo.g.cs</LensHostVersionInfoFile>
+    </PropertyGroup>
+    <WriteLinesToFile File="$(LensHostVersionInfoFile)"
+                      Lines="// &lt;auto-generated /&gt;&#x0A;[assembly: System.Reflection.AssemblyInformationalVersion(&quot;$(LensHostAdvancedVersion)&quot;)]"
+                      Overwrite="true" />
+    <ItemGroup>
+      <Compile Include="$(LensHostVersionInfoFile)" Visible="false" />
+    </ItemGroup>
+    <Message Importance="High" Text="Unity MCP Lens host build version advanced to $(LensHostAdvancedVersion)." />
+  </Target>
 </Project>

@@ -17,6 +17,13 @@ const requiredAssetTools = [
   "Unity_Asset_VerifySpriteArrayBinding",
 ];
 
+const requiredBootstrapWorkflowTools = [
+  "Unity_PlayMode_StepVerifier",
+  "Unity_Editor_RecoverFromHang",
+  "Unity_Workflow_RunGpuSimulationProbe",
+  "Unity_Workflow_VerifyRuntimePackSelection",
+];
+
 const foundationToolNames = [
   "Unity_GetLensHealth",
   "Unity_Editor_HealthCheckFast",
@@ -33,6 +40,7 @@ const foundationToolNames = [
   "Unity_FindInFile",
   "Unity_ManageEditor",
   "Unity_RunCommand",
+  ...requiredBootstrapWorkflowTools,
 ];
 
 const projectToolNames = [
@@ -582,7 +590,8 @@ function isReadOnlyFoundationTool(name) {
     name !== "Unity_SetToolPacks" &&
     name !== "Unity_Tools_ActivateAndVerify" &&
     name !== "Unity_ManageEditor" &&
-    name !== "Unity_RunCommand";
+    name !== "Unity_RunCommand" &&
+    !requiredBootstrapWorkflowTools.includes(name);
 }
 
 function titleFromName(name) {
@@ -734,6 +743,15 @@ function assertArraySchemasHaveItems(tools) {
   }
 }
 
+function assertReadOnlyHint(tools, name, expected) {
+  const tool = tools.find((item) => item.name === name);
+  assert(tool, `tools/list missing ${name}`);
+  const actual = tool.annotations && Object.prototype.hasOwnProperty.call(tool.annotations, "readOnlyHint")
+    ? tool.annotations.readOnlyHint
+    : tool.readOnlyHint;
+  assert.strictEqual(actual, expected, `${name} readOnlyHint`);
+}
+
 function walkSchema(schema, schemaPath) {
   if (!schema || typeof schema !== "object" || Array.isArray(schema)) return;
   if (schema.type === "array" && !Object.prototype.hasOwnProperty.call(schema, "items")) {
@@ -767,6 +785,12 @@ async function runDynamicPacksScenario() {
     assert(foundationNames.includes("Unity_Tools_Menu"), "foundation tools/list should expose Unity_Tools_Menu");
     assert(foundationNames.includes("Unity_Tools_Describe"), "foundation tools/list should expose Unity_Tools_Describe");
     assert(foundationNames.includes("Unity_Tools_ActivateAndVerify"), "foundation tools/list should expose Unity_Tools_ActivateAndVerify");
+    assertNamesInclude(foundationNames, requiredBootstrapWorkflowTools, "foundation bootstrap workflow tools/list");
+    assertReadOnlyHint(foundationList.tools, "Unity_Editor_HealthCheckFast", true);
+    assertReadOnlyHint(foundationList.tools, "Unity_PlayMode_StepVerifier", false);
+    assertReadOnlyHint(foundationList.tools, "Unity_Editor_RecoverFromHang", false);
+    assertReadOnlyHint(foundationList.tools, "Unity_Workflow_RunGpuSimulationProbe", false);
+    assertReadOnlyHint(foundationList.tools, "Unity_Workflow_VerifyRuntimePackSelection", false);
     for (const assetToolName of requiredAssetTools) {
       assert(!foundationNames.includes(assetToolName), `foundation tools/list should not expose ${assetToolName}`);
     }
@@ -808,12 +832,17 @@ async function runStaticAllScenario() {
     assertNamesInclude(staticNames, [
       "Unity_Project_PackageCompatibility",
       "Unity_Editor_SetPlayMode",
+      ...requiredBootstrapWorkflowTools,
       "Unity_Asset_Search",
       "Unity_GameObject_Inspect",
       "Unity_UI_VerifyScreenLayout",
       "Unity_GetLensUsageReport",
     ], "static_all startup tools/list");
     assertArraySchemasHaveItems(staticList.tools);
+    assertReadOnlyHint(staticList.tools, "Unity_PlayMode_StepVerifier", false);
+    assertReadOnlyHint(staticList.tools, "Unity_Editor_RecoverFromHang", false);
+    assertReadOnlyHint(staticList.tools, "Unity_Workflow_RunGpuSimulationProbe", false);
+    assertReadOnlyHint(staticList.tools, "Unity_Workflow_VerifyRuntimePackSelection", false);
 
     const projectResult = await client.callTool("Unity_Project_PackageCompatibility", {});
     assert.strictEqual(projectResult.structuredContent.success, true, "pack-gated project tool should succeed in static_all without pack switching");
@@ -840,6 +869,7 @@ async function runStaticAllScenario() {
     assertNamesInclude(afterNoopNames, [
       "Unity_Project_PackageCompatibility",
       "Unity_Editor_SetPlayMode",
+      ...requiredBootstrapWorkflowTools,
       "Unity_Asset_Search",
       "Unity_GameObject_Inspect",
       "Unity_UI_VerifyScreenLayout",

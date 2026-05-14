@@ -1,5 +1,6 @@
 const assert = require("assert");
 const childProcess = require("child_process");
+const crypto = require("crypto");
 const fs = require("fs");
 const net = require("net");
 const os = require("os");
@@ -193,6 +194,7 @@ class FakeBridge {
   async handleCommand(socket, command) {
     const type = command.type;
     this.commandCounts[type] = (this.commandCounts[type] || 0) + 1;
+    this.context.commands.push({ type, params: command.params || {} });
 
     if (this.context.shouldFail(type)) {
       await this.context.replaceBridge();
@@ -220,6 +222,7 @@ class ScenarioContext {
     this.statusDir = path.join(this.root, "connections");
     this.projectRoot = path.join(this.root, "Project");
     this.commandCounts = {};
+    this.commands = [];
     this.failOnceOn = failOnceOn;
     this.failed = false;
     this.bridge = null;
@@ -278,10 +281,20 @@ class ScenarioContext {
     return { foreignRoot, foreignPipe, foreignStatus };
   }
 
-  writeMalformedHealth() {
-    const healthPath = path.join(this.statusDir, `editor-health-malformed-${nextPipeId++}.json`);
+  writeMalformedHealth(options = {}) {
+    const hash = options.foreign ? "ffffffff" : projectHashForStatusFile(this.projectRoot);
+    const healthPath = path.join(this.statusDir, `editor-health-${hash}-${nextPipeId++}.json`);
     fs.writeFileSync(healthPath, "{ not json");
+    if (options.stale) setStaleFileTime(healthPath);
     return healthPath;
+  }
+
+  writeMalformedStatus(options = {}) {
+    const hash = options.foreign ? "ffffffff" : projectHashForStatusFile(this.projectRoot);
+    const statusPath = path.join(this.statusDir, `bridge-status-${hash}-${nextPipeId++}.json`);
+    fs.writeFileSync(statusPath, "{ not json");
+    if (options.stale) setStaleFileTime(statusPath);
+    return statusPath;
   }
 
   writeHealthOnly(options = {}) {
@@ -353,6 +366,16 @@ function writeStatus(statusPath, connectionPath, projectRoot, options) {
   return { statusPath, healthPath };
 }
 
+function projectHashForStatusFile(projectRoot) {
+  const assetsPath = path.join(projectRoot, "Assets").replace(/\\/g, "/");
+  return crypto.createHash("sha1").update(assetsPath, "utf8").digest("hex").slice(0, 8);
+}
+
+function setStaleFileTime(filePath) {
+  const stale = new Date(Date.now() - 120000);
+  fs.utimesSync(filePath, stale, stale);
+}
+
 function writeHealth(healthPath, projectRoot, options) {
   const heartbeat = options.heartbeat || new Date();
   const flags = options.flags || {};
@@ -421,9 +444,129 @@ function resultFor(type, params) {
         message: "Fake mutating command ran.",
         data: {},
       };
+    case "Unity.Editor.SetPlayMode":
+      return playModeSetResult(params);
+    case "Unity.PlayMode.StepVerifier":
+      return stepVerifierResult(params);
+    case "Unity.Workflow.RunGpuSimulationProbe":
+      return gpuSimulationProbeResult(params);
+    case "Unity.Workflow.VerifyRuntimePackSelection":
+      return runtimePackSelectionResult(params);
     default:
       return { success: true, message: `${type} ok`, data: {} };
   }
+}
+
+function playModeSetResult(params = {}) {
+  const mode = params.mode || params.Mode || "enter";
+  const entering = mode !== "exit";
+  return {
+    success: true,
+    message: entering ? "Fake play mode entered." : "Fake play mode exited.",
+    data: {
+      requested: entering,
+      transitionState: entering ? "entered_play_mode" : "exited_play_mode",
+      runtimeAdvanced: entering,
+      readyForRuntimeTools: entering,
+      transitionPending: false,
+      consoleErrorCount: 0,
+      finalState: {
+        isPlaying: entering,
+        isPaused: false,
+        isCompiling: false,
+        isUpdating: false,
+        isBuildingPlayer: false,
+        isPlayingOrWillChangePlaymode: false,
+        runtimeProbe: {
+          isAvailable: entering,
+          hasAdvancedFrames: entering,
+          updateCount: entering ? 12 : 0,
+          fixedUpdateCount: entering ? 2 : 0,
+          unscaledTime: entering ? 0.25 : 0,
+          activeSceneName: "FakeScene",
+        },
+      },
+    },
+  };
+}
+
+function stepVerifierResult(params = {}) {
+  const steps = Number(params.steps ?? params.Steps ?? 1);
+  const warmupSteps = Number(params.warmupSteps ?? params.WarmupSteps ?? 0);
+  return {
+    success: true,
+    message: "Fake paused stepping completed.",
+    data: {
+      enteredPlayMode: true,
+      paused: true,
+      stepsRequested: steps,
+      stepsCompleted: steps,
+      warmupSteps,
+      warmupCompleted: warmupSteps,
+      runtimeAdvanced: steps + warmupSteps > 0,
+      timedOut: false,
+      editorResponsiveAfter: true,
+      exitAfter: params.exitAfter ?? params.ExitAfter ?? true,
+      allowRealtimeRun: params.allowRealtimeRun ?? params.AllowRealtimeRun ?? false,
+      consoleDelta: {
+        newErrors: 0,
+        newWarnings: 0,
+        staleErrorsPresent: true,
+        staleWarningsPresent: true,
+      },
+    },
+  };
+}
+
+function gpuSimulationProbeResult(params = {}) {
+  const steps = Number(params.steps ?? params.Steps ?? 240);
+  const packId = params.packId || params.PackId || "garden";
+  return {
+    success: true,
+    message: "Fake FallingSands GPU simulation probe completed.",
+    data: {
+      activePack: packId,
+      gridSize: { width: 8, height: 8 },
+      stepsCompleted: steps,
+      dispatchTiming: { elapsedMs: 1.5, timedOut: false },
+      readbackTiming: { elapsedMs: 0.75, timedOut: false },
+      counts: {
+        seed: 1,
+        sprout: 1,
+        plant: 1,
+        flower: 1,
+        water: 2,
+        steam: 0,
+        bee: 1,
+        nectarBee: 0,
+        hive: 1,
+      },
+      capsPassed: true,
+      failedCaps: [],
+      consoleDelta: {
+        newErrors: 0,
+        newWarnings: 0,
+        staleErrorsPresent: true,
+      },
+      editorResponsiveAfter: true,
+    },
+  };
+}
+
+function runtimePackSelectionResult(params = {}) {
+  const packId = params.selectedPackId || params.SelectedPackId || params.packId || params.PackId || "garden";
+  return {
+    success: true,
+    message: "Fake runtime pack selection verified.",
+    data: {
+      selectedPackId: packId,
+      activeRuntimePackName: packId,
+      elementCount: 9,
+      sceneLoaded: !!(params.scenePath || params.ScenePath),
+      domainReloadObserved: false,
+      passed: true,
+    },
+  };
 }
 
 function manifestResult(activeToolPacks) {
@@ -446,6 +589,10 @@ function fakeTools(withSchemas) {
     toolDescriptor("Unity_GetLensHealth", true, withSchemas),
     toolDescriptor("Unity_ListToolPacks", true, withSchemas),
     toolDescriptor("Unity_RunCommand", false, withSchemas),
+    toolDescriptor("Unity.Editor.SetPlayMode", false, withSchemas),
+    toolDescriptor("Unity.PlayMode.StepVerifier", false, withSchemas),
+    toolDescriptor("Unity.Workflow.RunGpuSimulationProbe", false, withSchemas),
+    toolDescriptor("Unity.Workflow.VerifyRuntimePackSelection", false, withSchemas),
   ];
 }
 
@@ -486,6 +633,10 @@ async function assertFullTools(client) {
   const names = response.tools.map((tool) => tool.name);
   assert(names.includes("Unity_GetLensHealth"), "tools/list should include dynamic health tool");
   assert(names.includes("Unity_Editor_HealthCheckFast"), "tools/list should include file-backed fast health tool");
+  assert(names.includes("Unity_PlayMode_StepVerifier"), "tools/list should include bootstrap StepVerifier tool");
+  assert(names.includes("Unity_Editor_RecoverFromHang"), "tools/list should include bootstrap recovery tool");
+  assert(names.includes("Unity_Workflow_RunGpuSimulationProbe"), "tools/list should include bootstrap GPU probe tool");
+  assert(names.includes("Unity_Workflow_VerifyRuntimePackSelection"), "tools/list should include bootstrap pack handoff verifier");
   assert(names.includes("Unity_ListToolPacks"), "tools/list should include dynamic pack tool");
   assert(names.includes("Unity_RunCommand"), `tools/list should include dynamic mutating tool; got ${names.join(", ")}; stderr=${client.stderr}`);
   assert(response.tools.length >= 4, "tools/list should include dynamic tools plus local bootstrap helpers");
@@ -493,6 +644,12 @@ async function assertFullTools(client) {
 
 function commandTotal(commandCounts) {
   return Object.values(commandCounts).reduce((sum, value) => sum + value, 0);
+}
+
+function assertIncludesAll(actual, expected, message) {
+  for (const value of expected) {
+    assert(actual.includes(value), `${message} missing ${value}; got ${actual.join(", ")}`);
+  }
 }
 
 async function main() {
@@ -513,6 +670,175 @@ async function main() {
     assert.strictEqual(fastHealth.structuredContent.agent_should_stop, false);
     assert.strictEqual(commandTotal(context.commandCounts), beforeFastHealthCount, "fast health must not call the bridge");
   });
+
+  await withScenario("step-verifier-wrapper", null, async (context, client) => {
+    await assertFullTools(client);
+    const result = await client.callTool("Unity_PlayMode_StepVerifier", {
+      scenePath: "Assets/Scenes/MainMenu.unity",
+      warmupSteps: 1,
+      steps: 2,
+      exitAfter: true,
+      captureConsoleDelta: true,
+      timeoutMs: 10000,
+    });
+
+    assert.strictEqual(result.structuredContent.success, true, "StepVerifier wrapper should succeed");
+    assert.strictEqual(result.structuredContent.data.enteredPlayMode, true);
+    assert.strictEqual(result.structuredContent.data.timedOut, false);
+    assert.strictEqual(result.structuredContent.data.editorResponsiveAfter, true);
+    assert.strictEqual(result.structuredContent.data.verifier.success, true);
+    assert.strictEqual(result.structuredContent.data.verifier.data.paused, true);
+    assert.strictEqual(result.structuredContent.data.verifier.data.stepsRequested, 2);
+    assert.strictEqual(result.structuredContent.data.verifier.data.stepsCompleted, 2);
+    assert.strictEqual(result.structuredContent.data.verifier.data.warmupSteps, 1);
+    assert.strictEqual(result.structuredContent.data.verifier.data.allowRealtimeRun, false);
+    assert.strictEqual(result.structuredContent.data.verifier.data.consoleDelta.staleErrorsPresent, true);
+    assert.strictEqual(result.structuredContent.data.verifier.data.consoleDelta.newErrors, 0);
+    assert.strictEqual(result.structuredContent.data.timeoutMs, 10000);
+    assert.strictEqual(result.structuredContent.data.entryTimeoutMs, 10000);
+    assert.strictEqual(context.commandCounts["Unity.PlayMode.StepVerifier"], 1, "native StepVerifier should be called once");
+    assert((context.commandCounts["Unity.Editor.SetPlayMode"] || 0) >= 3, "StepVerifier should enter through SetPlayMode readiness");
+  });
+
+  await withScenario("step-verifier-default-timeout", null, async (context, client) => {
+    await assertFullTools(client);
+    const result = await client.callTool("Unity_PlayMode_StepVerifier", {
+      scenePath: "Assets/Scenes/MainMenu.unity",
+      steps: 1,
+    });
+
+    assert.strictEqual(result.structuredContent.success, true, "StepVerifier default-timeout wrapper should succeed");
+    assert.strictEqual(result.structuredContent.data.timeoutMs, 60000);
+    assert.strictEqual(result.structuredContent.data.entryTimeoutMs, 60000);
+    assert(result.structuredContent.data.stepTimeoutMs > 0, "StepVerifier should report a positive step timeout");
+  });
+
+  await withScenario("recover-diagnose-only", null, async (context, client) => {
+    await assertFullTools(client);
+    const beforeCount = commandTotal(context.commandCounts);
+    const result = await client.callTool("Unity_Editor_RecoverFromHang", {
+      diagnoseOnly: true,
+    });
+
+    assert.strictEqual(result.structuredContent.success, true, "diagnose-only recovery should return a successful bounded result");
+    assert.strictEqual(result.structuredContent.state, "recovered");
+    assert.strictEqual(result.structuredContent.safeToContinue, true);
+    assert.strictEqual(result.structuredContent.data.diagnoseOnly, true);
+    assert.strictEqual(result.structuredContent.data.allowKillUnity, false);
+    assert.strictEqual(result.structuredContent.data.allowRestartUnity, false);
+    assert.strictEqual(result.structuredContent.data.allowScratchCleanup, false);
+    assert.strictEqual(result.structuredContent.data.killedPid ?? null, null);
+    assert.strictEqual(result.structuredContent.data.restart ?? null, null);
+    assert.strictEqual(result.structuredContent.data.scratchCleanup ?? null, null);
+    assert.strictEqual(result.structuredContent.data.actionCount, 0);
+    assert.strictEqual(result.structuredContent.data.modalHandling.knownDialogsOnly, true);
+    assert.strictEqual(commandTotal(context.commandCounts), beforeCount, "diagnose-only recovery must not call the bridge");
+  });
+
+  await withScenario("runcommand-preflight-labels", null, async (context, client) => {
+    await assertFullTools(client);
+    const cases = [
+      {
+        title: "scene-load",
+        code: "UnityEditor.SceneManagement.EditorSceneManager.OpenScene(\"Assets/Scenes/Main.unity\");",
+        labels: ["loads_scene"],
+      },
+      {
+        title: "domain-reload",
+        code: "UnityEditor.AssetDatabase.Refresh(); UnityEditor.Compilation.CompilationPipeline.RequestScriptCompilation();",
+        labels: ["may_trigger_domain_reload", "touches_assets"],
+      },
+      {
+        title: "sync-gpu-readback",
+        code: "GridState.IdRead.GetData(ids); AsyncGPUReadback.Request(buffer);",
+        labels: ["does_sync_gpu_readback", "uses_full_grid_getdata", "may_block_main_thread"],
+      },
+      {
+        title: "play-and-block",
+        code: "UnityEditor.EditorApplication.isPlaying = true; while (true) { System.Threading.Thread.Sleep(1); }",
+        labels: ["requires_play_mode", "may_block_main_thread"],
+      },
+    ];
+
+    const beforeCount = commandTotal(context.commandCounts);
+    for (const item of cases) {
+      const result = await client.callTool("Unity_RunCommand", {
+        mode: "preflight",
+        title: item.title,
+        code: item.code,
+      });
+      assert.strictEqual(result.structuredContent.success, true, `${item.title} preflight should succeed`);
+      assert.strictEqual(result.structuredContent.data.mode, "preflight");
+      assert.strictEqual(result.structuredContent.data.bridgeTouched, false);
+      assert.strictEqual(result.structuredContent.data.unityTouched, false);
+      assertIncludesAll(result.structuredContent.data.riskLabels, item.labels, `${item.title} risk labels`);
+    }
+    assert.strictEqual(commandTotal(context.commandCounts), beforeCount, "RunCommand preflight must not call the bridge");
+  });
+
+  await withScenario("gpu-probe-wrapper", null, async (context, client) => {
+    await assertFullTools(client);
+    const result = await client.callTool("Unity_Workflow_RunGpuSimulationProbe", {
+      scenePath: "Assets/Scenes/Main.unity",
+      packId: "garden",
+      fixture: "sparse_nectar_bee",
+      steps: 10,
+      maxWallMs: 5000,
+      caps: {
+        beeCountMax: 500,
+        steamCountMax: 10000,
+        dispatchMsMax: 50,
+        readbackMsMax: 50,
+      },
+    });
+
+    assert.strictEqual(result.structuredContent.success, true, "GPU probe wrapper should succeed");
+    assert.strictEqual(result.structuredContent.data.entry.success, true, "GPU probe should enter paused play first");
+    assert.strictEqual(result.structuredContent.data.probe.success, true, "native GPU probe should run");
+    assert.strictEqual(result.structuredContent.data.probe.data.activePack, "garden");
+    assert.strictEqual(result.structuredContent.data.probe.data.stepsCompleted, 10);
+    assert.strictEqual(result.structuredContent.data.probe.data.capsPassed, true);
+    assert.strictEqual(result.structuredContent.data.exit.success, true, "GPU probe should exit play mode by default");
+    assert.strictEqual(result.structuredContent.data.timeoutMs, 65000, "GPU probe default timeout should be maxWallMs + 60000");
+    assert.strictEqual(result.structuredContent.data.entryTimeoutMs, 60000, "GPU probe entry cap should default to 60000");
+    assert.strictEqual(context.commandCounts["Unity.Workflow.RunGpuSimulationProbe"], 1, "native GPU probe should be called once");
+    assert.strictEqual(context.commandCounts["Unity.PlayMode.StepVerifier"], 2, "GPU probe should use StepVerifier for entry and exit");
+  });
+
+  await withScenario("pack-verify-default-timeout", null, async (context, client) => {
+    await assertFullTools(client);
+    const result = await client.callTool("Unity_Workflow_VerifyRuntimePackSelection", {
+      selectedPackId: "garden",
+      scenePath: "Assets/Scenes/Main.unity",
+    });
+
+    assert.strictEqual(result.structuredContent.success, true, "pack handoff verifier should succeed");
+    assert.strictEqual(result.structuredContent.data.timeoutMs, 60000);
+    assert.strictEqual(result.structuredContent.data.entryTimeoutMs, 60000);
+    assert.strictEqual(result.structuredContent.data.verify.success, true);
+  });
+
+  {
+    const context = new ScenarioContext("gpu-probe-entry-failure");
+    let client = null;
+    try {
+      await context.startBridge({ healthHeartbeat: new Date(Date.now() - 120000) });
+      client = new McpHostClient(context.projectRoot, context.statusDir);
+      await client.initialize();
+      const result = await client.callTool("Unity_Workflow_RunGpuSimulationProbe", {
+        scenePath: "Assets/Scenes/Main.unity",
+        packId: "garden",
+        steps: 10,
+        timeoutMs: 2000,
+      });
+      assert.strictEqual(result.isError, true, "unsafe health should block GPU probe entry");
+      assert.strictEqual(result.structuredContent.code, "UNITY_MCP_GPU_PROBE_ENTER_FAILED");
+      assert.strictEqual(context.commandCounts["Unity.Workflow.RunGpuSimulationProbe"] || 0, 0, "native GPU probe must not run after entry failure");
+    } finally {
+      if (client) await client.dispose().catch(() => {});
+      await context.dispose();
+    }
+  }
 
   {
     const context = new ScenarioContext("health-no-status");
@@ -609,6 +935,42 @@ async function main() {
       await context.dispose();
     }
   }
+
+  await withScenario("stale-malformed-same-project-ignored", null, async (context, client) => {
+    const malformed = context.writeMalformedStatus({ stale: true });
+    const result = await client.callTool("Unity_Editor_HealthCheckFast", { includeCandidates: true });
+    assert.strictEqual(result.structuredContent.state, "unity_alive_fresh");
+    assert.strictEqual(result.structuredContent.data.freshMalformedStatusCount, 0);
+    assert.strictEqual(result.structuredContent.data.ignoredMalformedStatusCount, 1);
+    assert(result.structuredContent.data.ignoredMalformedStatusFiles.includes(malformed), "ignored malformed file should be reported");
+    const candidate = result.structuredContent.data.candidates.bridge.find((item) => item.statusPath === malformed);
+    assert(candidate, "ignored stale malformed bridge candidate should be listed");
+    assert.strictEqual(candidate.ignoredMalformed, true);
+    assert.strictEqual(candidate.malformedIgnoreReason, "stale_malformed_status");
+  });
+
+  await withScenario("fresh-malformed-same-project-blocks", null, async (context, client) => {
+    const malformed = context.writeMalformedStatus();
+    const result = await client.callTool("Unity_Editor_HealthCheckFast", { includeCandidates: true });
+    assert.strictEqual(result.structuredContent.state, "malformed_status");
+    assert.strictEqual(result.structuredContent.safeToContinue, false);
+    assert.strictEqual(result.structuredContent.data.freshMalformedStatusCount, 1);
+    const candidate = result.structuredContent.data.candidates.bridge.find((item) => item.statusPath === malformed);
+    assert(candidate, "fresh malformed bridge candidate should be listed");
+    assert.strictEqual(candidate.ignoredMalformed, false);
+  });
+
+  await withScenario("stale-malformed-foreign-ignored", null, async (context, client) => {
+    const malformed = context.writeMalformedStatus({ stale: true, foreign: true });
+    const result = await client.callTool("Unity_Editor_HealthCheckFast", { includeCandidates: true });
+    assert.strictEqual(result.structuredContent.state, "unity_alive_fresh");
+    assert.strictEqual(result.structuredContent.data.freshMalformedStatusCount, 0);
+    assert.strictEqual(result.structuredContent.data.ignoredMalformedStatusCount, 1);
+    const candidate = result.structuredContent.data.candidates.bridge.find((item) => item.statusPath === malformed);
+    assert(candidate, "ignored foreign malformed bridge candidate should be listed");
+    assert.strictEqual(candidate.ignoredMalformed, true);
+    assert(["stale_malformed_status", "foreign_malformed_status"].includes(candidate.malformedIgnoreReason));
+  });
 
   await withScenario("fresh-bridge-missing-health", null, async (context, client) => {
     await context.bridge.stop();
@@ -747,6 +1109,20 @@ async function main() {
       assert.strictEqual(result.structuredContent.agent_should_stop, true);
       assert.strictEqual(result.structuredContent.safeToContinue, false);
       assert.strictEqual(result.structuredContent.data.maybeApplied, true);
+
+      const unsafePreflightCount = commandTotal(context.commandCounts);
+      const unsafePreflight = await client.callTool("Unity_RunCommand", {
+        mode: "preflight",
+        title: "unsafe preflight is file-backed",
+        code: "UnityEditor.AssetDatabase.Refresh(); GridState.IdRead.GetData(ids); while(true) {}",
+      });
+      assert.strictEqual(unsafePreflight.structuredContent.success, true, "preflight should remain available while session is unsafe");
+      assert.strictEqual(unsafePreflight.structuredContent.data.bridgeTouched, false);
+      assertIncludesAll(
+        unsafePreflight.structuredContent.data.riskLabels,
+        ["may_trigger_domain_reload", "touches_assets", "does_sync_gpu_readback", "uses_full_grid_getdata", "may_block_main_thread"],
+        "unsafe preflight risk labels");
+      assert.strictEqual(commandTotal(context.commandCounts), unsafePreflightCount, "unsafe preflight must not call the bridge");
 
       const blocked = await client.callTool("Unity_ListToolPacks", {});
       assert.strictEqual(blocked.isError, true, "unsafe session should block bridge-backed tools");

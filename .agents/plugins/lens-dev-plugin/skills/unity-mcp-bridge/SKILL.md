@@ -1,11 +1,29 @@
 ---
 name: "unity-mcp-bridge"
-description: "Use when Codex is working in a Unity project and needs to verify, diagnose, or recover the local Unity MCP bridge before touching Unity editor state. Prefer the owned unity-mcp-lens stdio server, beacon-first status checks, event-driven manifest awareness, and explicit user escalation only when Unity or the bridge really needs intervention."
+description: "Lens Dev Plugin v0.1.5. Use when Codex is working in a Unity project and needs fast file-backed Unity health, bridge diagnostics, safe stop contracts, or recovery diagnosis before touching Unity editor state. Prefer Unity.Editor.HealthCheckFast, the owned unity-mcp-lens stdio server, Command Center status, and explicit user escalation only when Unity or the bridge really needs intervention."
 ---
 
 # Unity MCP Bridge
 
 Use this skill as the operational guide for the local Unity MCP bridge and the owned `unity-mcp-lens` MCP server. The Unity bridge is still the authority for editor mutations and tool execution. This skill standardizes how to verify it, diagnose failures, notify the user, and keep all Unity MCP access on the Lens path.
+
+## Version Marker
+
+- Plugin guidance version: `Lens Dev Plugin v0.1.5`
+- Expected installed Lens host: `0.1.0-alpha.12` or newer
+- If Codex shows an older Lens Dev Plugin version, refresh the plugin cache from the repo-local source before trusting this skill's installed copy.
+
+## Fast Health First
+
+Start bridge-sensitive work with file-backed health before any Unity-backed call:
+
+- Prefer `Unity.Editor.HealthCheckFast` as the first safe diagnostic when the tool is available.
+- Use `Unity.Bridge.ListConnections` for file-backed bridge/editor-health candidates and selected-bridge diagnostics.
+- Do not use broad tool discovery, `Unity.RunCommand`, play-mode entry, or other Unity-backed probes to answer basic health.
+- Respect the stop contract fields: `safeToContinue`, `agent_should_stop`, `user_action_required`, `recommendedNextAction`, `safe_next_actions`, `unsafe_next_actions`, and `reason`.
+- If `agent_should_stop=true`, stop poking Unity. Safe next actions are limited to waiting, opening Command Center, listing connections, or an explicit recovery workflow requested by the user.
+- Treat stale or foreign malformed status files as warnings when a fresh matching bridge/editor-health pair exists. Fresh malformed files relevant to the selected project still block as `malformed_status`.
+- If the MCP wrapper in the current Codex chat has a closed transport after a host refresh, restart the connector or start a fresh chat; the installed host can still be validated directly from `%USERPROFILE%\.unity\unity-mcp-lens\unity_mcp_lens_win.exe`.
 
 ## Preferred Topology
 
@@ -17,13 +35,18 @@ Use this skill as the operational guide for the local Unity MCP bridge and the o
 ## Workflow
 
 1. Read the repo-local backlog at `docs/unity-mcp-backlog.md` if it exists.
-2. Start with the shared check script, not an improvised MCP probe:
+2. If direct Lens tools are available, call `Unity.Editor.HealthCheckFast` before Unity-backed tools.
+   - Continue only when `safeToContinue=true`.
+   - If the state is `editor_busy_healthy`, wait rather than escalating.
+   - If the state is `bridge_unavailable`, use `Unity.Bridge.ListConnections` and Command Center status before trying any bridge-backed action.
+   - If the state is `unity_alive_stale_unresponsive`, `unity_missing`, `process_missing`, `pid_reused`, or recent relevant `malformed_status`, stop editor-facing work and report the recommended next action.
+3. Start with the shared check script when direct tools are unavailable or when you need a scriptable preflight, not an improvised MCP probe:
    - macOS/Linux repo-local Unity work: `node unity-dev-assistant/scripts/Check-UnityDevSession.js`
    - Windows repo-local Unity work: `unity-dev-assistant/scripts/Check-UnityDevSession.ps1`
    - macOS/Linux bridge maintenance: `node unity-mcp-bridge/scripts/Check-UnityMcp.js`
    - Windows bridge maintenance: `unity-mcp-bridge/scripts/Check-UnityMcp.ps1`
    - checks are compact by default; add `--IncludeDiagnostics` or `-IncludeDiagnostics` only when you need the deep editor payload
-3. Check the local editor-status beacon first when it exists.
+4. Check the local editor-status beacon when it exists.
    - If the beacon reports a fresh compile/import/reload/play/build transition, treat that as the primary status signal and avoid an immediate extra MCP probe.
    - If the beacon is idle, stale, or missing, continue with the normal MCP health-check flow.
    - Do not begin a fresh Unity chat with a broad tool-discovery request when the beacon is fresh.
@@ -36,7 +59,7 @@ Use this skill as the operational guide for the local Unity MCP bridge and the o
    - `profile_catalog_version`
    - `supports_tool_sync_lens`
    - `last_tools_changed_utc`
-5. Attempt one lightweight MCP authority check only when bridge authority still needs to be confirmed.
+5. Attempt one lightweight MCP authority check only when bridge authority still needs to be confirmed and fast health did not already provide a safe answer.
    - Preferred Lens check: `Unity.ListToolPacks`
    - Fallback if Lens tools are not exposed yet: one narrow read-only Unity MCP tool already available in the session
    - `Check-UnityMcp` reports `Ready` only after `ReadyAuthorityProbe.DirectToolReady=true` when a ready bridge status can be probed.
@@ -69,6 +92,13 @@ powershell -ExecutionPolicy Bypass -File $script -ProjectPath "$PWD"
 
 12. Tell the user Unity MCP needs approval, reconnection, or editor recovery and pause Unity editor mutations until the bridge is healthy.
 
+## Recovery Discipline
+
+- Start recovery with `Unity.Editor.RecoverFromHang` using `diagnoseOnly=true`.
+- Do not kill, restart, or clean scratch artifacts unless the user explicitly requested those destructive options.
+- Never rely on a live Unity call to decide whether Unity is hung; use health files, process identity, heartbeat age, and bridge state.
+- Use Command Center when the user needs a visible status dashboard, server refresh, or explanation of bridge/editor state.
+
 ## Lens-Specific Rules
 
 - Prefer `unity-mcp-lens` configured as:
@@ -84,12 +114,13 @@ powershell -ExecutionPolicy Bypass -File $script -ProjectPath "$PWD"
   - args: `--mcp`
 - Do not burn probe budget on repeated broad tool discovery. In Codex, the plugin defaults to `static_all`; use `Unity.Tools.Menu` as the compact facade for navigation, but remember host-visible tools may still be absent from the current client-callable table.
 - Prefer the bootstrap tools before asking for more surface area:
+  - `Unity.Editor.HealthCheckFast`
+  - `Unity.Bridge.ListConnections`
   - `Unity.ListToolPacks`
   - `Unity.ReadDetailRef`
   - `Unity.Tools.Menu`
   - `Unity.Tools.Describe`
   - `Unity.Tools.ActivateAndVerify`
-  - `Unity.Bridge.ListConnections`
 - `foundation` is the default pack and is always on.
 - At most two additional non-foundation packs should be active at once.
 - Recommended Codex host mode `UNITY_MCP_LENS_TOOL_SURFACE_MODE=static_all` starts with `foundation+full` and makes `Unity.SetToolPacks` a compatibility no-op. In that mode, use `Unity.Tools.Menu` for compact pack-oriented navigation and call real tools directly when the client exposes them; otherwise use helper scripts or `Invoke-UnityMcpBatch`.

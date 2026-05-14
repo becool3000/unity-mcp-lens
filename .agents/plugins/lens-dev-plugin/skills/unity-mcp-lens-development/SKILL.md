@@ -1,6 +1,6 @@
 ---
 name: unity-mcp-lens-development
-description: Develop, test, and improve Unity MCP Lens tools, packs, bridge behavior, package UI, and Unity editor automation workflows. Use when working on Lens itself, adding or debugging Lens MCP tools, changing tool packs, validating bridge behavior, or making Unity editor-authored persistent changes for Lens projects.
+description: Lens Dev Plugin v0.1.5. Develop, test, and improve Unity MCP Lens tools, packs, bridge behavior, Command Center UI, safe health substrate, StepVerifier/recovery workflows, package UI, and Unity editor automation workflows. Use when working on Lens itself, adding or debugging Lens MCP tools, changing tool packs, validating bridge behavior, or making Unity editor-authored persistent changes for Lens projects.
 ---
 
 # Unity MCP Lens Development
@@ -14,6 +14,24 @@ The repo-local Codex plugin is the only editable source of truth for Lens workfl
 - `.agents/plugins/lens-dev-plugin/skills/unity-mcp-lens-development`
 
 Do not edit installed Codex cache copies or standalone `$CODEX_HOME/skills` copies. If the app shows duplicate Lens skills, remove the duplicates and regenerate the plugin cache from this repo.
+
+## Version Marker
+
+- Plugin guidance version: `Lens Dev Plugin v0.1.5`
+- Expected installed Lens host: `0.1.0-alpha.12` or newer
+- The plugin version and display name must be visible in `.codex-plugin/plugin.json` so Codex's plugin view makes stale installs obvious.
+- Host version and plugin version are intentionally separate. Host builds advance host metadata; plugin versions advance only when Codex guidance, plugin metadata, or plugin scripts change.
+
+## Safe Host Workflow Truth
+
+- `Unity.Editor.HealthCheckFast` is the first safe diagnostic. It is host-local and file-backed; it must not require a Unity callback.
+- Standard stop-contract fields are decision surfaces: `safeToContinue`, `agent_should_stop`, `user_action_required`, `recommendedNextAction`, `safe_next_actions`, `unsafe_next_actions`, and `reason`.
+- Session safety must block Unity-backed tools after watchdog/hung-command failures until a fresh non-busy editor and usable bridge are observed by `HealthCheckFast`.
+- `Unity.RunCommand` should use preflight/risk labels for risky snippets and a hard watchdog for execution.
+- `Unity.PlayMode.StepVerifier` is the default safe play-mode primitive. It should enter through the safe path, pause once runtime is observable, step exact counts, capture console deltas, and exit/restore state.
+- `Unity.Editor.RecoverFromHang` starts in `diagnoseOnly=true`; destructive options require explicit user args.
+- Status readers are non-destructive by default. Stale malformed files stay visible in diagnostics but must not poison a fresh matching bridge/editor-health pair.
+- Command Center is the Windows-first human UI for status, server refresh, settings, tool summaries, and explanations.
 
 ## Prime Directive
 

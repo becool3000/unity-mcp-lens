@@ -1,5 +1,7 @@
 using System.IO;
 using System.Diagnostics;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -81,6 +83,24 @@ public sealed class EditorHealthCandidate
     public required string BasicHealth { get; init; }
     public int EditorPid { get; init; }
     public string? Error { get; init; }
+    public DateTime FileWriteUtc { get; init; } = DateTime.MinValue;
+    public TimeSpan FileAge { get; init; } = TimeSpan.MaxValue;
+    public bool IsIgnoredMalformed { get; init; }
+    public string? MalformedIgnoreReason { get; init; }
+    public bool ProjectHashMatch { get; init; }
+}
+
+public sealed class MalformedStatusFileInfo
+{
+    public required string Path { get; init; }
+    public required DateTime FileWriteUtc { get; init; }
+    public required TimeSpan FileAge { get; init; }
+    public required bool IsRecent { get; init; }
+    public required bool ProjectHashMatch { get; init; }
+    public required bool IsProjectMatch { get; init; }
+    public required bool IsRelevant { get; init; }
+    public required bool IsIgnored { get; init; }
+    public string? IgnoreReason { get; init; }
 }
 
 public static class EditorHealthDiscovery
@@ -196,6 +216,44 @@ public static class EditorHealthDiscovery
             : DateTime.MinValue;
     }
 
+    public static MalformedStatusFileInfo InspectMalformedStatusFile(
+        string path,
+        string projectPathHint,
+        DateTime nowUtc,
+        string? parsedProjectRoot = null)
+    {
+        DateTime fileWriteUtc = GetFileWriteUtc(path);
+        TimeSpan fileAge = fileWriteUtc == DateTime.MinValue ? TimeSpan.MaxValue : nowUtc - fileWriteUtc;
+        if (fileAge < TimeSpan.Zero)
+            fileAge = TimeSpan.Zero;
+
+        string normalizedHint = NormalizePath(projectPathHint);
+        string normalizedProjectRoot = NormalizeProjectRoot(parsedProjectRoot, null);
+        bool projectRootMatch = IsPathMatch(normalizedProjectRoot, normalizedHint);
+        bool projectHashMatch = FileNameMatchesProjectHash(path, normalizedHint);
+        bool isRecent = fileAge <= FreshHeartbeatThreshold;
+        bool isRelevant = projectRootMatch || projectHashMatch;
+        bool isIgnored = !isRecent || !isRelevant;
+        string? ignoreReason = null;
+        if (!isRecent)
+            ignoreReason = "stale_malformed_status";
+        else if (!isRelevant)
+            ignoreReason = "foreign_malformed_status";
+
+        return new MalformedStatusFileInfo
+        {
+            Path = path,
+            FileWriteUtc = fileWriteUtc,
+            FileAge = fileAge,
+            IsRecent = isRecent,
+            ProjectHashMatch = projectHashMatch,
+            IsProjectMatch = projectRootMatch || projectHashMatch,
+            IsRelevant = isRelevant,
+            IsIgnored = isIgnored,
+            IgnoreReason = ignoreReason
+        };
+    }
+
     public static string NormalizeProjectRoot(string? projectRoot, string? projectPath)
     {
         string? candidate = !string.IsNullOrWhiteSpace(projectRoot) ? projectRoot : projectPath;
@@ -231,7 +289,7 @@ public static class EditorHealthDiscovery
         {
             var health = JsonSerializer.Deserialize<EditorHealthFile>(File.ReadAllText(healthPath));
             if (health == null)
-                return Malformed(healthPath, "Health file is empty.");
+                return Malformed(healthPath, "Health file is empty.", normalizedProjectPathHint, nowUtc);
 
             string projectRoot = NormalizeProjectRoot(health.ProjectRoot, health.ProjectPath);
             DateTime heartbeatUtc = ParseUtc(health.EditorHeartbeatUtc);
@@ -245,6 +303,11 @@ public static class EditorHealthDiscovery
             bool pidStartMatches = process.IsAlive && ProcessStartMatches(processStartUtc, process.StartTimeUtc);
             bool isFresh = heartbeatAge <= FreshHeartbeatThreshold && process.IsAlive && pidStartMatches;
             string basicHealth = ClassifyEditorHealth(heartbeatUtc, heartbeatAge, process.IsAlive, pidStartMatches);
+
+            DateTime fileWriteUtc = GetFileWriteUtc(healthPath);
+            TimeSpan fileAge = fileWriteUtc == DateTime.MinValue ? TimeSpan.MaxValue : nowUtc - fileWriteUtc;
+            if (fileAge < TimeSpan.Zero)
+                fileAge = TimeSpan.Zero;
 
             return new EditorHealthCandidate
             {
@@ -261,17 +324,25 @@ public static class EditorHealthDiscovery
                 PidStartMatches = pidStartMatches,
                 BasicHealth = basicHealth,
                 EditorPid = health.EditorPid,
-                Error = null
+                Error = null,
+                FileWriteUtc = fileWriteUtc,
+                FileAge = fileAge,
+                ProjectHashMatch = FileNameMatchesProjectHash(healthPath, normalizedProjectPathHint)
             };
         }
         catch (Exception ex)
         {
-            return Malformed(healthPath, ex.Message);
+            return Malformed(healthPath, ex.Message, normalizedProjectPathHint, nowUtc);
         }
     }
 
-    static EditorHealthCandidate Malformed(string healthPath, string error)
+    static EditorHealthCandidate Malformed(
+        string healthPath,
+        string error,
+        string normalizedProjectPathHint,
+        DateTime nowUtc)
     {
+        MalformedStatusFileInfo malformed = InspectMalformedStatusFile(healthPath, normalizedProjectPathHint, nowUtc);
         return new EditorHealthCandidate
         {
             HealthPath = healthPath,
@@ -280,11 +351,16 @@ public static class EditorHealthDiscovery
             EditorProcessStartUtc = DateTime.MinValue,
             HeartbeatAge = TimeSpan.MaxValue,
             IsFresh = false,
-            IsProjectMatch = false,
             EditorPidAlive = false,
             PidStartMatches = false,
             BasicHealth = "malformed_status",
-            Error = error
+            Error = error,
+            FileWriteUtc = malformed.FileWriteUtc,
+            FileAge = malformed.FileAge,
+            IsProjectMatch = malformed.IsProjectMatch,
+            IsIgnoredMalformed = malformed.IsIgnored,
+            MalformedIgnoreReason = malformed.IgnoreReason,
+            ProjectHashMatch = malformed.ProjectHashMatch
         };
     }
 
@@ -330,6 +406,87 @@ public static class EditorHealthDiscovery
         catch
         {
             return new ProcessProbe(false, DateTime.MinValue);
+        }
+    }
+
+    static DateTime GetFileWriteUtc(string path)
+    {
+        try
+        {
+            return File.Exists(path) ? File.GetLastWriteTimeUtc(path) : DateTime.MinValue;
+        }
+        catch
+        {
+            return DateTime.MinValue;
+        }
+    }
+
+    static bool FileNameMatchesProjectHash(string path, string normalizedProjectPathHint)
+    {
+        if (string.IsNullOrWhiteSpace(path) || string.IsNullOrWhiteSpace(normalizedProjectPathHint))
+            return false;
+
+        string fileName = Path.GetFileName(path);
+        foreach (string hash in GetProjectHashCandidates(normalizedProjectPathHint))
+        {
+            if (!string.IsNullOrWhiteSpace(hash) &&
+                fileName.Contains(hash, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    static IEnumerable<string> GetProjectHashCandidates(string normalizedProjectPathHint)
+    {
+        var candidates = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        string normalized = NormalizePath(normalizedProjectPathHint);
+        if (string.IsNullOrWhiteSpace(normalized))
+            return candidates;
+
+        candidates.Add(normalized);
+        if (string.Equals(Path.GetFileName(normalized), "Assets", StringComparison.OrdinalIgnoreCase))
+        {
+            string? parent = Path.GetDirectoryName(normalized);
+            if (!string.IsNullOrWhiteSpace(parent))
+                candidates.Add(parent);
+        }
+        else
+        {
+            candidates.Add(Path.Combine(normalized, "Assets"));
+        }
+
+        foreach (string candidate in candidates.ToArray())
+        {
+            candidates.Add(candidate.Replace(Path.DirectorySeparatorChar, '/').Replace(Path.AltDirectorySeparatorChar, '/'));
+            candidates.Add(candidate.Replace('/', Path.DirectorySeparatorChar).Replace('\\', Path.DirectorySeparatorChar));
+        }
+
+        return candidates
+            .Where(candidate => !string.IsNullOrWhiteSpace(candidate))
+            .Select(ComputeProjectHash)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    static string ComputeProjectHash(string input)
+    {
+        try
+        {
+            using SHA1 sha1 = SHA1.Create();
+            byte[] bytes = Encoding.UTF8.GetBytes(input ?? string.Empty);
+            byte[] hashBytes = sha1.ComputeHash(bytes);
+            var builder = new StringBuilder();
+            foreach (byte value in hashBytes)
+                builder.Append(value.ToString("x2"));
+
+            return builder.ToString()[..8];
+        }
+        catch
+        {
+            return string.Empty;
         }
     }
 
