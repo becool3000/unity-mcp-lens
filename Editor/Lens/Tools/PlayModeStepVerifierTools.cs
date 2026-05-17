@@ -181,8 +181,8 @@ This tool does not free-run real-time simulation by default. The Lens host shoul
                     rawData.reason,
                     rawData.consoleDelta,
                     rawData.cleanup,
-                    before,
-                    after
+                    before = SummarizeSnapshot(before),
+                    after = SummarizeSnapshot(after)
                 };
 
                 object shaped = ToolResultCompactor.ShapeStructuredPayload(
@@ -299,6 +299,45 @@ This tool does not free-run real-time simulation by default. The Lens host shoul
                 after.UnscaledTime > before.UnscaledTime ||
                 after.RuntimeTime > before.RuntimeTime ||
                 after.FixedTime > before.FixedTime;
+        }
+
+        static object SummarizeSnapshot(object snapshot)
+        {
+            try
+            {
+                JObject root = JObject.FromObject(snapshot ?? new { });
+                JToken dirtyAssets = root["dirtyAssets"];
+                JToken dirtyScenes = root["dirtyScenes"];
+                return new
+                {
+                    workflowId = root["workflowId"],
+                    capturedUtc = root["capturedUtc"],
+                    playMode = root["playMode"],
+                    activeScene = root["activeScene"],
+                    compileImportState = root["compileImportState"],
+                    dirtyScenes = new
+                    {
+                        available = dirtyScenes?["available"],
+                        dirtySceneCount = dirtyScenes?["dirtySceneCount"] ?? dirtyScenes?["sceneCount"],
+                        truncated = dirtyScenes?["truncated"]
+                    },
+                    dirtyAssets = new
+                    {
+                        available = dirtyAssets?["available"],
+                        dirtyAssetCount = dirtyAssets?["dirtyAssetCount"],
+                        truncated = dirtyAssets?["truncated"]
+                    },
+                    consoleCursor = root["consoleCursor"],
+                    activeToolPacks = root["activeToolPacks"],
+                    selectedBridgeSessionId = root["selectedBridgeSessionId"],
+                    selectedConnectionId = root["selectedConnectionId"],
+                    manifestVersion = root["manifestVersion"]
+                };
+            }
+            catch
+            {
+                return new { available = false };
+            }
         }
 
         static int GetConsoleDeltaInt(object consoleDelta, string name)

@@ -90,7 +90,7 @@ C:\Users\<you>\.unity\unity-mcp-lens\unity_mcp_lens_win.exe
 5. Verify:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .agents/plugins/lens-dev-plugin/skills/unity-dev-assistant/scripts/Check-UnityDevSession.ps1 -ProjectPath C:\Path\To\UnityProject
+& .agents/plugins/lens-dev-plugin/skills/unity-dev-assistant/scripts/Check-UnityDevSession.ps1 -ProjectPath C:\Path\To\UnityProject
 ```
 
 ---
@@ -111,7 +111,7 @@ For repeated smoke or workflow checks, use the repo-local batch helper so
 multiple project/ui/scene/debug calls share one Lens session:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .agents/plugins/lens-dev-plugin/skills/unity-dev-assistant/scripts/Invoke-UnityMcpBatch.ps1 -ProjectPath C:\Path\To\UnityProject -StepsPath C:\Path\To\steps.json
+& .agents/plugins/lens-dev-plugin/skills/unity-dev-assistant/scripts/Invoke-UnityMcpBatch.ps1 -ProjectPath C:\Path\To\UnityProject -StepsPath C:\Path\To\steps.json
 ```
 
 ---

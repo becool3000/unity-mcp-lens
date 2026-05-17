@@ -17,12 +17,12 @@ function loadSteps(args) {
 
 function parseStepsJson(rawJson, sourceLabel) {
   try {
-    return JSON.parse(rawJson);
+    return normalizeRawSteps(JSON.parse(rawJson));
   } catch (error) {
     const repairedJson = repairPowerShellStrippedJson(rawJson);
     if (repairedJson !== rawJson) {
       try {
-        return JSON.parse(repairedJson);
+        return normalizeRawSteps(JSON.parse(repairedJson));
       } catch (_repairError) {
       }
     }
@@ -36,6 +36,12 @@ function parseStepsJson(rawJson, sourceLabel) {
         `Input preview: ${preview}`
     );
   }
+}
+
+function normalizeRawSteps(value) {
+  if (Array.isArray(value)) return value;
+  if (value && typeof value === "object") return [value];
+  return value;
 }
 
 function repairPowerShellStrippedJson(rawJson) {
@@ -179,7 +185,7 @@ async function main() {
   const defaultTimeoutSeconds = common.getArgNumber(args, ["TimeoutSeconds"], 45);
   const rawSteps = loadSteps(args);
   if (!Array.isArray(rawSteps) || rawSteps.length === 0) {
-    throw new Error("Batch steps must be a non-empty JSON array.");
+    throw new Error("Batch steps must be a non-empty JSON array or a single step object.");
   }
 
   const steps = rawSteps.map((step, index) => normalizeStep(step, index, defaultTimeoutSeconds));
@@ -258,7 +264,16 @@ async function main() {
   process.exit(success ? 0 : 1);
 }
 
-main().catch((error) => {
-  console.error(error.message);
-  common.shutdownUnityMcpSessions().finally(() => process.exit(1));
-});
+if (require.main === module) {
+  main().catch((error) => {
+    console.error(error.message);
+    common.shutdownUnityMcpSessions().finally(() => process.exit(1));
+  });
+} else {
+  module.exports = {
+    loadSteps,
+    parseStepsJson,
+    normalizeRawSteps,
+    normalizeStep,
+  };
+}

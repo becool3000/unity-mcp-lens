@@ -1,6 +1,6 @@
 ---
 name: "unity-dev-assistant"
-description: "Lens Dev Plugin v0.1.5. Use when Codex is working in a Unity project and needs the full Unity development workflow: fast HealthCheckFirst status checks, Lens bridge-authoritative editor access, explicit tool-pack selection, compile-idle gating, safe paused StepVerifier play-mode checks, runtime probes, FallingSands GPU probes, screenshot-assisted validation, or edit-mode versus play-mode ownership-drift diagnosis."
+description: "Lens Dev Plugin v0.1.6. Use when Codex is working in a Unity project and needs the full Unity development workflow: fast HealthCheckFirst status checks, Lens bridge-authoritative editor access, explicit tool-pack selection, compile-idle gating, safe paused StepVerifier play-mode checks, runtime probes, FallingSands Main Menu pack selection, FallingSands GPU probes, screenshot-assisted validation, or edit-mode versus play-mode ownership-drift diagnosis."
 ---
 
 # Unity Dev Assistant
@@ -9,8 +9,8 @@ Use this as the primary Unity workflow skill. It depends on [$unity-mcp-bridge](
 
 ## Version Marker
 
-- Plugin guidance version: `Lens Dev Plugin v0.1.5`
-- Expected installed Lens host: `0.1.0-alpha.12` or newer
+- Plugin guidance version: `Lens Dev Plugin v0.1.6`
+- Expected installed Lens host: `0.1.0-alpha.24` or newer
 - If Codex shows an older Lens Dev Plugin version, refresh the plugin cache from the repo-local source before trusting this skill's installed copy.
 
 Default assumption going forward:
@@ -24,6 +24,7 @@ Default assumption going forward:
 - First contact is `Unity.Editor.HealthCheckFast` when the tool is available. Continue only when `safeToContinue=true`; if `agent_should_stop=true`, stop editor-facing work and report the recommended next action.
 - Use `Unity.Bridge.ListConnections` for file-backed diagnostics. Stale malformed status files are warning context when fresh matching bridge/editor health exists; fresh relevant malformed status remains blocking.
 - Prefer `Unity.PlayMode.StepVerifier` for smoke checks that need Play Mode. Its default is paused stepping; do not allow free-running wall-clock simulation unless the user explicitly needs it.
+- Prefer `Unity.Workflow.SelectPackThroughMainMenu` when FallingSands pack selection must go through the real Main Menu UI. It clicks the pack button through runtime UI tools and verifies the active runtime pack without `Unity.RunCommand`.
 - Treat console deltas as the pass/fail surface: new errors fail, stale errors/warnings are context unless the task asks to clean them up.
 - Prefer `Unity.Editor.RecoverFromHang` with `diagnoseOnly=true` before any recovery action. Do not kill, restart, or clean scratch artifacts without explicit user permission.
 - Prefer `Unity.Workflow.RunGpuSimulationProbe` for FallingSands garden-style deterministic GPU checks instead of ad hoc `Unity.RunCommand`.
@@ -74,7 +75,7 @@ or YAML edits.
 - Preview backend changes: `Unity.ProjectSettings.PreviewActiveInputHandler`
 - Apply backend changes: `Unity.ProjectSettings.SetActiveInputHandler`
 - Use `Unity.RunCommand` only for project-specific probes not covered by Lens tools.
-- For play-mode UI state and interaction, prefer `Unity.UI.QueryRuntimeLayout` and `Unity.UI.InvokeControl` before project-specific `Unity.RunCommand` snippets.
+- For FallingSands Main Menu pack selection, prefer `Unity.Workflow.SelectPackThroughMainMenu`. For other play-mode UI state and interaction, prefer `Unity.UI.QueryRuntimeLayout` and `Unity.UI.InvokeControl` before project-specific `Unity.RunCommand` snippets.
 - Treat active input handler changes as editor-authored ProjectSettings mutations that may need script reload or editor restart before defines and devices settle.
 
 ## Authoring-First Tool Preference
@@ -226,7 +227,7 @@ Prefer a scene-owned debugger component when a project needs fast UI or state it
 - Platform-native helpers first
 - Mandatory first step for Unity work in a fresh chat: `scripts/Check-UnityDevSession.js` on macOS/Linux or `scripts/Check-UnityDevSession.ps1` on Windows
 - Preferred transport: `unity-mcp-lens`
-- Default Codex exported tool surface: `static_all` (`foundation+full`); raw host default remains `dynamic_packs`
+- Default Lens host tool surface: `static_all` (`foundation+full`); set `UNITY_MCP_LENS_TOOL_SURFACE_MODE=dynamic_packs` only for clients that explicitly need dynamic pack switching
 - Current `foundation` surface: `18` tools
 - Current `foundation` + `scene` surface: `50` tools
 - Current `foundation` + `ui` surface: `35` tools

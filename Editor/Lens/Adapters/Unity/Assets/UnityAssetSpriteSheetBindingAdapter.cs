@@ -91,6 +91,14 @@ namespace Becool.UnityMcpLens.Editor.Adapters.Unity.Assets
                 return false;
             }
 
+#pragma warning disable CS0618
+            SpriteMetaData[] existingImporterMetadata = importer.spritesheet ?? Array.Empty<SpriteMetaData>();
+#pragma warning restore CS0618
+            plannedMetadata = PreserveExistingSpriteNamesForMatchingSlices(
+                plannedMetadata,
+                existingImporterMetadata,
+                out int preservedExistingSpriteNameCount);
+
             Object targetAsset = AssetDatabase.LoadMainAssetAtPath(targetAssetPath);
             if (targetAsset == null)
             {
@@ -214,6 +222,7 @@ namespace Becool.UnityMcpLens.Editor.Adapters.Unity.Assets
                 requestedFrameCount = request.FrameCount,
                 importedSpriteCount = previewOnly ? plannedMetadata.Length : readbackSprites.Length,
                 spriteNames,
+                preservedExistingSpriteNameCount,
                 targetFieldReadbackCount = readbackReferences.Length,
                 targetAssetDirty = EditorUtility.IsDirty(targetAsset),
                 saved = !previewOnly && (importerApplied || bindingApplied),
@@ -412,6 +421,44 @@ namespace Becool.UnityMcpLens.Editor.Adapters.Unity.Assets
                 return true;
 
             return !SpriteSheetsEqual(importer, plannedMetadata);
+        }
+
+        static SpriteMetaData[] PreserveExistingSpriteNamesForMatchingSlices(
+            SpriteMetaData[] plannedMetadata,
+            SpriteMetaData[] existingMetadata,
+            out int preservedNameCount)
+        {
+            preservedNameCount = 0;
+            plannedMetadata ??= Array.Empty<SpriteMetaData>();
+            existingMetadata ??= Array.Empty<SpriteMetaData>();
+
+            if (plannedMetadata.Length == 0 || plannedMetadata.Length != existingMetadata.Length)
+                return plannedMetadata;
+
+            var existingNames = new HashSet<string>(StringComparer.Ordinal);
+            var adjustedMetadata = new SpriteMetaData[plannedMetadata.Length];
+            for (int i = 0; i < plannedMetadata.Length; i++)
+            {
+                SpriteMetaData planned = plannedMetadata[i];
+                SpriteMetaData existing = existingMetadata[i];
+                if (!Approximately(existing.rect, planned.rect) ||
+                    !Approximately(existing.pivot, planned.pivot) ||
+                    existing.alignment != planned.alignment ||
+                    string.IsNullOrWhiteSpace(existing.name) ||
+                    !existingNames.Add(existing.name))
+                {
+                    preservedNameCount = 0;
+                    return plannedMetadata;
+                }
+
+                if (!string.Equals(existing.name, planned.name, StringComparison.Ordinal))
+                    preservedNameCount++;
+
+                planned.name = existing.name;
+                adjustedMetadata[i] = planned;
+            }
+
+            return preservedNameCount > 0 ? adjustedMetadata : plannedMetadata;
         }
 
         static void ApplyImporterSettings(TextureImporter importer, SpriteMetaData[] plannedMetadata, AssetSpriteSheetAndBindRequest request, ParsedTextureSettings settings)

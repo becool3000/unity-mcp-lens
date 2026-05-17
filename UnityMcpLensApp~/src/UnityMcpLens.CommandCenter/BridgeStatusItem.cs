@@ -14,6 +14,13 @@ public sealed class BridgeStatusItem
     public string Freshness { get; init; } = "unknown";
     public int EditorPid { get; init; }
     public bool EditorPidAlive { get; init; }
+    public string EditorProcessName { get; init; } = string.Empty;
+    public bool EditorProcessLooksLikeUnity { get; init; }
+    public bool CommandLineAvailable { get; init; }
+    public bool? ProjectCommandLineMatch { get; init; }
+    public string ProjectCommandLineEvidence { get; init; } = string.Empty;
+    public string EditorHealthMatchQuality { get; init; } = string.Empty;
+    public bool EditorHealthBridgePidMatch { get; init; }
     public string EditorProcessStartUtc { get; init; } = string.Empty;
     public bool PidStartMatches { get; init; } = true;
     public bool ProjectMatch { get; init; }

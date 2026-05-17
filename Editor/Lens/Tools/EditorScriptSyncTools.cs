@@ -13,6 +13,7 @@ using Becool.UnityMcpLens.Editor.Utils;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using UnityEditor;
+using UnityEditor.PackageManager;
 
 namespace Becool.UnityMcpLens.Editor.Tools
 {
@@ -35,6 +36,12 @@ namespace Becool.UnityMcpLens.Editor.Tools
 
         [McpDescription("Consecutive stable polls required before reporting editor idle.", Required = false, Default = 2)]
         public int StablePollCount { get; set; } = 2;
+
+        [McpDescription("Request a Unity Package Manager resolve before refreshing package paths when package-affecting changes are supplied.", Required = false, Default = true)]
+        public bool ResolvePackages { get; set; } = true;
+
+        [McpDescription("Host-side hint that stale local file-package sources were detected and package asset paths were injected into changedPaths.", Required = false, Default = false)]
+        public bool LocalPackageRefreshRequested { get; set; } = false;
     }
 
     [McpTool(ToolPackCatalog.EditorSyncScriptsToolName,
@@ -135,6 +142,10 @@ namespace Becool.UnityMcpLens.Editor.Tools
             bool refreshScheduledAfterResponse = false;
             ConsoleCursorSnapshot consoleBefore = ConsoleCursorDelta.Capture();
             int initialConsoleErrorCount = consoleBefore.ErrorCount;
+            bool packageResolveRequested = ShouldResolvePackages(relevantChangedPaths, parameters.Force, parameters.ResolvePackages, parameters.LocalPackageRefreshRequested);
+            var packageResolvePaths = relevantChangedPaths
+                .Where(IsPackageManagerAffectingPath)
+                .ToArray();
 
             if (BuildPipeline.isBuildingPlayer)
                 return BuildRefusedResult("Unity is building a player; script sync was refused.", "building_player");
@@ -161,6 +172,8 @@ namespace Becool.UnityMcpLens.Editor.Tools
                     noChangesDetected = true,
                     changedPaths,
                     relevantChangedPaths,
+                    packageResolveRequested,
+                    packageResolvePaths,
                     refreshRequested = false,
                     refreshScheduledAfterResponse = false,
                     compileStarted = false,
@@ -184,7 +197,7 @@ namespace Becool.UnityMcpLens.Editor.Tools
 
             if (!alreadyBusy)
             {
-                ScheduleRefreshAfterResponse(relevantChangedPaths, parameters.Force, parameters.TimeoutSeconds);
+                ScheduleRefreshAfterResponse(relevantChangedPaths, parameters.Force, parameters.TimeoutSeconds, packageResolveRequested);
                 refreshRequested = true;
                 refreshScheduledAfterResponse = true;
                 editorIdle = false;
@@ -263,6 +276,8 @@ namespace Becool.UnityMcpLens.Editor.Tools
                 noChangesDetected,
                 changedPaths,
                 relevantChangedPaths,
+                packageResolveRequested,
+                packageResolvePaths,
                 force = parameters.Force,
                 waitForCompile = parameters.WaitForCompile,
                 refreshRequested,
@@ -356,6 +371,8 @@ namespace Becool.UnityMcpLens.Editor.Tools
                     noChangesDetected,
                     changedPaths,
                     relevantChangedPaths,
+                    packageResolveRequested,
+                    packageResolvePaths,
                     refreshRequested = false,
                     refreshScheduledAfterResponse = false,
                     compileStarted,
@@ -477,14 +494,14 @@ namespace Becool.UnityMcpLens.Editor.Tools
             }
         }
 
-        static void ScheduleRefreshAfterResponse(string[] relevantChangedPaths, bool force, int timeoutSeconds)
+        static void ScheduleRefreshAfterResponse(string[] relevantChangedPaths, bool force, int timeoutSeconds, bool packageResolveRequested)
         {
-            EditorApplication.delayCall += () =>
+            EditorApplication.delayCall += async () =>
             {
                 try
                 {
                     BridgeStatusTracker.MarkEditorReloading("sync_scripts", Math.Max(5.0, timeoutSeconds));
-                    RequestRefresh(relevantChangedPaths, force);
+                    await RequestRefreshAsync(relevantChangedPaths, force, packageResolveRequested);
                 }
                 catch (Exception ex)
                 {
@@ -493,12 +510,16 @@ namespace Becool.UnityMcpLens.Editor.Tools
             };
         }
 
-        static void RequestRefresh(string[] relevantChangedPaths, bool force)
+        static async Task RequestRefreshAsync(string[] relevantChangedPaths, bool force, bool packageResolveRequested)
         {
+            if (packageResolveRequested)
+                await RequestPackageResolveAsync();
+
             bool globalRefresh = force || relevantChangedPaths.Length == 0;
             foreach (string path in relevantChangedPaths)
             {
-                if (path.StartsWith("Assets/", StringComparison.OrdinalIgnoreCase))
+                if (path.StartsWith("Assets/", StringComparison.OrdinalIgnoreCase) ||
+                    path.StartsWith("Packages/", StringComparison.OrdinalIgnoreCase))
                     AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceUpdate | ImportAssetOptions.ForceSynchronousImport);
                 else
                     globalRefresh = true;
@@ -508,6 +529,40 @@ namespace Becool.UnityMcpLens.Editor.Tools
                 AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
 
             UnityEditor.Compilation.CompilationPipeline.RequestScriptCompilation();
+        }
+
+        static async Task RequestPackageResolveAsync()
+        {
+            try
+            {
+                Client.Resolve();
+                await Task.Delay(500);
+            }
+            catch (Exception ex)
+            {
+                McpLog.Warning($"Unity.Editor.SyncScripts failed to request package resolve: {ex.Message}");
+            }
+        }
+
+        static bool ShouldResolvePackages(string[] relevantChangedPaths, bool force, bool resolvePackages, bool localPackageRefreshRequested)
+        {
+            if (!resolvePackages)
+                return false;
+
+            return localPackageRefreshRequested ||
+                relevantChangedPaths.Any(IsPackageManagerAffectingPath) ||
+                (force && relevantChangedPaths.Any(path => path.StartsWith("Packages/", StringComparison.OrdinalIgnoreCase)));
+        }
+
+        static bool IsPackageManagerAffectingPath(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+                return false;
+
+            string normalized = path.Replace('\\', '/').Trim();
+            return normalized.Equals("Packages/manifest.json", StringComparison.OrdinalIgnoreCase) ||
+                normalized.Equals("Packages/packages-lock.json", StringComparison.OrdinalIgnoreCase) ||
+                normalized.StartsWith("Packages/", StringComparison.OrdinalIgnoreCase);
         }
 
         static string NormalizeUnityRelativePath(string path)

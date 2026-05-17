@@ -41,7 +41,7 @@ result.Log("STATE::target={0};child={1};offset={2};size={3}",
     box != null ? box.size.ToString("F3") : "null");
 '@
 $script = Join-Path $PWD ".agents\plugins\lens-dev-plugin\skills\unity-dev-assistant\scripts\Invoke-UnityRunCommand.ps1"
-powershell -ExecutionPolicy Bypass -File $script -ProjectPath "$PWD" -Code $code
+& $script -ProjectPath "$PWD" -Code $code
 ```
 
 Run the read once in edit mode, then enter play mode and run the same read or

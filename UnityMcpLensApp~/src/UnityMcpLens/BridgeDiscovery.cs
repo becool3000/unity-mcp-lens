@@ -16,6 +16,8 @@ sealed class BridgeDiscoveryResult
     public required bool EditorPidAlive { get; init; }
     public required string BasicHealth { get; init; }
     public EditorHealthCandidate? EditorHealth { get; init; }
+    public string EditorHealthMatchQuality { get; init; } = "unknown";
+    public bool EditorHealthBridgePidMatch { get; init; }
     public int EditorPid => StatusFile.EditorPid;
 }
 
@@ -35,6 +37,8 @@ sealed class BridgeDiscoveryCandidate
     public required bool IsSelectable { get; init; }
     public required string BasicHealth { get; init; }
     public EditorHealthCandidate? EditorHealth { get; init; }
+    public string EditorHealthMatchQuality { get; init; } = "unknown";
+    public bool EditorHealthBridgePidMatch { get; init; }
     public int EditorPid { get; init; }
     public string? Error { get; init; }
     public string[] ExclusionReasons { get; init; } = [];
@@ -218,6 +222,10 @@ static class BridgeDiscovery
             string connectionPath = status.ConnectionPath;
             string projectRoot = NormalizeProjectRoot(status.ProjectRoot, status.ProjectPath);
             EditorHealthCandidate? editorHealth = EditorHealthDiscovery.FindBestForBridge(editorHealthCandidates, projectRoot, status.EditorPid);
+            string editorHealthMatchQuality = DescribeEditorHealthMatch(editorHealthCandidates, editorHealth, projectRoot, status.EditorPid);
+            bool editorHealthBridgePidMatch = editorHealth != null &&
+                status.EditorPid > 0 &&
+                editorHealth.EditorPid == status.EditorPid;
             bool isQuarantined = IsQuarantined(statusPath, connectionPath, quarantine);
             bool isProjectMatch = IsPathMatch(projectRoot, normalizedProjectPathHint);
             DateTime heartbeatUtc = ParseUtc(status.LastHeartbeat);
@@ -243,6 +251,12 @@ static class BridgeDiscovery
                 exclusionReasons.Add("quarantined");
             if (requireProjectMatch && !isProjectMatch)
                 exclusionReasons.Add("project_mismatch");
+            if (isProjectMatch &&
+                !isFresh &&
+                HasFreshProjectEditorHealthForDifferentPid(editorHealthCandidates, projectRoot, status.EditorPid))
+            {
+                exclusionReasons.Add("fresh_project_editor_health_without_matching_bridge_pid");
+            }
             if (IsHealthyStatus(status.Status) && !isFresh)
                 exclusionReasons.Add(editorPidAlive ? "stale_heartbeat" : "editor_pid_not_alive");
 
@@ -263,6 +277,8 @@ static class BridgeDiscovery
                 IsSelectable = isSelectable,
                 BasicHealth = basicHealth,
                 EditorHealth = editorHealth,
+                EditorHealthMatchQuality = editorHealthMatchQuality,
+                EditorHealthBridgePidMatch = editorHealthBridgePidMatch,
                 EditorPid = status.EditorPid,
                 ExclusionReasons = exclusionReasons.ToArray(),
                 FileWriteUtc = fileWriteUtc,
@@ -284,7 +300,9 @@ static class BridgeDiscovery
                 IsProjectMatch = isProjectMatch,
                 EditorPidAlive = editorPidAlive,
                 BasicHealth = basicHealth,
-                EditorHealth = editorHealth
+                EditorHealth = editorHealth,
+                EditorHealthMatchQuality = editorHealthMatchQuality,
+                EditorHealthBridgePidMatch = editorHealthBridgePidMatch
             });
         }
         catch (Exception ex)
@@ -316,6 +334,20 @@ static class BridgeDiscovery
                 ProjectHashMatch = malformed.ProjectHashMatch
             }, null);
         }
+    }
+
+    static bool HasFreshProjectEditorHealthForDifferentPid(
+        EditorHealthCandidate[] candidates,
+        string projectRoot,
+        int editorPid)
+    {
+        string normalizedProjectRoot = NormalizePath(projectRoot);
+        return candidates.Any(candidate =>
+            candidate.Error == null &&
+            candidate.EditorPid > 0 &&
+            (editorPid <= 0 || candidate.EditorPid != editorPid) &&
+            EditorHealthDiscovery.IsBridgeProjectMatch(candidate, normalizedProjectRoot) &&
+            EditorHealthDiscovery.IsSelectableBridgeHealth(candidate));
     }
 
     static string ResolveStatusDirectory()
@@ -359,6 +391,42 @@ static class BridgeDiscovery
         {
             return false;
         }
+    }
+
+    static string DescribeEditorHealthMatch(
+        EditorHealthCandidate[] candidates,
+        EditorHealthCandidate? selectedHealth,
+        string projectRoot,
+        int editorPid)
+    {
+        if (selectedHealth != null)
+        {
+            if (editorPid > 0 && selectedHealth.EditorPid == editorPid)
+            {
+                if (selectedHealth.CommandLineAvailable && selectedHealth.ProjectCommandLineMatch == true)
+                    return "fresh_pid_project_command_line_match";
+
+                return selectedHealth.CommandLineAvailable
+                    ? "fresh_pid_project_match_command_line_missing"
+                    : "fresh_pid_project_match_command_line_unavailable";
+            }
+
+            return "fresh_project_match_no_bridge_pid";
+        }
+
+        string normalizedProjectRoot = NormalizePath(projectRoot);
+        bool hasProjectHealth = candidates.Any(candidate =>
+            candidate.Error == null &&
+            EditorHealthDiscovery.IsBridgeProjectMatch(candidate, normalizedProjectRoot));
+        bool hasPidHealth = editorPid > 0 && candidates.Any(candidate =>
+            candidate.Error == null &&
+            candidate.EditorPid == editorPid);
+
+        if (hasPidHealth)
+            return "pid_health_present_but_not_fresh_or_not_project_matched";
+        if (hasProjectHealth)
+            return "project_health_present_but_not_matching_selected_bridge_pid";
+        return "no_matching_editor_health";
     }
 
     static DateTime GetFileWriteUtc(string path)
