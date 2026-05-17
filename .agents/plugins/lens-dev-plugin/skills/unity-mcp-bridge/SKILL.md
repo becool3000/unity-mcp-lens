@@ -1,6 +1,6 @@
 ---
 name: "unity-mcp-bridge"
-description: "Lens Dev Plugin v0.1.5. Use when Codex is working in a Unity project and needs fast file-backed Unity health, bridge diagnostics, safe stop contracts, or recovery diagnosis before touching Unity editor state. Prefer Unity.Editor.HealthCheckFast, the owned unity-mcp-lens stdio server, Command Center status, and explicit user escalation only when Unity or the bridge really needs intervention."
+description: "Lens Dev Plugin v0.1.6. Use when Codex is working in a Unity project and needs fast file-backed Unity health, bridge diagnostics, safe stop contracts, or recovery diagnosis before touching Unity editor state. Prefer Unity.Editor.HealthCheckFast, the owned unity-mcp-lens stdio server, Command Center status, and explicit user escalation only when Unity or the bridge really needs intervention."
 ---
 
 # Unity MCP Bridge
@@ -9,8 +9,8 @@ Use this skill as the operational guide for the local Unity MCP bridge and the o
 
 ## Version Marker
 
-- Plugin guidance version: `Lens Dev Plugin v0.1.5`
-- Expected installed Lens host: `0.1.0-alpha.12` or newer
+- Plugin guidance version: `Lens Dev Plugin v0.1.6`
+- Expected installed Lens host: `0.1.0-alpha.24` or newer
 - If Codex shows an older Lens Dev Plugin version, refresh the plugin cache from the repo-local source before trusting this skill's installed copy.
 
 ## Fast Health First
@@ -70,7 +70,7 @@ Start bridge-sensitive work with file-backed health before any Unity-backed call
 
 ```powershell
 $script = Join-Path $PWD ".agents\plugins\lens-dev-plugin\skills\unity-mcp-bridge\scripts\Check-UnityMcp.ps1"
-powershell -ExecutionPolicy Bypass -File $script -ProjectPath "$PWD"
+& $script -ProjectPath "$PWD"
 ```
 
 On macOS/Linux:
@@ -87,7 +87,7 @@ node .agents/plugins/lens-dev-plugin/skills/unity-mcp-bridge/scripts/Check-Unity
 
 ```powershell
 $script = Join-Path $PWD ".agents\plugins\lens-dev-plugin\skills\unity-mcp-bridge\scripts\Notify-UnityMcpActionRequired.ps1"
-powershell -ExecutionPolicy Bypass -File $script -ProjectPath "$PWD"
+& $script -ProjectPath "$PWD"
 ```
 
 12. Tell the user Unity MCP needs approval, reconnection, or editor recovery and pause Unity editor mutations until the bridge is healthy.
@@ -131,7 +131,7 @@ powershell -ExecutionPolicy Bypass -File $script -ProjectPath "$PWD"
 - When a tool result includes `detailRef`, use `Unity.ReadDetailRef` only when the preview/summary is insufficient. Do not immediately expand every large result.
 - `Unity.RunCommand`, `Unity.ReadConsole`, and `Unity.ManageEditor WaitForStableEditor` are expected to return compact, stage-aware results. Treat detail refs as the source for full logs, full scanned console entries, or full editor-state attempts when needed.
 - For known multi-step smoke or workflow sequences, prefer `Invoke-UnityMcpBatch` so one Lens session can activate the needed exact pack sets and avoid repeated schema/session churn.
-- On Windows, prefer `Invoke-UnityMcpBatch.ps1 -StepsPath <file>` for multi-line JSON. `-StepsJson` is accepted but shell quoting can strip JSON property quotes before Lens sees the payload.
+- On Windows, call helper scripts directly from PowerShell with `& script.ps1 ...`; avoid nesting `powershell -File` inside an existing PowerShell session. Prefer `Invoke-UnityMcpBatch.ps1 -StepsPath <file>` for multi-line JSON. `-StepsJson` is accepted but shell quoting can strip JSON property quotes before Lens sees the payload.
 
 ## Classification Rules
 

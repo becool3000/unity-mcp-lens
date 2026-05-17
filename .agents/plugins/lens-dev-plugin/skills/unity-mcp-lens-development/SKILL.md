@@ -1,6 +1,6 @@
 ---
 name: unity-mcp-lens-development
-description: Lens Dev Plugin v0.1.5. Develop, test, and improve Unity MCP Lens tools, packs, bridge behavior, Command Center UI, safe health substrate, StepVerifier/recovery workflows, package UI, and Unity editor automation workflows. Use when working on Lens itself, adding or debugging Lens MCP tools, changing tool packs, validating bridge behavior, or making Unity editor-authored persistent changes for Lens projects.
+description: Lens Dev Plugin v0.1.6. Develop, test, and improve Unity MCP Lens tools, packs, bridge behavior, Command Center UI, safe health substrate, StepVerifier/recovery workflows, package UI, and Unity editor automation workflows. Use when working on Lens itself, adding or debugging Lens MCP tools, changing tool packs, validating bridge behavior, or making Unity editor-authored persistent changes for Lens projects.
 ---
 
 # Unity MCP Lens Development
@@ -17,8 +17,8 @@ Do not edit installed Codex cache copies or standalone `$CODEX_HOME/skills` copi
 
 ## Version Marker
 
-- Plugin guidance version: `Lens Dev Plugin v0.1.5`
-- Expected installed Lens host: `0.1.0-alpha.12` or newer
+- Plugin guidance version: `Lens Dev Plugin v0.1.6`
+- Expected installed Lens host: `0.1.0-alpha.24` or newer
 - The plugin version and display name must be visible in `.codex-plugin/plugin.json` so Codex's plugin view makes stale installs obvious.
 - Host version and plugin version are intentionally separate. Host builds advance host metadata; plugin versions advance only when Codex guidance, plugin metadata, or plugin scripts change.
 
@@ -29,6 +29,7 @@ Do not edit installed Codex cache copies or standalone `$CODEX_HOME/skills` copi
 - Session safety must block Unity-backed tools after watchdog/hung-command failures until a fresh non-busy editor and usable bridge are observed by `HealthCheckFast`.
 - `Unity.RunCommand` should use preflight/risk labels for risky snippets and a hard watchdog for execution.
 - `Unity.PlayMode.StepVerifier` is the default safe play-mode primitive. It should enter through the safe path, pause once runtime is observable, step exact counts, capture console deltas, and exit/restore state.
+- `Unity.Workflow.SelectPackThroughMainMenu` is the preferred FallingSands Main Menu pack-selection path. It should enter paused Play Mode, invoke the pack button through runtime UI tools, then verify the active runtime pack without `Unity.RunCommand` or direct pack selectors.
 - `Unity.Editor.RecoverFromHang` starts in `diagnoseOnly=true`; destructive options require explicit user args.
 - Status readers are non-destructive by default. Stale malformed files stay visible in diagnostics but must not poison a fresh matching bridge/editor-health pair.
 - Command Center is the Windows-first human UI for status, server refresh, settings, tool summaries, and explanations.
@@ -164,7 +165,7 @@ Phase 17 addresses the highest TintPaint dogfood pain without widening `foundati
 - Prefer `Unity.PlayMode.PointerInputSmoke` for pointer-path evidence in play mode; it reports observed Input System state, scroll state, UI/world hit evidence, and optional sampled gameplay state.
 - Prefer `Unity.Editor.ExitPlayMode` or `Exit-UnityPlayMode.ps1` for play-mode cleanup; avoid custom `Unity.RunCommand` stop snippets.
 - `Unity.GetLensUsageReport` compact output should summarize large pack-transition lists and report TSAM coverage summary data.
-- Prefer `Unity.UI.QueryRuntimeLayout` for runtime UI layout/state readback and `Unity.UI.InvokeControl` for play-mode button/slider/toggle actions before writing custom `Unity.RunCommand` snippets.
+- Prefer `Unity.Workflow.SelectPackThroughMainMenu` for FallingSands Main Menu pack selection. For other play-mode UI state and interaction, prefer `Unity.UI.QueryRuntimeLayout` and `Unity.UI.InvokeControl` before writing custom `Unity.RunCommand` snippets.
 - Prefer `Unity.UI.CaptureGameView` for Game view screenshots; its capture result should include readiness diagnostics, play/pause state, Game view size, camera/canvas counts, console delta, and fallback evidence when requested.
 
 ## Phase 8 Dogfood Hardening Truth
@@ -192,7 +193,7 @@ This batch addresses the BeeSurvivors Lens dogfood findings from 2026-05-07.
 
 - Prefer `Unity.Tools.Describe` for live tool schema and pack requirement discovery, especially when Codex dynamic indexing is stale.
 - Prefer `Unity.Tools.Menu` for compact pack-oriented navigation. In `UNITY_MCP_LENS_TOOL_SURFACE_MODE=static_all`, all enabled real tools are natively exposed up front and `Unity.SetToolPacks` is a compatibility no-op.
-- For Codex, prefer `static_all` as the reliability path; raw host binaries still default to `dynamic_packs` for clients that handle `tools/list_changed` correctly.
+- Lens host binaries now default to `static_all` as the reliability path; set `UNITY_MCP_LENS_TOOL_SURFACE_MODE=dynamic_packs` only for clients that handle `tools/list_changed` correctly and explicitly want dynamic packs.
 - `Unity.Tools.Describe` or `Unity.Tools.ActivateAndVerify` proving a tool exists does not prove the current Codex thread has indexed it as callable. If a described active-pack tool is not callable after `Unity.SetToolPacks`, classify the issue as client dynamic-indexing drift and use helper scripts or `Invoke-UnityMcpBatch` while preserving the raw host evidence.
 - `Unity.SetToolPacks` should report whether `notifications/tools/list_changed` was emitted. If Codex still cannot call the described tool after that notification, do not keep widening packs; collect the active packs, manifest/profile version, and missing callable tool name.
 - Prefer `Unity.Editor.SyncScripts` via `Sync-UnityScriptChanges` for deterministic script refresh/compile waits; model-facing calls should wait through scheduled refresh/reload windows and return `readyForFollowUp=true` only when follow-up Unity actions are safe. No changed paths plus no force must return quickly.
