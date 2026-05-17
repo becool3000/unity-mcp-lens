@@ -78,6 +78,13 @@ public sealed class StatusScanner
                     Freshness = basicHealth,
                     EditorPid = editorHealth?.EditorPid ?? editorPid,
                     EditorPidAlive = editorHealth?.EditorPidAlive ?? editorPidAlive,
+                    EditorProcessName = editorHealth?.EditorProcessName ?? string.Empty,
+                    EditorProcessLooksLikeUnity = editorHealth?.EditorProcessLooksLikeUnity == true,
+                    CommandLineAvailable = editorHealth?.CommandLineAvailable == true,
+                    ProjectCommandLineMatch = editorHealth?.ProjectCommandLineMatch,
+                    ProjectCommandLineEvidence = editorHealth?.ProjectCommandLineEvidence ?? string.Empty,
+                    EditorHealthMatchQuality = DescribeEditorHealthMatch(healthCandidates, editorHealth, projectRoot, editorPid),
+                    EditorHealthBridgePidMatch = editorHealth != null && editorPid > 0 && editorHealth.EditorPid == editorPid,
                     EditorProcessStartUtc = editorHealth?.EditorProcessStartUtc == DateTime.MinValue || editorHealth == null
                         ? string.Empty
                         : editorHealth.EditorProcessStartUtc.ToString("O"),
@@ -149,6 +156,13 @@ public sealed class StatusScanner
             Freshness = health.IsIgnoredMalformed ? "ignored_malformed_status" : health.BasicHealth,
             EditorPid = health.EditorPid,
             EditorPidAlive = health.EditorPidAlive,
+            EditorProcessName = health.EditorProcessName ?? string.Empty,
+            EditorProcessLooksLikeUnity = health.EditorProcessLooksLikeUnity,
+            CommandLineAvailable = health.CommandLineAvailable,
+            ProjectCommandLineMatch = health.ProjectCommandLineMatch,
+            ProjectCommandLineEvidence = health.ProjectCommandLineEvidence ?? string.Empty,
+            EditorHealthMatchQuality = health.IsFresh ? "health_only_fresh" : "health_only_not_fresh",
+            EditorHealthBridgePidMatch = false,
             EditorProcessStartUtc = health.EditorProcessStartUtc == DateTime.MinValue ? string.Empty : health.EditorProcessStartUtc.ToString("O"),
             PidStartMatches = health.PidStartMatches,
             ProjectMatch = health.IsProjectMatch,
@@ -209,6 +223,28 @@ public sealed class StatusScanner
         {
             return false;
         }
+    }
+
+    static string DescribeEditorHealthMatch(EditorHealthCandidate[] candidates, EditorHealthCandidate? selectedHealth, string projectRoot, int editorPid)
+    {
+        if (selectedHealth != null)
+            return editorPid > 0 && selectedHealth.EditorPid == editorPid
+                ? "fresh_pid_project_match"
+                : "fresh_project_match_no_bridge_pid";
+
+        string normalizedProjectRoot = EditorHealthDiscovery.NormalizePath(projectRoot);
+        bool hasProjectHealth = candidates.Any(candidate =>
+            candidate.Error == null &&
+            EditorHealthDiscovery.IsBridgeProjectMatch(candidate, normalizedProjectRoot));
+        bool hasPidHealth = editorPid > 0 && candidates.Any(candidate =>
+            candidate.Error == null &&
+            candidate.EditorPid == editorPid);
+
+        if (hasPidHealth)
+            return "pid_health_present_but_not_fresh_or_not_project_matched";
+        if (hasProjectHealth)
+            return "project_health_present_but_not_matching_selected_bridge_pid";
+        return "no_matching_editor_health";
     }
 
     bool IsProjectMatch(string projectRoot)

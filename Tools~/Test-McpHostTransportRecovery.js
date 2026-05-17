@@ -157,6 +157,7 @@ class FakeBridge {
       healthHeartbeat: this.options.healthHeartbeat,
       toolCount: 3,
       writeHealth: this.options.writeHealth,
+      healthFlags: this.options.healthFlags,
     });
   }
 
@@ -227,6 +228,7 @@ class ScenarioContext {
     this.failed = false;
     this.bridge = null;
     this.bridges = [];
+    this.replacementBridgeOptions = {};
     fs.mkdirSync(this.statusDir, { recursive: true });
     fs.mkdirSync(this.projectRoot, { recursive: true });
     fs.mkdirSync(path.join(this.projectRoot, "Assets"), { recursive: true });
@@ -249,7 +251,7 @@ class ScenarioContext {
   }
 
   async replaceBridge() {
-    await this.startBridge();
+    await this.startBridge(this.replacementBridgeOptions);
   }
 
   writeStaleStatus() {
@@ -360,6 +362,7 @@ function writeStatus(statusPath, connectionPath, projectRoot, options) {
       heartbeat: options.healthHeartbeat || options.heartbeat,
       editorPid: options.editorPid ?? process.pid,
       processStart: options.processStart,
+      flags: options.healthFlags,
     });
   }
 
@@ -438,6 +441,12 @@ function resultFor(type, params) {
         message: "Fake tool packs listed.",
         data: { activeToolPacks: ["foundation"], availableToolPacks: ["foundation"] },
       };
+    case "Unity.ReadConsole":
+      return readConsoleResult(params);
+    case "Unity.ManageEditor":
+      return manageEditorResult(params);
+    case "Unity.Editor.SyncScripts":
+      return syncScriptsResult(params);
     case "Unity_RunCommand":
       return {
         success: true,
@@ -448,6 +457,10 @@ function resultFor(type, params) {
       return playModeSetResult(params);
     case "Unity.PlayMode.StepVerifier":
       return stepVerifierResult(params);
+    case "Unity.UI.QueryRuntimeLayout":
+      return uiRuntimeLayoutResult(params);
+    case "Unity.UI.InvokeControl":
+      return uiInvokeControlResult(params);
     case "Unity.Workflow.RunGpuSimulationProbe":
       return gpuSimulationProbeResult(params);
     case "Unity.Workflow.VerifyRuntimePackSelection":
@@ -455,6 +468,132 @@ function resultFor(type, params) {
     default:
       return { success: true, message: `${type} ok`, data: {} };
   }
+}
+
+function readConsoleResult(params = {}) {
+  const cursorSupplied = params.cursor !== undefined && params.cursor !== null;
+  const cursor = cursorSupplied ? Number(params.cursor) + 1 : 1;
+  return {
+    success: true,
+    message: "Fake console summary.",
+    data: {
+      cursor,
+      scannedFrom: cursorSupplied ? Number(params.cursor) : 0,
+      cursorSupplied,
+      entryCount: 0,
+      newErrors: 0,
+      newWarnings: 0,
+      staleErrorsPresent: null,
+      staleWarningsPresent: null,
+      typeCounts: {
+        error: 0,
+        warning: 0,
+        log: 0,
+        exception: 0,
+        assert: 0,
+        unknown: 0,
+      },
+      entries: [],
+    },
+  };
+}
+
+function manageEditorResult(params = {}) {
+  const action = params.action || params.Action || "GetState";
+  if (action === "GetCompactState") {
+    return {
+      success: true,
+      message: "Fake compact editor state.",
+      data: {
+        isPlaying: true,
+        isPaused: false,
+        isCompiling: false,
+        isUpdating: false,
+        isPlayingOrWillChangePlaymode: true,
+        isBuildingPlayer: false,
+        isEditorIdle: false,
+        runtimeAdvanced: true,
+        runtimeProbe: {
+          isAvailable: true,
+          hasAdvancedFrames: true,
+          updateCount: 12,
+          fixedUpdateCount: 6,
+          unscaledTime: 1.25,
+          activeSceneName: "TestScene",
+        },
+      },
+    };
+  }
+
+  return {
+    success: true,
+    message: `Fake ManageEditor ${action}.`,
+    data: {},
+  };
+}
+
+function syncScriptsResult(params = {}) {
+  const changedPaths = Array.isArray(params.changedPaths)
+    ? params.changedPaths
+    : Array.isArray(params.ChangedPaths)
+      ? params.ChangedPaths
+      : [];
+  const relevantChangedPaths = changedPaths.filter((changedPath) =>
+    /\.(cs|asmdef|asmref|rsp)$/i.test(String(changedPath || "")) ||
+    /(^|\/)package\.json$/i.test(String(changedPath || "")) ||
+    String(changedPath || "").replace(/\\/g, "/").toLowerCase() === "packages/manifest.json" ||
+    String(changedPath || "").replace(/\\/g, "/").toLowerCase() === "packages/packages-lock.json");
+  const force = params.force === true || params.Force === true;
+  const noChangesDetected = relevantChangedPaths.length === 0 && !force;
+  const refreshScheduledAfterResponse = !noChangesDetected;
+  const packageResolvePaths = relevantChangedPaths.filter((changedPath) =>
+    String(changedPath || "").replace(/\\/g, "/").toLowerCase().startsWith("packages/"));
+  const packageResolveRequested =
+    params.resolvePackages !== false &&
+    params.ResolvePackages !== false &&
+    (params.localPackageRefreshRequested === true ||
+      params.LocalPackageRefreshRequested === true ||
+      packageResolvePaths.length > 0);
+
+  return {
+    success: true,
+    message: refreshScheduledAfterResponse
+      ? "Fake script refresh scheduled."
+      : "Fake script sync ready.",
+    data: {
+      status: refreshScheduledAfterResponse ? "pending_refresh" : "ready",
+      readyForFollowUp: !refreshScheduledAfterResponse,
+      noChangesDetected,
+      changedPaths,
+      relevantChangedPaths,
+      packageResolveRequested,
+      packageResolvePaths,
+      force,
+      waitForCompile: params.waitForCompile !== false && params.WaitForCompile !== false,
+      refreshRequested: refreshScheduledAfterResponse,
+      refreshScheduledAfterResponse,
+      compileStarted: false,
+      compileObserved: false,
+      editorIdle: !refreshScheduledAfterResponse,
+      timedOut: false,
+      initialConsoleErrorCount: 0,
+      finalConsoleErrorCount: 0,
+      consoleErrorCount: 0,
+      newConsoleErrorCount: 0,
+      newConsoleErrorsDetected: false,
+      staleConsoleErrorsPresent: false,
+      consoleErrorsDetected: false,
+      consoleDelta: readConsoleResult().data,
+      warningCount: refreshScheduledAfterResponse ? 1 : 0,
+      warnings: refreshScheduledAfterResponse
+        ? [{
+            kind: "refresh_scheduled_after_response",
+            message: "Fake refresh scheduled after response.",
+          }]
+        : [],
+      finalState: {},
+    },
+  };
 }
 
 function playModeSetResult(params = {}) {
@@ -493,14 +632,15 @@ function playModeSetResult(params = {}) {
 function stepVerifierResult(params = {}) {
   const steps = Number(params.steps ?? params.Steps ?? 1);
   const warmupSteps = Number(params.warmupSteps ?? params.WarmupSteps ?? 0);
+  const forceNewError = steps === 99;
   return {
-    success: true,
-    message: "Fake paused stepping completed.",
+    success: !forceNewError,
+    message: forceNewError ? "Fake paused stepping saw a new console error." : "Fake paused stepping completed.",
     data: {
       enteredPlayMode: true,
       paused: true,
       stepsRequested: steps,
-      stepsCompleted: steps,
+      stepsCompleted: forceNewError ? Math.max(0, steps - 1) : steps,
       warmupSteps,
       warmupCompleted: warmupSteps,
       runtimeAdvanced: steps + warmupSteps > 0,
@@ -508,6 +648,46 @@ function stepVerifierResult(params = {}) {
       editorResponsiveAfter: true,
       exitAfter: params.exitAfter ?? params.ExitAfter ?? true,
       allowRealtimeRun: params.allowRealtimeRun ?? params.AllowRealtimeRun ?? false,
+      consoleDelta: {
+        newErrors: forceNewError ? 1 : 0,
+        newWarnings: 0,
+        staleErrorsPresent: true,
+        staleWarningsPresent: true,
+      },
+    },
+  };
+}
+
+function uiRuntimeLayoutResult(params = {}) {
+  const target = params.target || params.Target || "";
+  const found = target && !String(target).includes("Missing");
+  return {
+    success: true,
+    message: `Fake runtime layout found ${found ? 1 : 0} element(s).`,
+    data: {
+      rootCount: 1,
+      totalElementCount: found ? 1 : 0,
+      returnedElementCount: found ? 1 : 0,
+      warningCount: 0,
+      elements: found ? [{
+        name: target,
+        path: `Canvas/${target}`,
+        elementTypes: ["button", "selectable"],
+      }] : [],
+    },
+  };
+}
+
+function uiInvokeControlResult(params = {}) {
+  const target = params.target || params.Target || "";
+  const invoked = target && !String(target).includes("Missing");
+  return {
+    success: !!invoked,
+    message: invoked ? "Fake UI control invoked." : "Fake UI control target missing.",
+    data: {
+      target: { name: target, path: `Canvas/${target}` },
+      action: params.action || params.Action || "click",
+      actionResult: { succeeded: !!invoked },
       consoleDelta: {
         newErrors: 0,
         newWarnings: 0,
@@ -561,6 +741,7 @@ function runtimePackSelectionResult(params = {}) {
     data: {
       selectedPackId: packId,
       activeRuntimePackName: packId,
+      selectPack: params.selectPack ?? params.SelectPack ?? true,
       elementCount: 9,
       sceneLoaded: !!(params.scenePath || params.ScenePath),
       domainReloadObserved: false,
@@ -589,10 +770,12 @@ function fakeTools(withSchemas) {
     toolDescriptor("Unity_GetLensHealth", true, withSchemas),
     toolDescriptor("Unity_ListToolPacks", true, withSchemas),
     toolDescriptor("Unity_RunCommand", false, withSchemas),
+    toolDescriptor("Unity.Editor.SyncScripts", false, withSchemas),
     toolDescriptor("Unity.Editor.SetPlayMode", false, withSchemas),
     toolDescriptor("Unity.PlayMode.StepVerifier", false, withSchemas),
     toolDescriptor("Unity.Workflow.RunGpuSimulationProbe", false, withSchemas),
     toolDescriptor("Unity.Workflow.VerifyRuntimePackSelection", false, withSchemas),
+    toolDescriptor("Unity.Workflow.SelectPackThroughMainMenu", false, withSchemas),
   ];
 }
 
@@ -637,6 +820,7 @@ async function assertFullTools(client) {
   assert(names.includes("Unity_Editor_RecoverFromHang"), "tools/list should include bootstrap recovery tool");
   assert(names.includes("Unity_Workflow_RunGpuSimulationProbe"), "tools/list should include bootstrap GPU probe tool");
   assert(names.includes("Unity_Workflow_VerifyRuntimePackSelection"), "tools/list should include bootstrap pack handoff verifier");
+  assert(names.includes("Unity_Workflow_SelectPackThroughMainMenu"), "tools/list should include bootstrap Main Menu pack selection workflow");
   assert(names.includes("Unity_ListToolPacks"), "tools/list should include dynamic pack tool");
   assert(names.includes("Unity_RunCommand"), `tools/list should include dynamic mutating tool; got ${names.join(", ")}; stderr=${client.stderr}`);
   assert(response.tools.length >= 4, "tools/list should include dynamic tools plus local bootstrap helpers");
@@ -650,6 +834,37 @@ function assertIncludesAll(actual, expected, message) {
   for (const value of expected) {
     assert(actual.includes(value), `${message} missing ${value}; got ${actual.join(", ")}`);
   }
+}
+
+function writeBeeStyleLocalFilePackage(context) {
+  const packageName = "com.becool3000.unity-mcp-lens";
+  const packageRoot = path.join(context.root, "LocalLensPackage");
+  const sourcePath = path.join(packageRoot, "Editor", "Lens", "Tools", "RuntimeInvokeComponentMethodTools.cs");
+  const assemblyPath = path.join(context.projectRoot, "Library", "ScriptAssemblies", "Becool.UnityMcpLens.Editor.dll");
+  fs.mkdirSync(path.dirname(sourcePath), { recursive: true });
+  fs.mkdirSync(path.dirname(assemblyPath), { recursive: true });
+  fs.writeFileSync(path.join(packageRoot, "package.json"), JSON.stringify({ name: packageName }, null, 2));
+  fs.writeFileSync(sourcePath, "namespace FakeLens { public static class RuntimeInvokeComponentMethodTools {} }\n");
+  fs.writeFileSync(assemblyPath, "old fake assembly");
+
+  const oldTime = new Date(Date.now() - 120000);
+  const newTime = new Date(Date.now() - 1000);
+  fs.utimesSync(assemblyPath, oldTime, oldTime);
+  fs.utimesSync(sourcePath, newTime, newTime);
+
+  fs.writeFileSync(path.join(context.projectRoot, "Packages", "manifest.json"), JSON.stringify({
+    dependencies: {
+      [packageName]: `file:${packageRoot.replace(/\\/g, "/")}`,
+    },
+  }, null, 2));
+
+  return {
+    packageName,
+    packageRoot,
+    sourcePath,
+    assemblyPath,
+    assetPath: `Packages/${packageName}/Editor/Lens/Tools/RuntimeInvokeComponentMethodTools.cs`,
+  };
 }
 
 async function main() {
@@ -669,6 +884,68 @@ async function main() {
     assert.strictEqual(fastHealth.structuredContent.safeToContinue, true);
     assert.strictEqual(fastHealth.structuredContent.agent_should_stop, false);
     assert.strictEqual(commandTotal(context.commandCounts), beforeFastHealthCount, "fast health must not call the bridge");
+  });
+
+  {
+    const context = new ScenarioContext("health-paused-playmode-stable");
+    let client = null;
+    try {
+      await context.startBridge({
+        healthFlags: {
+          isPlaying: true,
+          isPaused: true,
+          isPlayingOrWillChangePlaymode: true,
+        },
+      });
+      client = new McpHostClient(context.projectRoot, context.statusDir);
+      await client.initialize();
+      const result = await client.callTool("Unity_Editor_HealthCheckFast", {});
+      assert.strictEqual(result.structuredContent.success, true, "paused play mode health should succeed");
+      assert.strictEqual(result.structuredContent.state, "unity_alive_fresh", "paused play mode must not be classified as a play transition");
+      assert.strictEqual(result.structuredContent.safeToContinue, true);
+      assert.strictEqual(result.structuredContent.data.editorBusy, false);
+    } finally {
+      if (client) await client.dispose().catch(() => {});
+      await context.dispose();
+    }
+  }
+
+  await withScenario("syncscripts-local-file-package-refresh", null, async (context, client) => {
+    await assertFullTools(client);
+    const localPackage = writeBeeStyleLocalFilePackage(context);
+    const result = await client.callTool("Unity_Editor_SyncScripts", {
+      waitForCompile: false,
+      timeoutSeconds: 2,
+    });
+
+    assert.strictEqual(context.commandCounts["Unity.Editor.SyncScripts"], 1, "host should call native SyncScripts once");
+    const syncCommand = context.commands.find((command) => command.type === "Unity.Editor.SyncScripts");
+    assert(syncCommand, "native SyncScripts command should be recorded");
+    assert(
+      Array.isArray(syncCommand.params.changedPaths) &&
+        syncCommand.params.changedPaths.includes(localPackage.assetPath),
+      `native SyncScripts should receive local file-package asset path ${localPackage.assetPath}; got ${JSON.stringify(syncCommand.params.changedPaths)}`
+    );
+    assert.strictEqual(syncCommand.params.localPackageRefreshRequested, true, "host should pass local file-package refresh hint");
+    assert.strictEqual(syncCommand.params.resolvePackages, true, "host should ask native SyncScripts to resolve packages");
+    assert(
+      Array.isArray(syncCommand.params.localPackageRefreshPaths) &&
+        syncCommand.params.localPackageRefreshPaths.includes(localPackage.assetPath),
+      `native SyncScripts should receive local package refresh paths; got ${JSON.stringify(syncCommand.params.localPackageRefreshPaths)}`
+    );
+    assert.strictEqual(result.structuredContent.success, false, "stale file-package assembly should fail follow-up readiness");
+    assert.strictEqual(result.structuredContent.data.localPackageRefreshRequested, true);
+    assert.strictEqual(result.structuredContent.data.packageResolveRequested, true);
+    assert(result.structuredContent.data.packageResolvePaths.includes(localPackage.assetPath));
+    assert.strictEqual(result.structuredContent.data.localPackageSourceNewerThanAssembly, true);
+    assert.strictEqual(result.structuredContent.data.proofStatus, "local_package_source_newer_than_assembly");
+    assert.strictEqual(result.structuredContent.data.status, "local_package_source_newer_than_assembly");
+    assert(result.structuredContent.data.localPackageRefreshPaths.includes(localPackage.assetPath));
+    const warningKinds = result.structuredContent.data.warnings.map((warning) => warning.kind);
+    assert(
+      warningKinds.includes("local_package_source_newer_than_assembly"),
+      `expected local package warning; got ${warningKinds.join(", ")}`
+    );
   });
 
   await withScenario("step-verifier-wrapper", null, async (context, client) => {
@@ -818,6 +1095,84 @@ async function main() {
     assert.strictEqual(result.structuredContent.data.verify.success, true);
   });
 
+  await withScenario("select-pack-through-main-menu", null, async (context, client) => {
+    await assertFullTools(client);
+    const result = await client.callTool("Unity_Workflow_SelectPackThroughMainMenu", {
+      packId: "garden",
+      mainMenuScenePath: "Assets/Scenes/MainMenu.unity",
+      exitAfter: true,
+      captureConsoleDelta: true,
+    });
+
+    assert.strictEqual(result.structuredContent.success, true, "Main Menu pack workflow should succeed");
+    assert.strictEqual(result.structuredContent.data.enteredPlayMode, true);
+    assert.strictEqual(result.structuredContent.data.paused, true);
+    assert.strictEqual(result.structuredContent.data.buttonFound, true);
+    assert.strictEqual(result.structuredContent.data.buttonInvoked, true);
+    assert.strictEqual(result.structuredContent.data.stepsAfterClick, 10);
+    assert.strictEqual(result.structuredContent.data.activeRuntimePackName, "garden");
+    assert.strictEqual(result.structuredContent.data.passed, true);
+    assert.strictEqual(result.structuredContent.data.timedOut, false);
+    assert.strictEqual(result.structuredContent.data.editorResponsiveAfter, true);
+    assert.strictEqual(result.structuredContent.data.consoleDelta.staleErrorsPresent, true);
+    assert.strictEqual(result.structuredContent.data.consoleDelta.newErrors, 0);
+    assert.strictEqual(result.structuredContent.data.verify.data.selectPack, false, "runtime verifier must not directly select the pack");
+
+    const interesting = context.commands
+      .map((command) => command.type)
+      .filter((type) => [
+        "Unity.PlayMode.StepVerifier",
+        "Unity.UI.QueryRuntimeLayout",
+        "Unity.UI.InvokeControl",
+        "Unity.Workflow.VerifyRuntimePackSelection",
+      ].includes(type));
+    assert.deepStrictEqual(interesting, [
+      "Unity.PlayMode.StepVerifier",
+      "Unity.UI.QueryRuntimeLayout",
+      "Unity.UI.InvokeControl",
+      "Unity.PlayMode.StepVerifier",
+      "Unity.Workflow.VerifyRuntimePackSelection",
+      "Unity.PlayMode.StepVerifier",
+    ], "Main Menu pack workflow should call runtime-safe tools in order");
+  });
+
+  await withScenario("select-pack-through-main-menu-new-console-error", null, async (context, client) => {
+    await assertFullTools(client);
+    const result = await client.callTool("Unity_Workflow_SelectPackThroughMainMenu", {
+      packId: "garden",
+      stepsAfterClick: 99,
+      exitAfter: true,
+      captureConsoleDelta: true,
+      failOnNewConsoleErrors: true,
+    });
+
+    assert.strictEqual(result.isError, true, "new console errors should fail Main Menu pack workflow");
+    assert.strictEqual(result.structuredContent.code, "UNITY_MCP_SELECT_PACK_MAIN_MENU_STEP_FAILED");
+    assert.strictEqual(result.structuredContent.data.step.data.consoleDelta.newErrors, 1);
+    assert.strictEqual(context.commandCounts["Unity.UI.InvokeControl"], 1, "button should be invoked before the new console error is detected");
+  });
+
+  {
+    const context = new ScenarioContext("select-pack-through-main-menu-entry-failure");
+    let client = null;
+    try {
+      await context.startBridge({ healthHeartbeat: new Date(Date.now() - 120000) });
+      client = new McpHostClient(context.projectRoot, context.statusDir);
+      await client.initialize();
+      const result = await client.callTool("Unity_Workflow_SelectPackThroughMainMenu", {
+        packId: "garden",
+        timeoutMs: 2000,
+      });
+      assert.strictEqual(result.isError, true, "unsafe health should block Main Menu pack workflow entry");
+      assert.strictEqual(result.structuredContent.code, "UNITY_MCP_SELECT_PACK_MAIN_MENU_ENTER_FAILED");
+      assert.strictEqual(context.commandCounts["Unity.UI.InvokeControl"] || 0, 0, "UI invoke must not run after entry failure");
+      assert.strictEqual(context.commandCounts["Unity.Workflow.VerifyRuntimePackSelection"] || 0, 0, "pack verification must not run after entry failure");
+    } finally {
+      if (client) await client.dispose().catch(() => {});
+      await context.dispose();
+    }
+  }
+
   {
     const context = new ScenarioContext("gpu-probe-entry-failure");
     let client = null;
@@ -867,6 +1222,67 @@ async function main() {
       assert.strictEqual(result.structuredContent.state, "bridge_unavailable");
       assert.strictEqual(result.structuredContent.safeToContinue, false);
       assert.strictEqual(result.structuredContent.agent_should_stop, false);
+    } finally {
+      if (client) await client.dispose().catch(() => {});
+      await context.dispose();
+    }
+  }
+
+  {
+    const context = new ScenarioContext("reload-gap-stale-bridge-fresh-health");
+    let client = null;
+    try {
+      const staleDeadPipe = makePipePath();
+      const staleDeadStatus = path.join(context.statusDir, "bridge-status-reload-gap-dead-pid.json");
+      writeStatus(staleDeadStatus, staleDeadPipe, context.projectRoot, {
+        status: "disconnected",
+        heartbeat: new Date(Date.now() - 120000),
+        toolCount: 999,
+        editorPid: 99999999,
+      });
+      const staleUnknownPidPipe = makePipePath();
+      const staleUnknownPidStatus = path.join(context.statusDir, "bridge-status-reload-gap-zero-pid.json");
+      writeStatus(staleUnknownPidStatus, staleUnknownPidPipe, context.projectRoot, {
+        status: "disconnected",
+        heartbeat: new Date(Date.now() - 120000),
+        toolCount: 999,
+        editorPid: 0,
+      });
+      const freshHealth = context.writeHealthOnly();
+
+      client = new McpHostClient(context.projectRoot, context.statusDir);
+      await client.initialize();
+      const diagnostic = await client.callTool("Unity_Bridge_ListConnections", {});
+      assert.strictEqual(diagnostic.structuredContent.data.selected ?? null, null, "dead stale bridge must not be selected during reload gap");
+      const staleDeadCandidate = diagnostic.structuredContent.data.candidates.find((candidate) => candidate.statusPath === staleDeadStatus);
+      assert(staleDeadCandidate, "stale dead-PID bridge candidate should remain diagnostic");
+      assert.strictEqual(staleDeadCandidate.selectable, false);
+      assert.strictEqual(staleDeadCandidate.basicHealth, "process_missing");
+      assert(
+        staleDeadCandidate.exclusionReasons.includes("fresh_project_editor_health_without_matching_bridge_pid"),
+        `stale dead-PID bridge should be excluded by fresh editor health; got ${staleDeadCandidate.exclusionReasons.join(", ")}`
+      );
+      const staleUnknownPidCandidate = diagnostic.structuredContent.data.candidates.find((candidate) => candidate.statusPath === staleUnknownPidStatus);
+      assert(staleUnknownPidCandidate, "stale zero-PID bridge candidate should remain diagnostic");
+      assert.strictEqual(staleUnknownPidCandidate.selectable, false);
+      assert.strictEqual(staleUnknownPidCandidate.basicHealth, "bridge_stale_unity_alive");
+      assert(
+        staleUnknownPidCandidate.exclusionReasons.includes("fresh_project_editor_health_without_matching_bridge_pid"),
+        `stale zero-PID bridge should be excluded by fresh editor health; got ${staleUnknownPidCandidate.exclusionReasons.join(", ")}`
+      );
+      const unmatchedHealth = diagnostic.structuredContent.data.unmatchedEditorHealthCandidates
+        .find((candidate) => candidate.healthPath === freshHealth);
+      const candidateHealth = diagnostic.structuredContent.data.candidates
+        .map((candidate) => candidate.editorHealth)
+        .find((candidate) => candidate && candidate.healthPath === freshHealth);
+      const visibleFreshHealth = unmatchedHealth || candidateHealth;
+      assert(visibleFreshHealth, "fresh editor health should remain visible while bridge reloads");
+      assert.strictEqual(visibleFreshHealth.basicHealth, "fresh");
+
+      const health = await client.callTool("Unity_Editor_HealthCheckFast", { includeCandidates: true });
+      assert.strictEqual(health.structuredContent.state, "bridge_unavailable");
+      assert.strictEqual(health.structuredContent.safeToContinue, false);
+      assert.strictEqual(health.structuredContent.agent_should_stop, false);
     } finally {
       if (client) await client.dispose().catch(() => {});
       await context.dispose();
@@ -982,6 +1398,18 @@ async function main() {
     assert.strictEqual(result.structuredContent.safeToContinue, false);
   });
 
+  await withScenario("fresh-bridge-ignores-dead-same-project-health", null, async (context, client) => {
+    const deadHealth = context.writeHealthOnly({ deadPid: true });
+    const result = await client.callTool("Unity_Editor_HealthCheckFast", { includeCandidates: true });
+    assert.strictEqual(result.structuredContent.state, "unity_alive_fresh");
+    assert.strictEqual(result.structuredContent.safeToContinue, true);
+    assert.strictEqual(result.structuredContent.data.selected.editorHealthBridgePidMatch, true);
+    const ignoredHealth = result.structuredContent.data.candidates.unmatchedEditorHealth
+      .find((candidate) => candidate.healthPath === deadHealth);
+    assert(ignoredHealth, "dead same-project health should remain diagnostic");
+    assert.strictEqual(ignoredHealth.basicHealth, "process_missing");
+  });
+
   await withScenario("stale-ignored", null, async (context, client) => {
     const staleStatus = context.writeStaleStatus();
     await assertFullTools(client);
@@ -1028,11 +1456,15 @@ async function main() {
 
     const staleHealthCandidate = candidates.find((candidate) => candidate.statusPath === staleHealth.foreignStatus);
     assert(staleHealthCandidate, "stale-health bridge candidate should be listed");
-    assert.strictEqual(staleHealthCandidate.basicHealth, "unity_silent");
+    assert.strictEqual(staleHealthCandidate.basicHealth, "fresh");
+    assert.strictEqual(staleHealthCandidate.editorHealth ?? null, null);
+    assert.strictEqual(staleHealthCandidate.editorHealthMatchQuality, "pid_health_present_but_not_fresh_or_not_project_matched");
 
     const pidReusedCandidate = candidates.find((candidate) => candidate.statusPath === pidReused.foreignStatus);
     assert(pidReusedCandidate, "pid-reused bridge candidate should be listed");
-    assert.strictEqual(pidReusedCandidate.basicHealth, "pid_reused");
+    assert.strictEqual(pidReusedCandidate.basicHealth, "fresh");
+    assert.strictEqual(pidReusedCandidate.editorHealth ?? null, null);
+    assert.strictEqual(pidReusedCandidate.editorHealthMatchQuality, "pid_health_present_but_not_fresh_or_not_project_matched");
 
     const malformedCandidate = diagnostic.structuredContent.data.unmatchedEditorHealthCandidates
       .find((candidate) => candidate.healthPath === malformedHealth);
@@ -1127,6 +1559,23 @@ async function main() {
       const blocked = await client.callTool("Unity_ListToolPacks", {});
       assert.strictEqual(blocked.isError, true, "unsafe session should block bridge-backed tools");
       assert.strictEqual(blocked.structuredContent.code, "UNITY_MCP_SESSION_UNSAFE");
+
+      const stablePlayFlags = { isPlaying: true, isPlayingOrWillChangePlaymode: true };
+      context.failOnceOn = "Unity.ReadConsole";
+      context.failed = false;
+      context.replacementBridgeOptions = { healthFlags: stablePlayFlags };
+      await context.startBridge({ healthFlags: stablePlayFlags });
+      const bypassed = await client.callTool("Unity_RunCommand", {
+        code: "return;",
+        title: "stable play mode bypass",
+        timeoutMs: 5000,
+      });
+      assert.strictEqual(bypassed.structuredContent.success, true, "stable Play Mode should allow RunCommand despite stale unsafe latch");
+      assert.strictEqual(context.commandCounts["Unity.ReadConsole"], 3, "ReadConsole safety probe should reconnect, retry once, then perform the delta check");
+      assert(client.stderr.includes("Allowing Unity.RunCommand while unsafe latch is set"), "host should log scoped RunCommand unsafe-latch bypass");
+
+      const afterBypass = await client.callTool("Unity_ListToolPacks", {});
+      assert.strictEqual(afterBypass.structuredContent.success, true, "successful stable Play Mode RunCommand should clear unsafe latch");
 
       await context.startBridge();
       const recovered = await client.callTool("Unity_Editor_HealthCheckFast", {});

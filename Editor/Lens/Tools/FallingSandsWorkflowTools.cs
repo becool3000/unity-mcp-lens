@@ -230,20 +230,23 @@ namespace Becool.UnityMcpLens.Editor.Tools
             }
         }
 
-        [McpTool(PackVerifyToolName, "Selects a FallingSands element pack and verifies the active runtime pack after optional scene load.", "Verify Runtime Pack Selection", Groups = new[] { "runtime", "diagnostics" }, EnabledByDefault = true)]
+        [McpTool(PackVerifyToolName, "Optionally selects a FallingSands element pack and verifies the active runtime pack after optional scene load.", "Verify Runtime Pack Selection", Groups = new[] { "runtime", "diagnostics" }, EnabledByDefault = true)]
         public static object VerifyRuntimePackSelection(JObject parameters)
         {
             parameters ??= new JObject();
             string selectedPackId = GetString(parameters, "garden", "selectedPackId", "SelectedPackId", "packId", "PackId");
             string scenePath = GetString(parameters, null, "scenePath", "ScenePath");
             bool requirePlayMode = GetBool(parameters, true, "requirePlayMode", "RequirePlayMode");
+            bool selectPack = GetBool(parameters, true, "selectPack", "SelectPack");
             string workflowId = "pack-handoff-" + Guid.NewGuid().ToString("N");
             object before = LensTransactionSnapshot.Capture(workflowId);
             object sceneLoad = null;
 
             try
             {
-                SelectFallingSandsPack(selectedPackId);
+                if (selectPack)
+                    SelectFallingSandsPack(selectedPackId);
+
                 if (!string.IsNullOrWhiteSpace(scenePath) && !EditorApplication.isPlaying)
                 {
                     string normalizedScenePath = NormalizeScenePath(scenePath);
@@ -289,6 +292,7 @@ namespace Becool.UnityMcpLens.Editor.Tools
                 {
                     workflowId,
                     selectedPackId,
+                    selectPack,
                     activeRuntimePackName = activePackName,
                     elementCount,
                     sceneLoaded = sceneLoad,
@@ -305,6 +309,7 @@ namespace Becool.UnityMcpLens.Editor.Tools
                 {
                     workflowId,
                     selectedPackId,
+                    selectPack,
                     scenePath,
                     sceneLoad,
                     passed = false,

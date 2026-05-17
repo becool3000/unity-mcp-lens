@@ -30,7 +30,7 @@
                                Margin="0,4,0,0" />
                 </StackPanel>
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                    <Button Content="Refresh" Click="RefreshButton_Click" ToolTip="Reload status files, settings, and install metadata." />
+                    <Button Content="Refresh" Click="RefreshButton_Click" ToolTip="Reload status files, settings, install metadata, and telemetry." />
                     <Button Content="Open Server Folder" Click="OpenServerFolder_Click" ToolTip="Open the installed Lens server directory." />
                     <Button Content="Open Status Folder" Click="OpenStatusFolder_Click" ToolTip="Open the bridge status directory." />
                 </StackPanel>
@@ -95,6 +95,169 @@
                                 </ListView>
                             </StackPanel>
                         </Border>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <TabItem Header="Telemetry">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="16">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+
+                            <Border Grid.Column="0" Background="White" BorderBrush="#E2E8F0" BorderThickness="1" Padding="16" Margin="0,0,12,12">
+                                <StackPanel>
+                                    <TextBlock Text="Telemetry File" Style="{StaticResource SectionTitle}" />
+                                    <TextBlock x:Name="TelemetryStatusText" FontSize="14" TextWrapping="Wrap" />
+                                    <TextBlock x:Name="TelemetryPathText" Style="{StaticResource HintText}" Margin="0,6,0,0" TextWrapping="Wrap" />
+                                    <TextBlock x:Name="TelemetryFileInfoText" Style="{StaticResource HintText}" Margin="0,4,0,0" />
+                                </StackPanel>
+                            </Border>
+
+                            <Border Grid.Column="1" Background="White" BorderBrush="#E2E8F0" BorderThickness="1" Padding="16" Margin="0,0,12,12">
+                                <StackPanel>
+                                    <TextBlock Text="Payload Savings" Style="{StaticResource SectionTitle}" />
+                                    <TextBlock x:Name="TelemetryPayloadSummaryText" FontSize="14" TextWrapping="Wrap" />
+                                    <TextBlock x:Name="TelemetryRowsText" Style="{StaticResource HintText}" Margin="0,6,0,0" />
+                                    <TextBlock x:Name="TelemetryDateRangeText" Style="{StaticResource HintText}" Margin="0,4,0,0" />
+                                </StackPanel>
+                            </Border>
+
+                            <Border Grid.Column="2" Background="White" BorderBrush="#E2E8F0" BorderThickness="1" Padding="16" Margin="0,0,0,12">
+                                <StackPanel>
+                                    <TextBlock Text="Bridge + Snapshots" Style="{StaticResource SectionTitle}" />
+                                    <TextBlock x:Name="TelemetryBridgeSummaryText" FontSize="14" TextWrapping="Wrap" />
+                                    <TextBlock x:Name="TelemetrySnapshotSummaryText" Style="{StaticResource HintText}" Margin="0,6,0,0" TextWrapping="Wrap" />
+                                    <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                                        <Button Content="Refresh Telemetry" Click="RefreshTelemetryButton_Click" ToolTip="Reload the project telemetry file without calling Unity." />
+                                        <Button Content="Open Telemetry File" Click="OpenTelemetryFileButton_Click" />
+                                        <Button Content="Copy Telemetry Summary" Click="CopyTelemetrySummaryButton_Click" />
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
+                        </Grid>
+
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Border Grid.Column="0" Background="White" BorderBrush="#E2E8F0" BorderThickness="1" Padding="16" Margin="0,0,12,12">
+                                <StackPanel>
+                                    <TextBlock Text="Top Savings" Style="{StaticResource SectionTitle}" />
+                                    <ListView x:Name="TelemetryTopSavingsList" MinHeight="160">
+                                        <ListView.View>
+                                            <GridView>
+                                                <GridViewColumn Header="Payload" DisplayMemberBinding="{Binding Label}" Width="260" />
+                                                <GridViewColumn Header="Rows" DisplayMemberBinding="{Binding Count}" Width="70" />
+                                                <GridViewColumn Header="Raw" DisplayMemberBinding="{Binding RawBytesDisplay}" Width="90" />
+                                                <GridViewColumn Header="Saved" DisplayMemberBinding="{Binding SavedBytesDisplay}" Width="90" />
+                                                <GridViewColumn Header="Savings" DisplayMemberBinding="{Binding SavingsPctDisplay}" Width="90" />
+                                            </GridView>
+                                        </ListView.View>
+                                    </ListView>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Grid.Column="1" Background="White" BorderBrush="#E2E8F0" BorderThickness="1" Padding="16" Margin="0,0,0,12">
+                                <StackPanel>
+                                    <TextBlock Text="Slow Operations" Style="{StaticResource SectionTitle}" />
+                                    <ListView x:Name="TelemetrySlowOperationsList" MinHeight="160">
+                                        <ListView.View>
+                                            <GridView>
+                                                <GridViewColumn Header="Operation" DisplayMemberBinding="{Binding Label}" Width="280" />
+                                                <GridViewColumn Header="Rows" DisplayMemberBinding="{Binding Count}" Width="70" />
+                                                <GridViewColumn Header="Mean ms" DisplayMemberBinding="{Binding MeanMs}" Width="90" />
+                                                <GridViewColumn Header="P95 ms" DisplayMemberBinding="{Binding P95Ms}" Width="90" />
+                                                <GridViewColumn Header="Max ms" DisplayMemberBinding="{Binding MaxMs}" Width="90" />
+                                            </GridView>
+                                        </ListView.View>
+                                    </ListView>
+                                </StackPanel>
+                            </Border>
+                        </Grid>
+
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Border Grid.Column="0" Background="White" BorderBrush="#E2E8F0" BorderThickness="1" Padding="16" Margin="0,0,12,12">
+                                <StackPanel>
+                                    <TextBlock Text="Top Stages" Style="{StaticResource SectionTitle}" />
+                                    <ListView x:Name="TelemetryTopStagesList" MinHeight="160">
+                                        <ListView.View>
+                                            <GridView>
+                                                <GridViewColumn Header="Stage" DisplayMemberBinding="{Binding Label}" Width="260" />
+                                                <GridViewColumn Header="Rows" DisplayMemberBinding="{Binding Count}" Width="70" />
+                                                <GridViewColumn Header="Raw" DisplayMemberBinding="{Binding RawBytesDisplay}" Width="90" />
+                                                <GridViewColumn Header="Shaped" DisplayMemberBinding="{Binding ShapedBytesDisplay}" Width="90" />
+                                                <GridViewColumn Header="Saved" DisplayMemberBinding="{Binding SavedBytesDisplay}" Width="90" />
+                                            </GridView>
+                                        </ListView.View>
+                                    </ListView>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Grid.Column="1" Background="White" BorderBrush="#E2E8F0" BorderThickness="1" Padding="16" Margin="0,0,0,12">
+                                <StackPanel>
+                                    <TextBlock Text="Top Names" Style="{StaticResource SectionTitle}" />
+                                    <ListView x:Name="TelemetryTopNamesList" MinHeight="160">
+                                        <ListView.View>
+                                            <GridView>
+                                                <GridViewColumn Header="Name" DisplayMemberBinding="{Binding Label}" Width="260" />
+                                                <GridViewColumn Header="Rows" DisplayMemberBinding="{Binding Count}" Width="70" />
+                                                <GridViewColumn Header="Raw" DisplayMemberBinding="{Binding RawBytesDisplay}" Width="90" />
+                                                <GridViewColumn Header="Shaped" DisplayMemberBinding="{Binding ShapedBytesDisplay}" Width="90" />
+                                                <GridViewColumn Header="Saved" DisplayMemberBinding="{Binding SavedBytesDisplay}" Width="90" />
+                                            </GridView>
+                                        </ListView.View>
+                                    </ListView>
+                                </StackPanel>
+                            </Border>
+                        </Grid>
+
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Border Grid.Column="0" Background="White" BorderBrush="#E2E8F0" BorderThickness="1" Padding="16" Margin="0,0,12,12">
+                                <StackPanel>
+                                    <TextBlock Text="Failure Classes" Style="{StaticResource SectionTitle}" />
+                                    <ListView x:Name="TelemetryFailureClassesList" MinHeight="150">
+                                        <ListView.View>
+                                            <GridView>
+                                                <GridViewColumn Header="Stage" DisplayMemberBinding="{Binding Stage}" Width="170" />
+                                                <GridViewColumn Header="Name" DisplayMemberBinding="{Binding Name}" Width="200" />
+                                                <GridViewColumn Header="Error" DisplayMemberBinding="{Binding ErrorKind}" Width="160" />
+                                                <GridViewColumn Header="Rows" DisplayMemberBinding="{Binding Count}" Width="70" />
+                                            </GridView>
+                                        </ListView.View>
+                                    </ListView>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Grid.Column="1" Background="White" BorderBrush="#E2E8F0" BorderThickness="1" Padding="16" Margin="0,0,0,12">
+                                <StackPanel>
+                                    <TextBlock Text="Unmatched Requests" Style="{StaticResource SectionTitle}" />
+                                    <ListView x:Name="TelemetryUnmatchedRequestsList" MinHeight="150">
+                                        <ListView.View>
+                                            <GridView>
+                                                <GridViewColumn Header="Time" DisplayMemberBinding="{Binding TimestampUtc}" Width="150" />
+                                                <GridViewColumn Header="Command" DisplayMemberBinding="{Binding Command}" Width="170" />
+                                                <GridViewColumn Header="Connection" DisplayMemberBinding="{Binding ConnectionId}" Width="130" />
+                                                <GridViewColumn Header="Bytes" DisplayMemberBinding="{Binding RequestBytes}" Width="70" />
+                                            </GridView>
+                                        </ListView.View>
+                                    </ListView>
+                                </StackPanel>
+                            </Border>
+                        </Grid>
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>

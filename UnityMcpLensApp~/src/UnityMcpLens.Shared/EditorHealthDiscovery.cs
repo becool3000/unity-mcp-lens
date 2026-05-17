@@ -88,6 +88,12 @@ public sealed class EditorHealthCandidate
     public bool IsIgnoredMalformed { get; init; }
     public string? MalformedIgnoreReason { get; init; }
     public bool ProjectHashMatch { get; init; }
+    public string? EditorProcessName { get; init; }
+    public string? EditorProcessPath { get; init; }
+    public bool EditorProcessLooksLikeUnity { get; init; }
+    public bool CommandLineAvailable { get; init; }
+    public bool? ProjectCommandLineMatch { get; init; }
+    public string? ProjectCommandLineEvidence { get; init; }
 }
 
 public sealed class MalformedStatusFileInfo
@@ -137,24 +143,50 @@ public static class EditorHealthDiscovery
     {
         string normalizedProjectRoot = NormalizePath(projectRoot);
 
-        EditorHealthCandidate? pidMatch = candidates
+        EditorHealthCandidate[] projectMatches = candidates
             .Where(candidate => candidate.Error == null &&
-                editorPid > 0 &&
-                candidate.EditorPid == editorPid)
-            .OrderByDescending(candidate => IsPathMatch(candidate.ProjectRoot, normalizedProjectRoot))
-            .ThenByDescending(candidate => candidate.IsFresh)
-            .ThenByDescending(candidate => candidate.EditorHeartbeatUtc)
-            .FirstOrDefault();
+                IsBridgeProjectMatch(candidate, normalizedProjectRoot))
+            .ToArray();
+
+        EditorHealthCandidate? pidMatch = editorPid > 0
+            ? projectMatches
+                .Where(candidate => candidate.EditorPid == editorPid &&
+                    IsSelectableBridgeHealth(candidate))
+                .OrderByDescending(candidate => candidate.EditorProcessLooksLikeUnity)
+                .ThenByDescending(candidate => candidate.ProjectCommandLineMatch == true)
+                .ThenByDescending(candidate => candidate.CommandLineAvailable)
+                .ThenByDescending(candidate => candidate.EditorHeartbeatUtc)
+                .FirstOrDefault()
+            : null;
 
         if (pidMatch != null)
             return pidMatch;
 
-        return candidates
-            .Where(candidate => candidate.Error == null &&
-                IsPathMatch(candidate.ProjectRoot, normalizedProjectRoot))
-            .OrderByDescending(candidate => candidate.IsFresh)
+        if (editorPid > 0)
+            return null;
+
+        return projectMatches
+            .Where(IsSelectableBridgeHealth)
+            .OrderByDescending(candidate => candidate.EditorProcessLooksLikeUnity)
+            .ThenByDescending(candidate => candidate.ProjectCommandLineMatch == true)
+            .ThenByDescending(candidate => candidate.CommandLineAvailable)
             .ThenByDescending(candidate => candidate.EditorHeartbeatUtc)
             .FirstOrDefault();
+    }
+
+    public static bool IsBridgeProjectMatch(EditorHealthCandidate candidate, string normalizedProjectRoot)
+    {
+        return IsPathMatch(candidate.ProjectRoot, normalizedProjectRoot) || candidate.ProjectHashMatch;
+    }
+
+    public static bool IsSelectableBridgeHealth(EditorHealthCandidate candidate)
+    {
+        return candidate.IsFresh &&
+            candidate.EditorPidAlive &&
+            candidate.PidStartMatches &&
+            (!candidate.CommandLineAvailable ||
+                !candidate.EditorProcessLooksLikeUnity ||
+                candidate.ProjectCommandLineMatch == true);
     }
 
     public static string ClassifyBridgeHealth(
@@ -303,6 +335,10 @@ public static class EditorHealthDiscovery
             bool pidStartMatches = process.IsAlive && ProcessStartMatches(processStartUtc, process.StartTimeUtc);
             bool isFresh = heartbeatAge <= FreshHeartbeatThreshold && process.IsAlive && pidStartMatches;
             string basicHealth = ClassifyEditorHealth(heartbeatUtc, heartbeatAge, process.IsAlive, pidStartMatches);
+            bool commandLineAvailable = !string.IsNullOrWhiteSpace(process.CommandLine);
+            bool? projectCommandLineMatch = commandLineAvailable
+                ? CommandLineMatchesProject(process.CommandLine!, projectRoot, health.ProjectPath)
+                : null;
 
             DateTime fileWriteUtc = GetFileWriteUtc(healthPath);
             TimeSpan fileAge = fileWriteUtc == DateTime.MinValue ? TimeSpan.MaxValue : nowUtc - fileWriteUtc;
@@ -327,7 +363,17 @@ public static class EditorHealthDiscovery
                 Error = null,
                 FileWriteUtc = fileWriteUtc,
                 FileAge = fileAge,
-                ProjectHashMatch = FileNameMatchesProjectHash(healthPath, normalizedProjectPathHint)
+                ProjectHashMatch = FileNameMatchesProjectHash(healthPath, normalizedProjectPathHint),
+                EditorProcessName = process.ProcessName,
+                EditorProcessPath = process.ProcessPath,
+                EditorProcessLooksLikeUnity = ProcessLooksLikeUnity(process.ProcessName, process.ProcessPath),
+                CommandLineAvailable = commandLineAvailable,
+                ProjectCommandLineMatch = projectCommandLineMatch,
+                ProjectCommandLineEvidence = commandLineAvailable && projectCommandLineMatch == true
+                    ? "process_command_line_contains_project_path"
+                    : commandLineAvailable && projectCommandLineMatch == false
+                        ? "process_command_line_missing_project_path"
+                        : null
             };
         }
         catch (Exception ex)
@@ -393,20 +439,95 @@ public static class EditorHealthDiscovery
     static ProcessProbe ProbeProcess(int pid)
     {
         if (pid <= 0)
-            return new ProcessProbe(false, DateTime.MinValue);
+            return new ProcessProbe(false, DateTime.MinValue, null, null, null);
 
         try
         {
             using Process process = Process.GetProcessById(pid);
             if (process.HasExited)
-                return new ProcessProbe(false, DateTime.MinValue);
+                return new ProcessProbe(false, DateTime.MinValue, null, null, null);
 
-            return new ProcessProbe(true, process.StartTime.ToUniversalTime());
+            string? processName = null;
+            string? processPath = null;
+            try { processName = process.ProcessName; } catch { }
+            try { processPath = process.MainModule?.FileName; } catch { }
+
+            return new ProcessProbe(
+                true,
+                process.StartTime.ToUniversalTime(),
+                processName,
+                processPath,
+                TryReadCommandLine(pid));
         }
         catch
         {
-            return new ProcessProbe(false, DateTime.MinValue);
+            return new ProcessProbe(false, DateTime.MinValue, null, null, null);
         }
+    }
+
+    static bool ProcessLooksLikeUnity(string? processName, string? processPath)
+    {
+        static bool LooksLikeUnityName(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return false;
+
+            string name = Path.GetFileNameWithoutExtension(value.Trim());
+            return string.Equals(name, "Unity", StringComparison.OrdinalIgnoreCase);
+        }
+
+        return LooksLikeUnityName(processName) || LooksLikeUnityName(processPath);
+    }
+
+    static string? TryReadCommandLine(int pid)
+    {
+        try
+        {
+            string procPath = $"/proc/{pid}/cmdline";
+            if (!File.Exists(procPath))
+                return null;
+
+            string raw = File.ReadAllText(procPath);
+            return raw.Replace('\0', ' ').Trim();
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    static bool CommandLineMatchesProject(string commandLine, string? projectRoot, string? projectPath)
+    {
+        if (string.IsNullOrWhiteSpace(commandLine))
+            return false;
+
+        string normalizedCommandLine = commandLine.Replace('\\', '/');
+        foreach (string candidate in BuildProjectPathMatchCandidates(projectRoot, projectPath))
+        {
+            if (!string.IsNullOrWhiteSpace(candidate) &&
+                normalizedCommandLine.Contains(candidate.Replace('\\', '/'), StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    static IEnumerable<string> BuildProjectPathMatchCandidates(string? projectRoot, string? projectPath)
+    {
+        var candidates = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        string normalizedRoot = NormalizeProjectRoot(projectRoot, projectPath);
+        if (!string.IsNullOrWhiteSpace(normalizedRoot))
+        {
+            candidates.Add(normalizedRoot);
+            candidates.Add(Path.Combine(normalizedRoot, "Assets"));
+        }
+
+        if (!string.IsNullOrWhiteSpace(projectPath))
+            candidates.Add(NormalizePath(projectPath));
+
+        return candidates.Where(candidate => !string.IsNullOrWhiteSpace(candidate));
     }
 
     static DateTime GetFileWriteUtc(string path)
@@ -490,5 +611,10 @@ public static class EditorHealthDiscovery
         }
     }
 
-    readonly record struct ProcessProbe(bool IsAlive, DateTime StartTimeUtc);
+    readonly record struct ProcessProbe(
+        bool IsAlive,
+        DateTime StartTimeUtc,
+        string? ProcessName,
+        string? ProcessPath,
+        string? CommandLine);
 }

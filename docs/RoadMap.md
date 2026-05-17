@@ -10,7 +10,7 @@ when Unity reloads, recompiles, or changes project/package state.
 
 - Standalone package id: `com.becool3000.unity-mcp-lens`.
 - Preferred MCP transport: the owned `unity-mcp-lens` stdio server.
-- Default Codex model-facing tool surface: `static_all` (`foundation+full`); raw host default remains dynamic packs.
+- Default Lens host tool surface: `static_all` (`foundation+full`); `dynamic_packs` remains available through `UNITY_MCP_LENS_TOOL_SURFACE_MODE=dynamic_packs`.
 - Current `foundation` baseline: `18` exported tools.
 - Current `foundation + scene` baseline: `50` exported tools.
 - Current `foundation + ui` baseline: `35` exported tools.

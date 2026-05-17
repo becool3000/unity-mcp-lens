@@ -12,7 +12,9 @@ public partial class MainWindow : Window
     readonly ProjectSettingsStore m_SettingsStore;
     readonly InstallerService m_InstallerService;
     readonly StatusScanner m_StatusScanner;
+    readonly TelemetryScanner m_TelemetryScanner;
     readonly DispatcherTimer m_Timer;
+    TelemetrySnapshot? m_LastTelemetrySnapshot;
 
     public MainWindow()
     {
@@ -22,6 +24,7 @@ public partial class MainWindow : Window
         m_SettingsStore = new ProjectSettingsStore(m_Options.ProjectRoot);
         m_InstallerService = new InstallerService(m_Options.PackageRoot);
         m_StatusScanner = new StatusScanner(m_Options.StatusDirectory, m_Options.ProjectRoot);
+        m_TelemetryScanner = new TelemetryScanner(m_Options.ProjectRoot);
 
         ContextText.Text = m_Options.ProjectRoot;
         m_Timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
@@ -35,6 +38,8 @@ public partial class MainWindow : Window
     }
 
     void RefreshButton_Click(object sender, RoutedEventArgs e) => LoadEverything();
+
+    void RefreshTelemetryButton_Click(object sender, RoutedEventArgs e) => _ = RefreshTelemetryAsync();
 
     void RefreshServerButton_Click(object sender, RoutedEventArgs e)
     {
@@ -82,12 +87,42 @@ public partial class MainWindow : Window
         OpenPath(m_Options.StatusDirectory);
     }
 
+    void OpenTelemetryFileButton_Click(object sender, RoutedEventArgs e)
+    {
+        string path = m_TelemetryScanner.StatsPath;
+        if (File.Exists(path))
+        {
+            OpenPath(path);
+            return;
+        }
+
+        string? directory = Path.GetDirectoryName(path);
+        if (!string.IsNullOrWhiteSpace(directory))
+        {
+            Directory.CreateDirectory(directory);
+            OpenPath(directory);
+        }
+    }
+
+    void CopyTelemetrySummaryButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (m_LastTelemetrySnapshot == null)
+        {
+            StatusText.Text = "No telemetry summary loaded.";
+            return;
+        }
+
+        Clipboard.SetText(m_LastTelemetrySnapshot.BuildClipboardSummary());
+        StatusText.Text = "Telemetry summary copied.";
+    }
+
     void LoadEverything()
     {
         LoadInstallSnapshot();
         LoadSettings();
         RefreshStatusOnly();
         LoadPaths();
+        _ = RefreshTelemetryAsync();
     }
 
     void RefreshStatusOnly()
@@ -143,6 +178,49 @@ public partial class MainWindow : Window
         StatusDirectoryText.Text = $"Status directory: {m_Options.StatusDirectory}";
         SettingsPathText.Text = $"Settings file: {m_SettingsStore.SettingsPath}";
         InstalledServerPathText.Text = $"Installed server: {m_InstallerService.InstalledServerPath}";
+    }
+
+    async Task RefreshTelemetryAsync()
+    {
+        try
+        {
+            StatusText.Text = "Loading telemetry...";
+            TelemetrySnapshot snapshot = await Task.Run(() => m_TelemetryScanner.Scan()).ConfigureAwait(true);
+            RenderTelemetry(snapshot);
+            StatusText.Text = snapshot.StatusMessage;
+        }
+        catch (Exception ex)
+        {
+            StatusText.Text = "Telemetry load failed.";
+            RenderTelemetry(new TelemetrySnapshot
+            {
+                StatsPath = m_TelemetryScanner.StatsPath,
+                Exists = File.Exists(m_TelemetryScanner.StatsPath),
+                StatusMessage = $"Telemetry load failed: {ex.Message}"
+            });
+        }
+    }
+
+    void RenderTelemetry(TelemetrySnapshot snapshot)
+    {
+        m_LastTelemetrySnapshot = snapshot;
+
+        TelemetryStatusText.Text = snapshot.StatusMessage;
+        TelemetryPathText.Text = snapshot.StatsPath;
+        TelemetryFileInfoText.Text = snapshot.Exists
+            ? $"Size {snapshot.FileSizeDisplay}; last write {snapshot.LastWriteDisplay}; scope {snapshot.Scope}; next line {snapshot.NextLine:N0}"
+            : "No telemetry file exists for this project yet.";
+        TelemetryPayloadSummaryText.Text = snapshot.PayloadSummaryDisplay;
+        TelemetryRowsText.Text = snapshot.RowSummaryDisplay;
+        TelemetryDateRangeText.Text = $"Date range: {snapshot.DateRangeDisplay}";
+        TelemetryBridgeSummaryText.Text = snapshot.BridgeSummaryDisplay;
+        TelemetrySnapshotSummaryText.Text = snapshot.SnapshotSummaryDisplay;
+        TelemetryTopSavingsList.ItemsSource = snapshot.TopSavings;
+        TelemetryTopStagesList.ItemsSource = snapshot.TopStages;
+        TelemetryTopNamesList.ItemsSource = snapshot.TopNames;
+        TelemetrySlowOperationsList.ItemsSource = snapshot.SlowOperations;
+        TelemetryFailureClassesList.ItemsSource = snapshot.FailureClasses;
+        TelemetryUnmatchedRequestsList.ItemsSource = snapshot.UnmatchedRequests;
     }
 
     LensSettingsSnapshot ReadSettingsFromUi()

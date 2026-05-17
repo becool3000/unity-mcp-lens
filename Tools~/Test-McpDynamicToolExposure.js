@@ -22,6 +22,7 @@ const requiredBootstrapWorkflowTools = [
   "Unity_Editor_RecoverFromHang",
   "Unity_Workflow_RunGpuSimulationProbe",
   "Unity_Workflow_VerifyRuntimePackSelection",
+  "Unity_Workflow_SelectPackThroughMainMenu",
 ];
 
 const foundationToolNames = [
@@ -125,14 +126,21 @@ class McpHostClient {
     this.notifications = [];
     this.notificationWaiters = [];
     this.stderr = "";
+    const env = {
+      ...process.env,
+      UNITY_MCP_STATUS_DIR: statusDir,
+      UNITY_MCP_PROJECT_PATH: projectRoot,
+    };
+    const toolSurfaceMode = options.toolSurfaceMode ?? process.env.UNITY_MCP_LENS_TOOL_SURFACE_MODE;
+    if (toolSurfaceMode) {
+      env.UNITY_MCP_LENS_TOOL_SURFACE_MODE = toolSurfaceMode;
+    } else {
+      delete env.UNITY_MCP_LENS_TOOL_SURFACE_MODE;
+    }
+
     this.child = childProcess.spawn(hostPath, [], {
       cwd: projectRoot,
-      env: {
-        ...process.env,
-        UNITY_MCP_STATUS_DIR: statusDir,
-        UNITY_MCP_PROJECT_PATH: projectRoot,
-        UNITY_MCP_LENS_TOOL_SURFACE_MODE: options.toolSurfaceMode || process.env.UNITY_MCP_LENS_TOOL_SURFACE_MODE || "dynamic_packs",
-      },
+      env,
       stdio: ["pipe", "pipe", "pipe"],
       windowsHide: true,
     });
@@ -791,6 +799,7 @@ async function runDynamicPacksScenario() {
     assertReadOnlyHint(foundationList.tools, "Unity_Editor_RecoverFromHang", false);
     assertReadOnlyHint(foundationList.tools, "Unity_Workflow_RunGpuSimulationProbe", false);
     assertReadOnlyHint(foundationList.tools, "Unity_Workflow_VerifyRuntimePackSelection", false);
+    assertReadOnlyHint(foundationList.tools, "Unity_Workflow_SelectPackThroughMainMenu", false);
     for (const assetToolName of requiredAssetTools) {
       assert(!foundationNames.includes(assetToolName), `foundation tools/list should not expose ${assetToolName}`);
     }
@@ -843,6 +852,7 @@ async function runStaticAllScenario() {
     assertReadOnlyHint(staticList.tools, "Unity_Editor_RecoverFromHang", false);
     assertReadOnlyHint(staticList.tools, "Unity_Workflow_RunGpuSimulationProbe", false);
     assertReadOnlyHint(staticList.tools, "Unity_Workflow_VerifyRuntimePackSelection", false);
+    assertReadOnlyHint(staticList.tools, "Unity_Workflow_SelectPackThroughMainMenu", false);
 
     const projectResult = await client.callTool("Unity_Project_PackageCompatibility", {});
     assert.strictEqual(projectResult.structuredContent.success, true, "pack-gated project tool should succeed in static_all without pack switching");
@@ -881,6 +891,31 @@ async function runStaticAllScenario() {
   }
 }
 
+async function runDefaultStaticAllScenario() {
+  const context = new ScenarioContext();
+  let client = null;
+  try {
+    await context.startBridge();
+    client = new McpHostClient(context.projectRoot, context.statusDir);
+    await client.initialize();
+
+    const list = await client.listTools();
+    const names = list.tools.map((tool) => tool.name);
+    assertNamesInclude(names, [
+      "Unity_Project_PackageCompatibility",
+      "Unity_Asset_Search",
+      "Unity_UI_VerifyScreenLayout",
+    ], "default startup tools/list should be static_all");
+
+    const menuResultPayload = await client.callTool("Unity_Tools_Menu", {});
+    assert.strictEqual(menuResultPayload.structuredContent.success, true, "Unity_Tools_Menu should succeed in default mode");
+    assert.strictEqual(menuResultPayload.structuredContent.data.toolSurfaceMode, "static_all");
+  } finally {
+    if (client) await client.dispose().catch(() => {});
+    await context.dispose();
+  }
+}
+
 async function main() {
   assert(fs.existsSync(hostPath), `Host path does not exist: ${hostPath}`);
   const pluginConfig = JSON.parse(fs.readFileSync(path.join(repoRoot, ".agents", "plugins", "lens-dev-plugin", ".mcp.json"), "utf8"));
@@ -890,6 +925,7 @@ async function main() {
     "Codex plugin config should default Lens to static_all",
   );
 
+  await runDefaultStaticAllScenario();
   await runDynamicPacksScenario();
   await runStaticAllScenario();
 

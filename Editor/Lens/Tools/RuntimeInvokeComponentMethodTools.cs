@@ -1,9 +1,11 @@
 #nullable disable
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using Becool.UnityMcpLens.Editor.Adapters.Unity;
 using Becool.UnityMcpLens.Editor.Helpers;
@@ -22,6 +24,8 @@ namespace Becool.UnityMcpLens.Editor.Tools
     public static class RuntimeInvokeComponentMethodTools
     {
         const string ToolName = "Unity.Runtime.InvokeComponentMethod";
+        const int MaxReturnedDataDepth = 4;
+        const int MaxReturnedDataItems = 64;
 
         [McpSchema(ToolName)]
         public static object GetSchema()
@@ -218,6 +222,7 @@ namespace Becool.UnityMcpLens.Editor.Tools
             object beforeFrameCounts = EditorToolStateHelpers.BuildRuntimeProbeData();
             object beforeState = ComponentSummarySerializer.GetSafeComponentData(component, includeNonPublicSerializedFields: true);
             object returnValue = method.Invoke(component, convertedArgs);
+            ReturnedDataShape returnedData = BuildReturnedData(returnValue);
 
             if (waitFrames > 0)
                 await Task.Delay(Math.Max(1, waitFrames) * 16);
@@ -267,6 +272,11 @@ namespace Becool.UnityMcpLens.Editor.Tools
                 },
                 args = args.ToArray(),
                 returnValue = DescribeValue(returnValue),
+                returnedData = returnedData.InlineData,
+                returnedDataIncluded = returnedData.IncludedInline,
+                returnedDataBytes = returnedData.Bytes,
+                returnedDataDetailRef = returnedData.DetailRef,
+                returnedDataTruncated = returnedData.Truncated,
                 waitFrames,
                 frameCounts = new
                 {
@@ -299,6 +309,11 @@ namespace Becool.UnityMcpLens.Editor.Tools
                 component = root["component"],
                 method = root["method"],
                 returnValue = root["returnValue"],
+                returnedData = root["returnedData"],
+                returnedDataIncluded = root["returnedDataIncluded"],
+                returnedDataBytes = root["returnedDataBytes"],
+                returnedDataDetailRef = root["returnedDataDetailRef"],
+                returnedDataTruncated = root["returnedDataTruncated"],
                 waitFrames = root["waitFrames"],
                 frameCounts = root["frameCounts"],
                 stateChanged = root["stateChanged"],
@@ -596,6 +611,184 @@ namespace Becool.UnityMcpLens.Editor.Tools
             }
 
             return value.ToString();
+        }
+
+        sealed class ReturnedDataShape
+        {
+            public object InlineData;
+            public bool IncludedInline;
+            public int Bytes;
+            public object DetailRef;
+            public bool Truncated;
+        }
+
+        static ReturnedDataShape BuildReturnedData(object value)
+        {
+            bool truncated = false;
+            object shaped = ShapeReturnedValue(value, 0, new HashSet<int>(), ref truncated);
+            string serialized = JsonConvert.SerializeObject(shaped, Formatting.None);
+            int bytes = PayloadBudgeting.GetUtf8ByteCount(serialized);
+            object detailRef = bytes > PayloadBudgetPolicy.MaxToolResultBytes
+                ? ToolResultCompactor.CreateStoredDetailRef(
+                    ToolName,
+                    shaped,
+                    bytes,
+                    new { kind = "runtime_invoke_component_method_returned_data" })
+                : null;
+            bool includeInline = bytes <= PayloadBudgetPolicy.MaxToolResultBytes || detailRef == null;
+
+            return new ReturnedDataShape
+            {
+                InlineData = includeInline ? shaped : null,
+                IncludedInline = includeInline,
+                Bytes = bytes,
+                DetailRef = detailRef,
+                Truncated = truncated
+            };
+        }
+
+        static object ShapeReturnedValue(object value, int depth, HashSet<int> visited, ref bool truncated)
+        {
+            if (value == null)
+                return null;
+
+            Type type = value.GetType();
+            Type nullableType = Nullable.GetUnderlyingType(type) ?? type;
+            if (value is string || nullableType.IsPrimitive || nullableType.IsEnum || value is decimal)
+                return value;
+            if (value is DateTime dateTime)
+                return dateTime.ToString("O");
+            if (value is DateTimeOffset dateTimeOffset)
+                return dateTimeOffset.ToString("O");
+            if (value is Guid guid)
+                return guid.ToString("D");
+            if (value is Vector2 vector2)
+                return new { x = vector2.x, y = vector2.y };
+            if (value is Vector3 vector3)
+                return new { x = vector3.x, y = vector3.y, z = vector3.z };
+            if (value is Color color)
+                return new { r = color.r, g = color.g, b = color.b, a = color.a };
+            if (value is Object unityObject)
+            {
+                return new
+                {
+                    name = unityObject.name,
+                    type = unityObject.GetType().FullName,
+                    objectId = UnityApiAdapter.GetObjectIdOrZero(unityObject)
+                };
+            }
+
+            if (depth >= MaxReturnedDataDepth)
+            {
+                truncated = true;
+                return new { type = type.FullName, truncated = true };
+            }
+
+            if (!type.IsValueType)
+            {
+                int identity = RuntimeHelpers.GetHashCode(value);
+                if (!visited.Add(identity))
+                {
+                    truncated = true;
+                    return new { type = type.FullName, circularReference = true };
+                }
+            }
+
+            if (value is IDictionary dictionary)
+            {
+                var shaped = new Dictionary<string, object>();
+                int count = 0;
+                foreach (DictionaryEntry entry in dictionary)
+                {
+                    if (count >= MaxReturnedDataItems)
+                    {
+                        truncated = true;
+                        break;
+                    }
+
+                    string key = entry.Key?.ToString() ?? string.Empty;
+                    shaped[key] = ShapeReturnedValue(entry.Value, depth + 1, visited, ref truncated);
+                    count++;
+                }
+
+                return shaped;
+            }
+
+            if (value is IEnumerable enumerable)
+            {
+                var shaped = new List<object>();
+                int count = 0;
+                foreach (object item in enumerable)
+                {
+                    if (count >= MaxReturnedDataItems)
+                    {
+                        truncated = true;
+                        break;
+                    }
+
+                    shaped.Add(ShapeReturnedValue(item, depth + 1, visited, ref truncated));
+                    count++;
+                }
+
+                return shaped.ToArray();
+            }
+
+            return ShapeReturnedObject(value, type, depth, visited, ref truncated);
+        }
+
+        static object ShapeReturnedObject(object value, Type type, int depth, HashSet<int> visited, ref bool truncated)
+        {
+            var shaped = new Dictionary<string, object>
+            {
+                ["type"] = type.FullName
+            };
+
+            int count = 0;
+            foreach (PropertyInfo property in type.GetProperties(BindingFlags.Public | BindingFlags.Instance)
+                .Where(property => property.CanRead && property.GetIndexParameters().Length == 0)
+                .OrderBy(property => property.Name, StringComparer.Ordinal))
+            {
+                if (count >= MaxReturnedDataItems)
+                {
+                    truncated = true;
+                    break;
+                }
+
+                try
+                {
+                    shaped[property.Name] = ShapeReturnedValue(property.GetValue(value), depth + 1, visited, ref truncated);
+                    count++;
+                }
+                catch
+                {
+                    shaped[property.Name] = new { unavailable = true };
+                }
+            }
+
+            foreach (FieldInfo field in type.GetFields(BindingFlags.Public | BindingFlags.Instance)
+                .OrderBy(field => field.Name, StringComparer.Ordinal))
+            {
+                if (count >= MaxReturnedDataItems)
+                {
+                    truncated = true;
+                    break;
+                }
+
+                try
+                {
+                    shaped[field.Name] = ShapeReturnedValue(field.GetValue(value), depth + 1, visited, ref truncated);
+                    count++;
+                }
+                catch
+                {
+                    shaped[field.Name] = new { unavailable = true };
+                }
+            }
+
+            if (count == 0)
+                shaped["stringValue"] = value.ToString();
+
+            return shaped;
         }
 
         static bool HasAllowedMethodMarker(MethodInfo method, string[] allowedMethodMarkers)

@@ -46,6 +46,7 @@ sealed class UnityMcpLensHost
         "Unity_Prefab_PreviewCopyComponentSerializedValues",
         "Unity_GetLensHealth",
         "Unity_Editor_HealthCheckFast",
+        "Unity_Editor_ReloadSceneModal",
         "Unity_ListToolPacks",
         "Unity_Bridge_ListConnections",
         "Unity_ReadDetailRef",
@@ -136,6 +137,7 @@ sealed class UnityMcpLensHost
         "Unity_Editor_RecoverFromHang",
         "Unity_Workflow_RunGpuSimulationProbe",
         "Unity_Workflow_VerifyRuntimePackSelection",
+        "Unity_Workflow_SelectPackThroughMainMenu",
         "Unity_Tile_BuildSet",
         "Unity_Tilemap_Setup",
         "Unity_Tilemap_Paint",
@@ -260,6 +262,21 @@ sealed class UnityMcpLensHost
         public required TimeSpan Elapsed { get; init; }
     }
 
+    sealed class RunCommandSafetyBypassResult
+    {
+        public bool Allowed { get; init; }
+        public string Reason { get; init; } = string.Empty;
+        public string FailureKind { get; init; } = string.Empty;
+        public HostHealthEvaluation? Health { get; init; }
+        public object? RuntimeState { get; init; }
+        public object? ConsoleBefore { get; init; }
+        public object? ConsoleAfter { get; init; }
+        public bool RuntimeProbeAvailable { get; init; }
+        public bool RuntimeAdvanced { get; init; }
+        public bool PausedReady { get; init; }
+        public int NewConsoleErrorCount { get; init; }
+    }
+
     sealed class BridgeDiscoveryException : InvalidOperationException
     {
         public BridgeDiscoveryException(string message, BridgeDiscoverySnapshot snapshot)
@@ -301,6 +318,57 @@ sealed class UnityMcpLensHost
         public List<object> Attempts { get; init; } = [];
         public object? LastState { get; init; }
         public string? LastError { get; init; }
+    }
+
+    sealed class AssemblyReloadProofSnapshot
+    {
+        public bool Relevant { get; init; }
+        public string[] ChangedPaths { get; init; } = [];
+        public string[] RelevantChangedPaths { get; init; } = [];
+        public string ProjectRoot { get; init; } = string.Empty;
+        public string ScriptAssembliesPath { get; init; } = string.Empty;
+        public int AssemblyCount { get; init; }
+        public DateTime NewestAssemblyWriteUtc { get; init; } = DateTime.MinValue;
+        public DateTime NewestSourceWriteUtc { get; init; } = DateTime.MinValue;
+        public string? NewestSourcePath { get; init; }
+        public DateTime NewestLocalPackageSourceWriteUtc { get; init; } = DateTime.MinValue;
+        public string? NewestLocalPackageSourcePath { get; init; }
+        public string? NewestLocalPackageSourceAssetPath { get; init; }
+        public string[] LocalPackageSourceRoots { get; init; } = [];
+        public int LocalPackageSourceFileCount { get; init; }
+        public bool LocalPackageSourceNewerThanAssembly { get; init; }
+        public int LocalPackageSourceNewerThanAssemblyPathCount { get; init; }
+        public string[] LocalPackageSourceNewerThanAssemblyAssetPaths { get; init; } = [];
+        public string AssemblyFingerprint { get; init; } = string.Empty;
+    }
+
+    sealed class LocalPackageSourceProbe
+    {
+        public string[] Roots { get; init; } = [];
+        public int FileCount { get; init; }
+        public DateTime NewestWriteUtc { get; init; } = DateTime.MinValue;
+        public string? NewestPath { get; init; }
+        public string? NewestAssetPath { get; init; }
+        public int NewerThanAssemblyPathCount { get; init; }
+        public string[] NewerThanAssemblyAssetPaths { get; init; } = [];
+    }
+
+    sealed class LocalPackageSourceRoot
+    {
+        public required string Root { get; init; }
+        public required string PackageName { get; init; }
+    }
+
+    sealed class AssemblyReloadProofResult
+    {
+        public required string ProofStatus { get; init; }
+        public bool Relevant { get; init; }
+        public bool AssemblyChanged { get; init; }
+        public bool SourceNewerThanAssembly { get; init; }
+        public AssemblyReloadProofSnapshot? Before { get; init; }
+        public AssemblyReloadProofSnapshot? After { get; init; }
+        public string? WarningKind { get; init; }
+        public string? WarningMessage { get; init; }
     }
 
     readonly JsonSerializerOptions m_JsonOptions = new(JsonSerializerDefaults.Web)
@@ -487,6 +555,8 @@ sealed class UnityMcpLensHost
 
         m_ToolCache[ScriptUpdatingConsentModalTool.ToolName] =
             ScriptUpdatingConsentModalTool.BuildDescriptor(m_JsonOptions);
+        m_ToolCache[ReloadSceneModalTool.ToolName] =
+            ReloadSceneModalTool.BuildDescriptor(m_JsonOptions);
     }
 
     BridgeToolDescriptor[] BuildBootstrapTools()
@@ -677,7 +747,26 @@ sealed class UnityMcpLensHost
                 selectedPackId = new { type = "string", description = "Expected FallingSands pack id." },
                 scenePath = new { type = "string", description = "Optional Assets-relative .unity scene path to load before Play Mode." },
                 requirePlayMode = new { type = "boolean", description = "Require runtime verification in Play Mode. Defaults to true." },
+                selectPack = new { type = "boolean", description = "Select the pack directly before verifying. Defaults to true for compatibility." },
                 timeoutMs = new { type = "integer", description = "Host workflow timeout in milliseconds. Defaults to 60000." }
+            }
+        }, m_JsonOptions);
+
+        JsonElement selectPackThroughMainMenuInputSchema = JsonSerializer.SerializeToElement(new
+        {
+            type = "object",
+            properties = new
+            {
+                packId = new { type = "string", description = "FallingSands pack id to select through the Main Menu. Defaults to garden." },
+                mainMenuScenePath = new { type = "string", description = "Assets-relative Main Menu scene path. Defaults to Assets/Scenes/MainMenu.unity." },
+                buttonName = new { type = "string", description = "Runtime UI button GameObject name. Defaults to PackButton_{packId}." },
+                buttonSearchMethod = new { type = "string", description = "UI target search method such as by_name, by_path, or by_id. Defaults to by_name." },
+                expectedRuntimePackName = new { type = "string", description = "Expected runtime ActiveElementPackName. Defaults to a display-cased pack id." },
+                stepsAfterClick = new { type = "integer", description = "Bounded paused steps after clicking the pack button. Defaults to 10." },
+                timeoutMs = new { type = "integer", description = "Hard workflow timeout in milliseconds. Defaults to 60000." },
+                exitAfter = new { type = "boolean", description = "Exit Play Mode after verification. Defaults to true." },
+                captureConsoleDelta = new { type = "boolean", description = "Capture only console entries emitted during the workflow. Defaults to true." },
+                failOnNewConsoleErrors = new { type = "boolean", description = "Fail when new console errors appear. Defaults to true." }
             }
         }, m_JsonOptions);
 
@@ -765,8 +854,14 @@ sealed class UnityMcpLensHost
             BuildBootstrapTool(
                 "Unity_Workflow_VerifyRuntimePackSelection",
                 "Verify FallingSands Runtime Pack Selection",
-                "Selects a FallingSands pack, loads the scene when requested, enters runtime if needed, and verifies the active runtime pack.",
+                "Optionally selects a FallingSands pack, loads the scene when requested, enters runtime if needed, and verifies the active runtime pack.",
                 packVerifyInputSchema,
+                readOnlyHint: false),
+            BuildBootstrapTool(
+                "Unity_Workflow_SelectPackThroughMainMenu",
+                "Select FallingSands Pack Through Main Menu",
+                "Enters the FallingSands Main Menu through safe paused Play Mode, clicks a pack button with Unity.UI.InvokeControl, then verifies the active runtime pack without Unity.RunCommand.",
+                selectPackThroughMainMenuInputSchema,
                 readOnlyHint: false),
             BuildBootstrapTool(
                 "Unity_ListToolPacks",
@@ -858,6 +953,18 @@ sealed class UnityMcpLensHost
         if (ScriptUpdatingConsentModalTool.MatchesToolName(canonicalToolName))
         {
             var localPayload = ScriptUpdatingConsentModalTool.Execute(argumentsElement, m_JsonOptions);
+            await WriteRpcAsync(new
+            {
+                jsonrpc = "2.0",
+                id = idElement.GetValueOrDefault(),
+                result = BuildToolCallResult(localPayload, IsToolLevelError(localPayload))
+            }, cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
+        if (ReloadSceneModalTool.MatchesToolName(canonicalToolName))
+        {
+            var localPayload = ReloadSceneModalTool.Execute(argumentsElement, m_JsonOptions);
             await WriteRpcAsync(new
             {
                 jsonrpc = "2.0",
@@ -990,7 +1097,8 @@ sealed class UnityMcpLensHost
             return BuildToolCallResult(payload, IsToolLevelError(payload));
         }
 
-        if (ToolNamesMatch(canonicalToolName, "Unity.RunCommand") && IsRunCommandPreflightMode(argumentsElement))
+        bool isRunCommand = ToolNamesMatch(canonicalToolName, "Unity.RunCommand");
+        if (isRunCommand && IsRunCommandPreflightMode(argumentsElement))
         {
             JsonElement payload = CreateRunCommandPreflightPayload(argumentsElement);
             return BuildToolCallResult(payload, IsToolLevelError(payload));
@@ -998,10 +1106,27 @@ sealed class UnityMcpLensHost
 
         if (IsSessionUnsafe())
         {
-            return BuildToolCallResult(CreateSessionUnsafePayload(canonicalToolName), isError: true);
+            if (isRunCommand)
+            {
+                RunCommandSafetyBypassResult bypass = await EvaluateRunCommandStablePlayModeBypassAsync(cancellationToken).ConfigureAwait(false);
+                if (bypass.Allowed)
+                {
+                    Console.Error.WriteLine($"[unity-mcp-lens] Allowing Unity.RunCommand while unsafe latch is set because stable Play Mode was proven: {bypass.Reason}");
+                }
+                else
+                {
+                    return BuildToolCallResult(
+                        CreateSessionUnsafePayload(canonicalToolName, $"Stable Play Mode RunCommand bypass was not proven: {bypass.Reason}"),
+                        isError: true);
+                }
+            }
+            else
+            {
+                return BuildToolCallResult(CreateSessionUnsafePayload(canonicalToolName), isError: true);
+            }
         }
 
-        if (ToolNamesMatch(canonicalToolName, "Unity.RunCommand"))
+        if (isRunCommand)
         {
             JsonElement payload = await CallRunCommandWithWatchdogAsync(toolName, canonicalToolName, argumentsElement, cancellationToken).ConfigureAwait(false);
             return BuildToolCallResult(payload, IsToolLevelError(payload));
@@ -1030,6 +1155,12 @@ sealed class UnityMcpLensHost
         if (ToolNamesMatch(canonicalToolName, "Unity.Workflow.VerifyRuntimePackSelection"))
         {
             JsonElement payload = await CreateVerifyRuntimePackSelectionPayloadAsync(argumentsElement, cancellationToken).ConfigureAwait(false);
+            return BuildToolCallResult(payload, IsToolLevelError(payload));
+        }
+
+        if (ToolNamesMatch(canonicalToolName, "Unity.Workflow.SelectPackThroughMainMenu"))
+        {
+            JsonElement payload = await CreateSelectPackThroughMainMenuPayloadAsync(argumentsElement, cancellationToken).ConfigureAwait(false);
             return BuildToolCallResult(payload, IsToolLevelError(payload));
         }
 
@@ -1973,7 +2104,7 @@ sealed class UnityMcpLensHost
         BridgeDiscoverySnapshot snapshot = BridgeDiscovery.FindBridgeSnapshot(projectPathHint, quarantineIds, requireProjectMatch);
         BridgeDiscoveryResult? selected = snapshot.Selected;
         UnityMcpLens.Shared.EditorHealthCandidate? editorHealth =
-            selected?.EditorHealth ?? SelectBestEditorHealth(snapshot, requireProjectMatch);
+            selected != null ? selected.EditorHealth : SelectBestEditorHealth(snapshot, requireProjectMatch);
         bool editorBusy = IsEditorBusy(editorHealth);
         bool usableBridge = selected is { IsFresh: true };
         HostStopContract contract = ClassifyHealth(snapshot, selected, editorHealth, editorBusy, usableBridge);
@@ -2180,11 +2311,12 @@ sealed class UnityMcpLensHost
     static bool IsEditorBusy(UnityMcpLens.Shared.EditorHealthCandidate? editorHealth)
     {
         var health = editorHealth?.HealthFile;
+        bool playModeTransition = health?.IsPlayingOrWillChangePlaymode == true && health.IsPlaying != true;
         return health != null && (
             health.IsCompiling ||
             health.IsImporting ||
             health.IsUpdating ||
-            health.IsPlayingOrWillChangePlaymode ||
+            playModeTransition ||
             health.IsBuildingPlayer);
     }
 
@@ -2259,7 +2391,7 @@ sealed class UnityMcpLensHost
 
     void ApplyHealthEvaluationToSessionSafety(HostHealthEvaluation evaluation)
     {
-        if (evaluation.Contract.SafeToContinue && evaluation.UsableBridge && !evaluation.EditorBusy)
+        if (HasProvenFreshBridgeEditorPair(evaluation))
         {
             ClearSessionSafety();
             return;
@@ -2298,6 +2430,44 @@ sealed class UnityMcpLensHost
         m_SessionSafety.LastProjectPath = null;
         m_SessionSafety.LastStatusPath = null;
         m_SessionSafety.LastConnectionPath = null;
+    }
+
+    static bool HasProvenFreshBridgeEditorPair(HostHealthEvaluation evaluation)
+    {
+        BridgeDiscoveryResult? selected = evaluation.SelectedBridge;
+        UnityMcpLens.Shared.EditorHealthCandidate? health = evaluation.EditorHealth;
+        if (!evaluation.Contract.SafeToContinue ||
+            evaluation.EditorBusy ||
+            selected?.IsFresh != true ||
+            health?.IsFresh != true)
+        {
+            return false;
+        }
+
+        bool pidMatches = selected.EditorPid <= 0 || health.EditorPid == selected.EditorPid;
+        bool projectMatches = UnityMcpLens.Shared.EditorHealthDiscovery.IsBridgeProjectMatch(
+            health,
+            selected.ProjectRoot);
+        bool commandLineMatches = !health.CommandLineAvailable ||
+            !health.EditorProcessLooksLikeUnity ||
+            health.ProjectCommandLineMatch == true;
+        return pidMatches && projectMatches && commandLineMatches;
+    }
+
+    static bool HasProvenFreshBridgeEditorPair(BridgeDiscoveryResult selected)
+    {
+        UnityMcpLens.Shared.EditorHealthCandidate? health = selected.EditorHealth;
+        if (selected.IsFresh != true || health?.IsFresh != true)
+            return false;
+
+        bool pidMatches = selected.EditorPid <= 0 || health.EditorPid == selected.EditorPid;
+        bool projectMatches = UnityMcpLens.Shared.EditorHealthDiscovery.IsBridgeProjectMatch(
+            health,
+            selected.ProjectRoot);
+        bool commandLineMatches = !health.CommandLineAvailable ||
+            !health.EditorProcessLooksLikeUnity ||
+            health.ProjectCommandLineMatch == true;
+        return pidMatches && projectMatches && commandLineMatches;
     }
 
     object CreateSessionSafetyDiagnostics()
@@ -2849,6 +3019,8 @@ sealed class UnityMcpLensHost
 
         bool connected = m_BridgeConnection != null &&
             string.Equals(m_BridgeConnection.ProjectRoot, selected!.ProjectRoot, StringComparison.OrdinalIgnoreCase);
+        if (connectError == null && HasProvenFreshBridgeEditorPair(selected!))
+            ClearSessionSafety();
 
         return JsonSerializer.SerializeToElement(new
         {
@@ -2894,13 +3066,16 @@ sealed class UnityMcpLensHost
         JsonElement syncRequest = default;
         HostSyncReadyResult? ready = null;
         bool hostWaitAttempted = false;
+        AssemblyReloadProofSnapshot? assemblyProofBefore = CaptureAssemblyReloadProofSnapshot(argumentsElement);
+        JsonElement nativeArgumentsElement = BuildSyncScriptsNativeArguments(argumentsElement, assemblyProofBefore);
+        bool localPackageRefreshRequested = assemblyProofBefore?.LocalPackageSourceNewerThanAssemblyAssetPaths.Length > 0;
 
         try
         {
             packActivation = await EnsureScriptSyncPacksActiveAsync(cancellationToken).ConfigureAwait(false);
             syncRequest = await CallBridgeToolResultAsync(
                 "Unity.Editor.SyncScripts",
-                argumentsElement,
+                nativeArgumentsElement,
                 cancellationToken).ConfigureAwait(false);
 
             bool hasNativeData = TryGetNestedProperty(syncRequest, out var nativeData, "data");
@@ -2911,6 +3086,8 @@ sealed class UnityMcpLensHost
             bool nativeRefused = GetJsonBool(nativeData, false, "refused");
             bool nativeTimedOut = GetJsonBool(nativeData, false, "timedOut");
             bool nativeNewConsoleErrorsDetected = GetJsonBool(nativeData, false, "newConsoleErrorsDetected", "consoleErrorsDetected");
+            bool nativeCompileObserved = GetJsonBool(nativeData, false, "compileObserved");
+            bool nativePackageResolveRequested = GetJsonBool(nativeData, false, "packageResolveRequested");
             int initialConsoleErrorCount = GetJsonInt(nativeData, 0, "initialConsoleErrorCount");
             int nativeFinalConsoleErrorCount = GetJsonInt(
                 nativeData,
@@ -2966,20 +3143,42 @@ sealed class UnityMcpLensHost
                 : nativeNewConsoleErrorCount;
             bool newConsoleErrorsDetected = newConsoleErrorCount > 0;
             bool staleConsoleErrorsPresent = finalConsoleErrorCount > 0 && !newConsoleErrorsDetected;
+            object[] nativeWarnings = CloneJsonArray(nativeData, "warnings") ?? [];
+            var warnings = new List<object>(nativeWarnings);
+            AssemblyReloadProofSnapshot? assemblyProofAfter = CaptureAssemblyReloadProofSnapshot(nativeArgumentsElement);
+            AssemblyReloadProofResult assemblyReloadProof = BuildAssemblyReloadProofResult(
+                assemblyProofBefore,
+                assemblyProofAfter,
+                nativeCompileObserved,
+                finalTimedOut,
+                nativeRefused);
+            if (assemblyReloadProof.WarningKind != null)
+            {
+                warnings.Add(new
+                {
+                    kind = assemblyReloadProof.WarningKind,
+                    message = assemblyReloadProof.WarningMessage,
+                    proofStatus = assemblyReloadProof.ProofStatus
+                });
+            }
+
+            if (assemblyReloadProof.SourceNewerThanAssembly)
+                finalReadyForFollowUp = false;
+
             string finalStatus = finalReadyForFollowUp
                 ? "ready"
                 : !consoleCheckSucceeded
                     ? "console_check_failed"
                     : newConsoleErrorsDetected
                         ? "console_errors"
+                        : assemblyReloadProof.SourceNewerThanAssembly
+                            ? assemblyReloadProof.ProofStatus
                         : finalTimedOut
                             ? "timed_out"
                             : nativeRefused
                                 ? "refused"
                                 : nativeStatus ?? "failed";
             int elapsedMs = (int)Math.Round((DateTime.UtcNow - startedUtc).TotalMilliseconds);
-            object[] nativeWarnings = CloneJsonArray(nativeData, "warnings") ?? [];
-            var warnings = new List<object>(nativeWarnings);
             if (hostWaitAttempted && ready?.ConsoleCheckSucceeded == false)
             {
                 warnings.Add(new
@@ -3002,6 +3201,13 @@ sealed class UnityMcpLensHost
                     noChangesDetected = GetJsonBool(nativeData, false, "noChangesDetected"),
                     changedPaths = CloneJsonProperty(nativeData, "changedPaths"),
                     relevantChangedPaths = CloneJsonProperty(nativeData, "relevantChangedPaths"),
+                    localPackageRefreshRequested,
+                    localPackageRefreshPaths = assemblyProofBefore?.LocalPackageSourceNewerThanAssemblyAssetPaths ?? [],
+                    packageResolveRequested = localPackageRefreshRequested || nativePackageResolveRequested,
+                    nativePackageResolveRequested,
+                    packageResolvePaths = CloneJsonProperty(nativeData, "packageResolvePaths") ??
+                        assemblyProofBefore?.LocalPackageSourceNewerThanAssemblyAssetPaths ??
+                        [],
                     force = GetJsonBool(nativeData, false, "force"),
                     waitForCompile,
                     refreshRequested = GetJsonBool(nativeData, false, "refreshRequested"),
@@ -3010,7 +3216,12 @@ sealed class UnityMcpLensHost
                     hostWaitAttempted,
                     hostWaitCompleted = hostWaitAttempted && ready?.EditorIdle == true,
                     compileStarted = GetJsonBool(nativeData, false, "compileStarted"),
-                    compileObserved = GetJsonBool(nativeData, false, "compileObserved"),
+                    compileObserved = nativeCompileObserved,
+                    assemblyReloadProof,
+                    assemblyChanged = assemblyReloadProof.AssemblyChanged,
+                    sourceNewerThanAssembly = assemblyReloadProof.SourceNewerThanAssembly,
+                    localPackageSourceNewerThanAssembly = assemblyReloadProof.After?.LocalPackageSourceNewerThanAssembly == true,
+                    proofStatus = assemblyReloadProof.ProofStatus,
                     editorIdle = hostWaitAttempted ? ready?.EditorIdle == true : GetJsonBool(nativeData, false, "editorIdle"),
                     timedOut = finalTimedOut,
                     initialConsoleErrorCount,
@@ -3075,12 +3286,45 @@ sealed class UnityMcpLensHost
                     waitForCompile,
                     captureConsoleDelta,
                     syncRequest,
+                    nativeArguments = nativeArgumentsElement,
                     packActivation,
                     startingActivePacks,
                     activeToolPacks = m_ActiveToolPacks,
                     host = CreateHostDiagnostics()
                 });
         }
+    }
+
+    JsonElement BuildSyncScriptsNativeArguments(JsonElement argumentsElement, AssemblyReloadProofSnapshot? proofSnapshot)
+    {
+        string[] localPackageRefreshPaths = proofSnapshot?.LocalPackageSourceNewerThanAssemblyAssetPaths ?? [];
+        if (localPackageRefreshPaths.Length == 0)
+            return argumentsElement;
+
+        JsonObject argumentsObject = JsonNode.Parse(argumentsElement.GetRawText()) as JsonObject ?? new JsonObject();
+        var changedPaths = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (string path in GetJsonStringArray(argumentsElement, "changedPaths", "ChangedPaths"))
+        {
+            if (!string.IsNullOrWhiteSpace(path))
+                changedPaths.Add(path);
+        }
+
+        foreach (string path in localPackageRefreshPaths)
+        {
+            if (!string.IsNullOrWhiteSpace(path))
+                changedPaths.Add(path);
+        }
+
+        var changedPathArray = new JsonArray();
+        foreach (string path in changedPaths)
+            changedPathArray.Add(path);
+
+        argumentsObject["changedPaths"] = changedPathArray;
+        argumentsObject["localPackageRefreshRequested"] = true;
+        argumentsObject["localPackageRefreshPaths"] = JsonSerializer.SerializeToNode(localPackageRefreshPaths, m_JsonOptions);
+        argumentsObject["localPackageRefreshPathCount"] = localPackageRefreshPaths.Length;
+        argumentsObject["resolvePackages"] = true;
+        return JsonSerializer.SerializeToElement(argumentsObject, m_JsonOptions);
     }
 
     async Task<object> EnsureScriptSyncPacksActiveAsync(CancellationToken cancellationToken)
@@ -3142,6 +3386,465 @@ sealed class UnityMcpLensHost
             activeToolPacks = m_ActiveToolPacks,
             toolsListChangedNotificationSent
         };
+    }
+
+    AssemblyReloadProofSnapshot CaptureAssemblyReloadProofSnapshot(JsonElement argumentsElement)
+    {
+        string projectRoot = ResolveProjectPathHint(out _);
+        string[] changedPaths = GetJsonStringArray(argumentsElement, "changedPaths", "ChangedPaths");
+        string[] relevantChangedPaths = changedPaths
+            .Select(path => NormalizeUnityChangedPath(projectRoot, path))
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Where(IsCompileAffectingPath)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(path => path, StringComparer.Ordinal)
+            .ToArray();
+        bool force = ExtractBool(argumentsElement, false, "force", "Force");
+        string scriptAssembliesPath = Path.Combine(projectRoot, "Library", "ScriptAssemblies");
+        FileInfo[] assemblyFiles = Directory.Exists(scriptAssembliesPath)
+            ? new DirectoryInfo(scriptAssembliesPath)
+                .EnumerateFiles("*.dll", SearchOption.TopDirectoryOnly)
+                .OrderBy(file => file.FullName, StringComparer.OrdinalIgnoreCase)
+                .ToArray()
+            : [];
+        DateTime newestAssemblyWriteUtc = assemblyFiles.Length == 0
+            ? DateTime.MinValue
+            : assemblyFiles.Max(file => file.LastWriteTimeUtc);
+        DateTime newestChangedSourceWriteUtc = GetNewestSourceWriteUtc(projectRoot, relevantChangedPaths, out string? newestChangedSourcePath);
+        LocalPackageSourceProbe localPackageProbe = FindLocalPackageCompileSourceProbe(projectRoot, newestAssemblyWriteUtc);
+        DateTime newestSourceWriteUtc = newestChangedSourceWriteUtc >= localPackageProbe.NewestWriteUtc
+            ? newestChangedSourceWriteUtc
+            : localPackageProbe.NewestWriteUtc;
+        string? newestSourcePath = newestChangedSourceWriteUtc >= localPackageProbe.NewestWriteUtc
+            ? newestChangedSourcePath
+            : localPackageProbe.NewestPath;
+        bool localPackageSourceNewerThanAssembly = localPackageProbe.NewestWriteUtc != DateTime.MinValue &&
+            newestAssemblyWriteUtc != DateTime.MinValue &&
+            localPackageProbe.NewestWriteUtc > newestAssemblyWriteUtc.AddSeconds(1);
+
+        return new AssemblyReloadProofSnapshot
+        {
+            Relevant = force || relevantChangedPaths.Length > 0 || localPackageSourceNewerThanAssembly,
+            ChangedPaths = changedPaths,
+            RelevantChangedPaths = relevantChangedPaths,
+            ProjectRoot = projectRoot,
+            ScriptAssembliesPath = scriptAssembliesPath,
+            AssemblyCount = assemblyFiles.Length,
+            NewestAssemblyWriteUtc = newestAssemblyWriteUtc,
+            NewestSourceWriteUtc = newestSourceWriteUtc,
+            NewestSourcePath = newestSourcePath,
+            NewestLocalPackageSourceWriteUtc = localPackageProbe.NewestWriteUtc,
+            NewestLocalPackageSourcePath = localPackageProbe.NewestPath,
+            NewestLocalPackageSourceAssetPath = localPackageProbe.NewestAssetPath,
+            LocalPackageSourceRoots = localPackageProbe.Roots,
+            LocalPackageSourceFileCount = localPackageProbe.FileCount,
+            LocalPackageSourceNewerThanAssembly = localPackageSourceNewerThanAssembly,
+            LocalPackageSourceNewerThanAssemblyPathCount = localPackageProbe.NewerThanAssemblyPathCount,
+            LocalPackageSourceNewerThanAssemblyAssetPaths = localPackageProbe.NewerThanAssemblyAssetPaths,
+            AssemblyFingerprint = string.Join("|", assemblyFiles.Select(file =>
+                $"{file.Name}:{file.Length}:{file.LastWriteTimeUtc.Ticks}"))
+        };
+    }
+
+    static AssemblyReloadProofResult BuildAssemblyReloadProofResult(
+        AssemblyReloadProofSnapshot? before,
+        AssemblyReloadProofSnapshot? after,
+        bool compileObserved,
+        bool timedOut,
+        bool refused)
+    {
+        if (after?.Relevant != true)
+        {
+            return new AssemblyReloadProofResult
+            {
+                ProofStatus = "not_required",
+                Relevant = false,
+                Before = before,
+                After = after
+            };
+        }
+
+        bool assemblyChanged = before != null &&
+            !string.Equals(before.AssemblyFingerprint, after.AssemblyFingerprint, StringComparison.Ordinal);
+        bool sourceNewerThanAssembly = after.NewestSourceWriteUtc != DateTime.MinValue &&
+            after.NewestAssemblyWriteUtc != DateTime.MinValue &&
+            after.NewestSourceWriteUtc > after.NewestAssemblyWriteUtc.AddSeconds(1);
+        bool localPackageSourceNewerThanAssembly = sourceNewerThanAssembly &&
+            after.LocalPackageSourceNewerThanAssembly;
+        string proofStatus =
+            refused ? "refused" :
+            timedOut ? "timed_out" :
+            after.AssemblyCount == 0 ? "unavailable_no_script_assemblies" :
+            localPackageSourceNewerThanAssembly ? "local_package_source_newer_than_assembly" :
+            sourceNewerThanAssembly ? "source_newer_than_assembly" :
+            assemblyChanged ? "assembly_changed" :
+            compileObserved ? "compile_observed_no_assembly_change" :
+            "assembly_reload_not_observed";
+
+        bool warnReloadNotObserved = proofStatus == "assembly_reload_not_observed" ||
+            (!compileObserved && !assemblyChanged && after.AssemblyCount > 0 && !sourceNewerThanAssembly);
+
+        return new AssemblyReloadProofResult
+        {
+            ProofStatus = proofStatus,
+            Relevant = true,
+            AssemblyChanged = assemblyChanged,
+            SourceNewerThanAssembly = sourceNewerThanAssembly,
+            Before = before,
+            After = after,
+            WarningKind = localPackageSourceNewerThanAssembly
+                ? "local_package_source_newer_than_assembly"
+                : sourceNewerThanAssembly
+                ? "source_newer_than_script_assembly"
+                : warnReloadNotObserved
+                    ? "assembly_reload_not_observed"
+                    : null,
+            WarningMessage = localPackageSourceNewerThanAssembly
+                ? "Local file-package source is newer than the newest loaded script assembly after Unity became idle; Lens requested package asset refresh/import paths but Unity has not loaded the updated assembly yet."
+                : sourceNewerThanAssembly
+                ? "Changed source is newer than the newest loaded script assembly after Unity became idle."
+                : warnReloadNotObserved
+                    ? "Relevant script changes were supplied, but Lens did not observe compilation or a script assembly timestamp change."
+                    : null
+        };
+    }
+
+    static DateTime GetNewestSourceWriteUtc(string projectRoot, string[] relevantChangedPaths, out string? newestPath)
+    {
+        DateTime newest = DateTime.MinValue;
+        newestPath = null;
+        foreach (string path in relevantChangedPaths)
+        {
+            string fullPath = Path.IsPathRooted(path) ? path : Path.Combine(projectRoot, path);
+            try
+            {
+                if (File.Exists(fullPath))
+                {
+                    DateTime writeUtc = File.GetLastWriteTimeUtc(fullPath);
+                    if (writeUtc > newest)
+                    {
+                        newest = writeUtc;
+                        newestPath = fullPath;
+                    }
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        return newest;
+    }
+
+    static LocalPackageSourceProbe FindLocalPackageCompileSourceProbe(string projectRoot, DateTime newestAssemblyWriteUtc)
+    {
+        LocalPackageSourceRoot[] roots = ResolveLocalPackageSourceRoots(projectRoot);
+        DateTime newest = DateTime.MinValue;
+        string? newestPath = null;
+        string? newestAssetPath = null;
+        int fileCount = 0;
+        int newerThanAssemblyPathCount = 0;
+        var newerThanAssemblyAssetPaths = new List<string>();
+
+        foreach (LocalPackageSourceRoot root in roots)
+        {
+            foreach (string file in EnumerateCompileAffectingSourceFiles(root.Root))
+            {
+                try
+                {
+                    fileCount++;
+                    DateTime writeUtc = File.GetLastWriteTimeUtc(file);
+                    string? assetPath = ToPackageAssetPath(root, file);
+                    if (writeUtc > newest)
+                    {
+                        newest = writeUtc;
+                        newestPath = file;
+                        newestAssetPath = assetPath;
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(assetPath) &&
+                        newestAssemblyWriteUtc != DateTime.MinValue &&
+                        writeUtc > newestAssemblyWriteUtc.AddSeconds(1))
+                    {
+                        newerThanAssemblyPathCount++;
+                        if (newerThanAssemblyAssetPaths.Count < 64)
+                            newerThanAssemblyAssetPaths.Add(assetPath);
+                    }
+                }
+                catch
+                {
+                }
+            }
+        }
+
+        return new LocalPackageSourceProbe
+        {
+            Roots = roots.Select(root => root.Root).ToArray(),
+            FileCount = fileCount,
+            NewestWriteUtc = newest,
+            NewestPath = newestPath,
+            NewestAssetPath = newestAssetPath,
+            NewerThanAssemblyPathCount = newerThanAssemblyPathCount,
+            NewerThanAssemblyAssetPaths = newerThanAssemblyAssetPaths
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(path => path, StringComparer.Ordinal)
+                .ToArray()
+        };
+    }
+
+    static LocalPackageSourceRoot[] ResolveLocalPackageSourceRoots(string projectRoot)
+    {
+        var roots = new Dictionary<string, LocalPackageSourceRoot>(StringComparer.OrdinalIgnoreCase);
+        string packagesDirectory = Path.Combine(projectRoot, "Packages");
+        string manifestPath = Path.Combine(packagesDirectory, "manifest.json");
+
+        if (File.Exists(manifestPath))
+        {
+            try
+            {
+                using JsonDocument manifest = JsonDocument.Parse(File.ReadAllText(manifestPath));
+                if (manifest.RootElement.TryGetProperty("dependencies", out JsonElement dependencies) &&
+                    dependencies.ValueKind == JsonValueKind.Object)
+                {
+                    foreach (JsonProperty dependency in dependencies.EnumerateObject())
+                    {
+                        if (dependency.Value.ValueKind != JsonValueKind.String)
+                            continue;
+
+                        string? root = ResolveLocalPackageDependencyRoot(
+                            projectRoot,
+                            packagesDirectory,
+                            dependency.Value.GetString());
+                        if (!string.IsNullOrWhiteSpace(root) && Directory.Exists(root))
+                            AddLocalPackageSourceRoot(roots, root, dependency.Name);
+                    }
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        if (Directory.Exists(packagesDirectory))
+        {
+            try
+            {
+                foreach (string directory in Directory.EnumerateDirectories(packagesDirectory, "*", SearchOption.TopDirectoryOnly))
+                {
+                    string name = Path.GetFileName(directory);
+                    if (string.Equals(name, "PackageCache", StringComparison.OrdinalIgnoreCase))
+                        continue;
+                    if (File.Exists(Path.Combine(directory, "package.json")))
+                        AddLocalPackageSourceRoot(roots, directory, ReadPackageName(directory) ?? name);
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        return roots.Values
+            .OrderBy(root => root.Root, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    static void AddLocalPackageSourceRoot(Dictionary<string, LocalPackageSourceRoot> roots, string root, string fallbackPackageName)
+    {
+        try
+        {
+            string fullRoot = Path.GetFullPath(root);
+            string packageName = ReadPackageName(fullRoot) ?? fallbackPackageName;
+            if (!string.IsNullOrWhiteSpace(packageName))
+            {
+                roots[fullRoot] = new LocalPackageSourceRoot
+                {
+                    Root = fullRoot,
+                    PackageName = packageName
+                };
+            }
+        }
+        catch
+        {
+        }
+    }
+
+    static string? ReadPackageName(string packageRoot)
+    {
+        string packageJsonPath = Path.Combine(packageRoot, "package.json");
+        if (!File.Exists(packageJsonPath))
+            return null;
+
+        try
+        {
+            using JsonDocument document = JsonDocument.Parse(File.ReadAllText(packageJsonPath));
+            if (document.RootElement.TryGetProperty("name", out JsonElement nameElement) &&
+                nameElement.ValueKind == JsonValueKind.String)
+            {
+                string? name = nameElement.GetString();
+                return string.IsNullOrWhiteSpace(name) ? null : name.Trim();
+            }
+        }
+        catch
+        {
+        }
+
+        return null;
+    }
+
+    static string? ToPackageAssetPath(LocalPackageSourceRoot root, string file)
+    {
+        try
+        {
+            string relative = Path.GetRelativePath(root.Root, file).Replace('\\', '/');
+            if (relative.StartsWith("../", StringComparison.Ordinal) ||
+                Path.IsPathRooted(relative))
+                return null;
+
+            return $"Packages/{root.PackageName}/{relative}";
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    static string? ResolveLocalPackageDependencyRoot(string projectRoot, string packagesDirectory, string? dependency)
+    {
+        if (string.IsNullOrWhiteSpace(dependency) ||
+            !dependency.StartsWith("file:", StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        string spec = dependency["file:".Length..].Trim();
+        if (string.IsNullOrWhiteSpace(spec))
+            return null;
+
+        if (Uri.TryCreate(spec, UriKind.Absolute, out Uri? uri) && uri.IsFile)
+            return uri.LocalPath;
+
+        spec = Uri.UnescapeDataString(spec).Replace('/', Path.DirectorySeparatorChar);
+        if (Path.IsPathRooted(spec))
+            return spec;
+
+        string projectRelative = Path.GetFullPath(Path.Combine(projectRoot, spec));
+        if (Directory.Exists(projectRelative))
+            return projectRelative;
+
+        return Path.GetFullPath(Path.Combine(packagesDirectory, spec));
+    }
+
+    static IEnumerable<string> EnumerateCompileAffectingSourceFiles(string root)
+    {
+        if (!Directory.Exists(root))
+            yield break;
+
+        var pending = new Stack<string>();
+        pending.Push(root);
+        while (pending.Count > 0)
+        {
+            string directory = pending.Pop();
+            string[] files;
+            try
+            {
+                files = Directory.GetFiles(directory);
+            }
+            catch
+            {
+                continue;
+            }
+
+            foreach (string file in files)
+            {
+                string extension = Path.GetExtension(file);
+                if (string.Equals(extension, ".cs", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(extension, ".asmdef", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(extension, ".asmref", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(extension, ".rsp", StringComparison.OrdinalIgnoreCase))
+                {
+                    yield return file;
+                }
+            }
+
+            string[] childDirectories;
+            try
+            {
+                childDirectories = Directory.GetDirectories(directory);
+            }
+            catch
+            {
+                continue;
+            }
+
+            foreach (string child in childDirectories)
+            {
+                if (ShouldSkipLocalPackageProbeDirectory(child))
+                    continue;
+                pending.Push(child);
+            }
+        }
+    }
+
+    static bool ShouldSkipLocalPackageProbeDirectory(string directory)
+    {
+        string name = Path.GetFileName(directory);
+        return string.IsNullOrWhiteSpace(name) ||
+            name.StartsWith(".", StringComparison.Ordinal) ||
+            name.EndsWith("~", StringComparison.Ordinal) ||
+            string.Equals(name, "Library", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(name, "Temp", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(name, "Obj", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(name, "obj", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(name, "bin", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(name, "node_modules", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(name, "PackageCache", StringComparison.OrdinalIgnoreCase);
+    }
+
+    static string NormalizeUnityChangedPath(string projectRoot, string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return string.Empty;
+
+        string normalized = path.Replace('\\', '/').Trim();
+        if (normalized.StartsWith("unity://path/", StringComparison.OrdinalIgnoreCase))
+            normalized = normalized["unity://path/".Length..];
+        if (normalized.StartsWith("file://", StringComparison.OrdinalIgnoreCase) &&
+            Uri.TryCreate(normalized, UriKind.Absolute, out var uri))
+        {
+            normalized = uri.LocalPath.Replace('\\', '/');
+        }
+
+        if (Path.IsPathRooted(normalized))
+        {
+            try
+            {
+                string fullPath = Path.GetFullPath(normalized).Replace('\\', '/');
+                string rootedProject = Path.GetFullPath(projectRoot).Replace('\\', '/').TrimEnd('/');
+                if (fullPath.StartsWith(rootedProject + "/", StringComparison.OrdinalIgnoreCase))
+                    return fullPath[(rootedProject.Length + 1)..];
+
+                return fullPath;
+            }
+            catch
+            {
+                return normalized;
+            }
+        }
+
+        return normalized.TrimStart('/', '.');
+    }
+
+    static bool IsCompileAffectingPath(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return false;
+
+        string normalized = path.Replace('\\', '/').Trim().ToLowerInvariant();
+        return normalized.EndsWith(".cs", StringComparison.Ordinal) ||
+            normalized.EndsWith(".asmdef", StringComparison.Ordinal) ||
+            normalized.EndsWith(".asmref", StringComparison.Ordinal) ||
+            normalized.EndsWith(".rsp", StringComparison.Ordinal) ||
+            normalized == "packages/manifest.json" ||
+            normalized == "packages/packages-lock.json" ||
+            normalized.EndsWith("/package.json", StringComparison.Ordinal);
     }
 
     async Task<JsonElement> CreatePlayModeEnterReadyPayloadAsync(JsonElement argumentsElement, CancellationToken cancellationToken)
@@ -3668,6 +4371,260 @@ sealed class UnityMcpLensHost
         }
     }
 
+    async Task<JsonElement> CreateSelectPackThroughMainMenuPayloadAsync(JsonElement argumentsElement, CancellationToken cancellationToken)
+    {
+        DateTime startedUtc = DateTime.UtcNow;
+        int timeoutMs = Math.Clamp(ExtractInt(argumentsElement, 60000, "timeoutMs", "TimeoutMs"), 1000, 120000);
+        string packId = ExtractString(argumentsElement, "packId", "PackId") ?? "garden";
+        string mainMenuScenePath = ExtractString(argumentsElement, "mainMenuScenePath", "MainMenuScenePath", "scenePath", "ScenePath") ?? "Assets/Scenes/MainMenu.unity";
+        string buttonName = ExtractString(argumentsElement, "buttonName", "ButtonName") ?? $"PackButton_{packId}";
+        string buttonSearchMethod = ExtractString(argumentsElement, "buttonSearchMethod", "ButtonSearchMethod", "searchMethod", "SearchMethod") ?? "by_name";
+        string? explicitExpectedRuntimePackName = ExtractString(argumentsElement, "expectedRuntimePackName", "ExpectedRuntimePackName");
+        string expectedRuntimePackName = explicitExpectedRuntimePackName ?? ToDisplayPackName(packId);
+        int stepsAfterClick = Math.Max(0, ExtractInt(argumentsElement, 10, "stepsAfterClick", "StepsAfterClick"));
+        bool exitAfter = ExtractBool(argumentsElement, true, "exitAfter", "ExitAfter");
+        bool captureConsoleDelta = ExtractBool(argumentsElement, true, "captureConsoleDelta", "CaptureConsoleDelta");
+        bool failOnNewConsoleErrors = ExtractBool(argumentsElement, true, "failOnNewConsoleErrors", "FailOnNewConsoleErrors");
+
+        JsonElement entry = default;
+        JsonElement layout = default;
+        JsonElement invoke = default;
+        JsonElement step = default;
+        JsonElement verify = default;
+        JsonElement exit = default;
+        bool enteredPlayMode = false;
+        bool paused = false;
+        bool buttonFound = false;
+        bool buttonInvoked = false;
+        bool passed = false;
+        bool timedOut = false;
+        string? activeRuntimePackName = null;
+        string? failureCode = null;
+        string? failureMessage = null;
+
+        int RemainingMs() => Math.Max(1000, timeoutMs - (int)Math.Round((DateTime.UtcNow - startedUtc).TotalMilliseconds));
+        TimeSpan RemainingTimeout(int capMs) => TimeSpan.FromMilliseconds(Math.Max(1000, Math.Min(capMs, RemainingMs())));
+
+        try
+        {
+            int entryTimeoutMs = Math.Min(timeoutMs, 60000);
+            entry = await CreatePlayModeStepVerifierPayloadAsync(JsonSerializer.SerializeToElement(new
+            {
+                scenePath = mainMenuScenePath,
+                steps = 0,
+                warmupSteps = 0,
+                exitAfter = false,
+                restorePreviousState = false,
+                captureConsoleDelta = false,
+                failOnNewConsoleErrors = false,
+                timeoutMs = entryTimeoutMs
+            }, m_JsonOptions), cancellationToken).ConfigureAwait(false);
+
+            enteredPlayMode = GetNestedJsonBool(entry, false, "data", "enteredPlayMode");
+            paused = GetNestedJsonBool(entry, false, "data", "verifier", "data", "paused");
+            timedOut = timedOut || GetNestedJsonBool(entry, false, "data", "timedOut");
+            if (IsToolLevelError(entry))
+            {
+                failureCode = "UNITY_MCP_SELECT_PACK_MAIN_MENU_ENTER_FAILED";
+                failureMessage = "Main Menu pack selection could not enter paused Play Mode.";
+            }
+
+            if (failureCode == null)
+            {
+                layout = await CallBridgeToolResultAsync(
+                    "Unity.UI.QueryRuntimeLayout",
+                    new
+                    {
+                        target = buttonName,
+                        searchMethod = buttonSearchMethod,
+                        includeChildren = true,
+                        includeInactive = false,
+                        elementTypes = new[] { "button" },
+                        maxElements = 5,
+                        includeScreenBounds = true
+                    },
+                    cancellationToken,
+                    RemainingTimeout(10000)).ConfigureAwait(false);
+
+                bool layoutSuccess = GetJsonBool(layout, false, "success") && !IsToolLevelError(layout);
+                int? elementCount = GetNestedJsonNullableInt(layout, "data", "totalElementCount") ??
+                    GetNestedJsonNullableInt(layout, "data", "returnedElementCount");
+                buttonFound = layoutSuccess && elementCount.GetValueOrDefault(1) > 0;
+                if (!buttonFound)
+                {
+                    failureCode = "UNITY_MCP_SELECT_PACK_MAIN_MENU_BUTTON_NOT_FOUND";
+                    failureMessage = $"Main Menu pack button '{buttonName}' was not found.";
+                }
+            }
+
+            if (failureCode == null)
+            {
+                invoke = await CallBridgeToolResultAsync(
+                    "Unity.UI.InvokeControl",
+                    new
+                    {
+                        target = buttonName,
+                        searchMethod = buttonSearchMethod,
+                        includeInactive = false,
+                        action = "click",
+                        waitFrames = 1,
+                        captureConsoleDelta
+                    },
+                    cancellationToken,
+                    RemainingTimeout(10000)).ConfigureAwait(false);
+
+                buttonInvoked = GetJsonBool(invoke, false, "success") && !IsToolLevelError(invoke);
+                if (!buttonInvoked)
+                {
+                    failureCode = "UNITY_MCP_SELECT_PACK_MAIN_MENU_INVOKE_FAILED";
+                    failureMessage = $"Main Menu pack button '{buttonName}' could not be invoked.";
+                }
+            }
+
+            if (failureCode == null)
+            {
+                step = await CallBridgeToolResultAsync(
+                    "Unity.PlayMode.StepVerifier",
+                    new
+                    {
+                        steps = stepsAfterClick,
+                        warmupSteps = 0,
+                        exitAfter = false,
+                        restorePreviousState = false,
+                        captureConsoleDelta,
+                        failOnNewConsoleErrors,
+                        allowRealtimeRun = false,
+                        timeoutMs = RemainingMs()
+                    },
+                    cancellationToken,
+                    RemainingTimeout(60000)).ConfigureAwait(false);
+
+                paused = paused || GetNestedJsonBool(step, false, "data", "paused");
+                timedOut = timedOut || GetNestedJsonBool(step, false, "data", "timedOut");
+                if (IsToolLevelError(step))
+                {
+                    failureCode = "UNITY_MCP_SELECT_PACK_MAIN_MENU_STEP_FAILED";
+                    failureMessage = "Main Menu pack selection did not complete bounded paused steps after invoking the button.";
+                }
+            }
+
+            if (failureCode == null)
+            {
+                verify = await CallBridgeToolResultAsync(
+                    "Unity.Workflow.VerifyRuntimePackSelection",
+                    new
+                    {
+                        selectedPackId = packId,
+                        requirePlayMode = true,
+                        selectPack = false,
+                        timeoutMs = RemainingMs()
+                    },
+                    cancellationToken,
+                    RemainingTimeout(30000)).ConfigureAwait(false);
+
+                activeRuntimePackName = GetNestedJsonString(verify, "data", "activeRuntimePackName");
+                bool nativePassed = GetNestedJsonBool(verify, false, "data", "passed") && !IsToolLevelError(verify);
+                bool packMatches = MatchesExpectedPackName(activeRuntimePackName, packId, expectedRuntimePackName, explicitExpectedRuntimePackName != null);
+                passed = nativePassed && packMatches;
+                if (!passed)
+                {
+                    failureCode = "UNITY_MCP_SELECT_PACK_MAIN_MENU_VERIFY_FAILED";
+                    failureMessage = $"Main Menu pack selection did not verify expected runtime pack '{expectedRuntimePackName}'.";
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            failureCode = "UNITY_MCP_SELECT_PACK_MAIN_MENU_FAILED";
+            failureMessage = $"Main Menu pack selection workflow failed: {ex.Message}";
+        }
+
+        if (exitAfter && enteredPlayMode)
+        {
+            try
+            {
+                exit = await CallBridgeToolResultAsync(
+                    "Unity.PlayMode.StepVerifier",
+                    new
+                    {
+                        steps = 0,
+                        warmupSteps = 0,
+                        exitAfter = true,
+                        restorePreviousState = false,
+                        captureConsoleDelta = false,
+                        failOnNewConsoleErrors = false,
+                        timeoutMs = RemainingMs()
+                    },
+                    cancellationToken,
+                    RemainingTimeout(30000)).ConfigureAwait(false);
+
+                if (failureCode == null && IsToolLevelError(exit))
+                {
+                    failureCode = "UNITY_MCP_SELECT_PACK_MAIN_MENU_EXIT_FAILED";
+                    failureMessage = "Main Menu pack selection verified the pack but failed to exit Play Mode cleanly.";
+                }
+            }
+            catch (Exception ex)
+            {
+                if (failureCode == null)
+                {
+                    failureCode = "UNITY_MCP_SELECT_PACK_MAIN_MENU_EXIT_FAILED";
+                    failureMessage = $"Main Menu pack selection verified the pack but failed to exit Play Mode: {ex.Message}";
+                }
+            }
+        }
+
+        HostHealthEvaluation afterHealth = BuildCurrentHostHealthEvaluation();
+        bool editorResponsiveAfter = afterHealth.Contract.State is "unity_alive_fresh" or "editor_busy_healthy" or "bridge_alive_no_editor_heartbeat";
+        object? consoleDelta = TryGetNestedProperty(step, out var stepConsoleDelta, "data", "consoleDelta")
+            ? stepConsoleDelta.Clone()
+            : TryGetNestedProperty(invoke, out var invokeConsoleDelta, "data", "consoleDelta")
+                ? invokeConsoleDelta.Clone()
+                : null;
+        object? JsonOrNull(JsonElement element) => element.ValueKind == JsonValueKind.Undefined ? null : element.Clone();
+        object data = new
+        {
+            packId,
+            mainMenuScenePath,
+            buttonName,
+            buttonSearchMethod,
+            expectedRuntimePackName,
+            enteredPlayMode,
+            paused,
+            buttonFound,
+            buttonInvoked,
+            stepsAfterClick,
+            activeRuntimePackName,
+            passed = passed && failureCode == null,
+            timedOut,
+            editorResponsiveAfter,
+            timeoutMs,
+            elapsedMs = Math.Round((DateTime.UtcNow - startedUtc).TotalMilliseconds, 3),
+            exitAfter,
+            captureConsoleDelta,
+            failOnNewConsoleErrors,
+            consoleDelta,
+            entry = JsonOrNull(entry),
+            layout = JsonOrNull(layout),
+            invoke = JsonOrNull(invoke),
+            step = JsonOrNull(step),
+            verify = JsonOrNull(verify),
+            exit = JsonOrNull(exit),
+            afterHealth = CreateHealthEvaluationDiagnostics(afterHealth),
+            host = CreateHostDiagnostics()
+        };
+
+        if (failureCode != null)
+            return CreateErrorPayload(failureMessage ?? "Main Menu pack selection failed.", failureCode, data);
+
+        return JsonSerializer.SerializeToElement(new
+        {
+            success = true,
+            message = "FallingSands pack selected through the Main Menu.",
+            data
+        }, m_JsonOptions);
+    }
+
     async Task<object> EnsureRuntimePackActiveForEnterReadyAsync(bool includeScenePack, CancellationToken cancellationToken)
     {
         string[] before = m_ActiveToolPacks.ToArray();
@@ -3765,6 +4722,145 @@ sealed class UnityMcpLensHost
                 path = string.IsNullOrWhiteSpace(directory) ? string.Empty : directory
             },
             cancellationToken).ConfigureAwait(false);
+    }
+
+    async Task<RunCommandSafetyBypassResult> EvaluateRunCommandStablePlayModeBypassAsync(CancellationToken cancellationToken)
+    {
+        HostHealthEvaluation health = BuildCurrentHostHealthEvaluation();
+        m_LastBridgeDiscoverySnapshot = health.Snapshot;
+        var editorHealth = health.EditorHealth?.HealthFile;
+        if (!HasProvenFreshBridgeEditorPair(health) || editorHealth == null)
+        {
+            return new RunCommandSafetyBypassResult
+            {
+                Allowed = false,
+                FailureKind = "fresh_bridge_editor_pair_not_proven",
+                Reason = "Health did not prove a fresh selected bridge/editor-health pair.",
+                Health = health
+            };
+        }
+
+        bool transitionOnly = editorHealth.IsPlayingOrWillChangePlaymode && !editorHealth.IsPlaying;
+        if (!editorHealth.IsPlaying ||
+            transitionOnly ||
+            editorHealth.IsCompiling ||
+            editorHealth.IsImporting ||
+            editorHealth.IsUpdating ||
+            editorHealth.IsBuildingPlayer)
+        {
+            return new RunCommandSafetyBypassResult
+            {
+                Allowed = false,
+                FailureKind = "editor_not_stable_play_mode",
+                Reason = "Editor health is not stable Play Mode.",
+                Health = health
+            };
+        }
+
+        object consoleBefore = await TryReadConsoleErrorSummaryAsync(cancellationToken).ConfigureAwait(false);
+        int? consoleCursor = ExtractConsoleCursor(consoleBefore);
+        if (!consoleCursor.HasValue)
+        {
+            return new RunCommandSafetyBypassResult
+            {
+                Allowed = false,
+                FailureKind = "console_cursor_missing",
+                Reason = "Unity.ReadConsole did not return a cursor for the Play Mode safety check.",
+                Health = health,
+                ConsoleBefore = consoleBefore
+            };
+        }
+
+        JsonElement runtimeState;
+        try
+        {
+            runtimeState = await CallBridgeToolResultAsync(
+                "Unity.ManageEditor",
+                new { action = "GetCompactState" },
+                cancellationToken,
+                TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            return new RunCommandSafetyBypassResult
+            {
+                Allowed = false,
+                FailureKind = "runtime_probe_failed",
+                Reason = $"Runtime state probe failed: {ex.Message}",
+                Health = health,
+                ConsoleBefore = consoleBefore
+            };
+        }
+
+        bool stateSuccess = GetJsonBool(runtimeState, false, "success");
+        bool stateIsPlaying = GetNestedJsonBool(runtimeState, false, "data", "isPlaying");
+        bool stateIsPaused = GetNestedJsonBool(runtimeState, false, "data", "isPaused");
+        bool stateIsCompiling = GetNestedJsonBool(runtimeState, false, "data", "isCompiling");
+        bool stateIsUpdating = GetNestedJsonBool(runtimeState, false, "data", "isUpdating");
+        bool stateIsBuilding = GetNestedJsonBool(runtimeState, false, "data", "isBuildingPlayer");
+        bool stateTransitionOnly = GetNestedJsonBool(runtimeState, false, "data", "isPlayingOrWillChangePlaymode") && !stateIsPlaying;
+        bool runtimeProbeAvailable = GetNestedJsonBool(runtimeState, false, "data", "runtimeProbe", "isAvailable");
+        bool runtimeAdvanced = GetNestedJsonBool(runtimeState, false, "data", "runtimeAdvanced") ||
+            GetNestedJsonBool(runtimeState, false, "data", "runtimeProbe", "hasAdvancedFrames");
+        bool pausedReady = stateIsPlaying && stateIsPaused && runtimeProbeAvailable;
+        if (!stateSuccess ||
+            !stateIsPlaying ||
+            stateTransitionOnly ||
+            stateIsCompiling ||
+            stateIsUpdating ||
+            stateIsBuilding ||
+            (!runtimeAdvanced && !pausedReady))
+        {
+            return new RunCommandSafetyBypassResult
+            {
+                Allowed = false,
+                FailureKind = "runtime_not_ready_for_runcommand",
+                Reason = "Runtime probe did not prove advancing or paused-ready Play Mode.",
+                Health = health,
+                RuntimeState = runtimeState.Clone(),
+                ConsoleBefore = consoleBefore,
+                RuntimeProbeAvailable = runtimeProbeAvailable,
+                RuntimeAdvanced = runtimeAdvanced,
+                PausedReady = pausedReady
+            };
+        }
+
+        object consoleAfter = await TryReadConsoleErrorSummaryAsync(cancellationToken, consoleCursor).ConfigureAwait(false);
+        int newConsoleErrorCount = ExtractConsoleNewErrorCount(consoleAfter) ?? ExtractConsoleErrorCount(consoleAfter) ?? 0;
+        if (newConsoleErrorCount > 0)
+        {
+            return new RunCommandSafetyBypassResult
+            {
+                Allowed = false,
+                FailureKind = "new_console_errors_detected",
+                Reason = "Console changed with new error/exception/assert entries during the Play Mode safety check.",
+                Health = health,
+                RuntimeState = runtimeState.Clone(),
+                ConsoleBefore = consoleBefore,
+                ConsoleAfter = consoleAfter,
+                RuntimeProbeAvailable = runtimeProbeAvailable,
+                RuntimeAdvanced = runtimeAdvanced,
+                PausedReady = pausedReady,
+                NewConsoleErrorCount = newConsoleErrorCount
+            };
+        }
+
+        return new RunCommandSafetyBypassResult
+        {
+            Allowed = true,
+            FailureKind = string.Empty,
+            Reason = pausedReady
+                ? "Fresh bridge/editor pair is in paused-ready Play Mode with no new console errors."
+                : "Fresh bridge/editor pair is in advancing Play Mode with no new console errors.",
+            Health = health,
+            RuntimeState = runtimeState.Clone(),
+            ConsoleBefore = consoleBefore,
+            ConsoleAfter = consoleAfter,
+            RuntimeProbeAvailable = runtimeProbeAvailable,
+            RuntimeAdvanced = runtimeAdvanced,
+            PausedReady = pausedReady,
+            NewConsoleErrorCount = newConsoleErrorCount
+        };
     }
 
     async Task<JsonElement> CallRunCommandWithWatchdogAsync(
@@ -4038,19 +5134,36 @@ sealed class UnityMcpLensHost
     {
         try
         {
-            return await CallBridgeToolResultAsync(
-                "Unity.ReadConsole",
-                new
+            return await ReadConsoleErrorSummaryOnceAsync(cancellationToken, cursor).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (IsBridgeTransportFailure(ex))
+        {
+            BridgeRecoveryState recoveryState = new()
+            {
+                RetrySafe = true,
+                RetryAttempted = true
+            };
+            try
+            {
+                Console.Error.WriteLine($"[unity-mcp-lens] Unity.ReadConsole transport failed, reconnecting and retrying once: {ex.Message}");
+                await RecoverBridgeAfterTransportFailureAsync(ex, "Unity.ReadConsole", recoveryState, cancellationToken).ConfigureAwait(false);
+                object retry = await ReadConsoleErrorSummaryOnceAsync(cancellationToken, cursor).ConfigureAwait(false);
+                recoveryState.RetrySucceeded = true;
+                m_LastRecoveryState = recoveryState;
+                return retry;
+            }
+            catch (Exception retryEx)
+            {
+                return new
                 {
-                    action = "Get",
-                    types = new[] { "Error", "Warning", "Exception", "Assert" },
-                    count = 100,
-                    cursor,
-                    format = "Summary",
-                    excludeMcpNoise = true,
-                    includeStacktrace = false
-                },
-                cancellationToken).ConfigureAwait(false);
+                    success = false,
+                    error = retryEx.Message,
+                    exceptionType = retryEx.GetType().Name,
+                    retryAttempted = true,
+                    initialExceptionType = ex.GetType().Name,
+                    initialError = ex.Message
+                };
+            }
         }
         catch (Exception ex)
         {
@@ -4061,6 +5174,23 @@ sealed class UnityMcpLensHost
                 exceptionType = ex.GetType().Name
             };
         }
+    }
+
+    async Task<JsonElement> ReadConsoleErrorSummaryOnceAsync(CancellationToken cancellationToken, int? cursor)
+    {
+        return await CallBridgeToolResultAsync(
+            "Unity.ReadConsole",
+            new
+            {
+                action = "Get",
+                types = new[] { "Error", "Warning", "Exception", "Assert" },
+                count = 100,
+                cursor,
+                format = "Summary",
+                excludeMcpNoise = true,
+                includeStacktrace = false
+            },
+            cancellationToken).ConfigureAwait(false);
     }
 
     async Task<HostSyncReadyResult> WaitForScriptSyncReadyFromHostAsync(
@@ -4596,9 +5726,35 @@ sealed class UnityMcpLensHost
             .ToArray();
     }
 
+    static string[] GetJsonStringArray(JsonElement element, params string[] names)
+    {
+        if (!TryGetPropertyIgnoreCase(element, out var value, names) || value.ValueKind != JsonValueKind.Array)
+            return [];
+
+        return value.EnumerateArray()
+            .Where(item => item.ValueKind == JsonValueKind.String)
+            .Select(item => item.GetString())
+            .Where(item => !string.IsNullOrWhiteSpace(item))
+            .Cast<string>()
+            .ToArray();
+    }
+
     static bool GetJsonBool(JsonElement element, bool fallback, params string[] names)
     {
         if (!TryGetPropertyIgnoreCase(element, out var value, names))
+            return fallback;
+
+        return value.ValueKind switch
+        {
+            JsonValueKind.True => true,
+            JsonValueKind.False => false,
+            _ => fallback
+        };
+    }
+
+    static bool GetNestedJsonBool(JsonElement element, bool fallback, params string[] path)
+    {
+        if (!TryGetNestedProperty(element, out var value, path))
             return fallback;
 
         return value.ValueKind switch
@@ -4627,6 +5783,15 @@ sealed class UnityMcpLensHost
             : null;
     }
 
+    static int? GetNestedJsonNullableInt(JsonElement element, params string[] path)
+    {
+        return TryGetNestedProperty(element, out var value, path) &&
+            value.ValueKind == JsonValueKind.Number &&
+            value.TryGetInt32(out int result)
+            ? result
+            : null;
+    }
+
     static double GetJsonDouble(JsonElement element, double fallback, params string[] names)
     {
         return TryGetPropertyIgnoreCase(element, out var value, names) &&
@@ -4641,6 +5806,38 @@ sealed class UnityMcpLensHost
         return TryGetPropertyIgnoreCase(element, out var value, names) && value.ValueKind == JsonValueKind.String
             ? value.GetString()
             : null;
+    }
+
+    static string? GetNestedJsonString(JsonElement element, params string[] path)
+    {
+        return TryGetNestedProperty(element, out var value, path) && value.ValueKind == JsonValueKind.String
+            ? value.GetString()
+            : null;
+    }
+
+    static string ToDisplayPackName(string packId)
+    {
+        string[] parts = (packId ?? string.Empty)
+            .Split(['_', '-', ' '], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (parts.Length == 0)
+            return string.Empty;
+
+        return string.Join(" ", parts.Select(part =>
+            part.Length == 0
+                ? part
+                : char.ToUpperInvariant(part[0]) + (part.Length == 1 ? string.Empty : part[1..])));
+    }
+
+    static bool MatchesExpectedPackName(string? activeRuntimePackName, string packId, string expectedRuntimePackName, bool explicitExpectedRuntimePackName)
+    {
+        if (string.IsNullOrWhiteSpace(activeRuntimePackName))
+            return false;
+
+        if (string.Equals(activeRuntimePackName, expectedRuntimePackName, StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        return !explicitExpectedRuntimePackName &&
+            string.Equals(activeRuntimePackName, packId, StringComparison.OrdinalIgnoreCase);
     }
 
     static int? ExtractConsoleErrorCount(object? consoleSummary)
@@ -4936,6 +6133,8 @@ sealed class UnityMcpLensHost
             editorPidAlive = result.EditorPidAlive,
             fresh = result.IsFresh,
             basicHealth = result.BasicHealth,
+            editorHealthMatchQuality = result.EditorHealthMatchQuality,
+            editorHealthBridgePidMatch = result.EditorHealthBridgePidMatch,
             editorHealth = result.EditorHealth == null ? null : CreateEditorHealthDiagnostics(result.EditorHealth),
             supportsToolSyncLens = result.StatusFile.SupportsToolSyncLens,
             bridgeSessionId = result.StatusFile.BridgeSessionId,
@@ -4958,6 +6157,8 @@ sealed class UnityMcpLensHost
             editorPidAlive = candidate.EditorPidAlive,
             fresh = candidate.IsFresh,
             basicHealth = candidate.BasicHealth,
+            editorHealthMatchQuality = candidate.EditorHealthMatchQuality,
+            editorHealthBridgePidMatch = candidate.EditorHealthBridgePidMatch,
             ignoredMalformed = candidate.IsIgnoredMalformed,
             malformedIgnoreReason = candidate.MalformedIgnoreReason,
             projectHashMatch = candidate.ProjectHashMatch,
@@ -4987,6 +6188,12 @@ sealed class UnityMcpLensHost
             editorPidAlive = candidate.EditorPidAlive,
             editorProcessStartUtc = candidate.EditorProcessStartUtc == DateTime.MinValue ? null : candidate.EditorProcessStartUtc.ToString("O"),
             pidStartMatches = candidate.PidStartMatches,
+            editorProcessName = candidate.EditorProcessName,
+            editorProcessPath = candidate.EditorProcessPath,
+            editorProcessLooksLikeUnity = candidate.EditorProcessLooksLikeUnity,
+            commandLineAvailable = candidate.CommandLineAvailable,
+            projectCommandLineMatch = candidate.ProjectCommandLineMatch,
+            projectCommandLineEvidence = candidate.ProjectCommandLineEvidence,
             fresh = candidate.IsFresh,
             ignoredMalformed = candidate.IsIgnoredMalformed,
             malformedIgnoreReason = candidate.MalformedIgnoreReason,
@@ -5091,7 +6298,7 @@ sealed class UnityMcpLensHost
     {
         string? rawMode = Environment.GetEnvironmentVariable(ToolSurfaceModeEnvVar);
         if (string.IsNullOrWhiteSpace(rawMode))
-            return DynamicPacksToolSurfaceMode;
+            return StaticAllToolSurfaceMode;
 
         string mode = rawMode.Trim();
         if (string.Equals(mode, DynamicPacksToolSurfaceMode, StringComparison.OrdinalIgnoreCase))
@@ -5099,8 +6306,8 @@ sealed class UnityMcpLensHost
         if (string.Equals(mode, StaticAllToolSurfaceMode, StringComparison.OrdinalIgnoreCase))
             return StaticAllToolSurfaceMode;
 
-        Console.Error.WriteLine($"[unity-mcp-lens] Unknown {ToolSurfaceModeEnvVar} value '{rawMode}'. Falling back to {DynamicPacksToolSurfaceMode}.");
-        return DynamicPacksToolSurfaceMode;
+        Console.Error.WriteLine($"[unity-mcp-lens] Unknown {ToolSurfaceModeEnvVar} value '{rawMode}'. Falling back to {StaticAllToolSurfaceMode}.");
+        return StaticAllToolSurfaceMode;
     }
 
     static string ResolveHostVersion()
