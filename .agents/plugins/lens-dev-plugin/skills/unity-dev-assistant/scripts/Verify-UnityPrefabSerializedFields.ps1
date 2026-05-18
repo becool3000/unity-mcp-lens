@@ -42,7 +42,7 @@ if ($WaitForEditorIdle) {
     }
 }
 
-$assignments = @()
+$nativeChecks = @()
 $labels = @()
 for ($index = 0; $index -lt $checks.Count; $index++) {
     $check = $checks[$index]
@@ -53,39 +53,43 @@ for ($index = 0; $index -lt $checks.Count; $index++) {
     $componentIndex = if ($null -ne $check.ComponentIndex) { [int]$check.ComponentIndex } else { 0 }
 
     $labels += $label
-    $assignments += [ordered]@{
+    $row = [ordered]@{
+        Label = $label
         TargetPath = $targetPath
         ComponentType = $componentType
         ComponentIndex = $componentIndex
         PropertyPath = $propertyPath
-        Value = $null
     }
+    if ($null -ne $check.ExpectedValue) {
+        $row.ExpectedValue = $check.ExpectedValue
+    }
+    $nativeChecks += $row
 }
 
 $payload = [ordered]@{
     PrefabPath = $PrefabPath
-    PreviewOnly = $true
-    Assignments = $assignments
+    Checks = $nativeChecks
 }
 
-$response = Invoke-UnityMcpToolJson -ProjectPath $resolvedProjectPath -ToolName "Unity_Prefab_SetSerializedProperties" -Arguments $payload -TimeoutSeconds $TimeoutSeconds
+$response = Invoke-UnityMcpToolJson -ProjectPath $resolvedProjectPath -ToolName "Unity_Prefab_VerifySerializedProperties" -Arguments $payload -TimeoutSeconds $TimeoutSeconds
 $toolResult = Get-UnityToolObject -Response $response
 
 $entries = @()
-if ($toolResult.success -eq $true -and $toolResult.data -and $toolResult.data.assignments) {
-    $assignmentResults = @($toolResult.data.assignments)
-    for ($index = 0; $index -lt $assignmentResults.Count; $index++) {
-        $assignmentResult = $assignmentResults[$index]
+if ($toolResult.success -eq $true -and $toolResult.data -and $toolResult.data.checks) {
+    $checkResults = @($toolResult.data.checks)
+    for ($index = 0; $index -lt $checkResults.Count; $index++) {
+        $checkResult = $checkResults[$index]
         $entries += [ordered]@{
             label          = if ($index -lt $labels.Count) { $labels[$index] } else { "check-$index" }
-            targetPath     = $assignmentResult.targetPath
-            componentType  = $assignmentResult.componentType
-            propertyPath   = $assignmentResult.propertyPath
-            targetFound    = $true
-            componentFound = $true
-            propertyFound  = $true
-            propertyType   = $assignmentResult.propertyType
-            propertyValue  = $assignmentResult.previousValue
+            targetPath     = $checkResult.targetPath
+            componentType  = $checkResult.componentType
+            propertyPath   = $checkResult.propertyPath
+            targetFound    = $checkResult.targetFound -ne $false
+            componentFound = $checkResult.componentFound -ne $false
+            propertyFound  = $checkResult.propertyFound -eq $true
+            propertyType   = $checkResult.propertyType
+            propertyValue  = $checkResult.currentValue
+            passed         = $checkResult.passed -eq $true
         }
     }
 }

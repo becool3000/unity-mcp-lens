@@ -139,6 +139,7 @@ class FakeBridge {
     this.sockets = new Set();
     this.connectionPath = makePipePath();
     this.statusPath = path.join(context.statusDir, `bridge-status-${nextPipeId++}.json`);
+    this.healthPath = null;
     this.commandCounts = context.commandCounts;
   }
 
@@ -151,7 +152,7 @@ class FakeBridge {
         resolve();
       });
     });
-    writeStatus(this.statusPath, this.connectionPath, this.context.projectRoot, {
+    const written = writeStatus(this.statusPath, this.connectionPath, this.context.projectRoot, {
       status: "ready",
       heartbeat: new Date(),
       healthHeartbeat: this.options.healthHeartbeat,
@@ -159,6 +160,7 @@ class FakeBridge {
       writeHealth: this.options.writeHealth,
       healthFlags: this.options.healthFlags,
     });
+    this.healthPath = written.healthPath;
   }
 
   async stop() {
@@ -326,14 +328,18 @@ function makePipePath() {
   return path.join(os.tmpdir(), `unity-mcp-lens-test-${process.pid}-${nextPipeId++}.sock`);
 }
 
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 function writeStatus(statusPath, connectionPath, projectRoot, options) {
   fs.writeFileSync(statusPath, JSON.stringify({
     connection_type: process.platform === "win32" ? "named_pipe" : "unix_socket",
     connection_path: connectionPath,
     status: options.status,
-    reason: null,
-    expected_recovery: false,
-    expected_recovery_expires_utc: null,
+    reason: options.reason || null,
+    expected_recovery: !!options.expectedRecovery,
+    expected_recovery_expires_utc: options.expectedRecoveryExpiresUtc || null,
     tool_discovery_mode: "live",
     tool_count: options.toolCount,
     tools_hash: "fake",
@@ -377,6 +383,28 @@ function projectHashForStatusFile(projectRoot) {
 function setStaleFileTime(filePath) {
   const stale = new Date(Date.now() - 120000);
   fs.utimesSync(filePath, stale, stale);
+}
+
+function markStatusStaleAndDead(statusPath) {
+  const status = JSON.parse(fs.readFileSync(statusPath, "utf8"));
+  const stale = new Date(Date.now() - 120000).toISOString();
+  status.last_heartbeat = stale;
+  status.tool_snapshot_utc = stale;
+  status.last_command_success_utc = stale;
+  status.last_tools_changed_utc = stale;
+  status.editor_pid = 99999999;
+  fs.writeFileSync(statusPath, JSON.stringify(status, null, 2));
+  setStaleFileTime(statusPath);
+}
+
+function markHealthStaleAndDead(healthPath) {
+  const health = JSON.parse(fs.readFileSync(healthPath, "utf8"));
+  const stale = new Date(Date.now() - 120000).toISOString();
+  health.editor_heartbeat_utc = stale;
+  health.state_captured_utc = stale;
+  health.editor_pid = 99999999;
+  fs.writeFileSync(healthPath, JSON.stringify(health, null, 2));
+  setStaleFileTime(healthPath);
 }
 
 function writeHealth(healthPath, projectRoot, options) {
@@ -1212,6 +1240,31 @@ async function main() {
   }
 
   {
+    const context = new ScenarioContext("cold-start-status-appears-after-host-init");
+    let client = null;
+    try {
+      client = new McpHostClient(context.projectRoot, context.statusDir);
+      await client.initialize();
+
+      const before = await client.callTool("Unity_Editor_HealthCheckFast", {});
+      assert.strictEqual(before.structuredContent.state, "no_status_file");
+      assert.strictEqual(before.structuredContent.safeToContinue, false);
+
+      await context.startBridge();
+      const after = await client.callTool("Unity_Editor_HealthCheckFast", { includeCandidates: true });
+      assert.strictEqual(after.structuredContent.state, "unity_alive_fresh");
+      assert.strictEqual(after.structuredContent.safeToContinue, true);
+      assert.strictEqual(after.structuredContent.data.selected.editorPid, process.pid);
+      assert.strictEqual(after.structuredContent.data.selected.editorHealthBridgePidMatch, true);
+      assert.strictEqual(after.structuredContent.data.selected.editorHealthMatchQuality, "fresh_pid_project_match_command_line_unavailable");
+      await assertFullTools(client);
+    } finally {
+      if (client) await client.dispose().catch(() => {});
+      await context.dispose();
+    }
+  }
+
+  {
     const context = new ScenarioContext("health-only-fresh");
     let client = null;
     try {
@@ -1283,6 +1336,51 @@ async function main() {
       assert.strictEqual(health.structuredContent.state, "bridge_unavailable");
       assert.strictEqual(health.structuredContent.safeToContinue, false);
       assert.strictEqual(health.structuredContent.agent_should_stop, false);
+    } finally {
+      if (client) await client.dispose().catch(() => {});
+      await context.dispose();
+    }
+  }
+
+  {
+    const context = new ScenarioContext("health-reload-wait-recovers");
+    let client = null;
+    try {
+      const reloadingStatus = path.join(context.statusDir, "bridge-status-editor-reloading.json");
+      writeStatus(reloadingStatus, makePipePath(), context.projectRoot, {
+        status: "editor_reloading",
+        reason: "compile_reload",
+        expectedRecovery: true,
+        expectedRecoveryExpiresUtc: new Date(Date.now() + 5000).toISOString(),
+        heartbeat: new Date(),
+        toolCount: 999,
+        healthFlags: { isCompiling: true },
+      });
+
+      client = new McpHostClient(context.projectRoot, context.statusDir);
+      await client.initialize();
+      const replacementPromise = delay(150).then(() => context.startBridge());
+      const result = await client.callTool("Unity_Editor_HealthCheckFast", {
+        includeCandidates: true,
+        timeoutMs: 3000,
+      });
+      const replacement = await replacementPromise;
+
+      assert.strictEqual(result.structuredContent.state, "unity_alive_fresh");
+      assert.strictEqual(result.structuredContent.safeToContinue, true);
+      assert.strictEqual(result.structuredContent.data.selected.statusPath, replacement.statusPath);
+      assert.strictEqual(result.structuredContent.data.reloadRecovery.waited, true);
+      assert.strictEqual(result.structuredContent.data.reloadRecovery.recovered, true);
+      assert.strictEqual(result.structuredContent.data.reloadRecovery.initialState, "editor_busy_healthy");
+      assert(result.structuredContent.data.reloadRecovery.attemptCount >= 2);
+
+      const reloadingCandidate = result.structuredContent.data.candidates.bridge
+        .find((candidate) => candidate.statusPath === reloadingStatus);
+      assert(reloadingCandidate, "editor_reloading bridge candidate should remain diagnostic");
+      assert.strictEqual(reloadingCandidate.selectable, false);
+      assert.strictEqual(reloadingCandidate.basicHealth, "editor_reloading");
+      assert.strictEqual(reloadingCandidate.recoveryActive, true);
+      assert(reloadingCandidate.exclusionReasons.includes("expected_recovery_active"));
     } finally {
       if (client) await client.dispose().catch(() => {});
       await context.dispose();
@@ -1439,6 +1537,35 @@ async function main() {
     assert.strictEqual(diagnostic.structuredContent.data.selected.projectRoot, context.projectRoot);
     const foreignCandidate = diagnostic.structuredContent.data.candidates.find((candidate) => candidate.statusPath === foreign.foreignStatus);
     assert.strictEqual(foreignCandidate.basicHealth, "process_missing");
+  });
+
+  await withScenario("stale-dead-bridge-after-domain-reload-ignored", null, async (context, client) => {
+    const oldBridge = context.bridge;
+    assert(oldBridge, "scenario should start with a bridge");
+    await assertFullTools(client);
+
+    await oldBridge.stop();
+    markStatusStaleAndDead(oldBridge.statusPath);
+    if (oldBridge.healthPath) markHealthStaleAndDead(oldBridge.healthPath);
+
+    const replacement = await context.startBridge();
+    const diagnostic = await client.callTool("Unity_Bridge_ListConnections", {});
+    assert.strictEqual(diagnostic.structuredContent.success, true, "bridge diagnostics should succeed after replacement bridge appears");
+    assert.strictEqual(diagnostic.structuredContent.data.selected.statusPath, replacement.statusPath);
+
+    const staleCandidate = diagnostic.structuredContent.data.candidates.find((candidate) => candidate.statusPath === oldBridge.statusPath);
+    assert(staleCandidate, "stale stopped bridge should remain visible as diagnostic evidence");
+    assert.strictEqual(staleCandidate.selectable, false);
+    assert(
+      staleCandidate.exclusionReasons.includes("stale_heartbeat") ||
+        staleCandidate.exclusionReasons.includes("fresh_project_editor_health_without_matching_bridge_pid"),
+      `stale stopped bridge should be excluded; got ${staleCandidate.exclusionReasons.join(", ")}`
+    );
+
+    const health = await client.callTool("Unity_Editor_HealthCheckFast", { includeCandidates: true });
+    assert.strictEqual(health.structuredContent.state, "unity_alive_fresh");
+    assert.strictEqual(health.structuredContent.data.selected.statusPath, replacement.statusPath);
+    assert.strictEqual(health.structuredContent.data.selected.editorHealthBridgePidMatch, true);
   });
 
   await withScenario("health-edge-diagnostics", null, async (context, client) => {

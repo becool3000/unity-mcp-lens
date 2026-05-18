@@ -11,6 +11,7 @@ using Becool.UnityMcpLens.Editor.Lens;
 using Becool.UnityMcpLens.Editor.Services;
 using Becool.UnityMcpLens.Editor.ToolRegistry;
 using Becool.UnityMcpLens.Editor.Tools.Parameters;
+using Becool.UnityMcpLens.Editor.Utils;
 using UnityEditor;
 using UnityEngine;
 
@@ -178,6 +179,7 @@ The tool is intended for verification, not authoring. It can attempt to queue a 
                     stepFrames = new { type = "integer", description = "Advance this many editor frames after queueing input when play mode is paused." },
                     advanceFrames = new { type = "integer", description = "Advance or wait this many runtime frames after queueing input before sampling state." },
                     settleMs = new { type = "integer", description = "Delay after queueing input before reading observed state." },
+                    observationTolerance = new { type = "number", description = "Pixel/control tolerance for proving observed Mouse.current state matches the queued position, button, and scroll." },
                     uiTarget = new { type = "string", description = "Optional UI root scope for raycast evidence." },
                     uiSearchMethod = new { type = "string", description = "How to find the optional UI root." },
                     includeInactive = new { type = "boolean", description = "Include inactive UI elements while evaluating raycast evidence." },
@@ -242,6 +244,7 @@ The tool is intended for verification, not authoring. It can attempt to queue a 
                     parameters.StepFrames = Math.Max(0, parameters.StepFrames);
                     parameters.AdvanceFrames = Math.Max(0, parameters.AdvanceFrames);
                     parameters.SettleMs = Math.Max(0, parameters.SettleMs);
+                    parameters.ObservationTolerance = Mathf.Max(0f, parameters.ObservationTolerance);
                 }
 
                 using (timing.Measure("service"))
@@ -274,7 +277,8 @@ The tool is intended for verification, not authoring. It can attempt to queue a 
                         data,
                         BuildPointerInputSmokeCompactData(data),
                         new { kind = "playmode_pointer_input_smoke_full_result" },
-                        "playmode_pointer_input_smoke"))
+                        "playmode_pointer_input_smoke",
+                        detailRefMinBytes: PayloadBudgetPolicy.MaxToolResultBytes))
                     : Response.Error("Pointer input smoke failed.", data);
                 timing.SetResponseBytes(GetUtf8ByteCount(JsonConvert.SerializeObject(response, Formatting.None)));
             }
@@ -297,6 +301,7 @@ The tool is intended for verification, not authoring. It can attempt to queue a 
                 StepFrames = GetInt(parameters, 1, "stepFrames", "StepFrames"),
                 AdvanceFrames = GetInt(parameters, 0, "advanceFrames", "AdvanceFrames"),
                 SettleMs = GetInt(parameters, 100, "settleMs", "SettleMs"),
+                ObservationTolerance = GetFloat(parameters, 2f, "observationTolerance", "ObservationTolerance"),
                 UiTarget = GetString(parameters, "uiTarget", "UiTarget"),
                 UiSearchMethod = GetString(parameters, "uiSearchMethod", "UiSearchMethod") ?? "by_name",
                 IncludeInactive = GetBool(parameters, false, "includeInactive", "IncludeInactive"),
@@ -372,7 +377,8 @@ The tool is intended for verification, not authoring. It can attempt to queue a 
             var world = BuildWorldPointerEvidence(parameters, point);
             var afterState = CaptureStateTargets(parameters.StateTargets);
             var state = BuildStateEvidence(beforeState, afterState, parameters.StateAssertions);
-            bool inputPassed = !parameters.QueueInput || queue.succeeded;
+            var inputDelivery = BuildInputDeliveryEvidence(parameters, queue, observed, point, scroll);
+            bool inputPassed = !parameters.QueueInput || JObject.FromObject(inputDelivery)["passed"]?.Value<bool>() == true;
             bool passed = EditorApplication.isPlaying && inputPassed && (JObject.FromObject(state)["passed"]?.Value<bool>() != false);
 
             return new
@@ -391,7 +397,8 @@ The tool is intended for verification, not authoring. It can attempt to queue a 
                     point = ToVector2Object(point),
                     scroll = ToVector2Object(scroll),
                     button = parameters.Button,
-                    queueInput = parameters.QueueInput
+                    queueInput = parameters.QueueInput,
+                    observationTolerance = parameters.ObservationTolerance
                 },
                 inputSystem = new
                 {
@@ -403,6 +410,7 @@ The tool is intended for verification, not authoring. It can attempt to queue a 
                     queue.deliveryMode,
                     queue.error
                 },
+                inputDelivery,
                 observed,
                 ui,
                 world,
@@ -540,6 +548,123 @@ The tool is intended for verification, not authoring. It can attempt to queue a 
                 "middle" => "Middle",
                 _ => "Left"
             };
+        }
+
+        static object BuildInputDeliveryEvidence(PointerInputSmokeParams parameters, MouseInputQueueResult queue, object observed, Vector2 point, Vector2 scroll)
+        {
+            if (!parameters.QueueInput)
+            {
+                return new
+                {
+                    passed = true,
+                    status = "not_requested",
+                    checks = Array.Empty<object>()
+                };
+            }
+
+            JObject observedObject = JObject.FromObject(observed ?? new { });
+            var checks = new List<object>();
+            bool queueSucceeded = queue != null && queue.succeeded;
+            checks.Add(new
+            {
+                kind = "queue_succeeded",
+                expected = true,
+                actual = queueSucceeded,
+                passed = queueSucceeded,
+                message = queueSucceeded ? null : queue?.error ?? "Input System queue did not complete successfully."
+            });
+
+            bool positionPassed = TryReadVector2(observedObject["position"], out Vector2 observedPosition) &&
+                Vector2.Distance(observedPosition, point) <= parameters.ObservationTolerance;
+            checks.Add(new
+            {
+                kind = "position",
+                expected = ToVector2Object(point),
+                actual = observedObject["position"],
+                tolerance = parameters.ObservationTolerance,
+                passed = positionPassed
+            });
+
+            string normalizedButton = NormalizeMouseButton(parameters.Button);
+            bool buttonRequested = !string.Equals(parameters.Button, "none", StringComparison.OrdinalIgnoreCase);
+            bool buttonPassed = !buttonRequested || ReadButtonPressed(observedObject[normalizedButton.ToLowerInvariant() + "Button"]);
+            checks.Add(new
+            {
+                kind = "button",
+                expected = buttonRequested ? normalizedButton : "none",
+                actual = buttonRequested ? observedObject[normalizedButton.ToLowerInvariant() + "Button"] : null,
+                required = buttonRequested,
+                passed = buttonPassed
+            });
+
+            bool scrollRequested = scroll.sqrMagnitude > 0.000001f;
+            bool scrollPassed = !scrollRequested ||
+                (TryReadVector2(observedObject["scroll"], out Vector2 observedScroll) &&
+                    Vector2.Distance(observedScroll, scroll) <= parameters.ObservationTolerance);
+            checks.Add(new
+            {
+                kind = "scroll",
+                expected = ToVector2Object(scroll),
+                actual = observedObject["scroll"],
+                required = scrollRequested,
+                tolerance = parameters.ObservationTolerance,
+                passed = scrollPassed
+            });
+
+            bool passed = checks.All(row => JObject.FromObject(row)["passed"]?.Value<bool>() == true);
+            string status = passed
+                ? "observed_match"
+                : queueSucceeded ? "queued_but_not_observed" : "queue_failed";
+
+            return new
+            {
+                passed,
+                status,
+                checks = checks.ToArray()
+            };
+        }
+
+        static bool TryReadVector2(JToken token, out Vector2 value)
+        {
+            value = default;
+            if (token == null || token.Type == JTokenType.Null)
+                return false;
+
+            if (token is JObject obj &&
+                TryGetFloat(obj["x"], out float x) &&
+                TryGetFloat(obj["y"], out float y))
+            {
+                value = new Vector2(x, y);
+                return true;
+            }
+
+            return false;
+        }
+
+        static bool ReadButtonPressed(JToken token)
+        {
+            if (token == null || token.Type == JTokenType.Null)
+                return false;
+
+            if (token.Type == JTokenType.Boolean)
+                return token.Value<bool>();
+
+            return TryGetFloat(token, out float value) && value > 0.5f;
+        }
+
+        static bool TryGetFloat(JToken token, out float value)
+        {
+            value = 0f;
+            if (token == null || token.Type == JTokenType.Null)
+                return false;
+
+            if (token.Type == JTokenType.Float || token.Type == JTokenType.Integer)
+            {
+                value = token.Value<float>();
+                return true;
+            }
+
+            return float.TryParse(token.ToString(), out value);
         }
 
         static object ReadObservedMouseState()
@@ -1020,6 +1145,7 @@ The tool is intended for verification, not authoring. It can attempt to queue a 
                 editor = root["editor"],
                 requested = root["requested"],
                 inputSystem = root["inputSystem"],
+                inputDelivery = root["inputDelivery"],
                 observed = root["observed"],
                 ui = new
                 {

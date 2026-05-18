@@ -15,6 +15,8 @@ const requiredAssetTools = [
   "Unity_Asset_ApplyImportSpriteSheetAndBind",
   "Unity_Asset_ImportSpriteSheetAndBind",
   "Unity_Asset_VerifySpriteArrayBinding",
+  "Unity_Asset_SpriteSheetVisualDiagnostics",
+  "Unity_Prefab_VerifySerializedProperties",
 ];
 
 const requiredBootstrapWorkflowTools = [
@@ -47,6 +49,9 @@ const foundationToolNames = [
 const projectToolNames = [
   "Unity_Project_GetInfo",
   "Unity_Project_PackageCompatibility",
+  "Unity_Project_DiagnoseImportSideEffects",
+  "Unity_Project_BlockedLanguageScan",
+  "Unity_Tests_Run",
 ];
 
 const runtimeToolNames = [
@@ -58,6 +63,11 @@ const runtimeToolNames = [
 const sceneToolNames = [
   "Unity_GameObject_Inspect",
   "Unity_GameObject_ApplyChanges",
+  "Unity_Camera_FitComposition",
+  "Unity_Scene_PreviewGridBoardLayout",
+  "Unity_Scene_ApplyGridBoardLayout",
+  "Unity_Scene_PreviewBulkMutation",
+  "Unity_Scene_ApplyBulkMutation",
 ];
 
 const uiToolNames = [
@@ -77,8 +87,10 @@ const assetToolNames = [
   "Unity_Asset_PreviewImportSpriteSheetAndBind",
   "Unity_Asset_ApplyImportSpriteSheetAndBind",
   "Unity_Asset_VerifySpriteArrayBinding",
+  "Unity_Asset_SpriteSheetVisualDiagnostics",
   "Unity_ManageAsset",
   "Unity_Prefab_SetSerializedProperties",
+  "Unity_Prefab_VerifySerializedProperties",
   "Unity_Resource_Write",
   "Unity_Tile_BuildSet",
   "Unity_ImportExternalModel",
@@ -584,13 +596,19 @@ function toolDescriptor(name, packs, readOnlyHint, withSchemas) {
 function isReadOnlyTool(name) {
   return name === "Unity_Project_GetInfo" ||
     name === "Unity_Project_PackageCompatibility" ||
+    name === "Unity_Project_DiagnoseImportSideEffects" ||
+    name === "Unity_Project_BlockedLanguageScan" ||
     name === "Unity_GameObject_Inspect" ||
+    name === "Unity_Scene_PreviewGridBoardLayout" ||
+    name === "Unity_Scene_PreviewBulkMutation" ||
     name === "Unity_UI_VerifyScreenLayout" ||
     name === "Unity_GetLensUsageReport" ||
     name === "Unity_Runtime_QueryObjects" ||
     name === "Unity_Asset_Search" ||
     name === "Unity_Asset_PreviewImportSpriteSheetAndBind" ||
-    name === "Unity_Asset_VerifySpriteArrayBinding";
+    name === "Unity_Asset_VerifySpriteArrayBinding" ||
+    name === "Unity_Asset_SpriteSheetVisualDiagnostics" ||
+    name === "Unity_Prefab_VerifySerializedProperties";
 }
 
 function isReadOnlyFoundationTool(name) {
@@ -678,6 +696,8 @@ function schemaFor(name) {
   if (name === "Unity_Asset_PreviewImportSpriteSheetAndBind") return importSpriteSheetSchema(false);
   if (name === "Unity_Asset_ApplyImportSpriteSheetAndBind") return importSpriteSheetSchema(false);
   if (name === "Unity_Asset_VerifySpriteArrayBinding") return verifySpriteArrayBindingSchema();
+  if (name === "Unity_Asset_SpriteSheetVisualDiagnostics") return spriteSheetVisualDiagnosticsSchema();
+  if (name === "Unity_Project_BlockedLanguageScan") return blockedLanguageScanSchema();
   if (name === "Unity_Asset_Search") {
     return {
       type: "object",
@@ -687,8 +707,143 @@ function schemaFor(name) {
       },
     };
   }
+  if (name === "Unity_Tests_Run") {
+    return {
+      type: "object",
+      properties: {
+        mode: { type: "string", enum: ["EditMode", "PlayMode"] },
+        assembly: { type: "string" },
+        assemblies: { type: "array", items: { type: "string" } },
+        filter: { type: "string" },
+        testNames: { type: "array", items: { type: "string" } },
+        category: { type: "string" },
+        categories: { type: "array", items: { type: "string" } },
+        timeoutMs: { type: "integer" },
+        timeoutSeconds: { type: "integer" },
+        maxFailedTests: { type: "integer" },
+        maxAssertionMessages: { type: "integer" },
+        captureConsoleDelta: { type: "boolean" },
+      },
+    };
+  }
+  if (name === "Unity_Camera_FitComposition") {
+    return {
+      type: "object",
+      properties: {
+        target: { type: "string" },
+        searchMethod: { type: "string" },
+        namePrefix: { type: "string" },
+        nameExact: { type: "string" },
+        componentTypes: { type: "array", items: { type: "string" } },
+        componentMatch: { type: "string" },
+        root: { type: "string" },
+        rootSearchMethod: { type: "string" },
+        scene: { type: "string" },
+        includeInactive: { type: "boolean" },
+        cameraTarget: { type: "string" },
+        cameraSearchMethod: { type: "string" },
+        desiredCoverageMin: { type: "number" },
+        desiredCoverageMax: { type: "number" },
+        aspectRatio: { type: "number" },
+        viewportWidth: { type: "integer" },
+        viewportHeight: { type: "integer" },
+        captureScreenshot: { type: "boolean" },
+        outputPath: { type: "string" },
+        screenshotWidth: { type: "integer" },
+        screenshotHeight: { type: "integer" },
+        maxRows: { type: "integer" },
+      },
+    };
+  }
+  if (name === "Unity_Scene_PreviewGridBoardLayout") return gridBoardLayoutSchema(false);
+  if (name === "Unity_Scene_ApplyGridBoardLayout") return gridBoardLayoutSchema(true);
+  if (name === "Unity_Scene_PreviewBulkMutation") return bulkMutationSchema(false);
+  if (name === "Unity_Scene_ApplyBulkMutation") return bulkMutationSchema(true);
 
   return { type: "object", properties: {} };
+}
+
+function bulkMutationSchema(includeSaveScene) {
+  const properties = {
+    scene: { type: "string" },
+    scenePath: { type: "string" },
+    namePrefix: { type: "string" },
+    nameExact: { type: "string" },
+    componentTypes: { type: "array", items: { type: "string" } },
+    componentType: { type: "string" },
+    componentMatch: { type: "string" },
+    root: { type: "string" },
+    rootSearchMethod: { type: "string" },
+    includeInactive: { type: "boolean" },
+    gridFieldName: { type: "string" },
+    gridFieldComponentType: { type: "string" },
+    gridFieldComponentIndex: { type: "integer" },
+    fieldVariables: { type: "array", items: {} },
+    mutations: { type: "array", items: {} },
+    maxObjects: { type: "integer" },
+    maxRows: { type: "integer" },
+    allowPartial: { type: "boolean" },
+  };
+  if (includeSaveScene) properties.saveScene = { type: "boolean" };
+  return {
+    type: "object",
+    properties,
+    required: ["componentTypes", "mutations"],
+  };
+}
+
+function gridBoardLayoutSchema(includeSaveScene) {
+  const properties = {
+    scenePath: { type: "string" },
+    boardWidth: { type: "integer" },
+    boardHeight: { type: "integer" },
+    boardSize: {},
+    tileComponentType: { type: "string" },
+    gridFieldName: { type: "string" },
+    gridFieldComponentType: { type: "string" },
+    gridFieldComponentIndex: { type: "integer" },
+    root: { type: "string" },
+    rootSearchMethod: { type: "string" },
+    includeInactive: { type: "boolean" },
+    projectionType: { type: "string" },
+    tileSize: {},
+    tileSizeX: { type: "number" },
+    tileSizeY: { type: "number" },
+    tileSizeZ: { type: "number" },
+    origin: {},
+    originX: { type: "number" },
+    originY: { type: "number" },
+    originZ: { type: "number" },
+    useLocalPosition: { type: "boolean" },
+    classificationFieldName: { type: "string" },
+    obstacleFieldName: { type: "string" },
+    floorValue: { type: "string" },
+    obstacleValue: { type: "string" },
+    sortingBase: { type: "integer" },
+    floorSortingBase: { type: "integer" },
+    obstacleSortingBase: { type: "integer" },
+    sortingRowStride: { type: "integer" },
+    sortingColumnStride: { type: "integer" },
+    sortingZStride: { type: "integer" },
+    sortingLayerName: { type: "string" },
+    applySorting: { type: "boolean" },
+    cameraFitMode: { type: "string" },
+    cameraTarget: { type: "string" },
+    cameraSearchMethod: { type: "string" },
+    desiredCoverageMin: { type: "number" },
+    desiredCoverageMax: { type: "number" },
+    aspectRatio: { type: "number" },
+    viewportWidth: { type: "integer" },
+    viewportHeight: { type: "integer" },
+    maxRows: { type: "integer" },
+    maxOverlapSamples: { type: "integer" },
+  };
+  if (includeSaveScene) properties.saveScene = { type: "boolean" };
+  return {
+    type: "object",
+    properties,
+    required: ["tileComponentType"],
+  };
 }
 
 function importSpriteSheetSchema(includeMode) {
@@ -736,6 +891,65 @@ function verifySpriteArrayBindingSchema() {
       expectedSpriteNames: { type: "array", items: { type: "string" } },
     },
     required: ["targetAssetPath", "targetFieldName"],
+  };
+}
+
+function spriteSheetVisualDiagnosticsSchema() {
+  return {
+    type: "object",
+    properties: {
+      assetPath: { type: "string" },
+      frameCount: { type: "integer" },
+      frameWidth: { type: "integer" },
+      frameHeight: { type: "integer" },
+      columns: { type: "integer" },
+      rows: { type: "integer" },
+      paddingX: { type: "integer" },
+      paddingY: { type: "integer" },
+      offsetX: { type: "integer" },
+      offsetY: { type: "integer" },
+      spriteNamePrefix: { type: "string" },
+      expectedSpriteNames: { type: "array", items: { type: "string" } },
+      alphaThreshold: { type: "number" },
+      emptyAlphaCoverageThreshold: { type: "number" },
+      oversizedPaddingRatio: { type: "number" },
+      minUsableAreaCoverage: { type: "number" },
+      textArtifactSensitivity: { type: "number" },
+      maxCells: { type: "integer" },
+    },
+    required: ["assetPath"],
+  };
+}
+
+function blockedLanguageScanSchema() {
+  return {
+    type: "object",
+    properties: {
+      blockedTerms: { type: "array", items: { type: "string" } },
+      terms: { type: "array", items: { type: "string" } },
+      forbiddenTerms: { type: "array", items: { type: "string" } },
+      blockedTermsPath: { type: "string" },
+      termFile: { type: "string" },
+      termsAssetPath: { type: "string" },
+      matchMode: { type: "string" },
+      caseSensitive: { type: "boolean" },
+      wholeWord: { type: "boolean" },
+      under: { type: "string" },
+      assetPaths: { type: "array", items: { type: "string" } },
+      includeScripts: { type: "boolean" },
+      includeScenes: { type: "boolean" },
+      includeLoadedScenes: { type: "boolean" },
+      includePrefabs: { type: "boolean" },
+      includeScriptableObjects: { type: "boolean" },
+      includeTextAssets: { type: "boolean" },
+      includePackages: { type: "boolean" },
+      maxAssets: { type: "integer" },
+      maxFindings: { type: "integer" },
+      maxTextBytes: { type: "integer" },
+      maxSerializedObjectsPerAsset: { type: "integer" },
+      contextChars: { type: "integer" },
+    },
+    required: [],
   };
 }
 
@@ -840,10 +1054,17 @@ async function runStaticAllScenario() {
     const staticNames = staticList.tools.map((tool) => tool.name);
     assertNamesInclude(staticNames, [
       "Unity_Project_PackageCompatibility",
+      "Unity_Project_BlockedLanguageScan",
+      "Unity_Tests_Run",
       "Unity_Editor_SetPlayMode",
       ...requiredBootstrapWorkflowTools,
       "Unity_Asset_Search",
       "Unity_GameObject_Inspect",
+      "Unity_Camera_FitComposition",
+      "Unity_Scene_PreviewGridBoardLayout",
+      "Unity_Scene_ApplyGridBoardLayout",
+      "Unity_Scene_PreviewBulkMutation",
+      "Unity_Scene_ApplyBulkMutation",
       "Unity_UI_VerifyScreenLayout",
       "Unity_GetLensUsageReport",
     ], "static_all startup tools/list");
@@ -853,6 +1074,13 @@ async function runStaticAllScenario() {
     assertReadOnlyHint(staticList.tools, "Unity_Workflow_RunGpuSimulationProbe", false);
     assertReadOnlyHint(staticList.tools, "Unity_Workflow_VerifyRuntimePackSelection", false);
     assertReadOnlyHint(staticList.tools, "Unity_Workflow_SelectPackThroughMainMenu", false);
+    assertReadOnlyHint(staticList.tools, "Unity_Tests_Run", false);
+    assertReadOnlyHint(staticList.tools, "Unity_Project_BlockedLanguageScan", true);
+    assertReadOnlyHint(staticList.tools, "Unity_Camera_FitComposition", false);
+    assertReadOnlyHint(staticList.tools, "Unity_Scene_PreviewGridBoardLayout", true);
+    assertReadOnlyHint(staticList.tools, "Unity_Scene_ApplyGridBoardLayout", false);
+    assertReadOnlyHint(staticList.tools, "Unity_Scene_PreviewBulkMutation", true);
+    assertReadOnlyHint(staticList.tools, "Unity_Scene_ApplyBulkMutation", false);
 
     const projectResult = await client.callTool("Unity_Project_PackageCompatibility", {});
     assert.strictEqual(projectResult.structuredContent.success, true, "pack-gated project tool should succeed in static_all without pack switching");
@@ -878,10 +1106,17 @@ async function runStaticAllScenario() {
     const afterNoopNames = afterNoopList.tools.map((tool) => tool.name);
     assertNamesInclude(afterNoopNames, [
       "Unity_Project_PackageCompatibility",
+      "Unity_Project_BlockedLanguageScan",
+      "Unity_Tests_Run",
       "Unity_Editor_SetPlayMode",
       ...requiredBootstrapWorkflowTools,
       "Unity_Asset_Search",
       "Unity_GameObject_Inspect",
+      "Unity_Camera_FitComposition",
+      "Unity_Scene_PreviewGridBoardLayout",
+      "Unity_Scene_ApplyGridBoardLayout",
+      "Unity_Scene_PreviewBulkMutation",
+      "Unity_Scene_ApplyBulkMutation",
       "Unity_UI_VerifyScreenLayout",
       "Unity_GetLensUsageReport",
     ], "static_all tools/list after Unity_SetToolPacks no-op");
@@ -903,7 +1138,14 @@ async function runDefaultStaticAllScenario() {
     const names = list.tools.map((tool) => tool.name);
     assertNamesInclude(names, [
       "Unity_Project_PackageCompatibility",
+      "Unity_Project_BlockedLanguageScan",
+      "Unity_Tests_Run",
       "Unity_Asset_Search",
+      "Unity_Camera_FitComposition",
+      "Unity_Scene_PreviewGridBoardLayout",
+      "Unity_Scene_ApplyGridBoardLayout",
+      "Unity_Scene_PreviewBulkMutation",
+      "Unity_Scene_ApplyBulkMutation",
       "Unity_UI_VerifyScreenLayout",
     ], "default startup tools/list should be static_all");
 

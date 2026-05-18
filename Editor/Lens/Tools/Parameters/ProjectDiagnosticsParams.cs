@@ -34,5 +34,29 @@ namespace Becool.UnityMcpLens.Editor.Tools.Parameters
 
         [McpDescription("Include inactive scene objects when resolving the target.", Required = false)]
         public bool IncludeInactive { get; set; } = true;
+
+        [McpDescription("Maximum number of findings to return.", Required = false)]
+        public int MaxFindings { get; set; } = PayloadBudgetPolicy.MaxDiagnosticFindings;
+    }
+
+    public record DiagnoseImportSideEffectsParams
+    {
+        [McpDescription("Folder under Assets or Packages to inspect. Defaults to Assets.", Required = false)]
+        public string Under { get; set; } = "Assets";
+
+        [McpDescription("Optional AssetDatabase.FindAssets filter. Examples: 't:Texture2D', 't:Prefab', or empty for all assets.", Required = false)]
+        public string Filter { get; set; }
+
+        [McpDescription("Explicit asset paths to inspect in addition to any query results.", Required = false)]
+        public string[] AssetPaths { get; set; }
+
+        [McpDescription("Maximum number of candidate assets to inspect.", Required = false)]
+        public int MaxAssets { get; set; } = 100;
+
+        [McpDescription("Maximum number of diagnostic findings to return.", Required = false)]
+        public int MaxFindings { get; set; } = PayloadBudgetPolicy.MaxDiagnosticFindings;
+
+        [McpDescription("Include dependency counts for inspected assets. Defaults to true.", Required = false)]
+        public bool IncludeDependencies { get; set; } = true;
     }
 }

@@ -121,8 +121,8 @@ Still needed:
 - `foundation + scene` now targets `50` tools, including scene authoring primitives, object-reference assignment, explicit dirty/save tools, prefab instantiate/bind, and `Unity.Scene.FindComponents` for read-only scene component reuse discovery.
 - `foundation + ui` now targets `35` tools, including `Unity.UI.QueryRuntimeLayout` and `Unity.UI.InvokeControl`.
 - `foundation + runtime` now targets `29` tools, including `Unity.Editor.SetPlayMode`.
-- Latest expected metadata audit baseline keeps `foundation + project=37` with component reuse discovery, package capability awareness, workflow wrappers, and active project diagnostics.
-- Latest expected metadata audit baseline keeps `foundation + assets=47` with prefab authoring/overrides, preset create/apply workflows, copy workflows, asset/resource workflows, and sprite-sheet binding tools.
+- Latest expected metadata audit baseline keeps `foundation + project=38` with component reuse discovery, package capability awareness, workflow wrappers, import side-effect diagnosis, and active project diagnostics.
+- Latest expected metadata audit baseline keeps `foundation + assets=48` with prefab authoring/overrides, prefab serialized-property verification, preset create/apply workflows, copy workflows, asset/resource workflows, and sprite-sheet binding tools.
 - `debug` remains observed at `28` tools.
 - `UNITY_MCP_LENS_TOOL_SURFACE_MODE=static_all` starts the host at `foundation+full`; `Unity.SetToolPacks` is then a no-op and agents should use `Unity.Tools.Menu` for compact navigation while calling real tools directly.
 - Phase 8 split GameObject tools are in the `scene` pack.
@@ -251,6 +251,7 @@ UI/binding/layout result:
 - `Ensure-UnityUiHierarchy.ps1` preview/apply no-op cleanly for the quick-select HUD subtree under `Quick Select Canvas`.
 - `Bind-UnitySceneSerializedReferences.ps1` preview/apply no-op cleanly for `SandQuickSelectHud`.
 - `Set-UnityUiLayout.ps1` preview/apply no-op cleanly for `Quick Select Panel`.
+- Added `Test-UnityUiSceneBindingWorkflow.ps1` and `Test-UnityUiSceneBindingWorkflow.js` as fixture-driven Phase 12 batch smokes for UI hierarchy, scene binding, layout, and screen-layout verification.
 
 Play-mode verification result:
 
@@ -601,6 +602,7 @@ Work:
 - Add first-class durable uGUI prefab authoring and scene prefab instantiation/binding paths.
 - Add read-only UI raycast/layout verification so UI blocking and hit-test behavior do not require custom hierarchy probes.
 - Dogfood the full Phase 12 HUD authoring flow in `D:\TintPaint` without custom editor C# when that project has durable UI/HUD targets.
+- Use `Test-UnityUiSceneBindingWorkflow.ps1` or `Test-UnityUiSceneBindingWorkflow.js` with project fixture JSON for repeatable Phase 12 no-op/apply coverage before adding more custom HUD probes.
 - Keep no-op apply responses truly clean: `applied=false`, no unnecessary dirty/save.
 - Make `Unity.RunCommand` structured `ReturnResult(...)` the preferred probe return path over console-warning abuse.
 - Keep helper-driven runtime probes play-aware so healthy play mode does not get blocked by idle-wait wrappers.
@@ -648,6 +650,7 @@ Work:
 - Treat domain reload and process exit as expected transport-loss windows.
 - Reacquire the editor and bridge after restart.
 - Keep relaunch orchestration outside Unity where possible because the exiting editor cannot report its own restart.
+- Added `Recover-UnityEditorSession.ps1` as the Windows external orchestrator: diagnose-only by default, restart/reacquire only when requested, optional kill only for confirmed stale or hung Unity PIDs.
 
 ---
 
@@ -660,6 +663,7 @@ Work:
 - Add prefab-aware inspect/preview/apply workflows.
 - Add serialized reference inspect/bind/verify tools.
 - Support durable player/character prefab authoring, child rig setup, tweak point exposure, and saved reference validation.
+- Added `Unity.Prefab.VerifySerializedProperties` as a read-only prefab asset/instance field verification tool; the Windows helper now calls it directly instead of using a null-value `SetSerializedProperties` preview.
 
 ### Project Diagnostics Beyond Input
 
@@ -667,6 +671,7 @@ Work:
 
 - Expand project-pack TSAM diagnostics beyond Input System to missing scripts, reference validation, and import side effects.
 - Keep results compact and read-first.
+- Added `Unity.Project.DiagnoseImportSideEffects` for read-only importer/dependency diagnosis before asset refresh or reimport work.
 
 ### Scene Tool Dogfooding
 
@@ -674,6 +679,7 @@ Work:
 
 - Exercise split GameObject tools on real scene authoring.
 - Keep `Unity.ManageGameObject` as a compatibility fallback until split coverage is proven.
+- Added `Test-UnitySplitGameObjectWorkflow.ps1` and `Test-UnitySplitGameObjectWorkflow.js` as dogfood helpers for split GameObject create/inspect/change/component/stable-path/delete flows.
 
 ---
 

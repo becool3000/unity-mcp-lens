@@ -15,6 +15,9 @@ sealed class BridgeDiscoveryResult
     public required bool IsProjectMatch { get; init; }
     public required bool EditorPidAlive { get; init; }
     public required string BasicHealth { get; init; }
+    public required bool ExpectedRecovery { get; init; }
+    public DateTime ExpectedRecoveryExpiresUtc { get; init; } = DateTime.MinValue;
+    public bool RecoveryActive { get; init; }
     public EditorHealthCandidate? EditorHealth { get; init; }
     public string EditorHealthMatchQuality { get; init; } = "unknown";
     public bool EditorHealthBridgePidMatch { get; init; }
@@ -36,6 +39,9 @@ sealed class BridgeDiscoveryCandidate
     public required bool IsQuarantined { get; init; }
     public required bool IsSelectable { get; init; }
     public required string BasicHealth { get; init; }
+    public required bool ExpectedRecovery { get; init; }
+    public DateTime ExpectedRecoveryExpiresUtc { get; init; } = DateTime.MinValue;
+    public bool RecoveryActive { get; init; }
     public EditorHealthCandidate? EditorHealth { get; init; }
     public string EditorHealthMatchQuality { get; init; } = "unknown";
     public bool EditorHealthBridgePidMatch { get; init; }
@@ -185,6 +191,10 @@ static class BridgeDiscovery
                 TimeSpan malformedHeartbeatAge = malformedHeartbeatUtc == DateTime.MinValue ? TimeSpan.MaxValue : nowUtc - malformedHeartbeatUtc;
                 if (malformedHeartbeatAge < TimeSpan.Zero)
                     malformedHeartbeatAge = TimeSpan.Zero;
+                DateTime malformedRecoveryExpiresUtc = ParseUtc(status?.ExpectedRecoveryExpiresUtc);
+                bool malformedRecoveryActive =
+                    malformedHeartbeatAge <= FreshHeartbeatThreshold &&
+                    IsRecoveryActive(status?.Status, status?.ExpectedRecovery == true, malformedRecoveryExpiresUtc, nowUtc);
                 string malformedProjectRoot = NormalizeProjectRoot(status?.ProjectRoot, status?.ProjectPath);
                 MalformedStatusFileInfo malformed = EditorHealthDiscovery.InspectMalformedStatusFile(
                     statusPath,
@@ -206,6 +216,9 @@ static class BridgeDiscovery
                     IsQuarantined = false,
                     IsSelectable = false,
                     BasicHealth = "malformed_status",
+                    ExpectedRecovery = status?.ExpectedRecovery == true,
+                    ExpectedRecoveryExpiresUtc = malformedRecoveryExpiresUtc,
+                    RecoveryActive = malformedRecoveryActive,
                     EditorPid = status?.EditorPid ?? 0,
                     Error = "Status file is missing connection_path or project_root/project_path.",
                     ExclusionReasons = malformed.IsIgnored
@@ -221,6 +234,9 @@ static class BridgeDiscovery
 
             string connectionPath = status.ConnectionPath;
             string projectRoot = NormalizeProjectRoot(status.ProjectRoot, status.ProjectPath);
+            DateTime expectedRecoveryExpiresUtc = ParseUtc(status.ExpectedRecoveryExpiresUtc);
+            bool recoveryActive = IsRecoveryActive(status.Status, status.ExpectedRecovery, expectedRecoveryExpiresUtc, nowUtc);
+            bool readyStatus = IsHealthyStatus(status.Status);
             EditorHealthCandidate? editorHealth = EditorHealthDiscovery.FindBestForBridge(editorHealthCandidates, projectRoot, status.EditorPid);
             string editorHealthMatchQuality = DescribeEditorHealthMatch(editorHealthCandidates, editorHealth, projectRoot, status.EditorPid);
             bool editorHealthBridgePidMatch = editorHealth != null &&
@@ -238,19 +254,27 @@ static class BridgeDiscovery
                 fileAge = TimeSpan.Zero;
             bool editorPidAlive = IsEditorPidAlive(status.EditorPid);
             bool isFresh = heartbeatAge <= FreshHeartbeatThreshold && editorPidAlive;
-            string basicHealth = EditorHealthDiscovery.ClassifyBridgeHealth(
+            recoveryActive = recoveryActive && isFresh;
+            string rawBasicHealth = EditorHealthDiscovery.ClassifyBridgeHealth(
                 bridgeStatusValid: true,
                 bridgeHeartbeatUtc: heartbeatUtc,
                 bridgeHeartbeatAge: heartbeatAge,
                 bridgeFresh: isFresh,
                 bridgeEditorPidAlive: editorPidAlive,
                 editorHealth: editorHealth);
+            string basicHealth = !readyStatus && isFresh
+                ? recoveryActive
+                    ? NormalizeRecoveryHealth(status.Status)
+                    : "bridge_status_not_ready"
+                : rawBasicHealth;
 
             var exclusionReasons = new List<string>();
             if (isQuarantined)
                 exclusionReasons.Add("quarantined");
             if (requireProjectMatch && !isProjectMatch)
                 exclusionReasons.Add("project_mismatch");
+            if (!readyStatus)
+                exclusionReasons.Add(recoveryActive ? "expected_recovery_active" : "bridge_status_not_ready");
             if (isProjectMatch &&
                 !isFresh &&
                 HasFreshProjectEditorHealthForDifferentPid(editorHealthCandidates, projectRoot, status.EditorPid))
@@ -276,6 +300,9 @@ static class BridgeDiscovery
                 IsQuarantined = isQuarantined,
                 IsSelectable = isSelectable,
                 BasicHealth = basicHealth,
+                ExpectedRecovery = status.ExpectedRecovery,
+                ExpectedRecoveryExpiresUtc = expectedRecoveryExpiresUtc,
+                RecoveryActive = recoveryActive,
                 EditorHealth = editorHealth,
                 EditorHealthMatchQuality = editorHealthMatchQuality,
                 EditorHealthBridgePidMatch = editorHealthBridgePidMatch,
@@ -300,6 +327,9 @@ static class BridgeDiscovery
                 IsProjectMatch = isProjectMatch,
                 EditorPidAlive = editorPidAlive,
                 BasicHealth = basicHealth,
+                ExpectedRecovery = status.ExpectedRecovery,
+                ExpectedRecoveryExpiresUtc = expectedRecoveryExpiresUtc,
+                RecoveryActive = recoveryActive,
                 EditorHealth = editorHealth,
                 EditorHealthMatchQuality = editorHealthMatchQuality,
                 EditorHealthBridgePidMatch = editorHealthBridgePidMatch
@@ -323,6 +353,9 @@ static class BridgeDiscovery
                 IsQuarantined = false,
                 IsSelectable = false,
                 BasicHealth = "malformed_status",
+                ExpectedRecovery = false,
+                ExpectedRecoveryExpiresUtc = DateTime.MinValue,
+                RecoveryActive = false,
                 Error = ex.Message,
                 ExclusionReasons = malformed.IsIgnored
                     ? [malformed.IgnoreReason ?? "ignored_malformed_status"]
@@ -364,6 +397,30 @@ static class BridgeDiscovery
     {
         return string.Equals(status, "ready", StringComparison.OrdinalIgnoreCase) ||
             string.Equals(status, "transport_degraded", StringComparison.OrdinalIgnoreCase);
+    }
+
+    static bool IsRecoveryActive(string? status, bool expectedRecovery, DateTime expectedRecoveryExpiresUtc, DateTime nowUtc)
+    {
+        if (string.Equals(status, "editor_reloading", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(status, "transport_recovering", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        if (!expectedRecovery)
+            return false;
+
+        return expectedRecoveryExpiresUtc == DateTime.MinValue || expectedRecoveryExpiresUtc >= nowUtc;
+    }
+
+    static string NormalizeRecoveryHealth(string? status)
+    {
+        if (string.Equals(status, "editor_reloading", StringComparison.OrdinalIgnoreCase))
+            return "editor_reloading";
+        if (string.Equals(status, "transport_recovering", StringComparison.OrdinalIgnoreCase))
+            return "transport_recovering";
+
+        return "expected_recovery_active";
     }
 
     static bool IsPathMatch(string projectRoot, string currentWorkingDirectory)

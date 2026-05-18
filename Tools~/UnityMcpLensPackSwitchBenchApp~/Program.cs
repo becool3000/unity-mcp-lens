@@ -170,11 +170,11 @@ sealed class BenchmarkOptions
 sealed class MetadataAudit(BenchmarkOptions options)
 {
     const int ExpectedFoundationToolCount = 18;
-    const int ExpectedSceneToolCount = 50;
+    const int ExpectedSceneToolCount = 55;
     const int ExpectedUiToolCount = 35;
     const int ExpectedRuntimeToolCount = 29;
-    const int ExpectedProjectToolCount = 37;
-    const int ExpectedAssetsToolCount = 47;
+    const int ExpectedProjectToolCount = 40;
+    const int ExpectedAssetsToolCount = 49;
 
     static readonly string[] k_RequiredFoundationTools =
     [
@@ -229,6 +229,11 @@ sealed class MetadataAudit(BenchmarkOptions options)
         "Unity_Scene_FindComponents",
         "Unity_Object_ResolveStablePath",
         "Unity_Scene_CaptureView",
+        "Unity_Camera_FitComposition",
+        "Unity_Scene_PreviewGridBoardLayout",
+        "Unity_Scene_ApplyGridBoardLayout",
+        "Unity_Scene_PreviewBulkMutation",
+        "Unity_Scene_ApplyBulkMutation",
         "Unity_Tilemap_Setup",
         "Unity_Tilemap_Paint",
         "Unity_Runtime_GetVisualBoundsSnapshot"
@@ -284,12 +289,15 @@ sealed class MetadataAudit(BenchmarkOptions options)
         "Unity_InputActions_InspectAsset",
         "Unity_ProjectSettings_PreviewActiveInputHandler",
         "Unity_ProjectSettings_SetActiveInputHandler",
+        "Unity_Project_DiagnoseImportSideEffects",
+        "Unity_Project_BlockedLanguageScan",
         "Unity_Component_Search",
         "Unity_Component_ResolveCapability",
         "Unity_Component_InspectSchema",
         "Unity_Authoring_SuggestReusePlan",
         "Unity_Package_ResolveCapability",
         "Unity_Package_PreviewInstallForCapability",
+        "Unity_Tests_Run",
         "Unity_Workflow_AuthorSceneObject",
         "Unity_Workflow_AuthorPrefab",
         "Unity_Workflow_ConfigureExistingComponent",
@@ -305,6 +313,7 @@ sealed class MetadataAudit(BenchmarkOptions options)
         "Unity_Asset_PreviewImportSpriteSheetAndBind",
         "Unity_Asset_ApplyImportSpriteSheetAndBind",
         "Unity_Asset_VerifySpriteArrayBinding",
+        "Unity_Asset_SpriteSheetVisualDiagnostics",
         "Unity_ManageAsset",
         "Unity_Preset_Search",
         "Unity_Preset_Inspect",
@@ -323,6 +332,7 @@ sealed class MetadataAudit(BenchmarkOptions options)
         "Unity_Prefab_PreviewCopyComponentSerializedValues",
         "Unity_Prefab_ApplyCopyComponentSerializedValues",
         "Unity_Prefab_SetSerializedProperties",
+        "Unity_Prefab_VerifySerializedProperties",
         "Unity_Resource_Write",
         "Unity_Tile_BuildSet",
         "Unity_ImportExternalModel"
@@ -426,6 +436,11 @@ sealed class MetadataAudit(BenchmarkOptions options)
         ValidateReadOnlyHint(sceneTools, "Unity_Scene_FindComponents", expected: true, failures);
         ValidateReadOnlyHint(sceneTools, "Unity_Scene_PreviewCopyComponentSerializedValues", expected: true, failures);
         ValidateReadOnlyHint(sceneTools, "Unity_Scene_ApplyCopyComponentSerializedValues", expected: false, failures);
+        ValidateReadOnlyHint(sceneTools, "Unity_Camera_FitComposition", expected: false, failures);
+        ValidateReadOnlyHint(sceneTools, "Unity_Scene_PreviewGridBoardLayout", expected: true, failures);
+        ValidateReadOnlyHint(sceneTools, "Unity_Scene_ApplyGridBoardLayout", expected: false, failures);
+        ValidateReadOnlyHint(sceneTools, "Unity_Scene_PreviewBulkMutation", expected: true, failures);
+        ValidateReadOnlyHint(sceneTools, "Unity_Scene_ApplyBulkMutation", expected: false, failures);
         ValidateReadOnlyHint(sceneTools, "Unity_ManageGameObject", expected: false, failures);
         ValidateReadOnlyHint(uiTools, "Unity_UI_PreviewEnsureHierarchy", expected: true, failures);
         ValidateReadOnlyHint(uiTools, "Unity_UI_ApplyEnsureHierarchy", expected: false, failures);
@@ -454,12 +469,15 @@ sealed class MetadataAudit(BenchmarkOptions options)
         ValidateReadOnlyHint(projectTools, "Unity_InputActions_InspectAsset", expected: true, failures);
         ValidateReadOnlyHint(projectTools, "Unity_ProjectSettings_PreviewActiveInputHandler", expected: true, failures);
         ValidateReadOnlyHint(projectTools, "Unity_ProjectSettings_SetActiveInputHandler", expected: false, failures);
+        ValidateReadOnlyHint(projectTools, "Unity_Project_DiagnoseImportSideEffects", expected: true, failures);
+        ValidateReadOnlyHint(projectTools, "Unity_Project_BlockedLanguageScan", expected: true, failures);
         ValidateReadOnlyHint(projectTools, "Unity_Component_Search", expected: true, failures);
         ValidateReadOnlyHint(projectTools, "Unity_Component_ResolveCapability", expected: true, failures);
         ValidateReadOnlyHint(projectTools, "Unity_Component_InspectSchema", expected: true, failures);
         ValidateReadOnlyHint(projectTools, "Unity_Authoring_SuggestReusePlan", expected: true, failures);
         ValidateReadOnlyHint(projectTools, "Unity_Package_ResolveCapability", expected: true, failures);
         ValidateReadOnlyHint(projectTools, "Unity_Package_PreviewInstallForCapability", expected: true, failures);
+        ValidateReadOnlyHint(projectTools, "Unity_Tests_Run", expected: false, failures);
         ValidateReadOnlyHint(projectTools, "Unity_Workflow_AuthorSceneObject", expected: false, failures);
         ValidateReadOnlyHint(projectTools, "Unity_Workflow_AuthorPrefab", expected: false, failures);
         ValidateReadOnlyHint(projectTools, "Unity_Workflow_ConfigureExistingComponent", expected: false, failures);
@@ -470,6 +488,7 @@ sealed class MetadataAudit(BenchmarkOptions options)
         ValidateReadOnlyHint(assetsTools, "Unity_Asset_PreviewImportSpriteSheetAndBind", expected: true, failures);
         ValidateReadOnlyHint(assetsTools, "Unity_Asset_ApplyImportSpriteSheetAndBind", expected: false, failures);
         ValidateReadOnlyHint(assetsTools, "Unity_Asset_VerifySpriteArrayBinding", expected: true, failures);
+        ValidateReadOnlyHint(assetsTools, "Unity_Asset_SpriteSheetVisualDiagnostics", expected: true, failures);
         ValidateReadOnlyHint(assetsTools, "Unity_Preset_Search", expected: true, failures);
         ValidateReadOnlyHint(assetsTools, "Unity_Preset_Inspect", expected: true, failures);
         ValidateReadOnlyHint(assetsTools, "Unity_Preset_PreviewCreate", expected: true, failures);
@@ -487,6 +506,7 @@ sealed class MetadataAudit(BenchmarkOptions options)
         ValidateReadOnlyHint(assetsTools, "Unity_Prefab_PreviewCopyComponentSerializedValues", expected: true, failures);
         ValidateReadOnlyHint(assetsTools, "Unity_Prefab_ApplyCopyComponentSerializedValues", expected: false, failures);
         ValidateReadOnlyHint(assetsTools, "Unity_Prefab_SetSerializedProperties", expected: false, failures);
+        ValidateReadOnlyHint(assetsTools, "Unity_Prefab_VerifySerializedProperties", expected: true, failures);
         ValidateReadOnlyHint(debugTools, "Unity_GetLensUsageReport", expected: true, failures);
         ValidateGameObjectSchemas(sceneTools, failures);
         ValidateUiToolSchemas(uiTools, failures);
@@ -764,6 +784,18 @@ sealed class MetadataAudit(BenchmarkOptions options)
             failures);
         ValidateSplitGameObjectSchema(
             tools,
+            "Unity_Project_DiagnoseImportSideEffects",
+            ["under", "filter", "assetPaths", "maxAssets", "maxFindings", "includeDependencies"],
+            [],
+            failures);
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_Project_BlockedLanguageScan",
+            ["blockedTerms", "terms", "forbiddenTerms", "blockedTermsPath", "termFile", "termsAssetPath", "matchMode", "caseSensitive", "wholeWord", "under", "assetPaths", "includeScripts", "includeScenes", "includeLoadedScenes", "includePrefabs", "includeScriptableObjects", "includeTextAssets", "includePackages", "maxAssets", "maxFindings", "maxTextBytes", "maxSerializedObjectsPerAsset", "contextChars"],
+            [],
+            failures);
+        ValidateSplitGameObjectSchema(
+            tools,
             "Unity_Component_Search",
             ["query", "providers", "includeComponents", "includePrefabs", "includePresets", "includeMissingPackages", "includePackageCapabilities", "maxResults", "maxAssetScans"],
             [],
@@ -796,6 +828,12 @@ sealed class MetadataAudit(BenchmarkOptions options)
             tools,
             "Unity_Package_PreviewInstallForCapability",
             ["intent", "context", "packageId", "version", "includeFallbackPlan"],
+            [],
+            failures);
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_Tests_Run",
+            ["mode", "assembly", "assemblies", "filter", "testNames", "category", "categories", "timeoutMs", "timeoutSeconds", "maxFailedTests", "maxAssertionMessages", "captureConsoleDelta"],
             [],
             failures);
         ValidateSplitGameObjectSchema(
@@ -849,6 +887,12 @@ sealed class MetadataAudit(BenchmarkOptions options)
             "Unity_Asset_VerifySpriteArrayBinding",
             ["targetAssetPath", "targetFieldName", "expectedCount", "expectedTextureName", "expectedTextureGuid", "expectedSpriteNames"],
             ["targetAssetPath", "targetFieldName"],
+            failures);
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_Asset_SpriteSheetVisualDiagnostics",
+            ["assetPath", "frameCount", "frameWidth", "frameHeight", "columns", "rows", "paddingX", "paddingY", "offsetX", "offsetY", "spriteNamePrefix", "expectedSpriteNames", "alphaThreshold", "emptyAlphaCoverageThreshold", "oversizedPaddingRatio", "minUsableAreaCoverage", "textArtifactSensitivity", "maxCells"],
+            ["assetPath"],
             failures);
         ValidateSplitGameObjectSchema(
             tools,
@@ -951,6 +995,12 @@ sealed class MetadataAudit(BenchmarkOptions options)
             "Unity_Prefab_SetSerializedProperties",
             ["prefabPath", "target", "searchMethod", "includeInactive", "assignments", "previewOnly"],
             ["assignments"],
+            failures);
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_Prefab_VerifySerializedProperties",
+            ["prefabPath", "target", "searchMethod", "includeInactive", "checks"],
+            ["checks"],
             failures);
     }
 
@@ -1109,6 +1159,36 @@ sealed class MetadataAudit(BenchmarkOptions options)
             "Unity_Scene_QueryObjects",
             ["namePrefix", "nameExact", "componentTypes", "componentMatch", "root", "rootSearchMethod", "scene", "includeInactive", "fields", "maxRows"],
             [],
+            failures);
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_Camera_FitComposition",
+            ["target", "searchMethod", "namePrefix", "nameExact", "componentTypes", "componentMatch", "root", "rootSearchMethod", "scene", "includeInactive", "cameraTarget", "cameraSearchMethod", "desiredCoverageMin", "desiredCoverageMax", "aspectRatio", "viewportWidth", "viewportHeight", "captureScreenshot", "outputPath", "screenshotWidth", "screenshotHeight", "maxRows"],
+            [],
+            failures);
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_Scene_PreviewGridBoardLayout",
+            ["scenePath", "boardWidth", "boardHeight", "boardSize", "tileComponentType", "gridFieldName", "gridFieldComponentType", "gridFieldComponentIndex", "root", "rootSearchMethod", "includeInactive", "projectionType", "tileSize", "tileSizeX", "tileSizeY", "tileSizeZ", "origin", "originX", "originY", "originZ", "useLocalPosition", "classificationFieldName", "obstacleFieldName", "floorValue", "obstacleValue", "sortingBase", "floorSortingBase", "obstacleSortingBase", "sortingRowStride", "sortingColumnStride", "sortingZStride", "sortingLayerName", "applySorting", "cameraFitMode", "cameraTarget", "cameraSearchMethod", "desiredCoverageMin", "desiredCoverageMax", "aspectRatio", "viewportWidth", "viewportHeight", "maxRows", "maxOverlapSamples"],
+            ["tileComponentType"],
+            failures);
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_Scene_ApplyGridBoardLayout",
+            ["scenePath", "boardWidth", "boardHeight", "boardSize", "tileComponentType", "gridFieldName", "gridFieldComponentType", "gridFieldComponentIndex", "root", "rootSearchMethod", "includeInactive", "projectionType", "tileSize", "tileSizeX", "tileSizeY", "tileSizeZ", "origin", "originX", "originY", "originZ", "useLocalPosition", "classificationFieldName", "obstacleFieldName", "floorValue", "obstacleValue", "sortingBase", "floorSortingBase", "obstacleSortingBase", "sortingRowStride", "sortingColumnStride", "sortingZStride", "sortingLayerName", "applySorting", "cameraFitMode", "cameraTarget", "cameraSearchMethod", "desiredCoverageMin", "desiredCoverageMax", "aspectRatio", "viewportWidth", "viewportHeight", "maxRows", "maxOverlapSamples", "saveScene"],
+            ["tileComponentType"],
+            failures);
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_Scene_PreviewBulkMutation",
+            ["scene", "scenePath", "namePrefix", "nameExact", "componentTypes", "componentType", "componentMatch", "root", "rootSearchMethod", "includeInactive", "gridFieldName", "gridFieldComponentType", "gridFieldComponentIndex", "fieldVariables", "mutations", "maxObjects", "maxRows", "allowPartial"],
+            ["componentTypes", "mutations"],
+            failures);
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_Scene_ApplyBulkMutation",
+            ["scene", "scenePath", "namePrefix", "nameExact", "componentTypes", "componentType", "componentMatch", "root", "rootSearchMethod", "includeInactive", "gridFieldName", "gridFieldComponentType", "gridFieldComponentIndex", "fieldVariables", "mutations", "maxObjects", "maxRows", "allowPartial", "saveScene"],
+            ["componentTypes", "mutations"],
             failures);
         ValidateSplitGameObjectSchema(
             tools,

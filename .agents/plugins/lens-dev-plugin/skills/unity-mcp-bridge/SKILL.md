@@ -95,7 +95,9 @@ $script = Join-Path $PWD ".agents\plugins\lens-dev-plugin\skills\unity-mcp-bridg
 ## Recovery Discipline
 
 - Start recovery with `Unity.Editor.RecoverFromHang` using `diagnoseOnly=true`.
+- On Windows, prefer `scripts/Recover-UnityEditorSession.ps1 -DiagnoseOnly` for the safe first pass. A non-diagnose run wraps `Unity.Editor.RecoverFromHang`, permits restart, and waits for a fresh stable Lens-ready editor before success.
 - Do not kill, restart, or clean scratch artifacts unless the user explicitly requested those destructive options.
+- Use `-AllowKillUnity` only when a stale or hung Unity PID is confirmed and the user has accepted that recovery path.
 - Never rely on a live Unity call to decide whether Unity is hung; use health files, process identity, heartbeat age, and bridge state.
 - Use Command Center when the user needs a visible status dashboard, server refresh, or explanation of bridge/editor state.
 

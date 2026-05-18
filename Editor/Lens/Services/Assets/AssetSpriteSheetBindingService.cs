@@ -75,7 +75,12 @@ namespace Becool.UnityMcpLens.Editor.Services.Assets
                     return AssetSpritePipelineOperationResult.Error(
                         $"Failed to {(previewOnly ? "preview" : "apply")} sprite-sheet import/bind: {error}",
                         "sprite_sheet_import_bind_failed",
-                        new { errorKind = "sprite_sheet_import_bind_failed", error });
+                        new
+                        {
+                            errorKind = "sprite_sheet_import_bind_failed",
+                            error,
+                            details = data
+                        });
                 }
 
                 return AssetSpritePipelineOperationResult.Ok(

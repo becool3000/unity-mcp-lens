@@ -84,6 +84,7 @@ A focused helper-driven Phase 12 hardening smoke then passed with a residual pay
 - `Verify-UnityUiScreenLayout` passed in play mode using `inside_screen`, `ordered_stack`, and `below_center`.
 - `Invoke-UnityRunCommand` returned structured HUD placement data through the helper path with `playModeBypass.applied=true`.
 - The focused usage-report slice still recorded `NoShapingRecorded=true`; its only failure class was a `Unity_ManageEditor` disposed-transport response during a reconnect-prone play transition.
+- Added `Test-UnityUiSceneBindingWorkflow.ps1` and `Test-UnityUiSceneBindingWorkflow.js` as fixture-driven Phase 12 batch smokes for UI hierarchy, scene binding, layout, and screen-layout verification.
 
 A focused Phase 13 payload-shaping smoke then proved the first measurable
 payload accounting win:
@@ -171,6 +172,7 @@ at real workflow scale:
 ### 5. UI Authoring Dogfood And Recovery
 
 - Replace custom editor-C# HUD authoring flows with the new Phase 12 UI and scene binding tools.
+- Use the Phase 12 UI/scene-binding workflow helpers for project-specific no-op or accepted-mutation fixtures before writing new custom HUD authoring probes.
 - Turn recurring custom `Unity.RunCommand` UI authoring scripts into TSAM preview/apply tools, starting with durable uGUI prefab creation and scene prefab instantiation/binding.
 - Add read-only UI raycast/layout verification for hit-test stacks, UI blocking, and overlap checks.
 - Keep `ui`-pack preview/apply flows deterministic and compact.
@@ -187,6 +189,7 @@ at real workflow scale:
 - Add a reliable save/quit/relaunch/reacquire workflow around the helper scripts.
 - Keep any in-editor quit tool explicit about dirty state and expected transport loss.
 - Prefer an external orchestrator for relaunch and bridge-ready verification, because Unity cannot report after its own process exits.
+- Added the Windows `Recover-UnityEditorSession.ps1` helper for diagnose-first recovery, restart/reacquire when explicitly requested, and stable Lens-ready verification after relaunch.
 
 ---
 
@@ -197,17 +200,20 @@ at real workflow scale:
 - Add prefab-aware inspect/preview/apply workflows for durable prefab edits.
 - Add first-class serialized reference inspect/bind/verify tools.
 - Support common authoring workflows such as child rig setup, animation hook validation, and saved reference verification without custom project editor utilities.
+- Added `Unity.Prefab.VerifySerializedProperties` for read-only prefab asset/instance saved-field checks, with helper fallback support.
 
 ### 9. Project Diagnostics Beyond Input
 
 - Expand the `project` pack in the same TSAM style for missing scripts, reference validation, and import side effects now that package compatibility and input-action inspection are covered.
 - Keep these diagnostics read-first and compact by default.
 - Avoid growing the default `foundation` surface.
+- Added `Unity.Project.DiagnoseImportSideEffects` for compact read-only importer/dependency side-effect checks.
 
 ### 10. Scene Tool Dogfooding
 
 - Exercise the split GameObject TSAM tools on real scene work before expanding them further.
 - Keep `Unity.ManageGameObject` as a compatibility fallback until split coverage has been proven on practical authoring tasks.
+- Added `Test-UnitySplitGameObjectWorkflow.ps1` and `Test-UnitySplitGameObjectWorkflow.js` to dogfood split create, inspect, change, component, stable-path, and cleanup flows through the batch helper.
 
 ---
 

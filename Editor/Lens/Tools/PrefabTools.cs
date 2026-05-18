@@ -15,6 +15,9 @@ namespace Becool.UnityMcpLens.Editor.Tools
 {
     public static class PrefabTools
     {
+        const string SetSerializedPropertiesToolName = "Unity.Prefab.SetSerializedProperties";
+        const string VerifySerializedPropertiesToolName = "Unity.Prefab.VerifySerializedProperties";
+
         public const string SetSerializedPropertiesDescription = @"Sets serialized property values on a prefab asset or prefab instance without requiring a custom RunCommand.
 
 Args:
@@ -33,7 +36,22 @@ Args:
 Returns:
     Dictionary with success/message/data. Data contains changed fields, stable target identifiers, dirty state, asset state, and save state.";
 
-        [McpTool("Unity.Prefab.SetSerializedProperties", SetSerializedPropertiesDescription, Groups = new[] { "assets", "editor" }, EnabledByDefault = true)]
+        public const string VerifySerializedPropertiesDescription = @"Verifies serialized property values on a prefab asset or prefab instance without mutation.
+
+Args:
+    PrefabPath: Prefab asset path under Assets/. When omitted, Target must resolve to a scene prefab instance.
+    Target: Scene prefab instance GameObject target, path, or instance id.
+    Checks: Array of serialized property checks.
+      TargetPath: Relative child path under the prefab root. Use '.' or omit for the root GameObject.
+      ComponentType: Component type name on the target GameObject.
+      ComponentIndex: 0-based component index when multiple matching components exist.
+      PropertyPath: Serialized property path to read.
+      ExpectedValue: Optional value to compare against the serialized property's display value.
+
+Returns:
+    Dictionary with success/message/data. Data contains pass/fail counts, current values, prefab/asset state, and save state.";
+
+        [McpTool(SetSerializedPropertiesToolName, SetSerializedPropertiesDescription, Groups = new[] { "assets", "editor" }, EnabledByDefault = true)]
         public static object SetSerializedProperties(SetPrefabSerializedPropertiesParams parameters)
         {
             parameters ??= new SetPrefabSerializedPropertiesParams();
@@ -53,6 +71,20 @@ Returns:
             }
 
             return SetPrefabInstanceSerializedProperties(parameters);
+        }
+
+        [McpTool(VerifySerializedPropertiesToolName, VerifySerializedPropertiesDescription, "Verify Prefab Serialized Properties", Groups = new[] { "assets" }, EnabledByDefault = true)]
+        public static object VerifySerializedProperties(VerifyPrefabSerializedPropertiesParams parameters)
+        {
+            parameters ??= new VerifyPrefabSerializedPropertiesParams();
+            if (parameters.Checks == null || parameters.Checks.Length == 0)
+            {
+                return Response.Error("At least one check is required.");
+            }
+
+            return !string.IsNullOrWhiteSpace(parameters.PrefabPath)
+                ? VerifyPrefabAssetSerializedProperties(parameters)
+                : VerifyPrefabInstanceSerializedProperties(parameters);
         }
 
         static object SetPrefabAssetSerializedProperties(SetPrefabSerializedPropertiesParams parameters)
@@ -254,6 +286,221 @@ Returns:
                     saveState = SceneDirtyStateUtility.BuildSaveState(message: "not_requested")
                 });
             }
+        }
+
+        static object VerifyPrefabAssetSerializedProperties(VerifyPrefabSerializedPropertiesParams parameters)
+        {
+            string prefabPath = SanitizeAssetPath(parameters.PrefabPath);
+            if (!prefabPath.EndsWith(".prefab", StringComparison.OrdinalIgnoreCase))
+            {
+                return Response.Error($"PrefabPath must point to a .prefab asset. Received '{prefabPath}'.");
+            }
+
+            if (AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath) == null)
+            {
+                return Response.Error($"Prefab asset '{prefabPath}' could not be loaded.");
+            }
+
+            GameObject prefabRoot = null;
+            try
+            {
+                prefabRoot = PrefabUtility.LoadPrefabContents(prefabPath);
+                if (prefabRoot == null)
+                {
+                    return Response.Error($"Failed to load prefab contents for '{prefabPath}'.");
+                }
+
+                object[] checkResults = VerifyChecks(prefabRoot, parameters.Checks, out int passedCount, out int failedCount);
+                return Response.Success(failedCount == 0
+                    ? $"Verified {passedCount} prefab serialized properties for '{prefabPath}'."
+                    : $"Verified prefab serialized properties for '{prefabPath}' with {failedCount} failed checks.", new
+                {
+                    mode = "prefab_asset",
+                    prefabPath,
+                    passed = failedCount == 0,
+                    checkCount = checkResults.Length,
+                    passedCount,
+                    failedCount,
+                    checks = checkResults,
+                    warnings = Array.Empty<string>(),
+                    prefabState = CapturePrefabState(prefabPath),
+                    assetState = CaptureAssetState(prefabPath),
+                    saveState = BuildAssetSaveState(message: "not_requested")
+                });
+            }
+            finally
+            {
+                if (prefabRoot != null)
+                {
+                    PrefabUtility.UnloadPrefabContents(prefabRoot);
+                }
+            }
+        }
+
+        static object VerifyPrefabInstanceSerializedProperties(VerifyPrefabSerializedPropertiesParams parameters)
+        {
+            if (parameters.Target == null)
+            {
+                return Response.Error("PrefabPath or Target is required.");
+            }
+
+            JObject findParams = new()
+            {
+                ["search_inactive"] = parameters.IncludeInactive
+            };
+            GameObject targetRoot = ObjectsHelper.FindObject(parameters.Target, parameters.SearchMethod, findParams);
+            if (targetRoot == null)
+            {
+                return Response.Error("Scene prefab instance target could not be found.");
+            }
+
+            if (!targetRoot.scene.IsValid())
+            {
+                return Response.Error("Target does not belong to a valid loaded scene.");
+            }
+
+            if (!PrefabUtility.IsPartOfPrefabInstance(targetRoot))
+            {
+                return Response.Error($"Target '{UiDiagnosticsHelper.GetHierarchyPath(targetRoot.transform)}' is not part of a prefab instance.", new
+                {
+                    target = DescribePrefabObject(targetRoot, "."),
+                    dirtyState = SceneDirtyStateUtility.CaptureLoadedScenes()
+                });
+            }
+
+            GameObject instanceRoot = PrefabUtility.GetNearestPrefabInstanceRoot(targetRoot) ?? targetRoot;
+            string sourcePrefabPath = PrefabUtility.GetPrefabAssetPathOfNearestInstanceRoot(instanceRoot);
+            object[] checkResults = VerifyChecks(targetRoot, parameters.Checks, out int passedCount, out int failedCount);
+            return Response.Success(failedCount == 0
+                ? $"Verified {passedCount} prefab instance serialized properties on '{UiDiagnosticsHelper.GetHierarchyPath(targetRoot.transform)}'."
+                : $"Verified prefab instance serialized properties on '{UiDiagnosticsHelper.GetHierarchyPath(targetRoot.transform)}' with {failedCount} failed checks.", new
+            {
+                mode = "prefab_instance",
+                target = DescribePrefabObject(targetRoot, "."),
+                instanceRoot = DescribePrefabObject(instanceRoot, "."),
+                sourcePrefabPath,
+                passed = failedCount == 0,
+                checkCount = checkResults.Length,
+                passedCount,
+                failedCount,
+                checks = checkResults,
+                warnings = Array.Empty<string>(),
+                dirtyState = SceneDirtyStateUtility.CaptureLoadedScenes(),
+                prefabState = CapturePrefabState(sourcePrefabPath),
+                assetState = CaptureAssetState(sourcePrefabPath),
+                saveState = SceneDirtyStateUtility.BuildSaveState(message: "not_requested")
+            });
+        }
+
+        static object[] VerifyChecks(GameObject prefabRoot, PrefabSerializedPropertyVerifyCheck[] checks, out int passedCount, out int failedCount)
+        {
+            var rows = new List<object>();
+            passedCount = 0;
+            failedCount = 0;
+
+            for (int i = 0; i < checks.Length; i++)
+            {
+                PrefabSerializedPropertyVerifyCheck check = checks[i];
+                object row = ReadSerializedProperty(prefabRoot, check, i, out bool passed);
+                rows.Add(row);
+                if (passed)
+                {
+                    passedCount++;
+                }
+                else
+                {
+                    failedCount++;
+                }
+            }
+
+            return rows.ToArray();
+        }
+
+        static object ReadSerializedProperty(GameObject prefabRoot, PrefabSerializedPropertyVerifyCheck check, int index, out bool passed)
+        {
+            passed = false;
+            string label = string.IsNullOrWhiteSpace(check?.Label) ? $"check-{index}" : check.Label.Trim();
+            if (check == null)
+            {
+                return new { label, passed, error = "Check entry cannot be null." };
+            }
+
+            string targetPath = string.IsNullOrWhiteSpace(check.TargetPath) ? "." : check.TargetPath.Trim();
+            Transform targetTransform = targetPath == "." ? prefabRoot.transform : prefabRoot.transform.Find(targetPath);
+            if (targetTransform == null)
+            {
+                return new { label, targetPath, passed, targetFound = false, error = $"TargetPath '{targetPath}' was not found under prefab '{prefabRoot.name}'." };
+            }
+
+            Type componentType = ResolveType(check.ComponentType);
+            if (componentType == null || !typeof(Component).IsAssignableFrom(componentType))
+            {
+                return new { label, targetPath, hierarchyPath = UiDiagnosticsHelper.GetHierarchyPath(targetTransform), passed, targetFound = true, componentFound = false, error = $"Component type '{check.ComponentType}' could not be resolved." };
+            }
+
+            Component[] matches = targetTransform.GetComponents(componentType);
+            int componentIndex = Math.Max(0, check.ComponentIndex);
+            if (matches == null || matches.Length <= componentIndex || matches[componentIndex] == null)
+            {
+                return new { label, targetPath, hierarchyPath = UiDiagnosticsHelper.GetHierarchyPath(targetTransform), passed, targetFound = true, componentFound = false, componentType = componentType.FullName, componentIndex, error = $"Component '{check.ComponentType}' with index {componentIndex} was not found." };
+            }
+
+            Component component = matches[componentIndex];
+            SerializedObject serializedObject = new(component);
+            SerializedProperty property = serializedObject.FindProperty(check.PropertyPath);
+            if (property == null)
+            {
+                return new { label, targetPath, hierarchyPath = UiDiagnosticsHelper.GetHierarchyPath(targetTransform), passed, targetFound = true, componentFound = true, componentType = component.GetType().FullName, componentIndex, propertyFound = false, propertyPath = check.PropertyPath, error = $"Serialized property '{check.PropertyPath}' was not found." };
+            }
+
+            string currentValue = DescribeProperty(property);
+            bool hasExpectedValue = check.ExpectedValue != null;
+            bool valueMatches = !hasExpectedValue || SerializedPropertyValueMatches(property, currentValue, check.ExpectedValue);
+            passed = valueMatches;
+            return new
+            {
+                label,
+                targetPath,
+                hierarchyPath = UiDiagnosticsHelper.GetHierarchyPath(targetTransform),
+                targetObjectId = UnityApiAdapter.GetObjectIdOrZero(targetTransform.gameObject),
+                componentType = component.GetType().FullName,
+                componentId = UnityApiAdapter.GetObjectIdOrZero(component),
+                componentIndex,
+                propertyPath = check.PropertyPath,
+                propertyType = property.propertyType.ToString(),
+                propertyFound = true,
+                currentValue,
+                expectedValue = hasExpectedValue ? check.ExpectedValue : null,
+                hasExpectedValue,
+                valueMatches,
+                passed
+            };
+        }
+
+        static bool SerializedPropertyValueMatches(SerializedProperty property, string currentValue, JToken expectedValue)
+        {
+            if (expectedValue == null)
+                return true;
+
+            string expectedText = expectedValue.Type == JTokenType.String
+                ? expectedValue.Value<string>()
+                : expectedValue.ToString(Newtonsoft.Json.Formatting.None);
+
+            if (string.Equals(currentValue, expectedText, StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            return property.propertyType switch
+            {
+                SerializedPropertyType.Boolean => expectedValue.Type == JTokenType.Boolean && property.boolValue == expectedValue.Value<bool>(),
+                SerializedPropertyType.Integer => expectedValue.Type == JTokenType.Integer && property.intValue == expectedValue.Value<int>(),
+                SerializedPropertyType.Float => expectedValue.Type is JTokenType.Float or JTokenType.Integer && Mathf.Approximately(property.floatValue, expectedValue.Value<float>()),
+                SerializedPropertyType.String => string.Equals(property.stringValue ?? string.Empty, expectedText ?? string.Empty, StringComparison.Ordinal),
+                SerializedPropertyType.ObjectReference => string.Equals(
+                    property.objectReferenceValue != null ? AssetDatabase.GetAssetPath(property.objectReferenceValue) : "null",
+                    SanitizeAssetPath(expectedText),
+                    StringComparison.OrdinalIgnoreCase),
+                _ => false
+            };
         }
 
         static object ApplyAssignment(

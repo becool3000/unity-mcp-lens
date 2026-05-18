@@ -68,6 +68,9 @@ namespace Becool.UnityMcpLens.Editor.Tools.Parameters
         [McpDescription("Delay after queueing input before reading observed state.", Required = false)]
         public int SettleMs { get; set; } = 100;
 
+        [McpDescription("Pixel/control tolerance for proving observed Mouse.current state matches the queued position, button, and scroll.", Required = false)]
+        public float ObservationTolerance { get; set; } = 2f;
+
         [McpDescription("Optional UI root scope for raycast evidence.", Required = false)]
         public string UiTarget { get; set; }
 

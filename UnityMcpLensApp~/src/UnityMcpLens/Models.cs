@@ -20,6 +20,9 @@ sealed class BridgeStatusFile
     [JsonPropertyName("expected_recovery")]
     public bool ExpectedRecovery { get; set; }
 
+    [JsonPropertyName("expected_recovery_expires_utc")]
+    public string? ExpectedRecoveryExpiresUtc { get; set; }
+
     [JsonPropertyName("project_path")]
     public string? ProjectPath { get; set; }
 

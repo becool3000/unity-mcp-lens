@@ -26,7 +26,7 @@ Default assumption going forward:
 - Prefer `Unity.PlayMode.StepVerifier` for smoke checks that need Play Mode. Its default is paused stepping; do not allow free-running wall-clock simulation unless the user explicitly needs it.
 - Prefer `Unity.Workflow.SelectPackThroughMainMenu` when FallingSands pack selection must go through the real Main Menu UI. It clicks the pack button through runtime UI tools and verifies the active runtime pack without `Unity.RunCommand`.
 - Treat console deltas as the pass/fail surface: new errors fail, stale errors/warnings are context unless the task asks to clean them up.
-- Prefer `Unity.Editor.RecoverFromHang` with `diagnoseOnly=true` before any recovery action. Do not kill, restart, or clean scratch artifacts without explicit user permission.
+- Prefer `Unity.Editor.RecoverFromHang` with `diagnoseOnly=true` before any recovery action. On Windows, use `scripts/Recover-UnityEditorSession.ps1 -DiagnoseOnly` for the safe first pass; run it without `-DiagnoseOnly` only when a stale, missing, or unresponsive editor session should be restarted and reacquired. Do not kill, restart, or clean scratch artifacts without explicit user permission.
 - Prefer `Unity.Workflow.RunGpuSimulationProbe` for FallingSands garden-style deterministic GPU checks instead of ad hoc `Unity.RunCommand`.
 - Prefer `Unity.Workflow.VerifyRuntimePackSelection` after pack selection, scene reload, or static-state reset when a smoke check depends on a specific runtime pack.
 - Use `Unity.RunCommand` preflight/risk labels before risky snippets and favor existing Lens workflow tools when they cover the task.
@@ -60,6 +60,8 @@ For covered GameObject workflows, prefer the split Phase 8 tools over `Unity.Man
 - Lifecycle: `Unity.GameObject.PreviewCreate`, `Unity.GameObject.Create`, `Unity.GameObject.PreviewDelete`, `Unity.GameObject.Delete`
 - Scene authoring templates: use `objectKind=empty`, `primitive`, `camera`, `light`, `canvas`, or `eventSystem` instead of generating setup scripts.
 - Legacy fallback: use `Unity.ManageGameObject` only for compatibility paths or uncovered behavior.
+- Dogfood/regression helper: use `scripts/Test-UnitySplitGameObjectWorkflow.ps1` on Windows or `scripts/Test-UnitySplitGameObjectWorkflow.js` on macOS/Linux to exercise split create, inspect, change, component, stable-path, and cleanup flows through `Invoke-UnityMcpBatch`.
+- UI/binding regression helper: use `scripts/Test-UnityUiSceneBindingWorkflow.ps1` on Windows or `scripts/Test-UnityUiSceneBindingWorkflow.js` on macOS/Linux with project-specific fixture JSON to batch Phase 12 UI hierarchy, scene binding, layout, and screen-layout verification steps without custom `Unity_RunCommand`.
 
 With `foundation` plus `scene` active, the current scene baseline exports `50` tools. Keep `foundation` as the default and activate `scene` only when scene/GameObject work is needed.
 
@@ -70,6 +72,7 @@ For package/import/Input System and active input handler work, prefer the Phase 
 or YAML edits.
 
 - Diagnostics: `Unity.InputSystem.Diagnostics`
+- Import side effects: `Unity.Project.DiagnoseImportSideEffects`
 - Package compatibility: `Unity.Project.PackageCompatibility`
 - Input actions asset inspection: `Unity.InputActions.InspectAsset`
 - Preview backend changes: `Unity.ProjectSettings.PreviewActiveInputHandler`
@@ -84,7 +87,7 @@ Use the Phase 1-6 authoring surfaces as the first path for durable work:
 
 - Scene authoring: `Unity.GameObject.PreviewCreate`/`Create`, object/change/component preview/apply tools, `Unity.Scene.SetSerializedProperties`, `Unity.Scene.PreviewAssignObjectReferences`, `Unity.Scene.ApplyAssignObjectReferences`, `Unity.Scene.GetDirtyState`, and `Unity.Scene.Save`.
 - Component reuse: `Unity.Component.Search`, `Unity.Component.ResolveCapability`, `Unity.Component.InspectSchema`, `Unity.Scene.FindComponents`, and `Unity.Authoring.SuggestReusePlan`.
-- Prefabs and overrides: `Unity.Prefab.Inspect`, `Unity.Prefab.Instantiate`, `Unity.Prefab.CreateFromSceneObject`, `Unity.Prefab.GetOverrides`, selected preview/apply or preview/revert override tools, and `Unity.Prefab.SetSerializedProperties`.
+- Prefabs and overrides: `Unity.Prefab.Inspect`, `Unity.Prefab.Instantiate`, `Unity.Prefab.CreateFromSceneObject`, `Unity.Prefab.GetOverrides`, selected preview/apply or preview/revert override tools, `Unity.Prefab.SetSerializedProperties`, and `Unity.Prefab.VerifySerializedProperties`.
 - Presets and copy-from-existing: `Unity.Preset.Search`, `Unity.Preset.Inspect`, `Unity.Preset.PreviewCreate`/`Create` for reusable component preset assets, preset preview/apply tools, and scene/prefab component serialized-value copy tools with explicit `referencePolicy`.
 - Package capabilities: `Unity.Package.ResolveCapability` and `Unity.Package.PreviewInstallForCapability`; installation remains preview-only until the user explicitly approves.
 - Workflow wrappers: `Unity.Workflow.AuthorSceneObject`, `Unity.Workflow.AuthorPrefab`, `Unity.Workflow.ConfigureExistingComponent`, and `Unity.Workflow.RunPlayModeVerification` when a higher-level authoring flow is useful. These wrappers still preserve discovery, preview/apply, dirty-state, and verification evidence.
@@ -109,6 +112,8 @@ Use the Phase 1-6 authoring surfaces as the first path for durable work:
    - If `DirectHealthProbe.TransportFailure=true` and helper health is not ready, follow bridge recovery and stop editor-facing work.
    - Default output is compact and operator-focused. Use `-IncludeDiagnostics` only for explicit maintenance.
 4. If the bridge is unhealthy, follow [$unity-mcp-bridge](../unity-mcp-bridge/SKILL.md) recovery and stop editor-facing work.
+   - On Windows, use `scripts/Recover-UnityEditorSession.ps1 -DiagnoseOnly` to collect recovery diagnostics. Use `scripts/Recover-UnityEditorSession.ps1` only after restart is acceptable; add `-AllowKillUnity` only when the stale or hung Unity PID is confirmed.
+   - The recovery helper wraps `Unity.Editor.RecoverFromHang`, then waits for Lens to reacquire a stable editor before reporting success.
 5. Before real Unity work, keep the exported tool surface narrow:
    - start in `foundation`
    - use `Unity.ListToolPacks` to inspect available packs
@@ -181,7 +186,7 @@ Use the Phase 1-6 authoring surfaces as the first path for durable work:
    - save the scene through `Unity.Scene.Save` only when the user has accepted the durable edit or explicitly requested persistence
    - verify the subtree exists on disk before removing or disabling fallback creation
 21. For deterministic sprite importer and binding changes, prefer `Unity.Asset.PreviewImportSpriteSheetAndBind`, `Unity.Asset.ApplyImportSpriteSheetAndBind`, and `Unity.Asset.VerifySpriteArrayBinding`; use importer helper scripts only when the native tool surface is unavailable.
-22. For narrow prefab field verification after a sprite or property mutation, prefer `Unity.Prefab.Inspect`, `Unity.Prefab.GetOverrides`, and prefab serialized-property tools; use `scripts/Verify-UnityPrefabSerializedFields.ps1` as a helper fallback.
+22. For narrow prefab field verification after a sprite or property mutation, prefer `Unity.Prefab.VerifySerializedProperties`, `Unity.Prefab.Inspect`, `Unity.Prefab.GetOverrides`, and prefab serialized-property tools; use `scripts/Verify-UnityPrefabSerializedFields.ps1` as a helper fallback.
 23. For runtime visual ownership inspection, use `scripts/Get-UnityVisualOwnership.ps1`, which wraps `Unity.Runtime.GetVisualBoundsSnapshot` with ownership output enabled.
 24. For scene object-reference fields or arrays that should bind to authored scene objects, prefer `Unity.Scene.PreviewAssignObjectReferences` and `Unity.Scene.ApplyAssignObjectReferences`; use `scripts/Bind-UnitySceneSerializedReferences.ps1` only as a helper fallback.
 25. For persistent scene UI subtree repair or creation, prefer `Unity.UI.PreviewEnsureHierarchy` and `Unity.UI.ApplyEnsureHierarchy`; use `scripts/Ensure-UnityUiHierarchy.ps1` only as a helper fallback.
@@ -190,6 +195,8 @@ Use the Phase 1-6 authoring surfaces as the first path for durable work:
    - Keep strict `right_of`, `left_of`, `above`, and `below` for non-overlap rect semantics.
    - Use `right_of_center`, `left_of_center`, `above_center`, or `below_center` for “visually higher/lower within the same card” cases such as count labels inside HUD slots.
 28. For repeated smoke/workflow sequences, use `scripts/Invoke-UnityMcpBatch.js` or `scripts/Invoke-UnityMcpBatch.ps1` with an ordered JSON step list. Keep per-step outputs compact and read `detailRef` only when the passing summary is insufficient. On Windows, prefer `-StepsPath` for hand-written or multi-line JSON; `-StepsJson` is mainly for generated single-string payloads.
+   - For scene split-tool dogfood, use `scripts/Test-UnitySplitGameObjectWorkflow.ps1` on Windows or `scripts/Test-UnitySplitGameObjectWorkflow.js` on macOS/Linux; pass `-KeepObject`/`--KeepObject` only when you want to inspect the authored object afterward.
+   - For Phase 12 UI/scene-binding dogfood, use `scripts/Test-UnityUiSceneBindingWorkflow.ps1` on Windows or `scripts/Test-UnityUiSceneBindingWorkflow.js` on macOS/Linux with fixture JSON. Add `-Apply`/`--Apply` only for accepted no-op or intentional mutation fixtures.
 29. If a `Unity_RunCommand` starts a long WebGL build on Windows, pass `-MonitorBuildMode WebGL` plus any known output/report/artifact paths so the PowerShell helper can fall back to passive log/disk monitoring when MCP stdout becomes unreliable. On macOS/Linux, launch the build with the JS helper, then use the session check build monitor and `Editor.log` while the build is active.
 30. For autoplay or scripted validation, use `scripts/Run-UnityAutoplayPlaytest.ps1`.
 31. For screenshots, use `Unity.UI.CaptureGameView` when you need direct Game view evidence with play-state, camera/canvas, Game view size, console-delta, and timeout diagnostics. Use `scripts/Capture-UnityPlaytestArtifacts.js` on macOS/Linux or `scripts/Capture-UnityPlaytestArtifacts.ps1` on Windows for broader artifact capture with fallback paths.
@@ -256,6 +263,7 @@ Prefer a scene-owned debugger component when a project needs fast UI or state it
 - `Verify-UnityUiScreenLayout.ps1` requires JSON arrays, for example: `-TargetsJson '[{"key":"hud","target":"HUD Canvas","searchMethod":"by_name"}]' -AssertionsJson '[{"type":"inside_screen","targetKey":"hud","margin":0}]'`
 - Prefer `Unity.Bridge.ListConnections` for wrong-project or stale-status diagnosis before retrying project-wide reads
 - If `Unity.Bridge.ListConnections` shows stale duplicate status files, trust the selected fresh connection/project/PID first and keep stale candidates only as recovery evidence.
+- Use `Recover-UnityEditorSession.ps1 -DiagnoseOnly` before any restart attempt; a non-diagnose run is for stale/missing/unresponsive editor recovery and must reacquire stable Lens health before follow-up Unity work.
 - Prefer `Unity.Object.ResolveStablePath` before reusing a hierarchy path across scene, runtime, and UI tools; use its `stableId` or `indexedPath` when duplicate sibling names make plain paths ambiguous.
 - Prefer `Unity.Asset.SetSerializedProperties` for ScriptableObject/data asset scalar and object-reference binding
 - Prefer `Unity.Runtime.QueryObjects` for play-mode component counts and sample paths

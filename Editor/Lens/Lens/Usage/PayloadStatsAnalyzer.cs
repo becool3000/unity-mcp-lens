@@ -409,6 +409,7 @@ namespace Becool.UnityMcpLens.Editor.Lens.Usage
                         .ToList()
                 },
                 TsamCoverage = CreateTsamCoverage(scopedRows, maxItems),
+                TsamToolGroupCount = CountTsamToolGroups(scopedRows),
                 FailureClasses = CreateFailureClasses(scopedRows, maxItems),
                 LargestEntries = payloadRows
                     .OrderByDescending(row => row.RawBytes)
@@ -479,6 +480,14 @@ namespace Becool.UnityMcpLens.Editor.Lens.Usage
                 .ToList();
         }
 
+        static int CountTsamToolGroups(IReadOnlyList<PayloadRow> rows)
+        {
+            return rows?
+                .Where(IsTsamStageRow)
+                .GroupBy(row => $"{ResolveTsamToolName(row)}|{ResolveTsamAction(row)}")
+                .Count() ?? 0;
+        }
+
         static List<FailureClassRow> CreateFailureClasses(IReadOnlyList<PayloadRow> rows, int maxItems)
         {
             return rows
@@ -518,10 +527,25 @@ namespace Becool.UnityMcpLens.Editor.Lens.Usage
 
             if ((report.PackSetTransitions?.Count ?? 0) > 2)
             {
-                findings.Add(new UsageFindingRow("pack_churn", "info", $"Scope contains {report.PackSetTransitions.Count} pack-set transitions."));
                 int staticRestoreCount = report.PackSetTransitions.Count(row =>
                     string.Equals(row.ToolSurfaceMode, "static_all", StringComparison.OrdinalIgnoreCase) &&
                     string.Equals(row.SetToolPacksReason, "static_all_restore", StringComparison.OrdinalIgnoreCase));
+                int operationalCount = report.PackSetTransitions.Count - staticRestoreCount;
+                if (operationalCount > 0)
+                {
+                    findings.Add(new UsageFindingRow(
+                        "pack_churn",
+                        "info",
+                        $"Scope contains {operationalCount} operational pack-set transition row(s) plus {staticRestoreCount} static_all restore row(s)."));
+                }
+                else
+                {
+                    findings.Add(new UsageFindingRow(
+                        "pack_restore_noise_only",
+                        "info",
+                        $"Scope contains {staticRestoreCount} static_all restore row(s) and no operational pack-set transitions."));
+                }
+
                 if (staticRestoreCount > 0)
                     findings.Add(new UsageFindingRow("static_all_restore_churn", "info", $"{staticRestoreCount} pack-set transition row(s) are static_all startup restore, not Unity.SetToolPacks no-op calls."));
             }
@@ -606,6 +630,9 @@ namespace Becool.UnityMcpLens.Editor.Lens.Usage
             if (row == null)
                 return false;
 
+            if (IsTsamStageRow(row))
+                return true;
+
             if (!string.IsNullOrWhiteSpace(row.Stage) && row.Stage.StartsWith("coverage_", StringComparison.Ordinal))
                 return true;
 
@@ -618,8 +645,20 @@ namespace Becool.UnityMcpLens.Editor.Lens.Usage
             if (row == null)
                 return false;
 
+            if (!IsTsamStageName(row.Stage))
+                return false;
+
             return string.Equals(row.EventKind, "tool_tsam_stage", StringComparison.Ordinal) ||
+                string.Equals(row.EventKind, "coverage", StringComparison.Ordinal) ||
                 string.Equals(row.PayloadClass, "tool_timing", StringComparison.Ordinal);
+        }
+
+        static bool IsTsamStageName(string stage)
+        {
+            return string.Equals(stage, "normalization", StringComparison.Ordinal) ||
+                string.Equals(stage, "service", StringComparison.Ordinal) ||
+                string.Equals(stage, "adapter", StringComparison.Ordinal) ||
+                string.Equals(stage, "result_shaping", StringComparison.Ordinal);
         }
 
         static string ResolveTsamToolName(PayloadRow row)
@@ -921,6 +960,16 @@ namespace Becool.UnityMcpLens.Editor.Lens.Usage
         static object CreatePackSetTransitionsCompact(PayloadStatsReport report)
         {
             var rows = report?.PackSetTransitions ?? new List<PackSetTransitionRow>();
+            var staticRestoreRows = rows
+                .Where(IsStaticAllRestoreTransition)
+                .ToList();
+            var operationalRows = rows
+                .Where(row => !IsStaticAllRestoreTransition(row))
+                .ToList();
+            var inlineRows = operationalRows
+                .Concat(staticRestoreRows.Take(Math.Min(2, Math.Max(0, k_TopCount - operationalRows.Count))))
+                .Take(k_TopCount)
+                .ToArray();
             object detailRef = null;
             if (rows.Count > k_TopCount)
             {
@@ -941,13 +990,15 @@ namespace Becool.UnityMcpLens.Editor.Lens.Usage
             return new
             {
                 count = rows.Count,
-                shown = Math.Min(rows.Count, k_TopCount),
-                omitted = Math.Max(0, rows.Count - k_TopCount),
+                shown = inlineRows.Length,
+                omitted = Math.Max(0, rows.Count - inlineRows.Length),
                 changedCount = rows.Count(row => !row.Unchanged),
                 unchangedCount = rows.Count(row => row.Unchanged),
-                staticAllRestoreCount = rows.Count(row =>
-                    string.Equals(row.ToolSurfaceMode, "static_all", StringComparison.OrdinalIgnoreCase) &&
-                    string.Equals(row.SetToolPacksReason, "static_all_restore", StringComparison.OrdinalIgnoreCase)),
+                operationalCount = operationalRows.Count,
+                operationalResponseBytes = operationalRows.Sum(row => row.ResponseBytes),
+                staticAllRestoreCount = staticRestoreRows.Count,
+                staticAllRestoreResponseBytes = staticRestoreRows.Sum(row => row.ResponseBytes),
+                staticAllRestorePct = rows.Count == 0 ? 0d : Math.Round((staticRestoreRows.Count / (double)rows.Count) * 100d, 2),
                 totalResponseBytes = rows.Sum(row => row.ResponseBytes),
                 byReason = rows
                     .GroupBy(row => string.IsNullOrWhiteSpace(row.SetToolPacksReason) ? "(none)" : row.SetToolPacksReason)
@@ -973,10 +1024,18 @@ namespace Becool.UnityMcpLens.Editor.Lens.Usage
                         responseBytes = group.Sum(row => row.ResponseBytes)
                     })
                     .ToArray(),
-                topTransitions = rows.Take(k_TopCount).ToArray(),
+                topTransitions = inlineRows,
+                topTransitionPolicy = "operational_first_static_all_restore_sample",
                 detailAvailable = detailRef != null,
                 detailRef
             };
+        }
+
+        static bool IsStaticAllRestoreTransition(PackSetTransitionRow row)
+        {
+            return row != null &&
+                string.Equals(row.ToolSurfaceMode, "static_all", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(row.SetToolPacksReason, "static_all_restore", StringComparison.OrdinalIgnoreCase);
         }
 
         static object CreateTsamCoverageSummary(PayloadStatsReport report)
@@ -987,7 +1046,10 @@ namespace Becool.UnityMcpLens.Editor.Lens.Usage
             {
                 coverageRows = report?.CoverageEntryCount ?? 0,
                 tsamStageRows = stageRows,
-                toolCount = rows.Count,
+                toolCount = report?.TsamToolGroupCount ?? rows.Count,
+                shown = rows.Count,
+                omitted = Math.Max(0, (report?.TsamToolGroupCount ?? 0) - rows.Count),
+                totalToolGroups = report?.TsamToolGroupCount ?? rows.Count,
                 completeToolCount = rows.Count(row =>
                     row.NormalizationRows == row.OperationCount &&
                     row.ServiceRows == row.OperationCount &&
@@ -1246,6 +1308,7 @@ namespace Becool.UnityMcpLens.Editor.Lens.Usage
         public List<RunSummaryRow> RunSummaries { get; set; }
         public LatencyReport Latency { get; set; }
         public List<TsamCoverageRow> TsamCoverage { get; set; }
+        public int TsamToolGroupCount { get; set; }
         public List<FailureClassRow> FailureClasses { get; set; }
         public List<PayloadEntrySummaryRow> LargestEntries { get; set; }
         public List<UsageFindingRow> Findings { get; set; }

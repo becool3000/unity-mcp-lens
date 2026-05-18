@@ -84,10 +84,33 @@ namespace Becool.UnityMcpLens.Editor.Adapters.Unity.Assets
                 request.OffsetX,
                 request.OffsetY,
                 spriteNamePrefix);
+            object textureDimensions = DescribeTextureDimensions(importer, texture);
+            object frameFit = DescribeFrameFit(
+                texture.width,
+                texture.height,
+                request.FrameCount,
+                request.FrameWidth,
+                request.FrameHeight,
+                request.PaddingX,
+                request.PaddingY,
+                request.OffsetX,
+                request.OffsetY,
+                plannedMetadata.Length);
 
             if (plannedMetadata.Length < request.FrameCount)
             {
                 error = $"Requested {request.FrameCount} frame(s), but only {plannedMetadata.Length} fit inside '{assetPath}' ({texture.width}x{texture.height}).";
+                data = new
+                {
+                    errorKind = "frame_fit_failed",
+                    assetPath,
+                    textureGuid = AssetDatabase.AssetPathToGUID(assetPath),
+                    textureName = texture.name,
+                    textureSize = new { width = texture.width, height = texture.height },
+                    textureDimensions,
+                    requestedFrame = DescribeRequestedFrame(request),
+                    frameFit
+                };
                 return false;
             }
 
@@ -214,6 +237,9 @@ namespace Becool.UnityMcpLens.Editor.Adapters.Unity.Assets
                 textureGuid = AssetDatabase.AssetPathToGUID(assetPath),
                 textureName = texture.name,
                 textureSize = new { width = texture.width, height = texture.height },
+                textureDimensions,
+                requestedFrame = DescribeRequestedFrame(request),
+                frameFit,
                 targetAssetPath,
                 targetAssetGuid = AssetDatabase.AssetPathToGUID(targetAssetPath),
                 targetAssetType = targetAsset.GetType().FullName,
@@ -543,6 +569,102 @@ namespace Becool.UnityMcpLens.Editor.Adapters.Unity.Assets
             }
 
             return metadata.ToArray();
+        }
+
+        static object DescribeRequestedFrame(AssetSpriteSheetAndBindRequest request)
+        {
+            return new
+            {
+                count = request.FrameCount,
+                width = request.FrameWidth,
+                height = request.FrameHeight,
+                paddingX = request.PaddingX,
+                paddingY = request.PaddingY,
+                offsetX = request.OffsetX,
+                offsetY = request.OffsetY
+            };
+        }
+
+        static object DescribeFrameFit(
+            int textureWidth,
+            int textureHeight,
+            int frameCount,
+            int frameWidth,
+            int frameHeight,
+            int paddingX,
+            int paddingY,
+            int offsetX,
+            int offsetY,
+            int plannedFrameCount)
+        {
+            int stepX = Math.Max(1, frameWidth + Math.Max(0, paddingX));
+            int stepY = Math.Max(1, frameHeight + Math.Max(0, paddingY));
+            int startX = Math.Max(0, offsetX);
+            int startY = textureHeight - Math.Max(0, offsetY) - frameHeight;
+            int columns = startX + frameWidth <= textureWidth
+                ? ((textureWidth - startX - frameWidth) / stepX) + 1
+                : 0;
+            int rows = startY >= 0
+                ? (startY / stepY) + 1
+                : 0;
+            int capacity = Math.Max(0, columns) * Math.Max(0, rows);
+
+            return new
+            {
+                requestedCount = frameCount,
+                plannedCount = plannedFrameCount,
+                fitsRequested = plannedFrameCount >= frameCount,
+                capacity,
+                columns = Math.Max(0, columns),
+                rows = Math.Max(0, rows),
+                step = new { x = stepX, y = stepY },
+                start = new { x = startX, y = startY },
+                importedTextureSize = new { width = textureWidth, height = textureHeight }
+            };
+        }
+
+        static object DescribeTextureDimensions(TextureImporter importer, Texture2D texture)
+        {
+            int? sourceWidth = null;
+            int? sourceHeight = null;
+            try
+            {
+                MethodInfo method = typeof(TextureImporter).GetMethod(
+                    "GetSourceTextureWidthAndHeight",
+                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (method != null)
+                {
+                    object[] args = { 0, 0 };
+                    method.Invoke(importer, args);
+                    sourceWidth = Convert.ToInt32(args[0]);
+                    sourceHeight = Convert.ToInt32(args[1]);
+                }
+            }
+            catch
+            {
+                sourceWidth = null;
+                sourceHeight = null;
+            }
+
+            bool sourceAvailable = sourceWidth.HasValue && sourceHeight.HasValue && sourceWidth.Value > 0 && sourceHeight.Value > 0;
+            bool importedMatchesSource = sourceAvailable &&
+                sourceWidth.Value == texture.width &&
+                sourceHeight.Value == texture.height;
+
+            return new
+            {
+                imported = new { width = texture.width, height = texture.height },
+                source = sourceAvailable ? new { width = sourceWidth.Value, height = sourceHeight.Value } : null,
+                sourceAvailable,
+                importedMatchesSource = sourceAvailable ? importedMatchesSource : (bool?)null,
+                sourceToImportedScale = sourceAvailable
+                    ? new
+                    {
+                        x = texture.width == 0 ? (double?)null : Math.Round((double)sourceWidth.Value / texture.width, 4),
+                        y = texture.height == 0 ? (double?)null : Math.Round((double)sourceHeight.Value / texture.height, 4)
+                    }
+                    : null
+            };
         }
 
         static Sprite[] LoadSprites(string assetPath)

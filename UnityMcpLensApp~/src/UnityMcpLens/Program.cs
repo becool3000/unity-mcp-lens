@@ -68,17 +68,20 @@ sealed class UnityMcpLensHost
         "Unity_Scene_PreviewAssignObjectReferences",
         "Unity_Scene_PreviewInstantiatePrefabAndBind",
         "Unity_Scene_PreviewCopyComponentSerializedValues",
+        "Unity_Scene_PreviewBulkMutation",
         "Unity_Scene_VerifySerializedReferences",
         "Unity_Scene_FindComponents",
         "Unity_Scene_GetDirtyState",
         "Unity_Asset_PreviewImportSpriteSheetAndBind",
         "Unity_Asset_VerifySpriteArrayBinding",
+        "Unity_Asset_SpriteSheetVisualDiagnostics",
         "Unity_Runtime_QueryObjects",
         "Unity_UI_Raycast",
         "Unity_Object_ResolveStablePath",
         "Unity_Asset_Search",
         "Unity_Object_ValidateReferences",
         "Unity_Project_ScanMissingScripts",
+        "Unity_Project_BlockedLanguageScan",
         "Unity_Project_GetInfo",
         "Unity_Project_GetPackages",
         "Unity_Profiler_Query",
@@ -129,6 +132,7 @@ sealed class UnityMcpLensHost
         "Unity_Scene_ApplyAssignObjectReferences",
         "Unity_Scene_Save",
         "Unity_Scene_ApplyCopyComponentSerializedValues",
+        "Unity_Scene_ApplyBulkMutation",
         "Unity_Editor_ScriptUpdatingConsentModal",
         "Unity_Editor_SyncScripts",
         "Unity_Editor_SetPlayMode",
@@ -260,6 +264,20 @@ sealed class UnityMcpLensHost
         public required bool EditorBusy { get; init; }
         public required bool UsableBridge { get; init; }
         public required TimeSpan Elapsed { get; init; }
+        public HostHealthRecoverySummary? Recovery { get; init; }
+    }
+
+    sealed class HostHealthRecoverySummary
+    {
+        public required bool Waited { get; init; }
+        public required bool Recovered { get; init; }
+        public required bool TimedOut { get; init; }
+        public required int AttemptCount { get; init; }
+        public required double WaitedMs { get; init; }
+        public required string InitialState { get; init; }
+        public required string FinalState { get; init; }
+        public required string Reason { get; init; }
+        public required string[] AttemptStates { get; init; }
     }
 
     sealed class RunCommandSafetyBypassResult
@@ -2024,16 +2042,20 @@ sealed class UnityMcpLensHost
         string[] quarantineIds = GetActiveQuarantineIds();
         Stopwatch stopwatch = Stopwatch.StartNew();
 
-        Task<HostHealthEvaluation> scanTask = Task.Run(() => BuildHostHealthEvaluation(
-            projectPathHint,
-            requireProjectMatch,
-            quarantineIds,
-            stopwatch));
-        Task timeoutTask = Task.Delay(timeoutMs, cancellationToken);
-        Task completedTask = await Task.WhenAny(scanTask, timeoutTask).ConfigureAwait(false);
-        if (completedTask != scanTask)
+        HostHealthEvaluation evaluation;
+        try
         {
-            string reason = $"File-backed Unity health scan exceeded {timeoutMs}ms.";
+            evaluation = await BuildHostHealthEvaluationWithRetriesAsync(
+                projectPathHint,
+                requireProjectMatch,
+                quarantineIds,
+                stopwatch,
+                timeoutMs,
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch (TimeoutException ex)
+        {
+            string reason = ex.Message;
             RecordSessionFailure("health_check_timeout", reason, unsafeSession: true);
             HostStopContract timeoutContract = CreateStopContract(
                 "unity_alive_stale_unresponsive",
@@ -2056,12 +2078,6 @@ sealed class UnityMcpLensHost
                     elapsedMs = stopwatch.ElapsedMilliseconds,
                     sessionSafety = CreateSessionSafetyDiagnostics()
                 });
-        }
-
-        HostHealthEvaluation evaluation;
-        try
-        {
-            evaluation = await scanTask.ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -2095,6 +2111,64 @@ sealed class UnityMcpLensHost
         return CreateHealthCheckFastPayload(evaluation, includeCandidates, maxEntries, timeoutMs);
     }
 
+    async Task<HostHealthEvaluation> BuildHostHealthEvaluationWithRetriesAsync(
+        string projectPathHint,
+        bool requireProjectMatch,
+        IReadOnlyCollection<string>? quarantineIds,
+        Stopwatch stopwatch,
+        int timeoutMs,
+        CancellationToken cancellationToken)
+    {
+        DateTime deadlineUtc = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+        var attempts = new List<HostHealthEvaluation>();
+
+        while (true)
+        {
+            int remainingMs = (int)Math.Max(1d, (deadlineUtc - DateTime.UtcNow).TotalMilliseconds);
+            HostHealthEvaluation evaluation = await BuildHostHealthEvaluationWithinTimeoutAsync(
+                projectPathHint,
+                requireProjectMatch,
+                quarantineIds,
+                stopwatch,
+                remainingMs,
+                cancellationToken).ConfigureAwait(false);
+            attempts.Add(evaluation);
+
+            if (!ShouldRetryHealthEvaluation(evaluation))
+                return AttachHealthRecoverySummaryIfNeeded(evaluation, attempts, stopwatch, timedOut: false);
+
+            TimeSpan remaining = deadlineUtc - DateTime.UtcNow;
+            if (remaining <= s_BridgeDiscoveryReloadRetryPollInterval)
+                return AttachHealthRecoverySummaryIfNeeded(evaluation, attempts, stopwatch, timedOut: true);
+
+            int delayMs = (int)Math.Min(
+                s_BridgeDiscoveryReloadRetryPollInterval.TotalMilliseconds,
+                Math.Max(1d, remaining.TotalMilliseconds));
+            await Task.Delay(delayMs, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    async Task<HostHealthEvaluation> BuildHostHealthEvaluationWithinTimeoutAsync(
+        string projectPathHint,
+        bool requireProjectMatch,
+        IReadOnlyCollection<string>? quarantineIds,
+        Stopwatch stopwatch,
+        int timeoutMs,
+        CancellationToken cancellationToken)
+    {
+        Task<HostHealthEvaluation> scanTask = Task.Run(() => BuildHostHealthEvaluation(
+            projectPathHint,
+            requireProjectMatch,
+            quarantineIds,
+            stopwatch), cancellationToken);
+        Task timeoutTask = Task.Delay(timeoutMs, cancellationToken);
+        Task completedTask = await Task.WhenAny(scanTask, timeoutTask).ConfigureAwait(false);
+        if (completedTask != scanTask)
+            throw new TimeoutException($"File-backed Unity health scan exceeded {timeoutMs}ms.");
+
+        return await scanTask.ConfigureAwait(false);
+    }
+
     HostHealthEvaluation BuildHostHealthEvaluation(
         string projectPathHint,
         bool requireProjectMatch,
@@ -2118,6 +2192,74 @@ sealed class UnityMcpLensHost
             EditorBusy = editorBusy,
             UsableBridge = usableBridge,
             Elapsed = stopwatch.Elapsed
+        };
+    }
+
+    static bool ShouldRetryHealthEvaluation(HostHealthEvaluation evaluation)
+    {
+        if (evaluation.Contract.SafeToContinue)
+            return false;
+        if (evaluation.Contract.UserActionRequired || evaluation.Contract.AgentShouldStop)
+            return false;
+        if (HasActiveRecoveryCandidate(evaluation.Snapshot))
+            return true;
+        if (evaluation.Contract.State is "editor_reloading" or "editor_busy_healthy" or "bridge_alive_no_editor_heartbeat")
+            return true;
+        if (string.Equals(evaluation.Contract.State, "bridge_unavailable", StringComparison.OrdinalIgnoreCase) &&
+            (evaluation.EditorHealth?.IsFresh == true ||
+                evaluation.Snapshot.EditorHealthCandidates.Any(candidate => candidate.IsFresh && !candidate.IsIgnoredMalformed)))
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    static bool HasActiveRecoveryCandidate(BridgeDiscoverySnapshot snapshot)
+    {
+        return snapshot.Candidates.Any(candidate => candidate.RecoveryActive);
+    }
+
+    static HostHealthEvaluation AttachHealthRecoverySummaryIfNeeded(
+        HostHealthEvaluation evaluation,
+        IReadOnlyList<HostHealthEvaluation> attempts,
+        Stopwatch stopwatch,
+        bool timedOut)
+    {
+        if (attempts.Count <= 1)
+            return evaluation;
+
+        HostHealthEvaluation first = attempts[0];
+        bool recovered = evaluation.Contract.SafeToContinue;
+        var recovery = new HostHealthRecoverySummary
+        {
+            Waited = true,
+            Recovered = recovered,
+            TimedOut = timedOut && !recovered,
+            AttemptCount = attempts.Count,
+            WaitedMs = Math.Round(stopwatch.Elapsed.TotalMilliseconds, 3),
+            InitialState = first.Contract.State,
+            FinalState = evaluation.Contract.State,
+            Reason = recovered
+                ? "Health check waited through a transient reload/reconnect status and recovered a fresh bridge/editor pair."
+                : timedOut
+                    ? "Health check waited for transient reload/reconnect status to clear, but timed out before fresh ready status appeared."
+                    : "Health check retried transient reload/reconnect status and returned the latest non-retryable health state.",
+            AttemptStates = attempts
+                .Select(attempt => attempt.Contract.State)
+                .ToArray()
+        };
+
+        return new HostHealthEvaluation
+        {
+            Contract = evaluation.Contract,
+            Snapshot = evaluation.Snapshot,
+            SelectedBridge = evaluation.SelectedBridge,
+            EditorHealth = evaluation.EditorHealth,
+            EditorBusy = evaluation.EditorBusy,
+            UsableBridge = evaluation.UsableBridge,
+            Elapsed = evaluation.Elapsed,
+            Recovery = recovery
         };
     }
 
@@ -2225,19 +2367,6 @@ sealed class UnityMcpLensHost
                 reason: "Unity is heartbeating, but the editor is currently busy.");
         }
 
-        if (editorHealth is { IsFresh: true } && !usableBridge)
-        {
-            return CreateStopContract(
-                "bridge_unavailable",
-                safeToContinue: false,
-                agentShouldStop: IsRetryBudgetExhausted(),
-                userActionRequired: false,
-                recommendedNextAction: "Refresh or restart the Lens bridge, then rerun Unity.Editor.HealthCheckFast.",
-                safeNextActions: DefaultSafeRecoveryActions(),
-                unsafeNextActions: DefaultUnsafeUnityActions(),
-                reason: "Unity editor health is fresh, but no selectable bridge status is available.");
-        }
-
         if (selected is { IsFresh: true } && !editorBusy)
         {
             return CreateStopContract(
@@ -2249,6 +2378,32 @@ sealed class UnityMcpLensHost
                 safeNextActions: ["Proceed with needed Lens tools", "Unity.Bridge.ListConnections"],
                 unsafeNextActions: [],
                 reason: "Unity editor health and bridge heartbeat are fresh.");
+        }
+
+        if (HasActiveRecoveryCandidate(snapshot))
+        {
+            return CreateStopContract(
+                "editor_reloading",
+                safeToContinue: false,
+                agentShouldStop: false,
+                userActionRequired: false,
+                recommendedNextAction: "Wait for Unity script reload/reconnect status to clear, then rerun Unity.Editor.HealthCheckFast.",
+                safeNextActions: ["Unity.Editor.HealthCheckFast", "Unity.Bridge.ListConnections", "Open Command Center"],
+                unsafeNextActions: DefaultUnsafeUnityActions(),
+                reason: "A matching Lens bridge status file reports an active expected recovery window.");
+        }
+
+        if (editorHealth is { IsFresh: true } && !usableBridge)
+        {
+            return CreateStopContract(
+                "bridge_unavailable",
+                safeToContinue: false,
+                agentShouldStop: IsRetryBudgetExhausted(),
+                userActionRequired: false,
+                recommendedNextAction: "Refresh or restart the Lens bridge, then rerun Unity.Editor.HealthCheckFast.",
+                safeNextActions: DefaultSafeRecoveryActions(),
+                unsafeNextActions: DefaultUnsafeUnityActions(),
+                reason: "Unity editor health is fresh, but no selectable bridge status is available.");
         }
 
         return CreateStopContract(
@@ -2284,7 +2439,9 @@ sealed class UnityMcpLensHost
             : null;
 
         return CreateStopContractSuccessPayload(
-            "Unity editor health checked from file-backed status only.",
+            evaluation.Recovery?.Recovered == true
+                ? "Unity editor health checked from file-backed status only; waited through reload and recovered."
+                : "Unity editor health checked from file-backed status only.",
             contract,
             new
             {
@@ -2303,6 +2460,31 @@ sealed class UnityMcpLensHost
                 freshMalformedStatusCount = evaluation.Snapshot.FreshMalformedStatusCount,
                 ignoredMalformedStatusCount = evaluation.Snapshot.IgnoredMalformedStatusCount,
                 ignoredMalformedStatusFiles = evaluation.Snapshot.IgnoredMalformedStatusFiles.Take(maxEntries).ToArray(),
+                reloadRecovery = evaluation.Recovery == null
+                    ? new
+                    {
+                        waited = false,
+                        recovered = false,
+                        timedOut = false,
+                        attemptCount = 1,
+                        waitedMs = 0d,
+                        initialState = contract.State,
+                        finalState = contract.State,
+                        reason = "No transient reload/reconnect retry was needed.",
+                        attemptStates = new[] { contract.State }
+                    }
+                    : new
+                    {
+                        waited = evaluation.Recovery.Waited,
+                        recovered = evaluation.Recovery.Recovered,
+                        timedOut = evaluation.Recovery.TimedOut,
+                        attemptCount = evaluation.Recovery.AttemptCount,
+                        waitedMs = evaluation.Recovery.WaitedMs,
+                        initialState = evaluation.Recovery.InitialState,
+                        finalState = evaluation.Recovery.FinalState,
+                        reason = evaluation.Recovery.Reason,
+                        attemptStates = evaluation.Recovery.AttemptStates
+                    },
                 sessionSafety = CreateSessionSafetyDiagnostics(),
                 candidates
             });
@@ -6133,6 +6315,9 @@ sealed class UnityMcpLensHost
             editorPidAlive = result.EditorPidAlive,
             fresh = result.IsFresh,
             basicHealth = result.BasicHealth,
+            expectedRecovery = result.ExpectedRecovery,
+            expectedRecoveryExpiresUtc = result.ExpectedRecoveryExpiresUtc == DateTime.MinValue ? null : result.ExpectedRecoveryExpiresUtc.ToString("O"),
+            recoveryActive = result.RecoveryActive,
             editorHealthMatchQuality = result.EditorHealthMatchQuality,
             editorHealthBridgePidMatch = result.EditorHealthBridgePidMatch,
             editorHealth = result.EditorHealth == null ? null : CreateEditorHealthDiagnostics(result.EditorHealth),
@@ -6157,6 +6342,9 @@ sealed class UnityMcpLensHost
             editorPidAlive = candidate.EditorPidAlive,
             fresh = candidate.IsFresh,
             basicHealth = candidate.BasicHealth,
+            expectedRecovery = candidate.ExpectedRecovery,
+            expectedRecoveryExpiresUtc = candidate.ExpectedRecoveryExpiresUtc == DateTime.MinValue ? null : candidate.ExpectedRecoveryExpiresUtc.ToString("O"),
+            recoveryActive = candidate.RecoveryActive,
             editorHealthMatchQuality = candidate.EditorHealthMatchQuality,
             editorHealthBridgePidMatch = candidate.EditorHealthBridgePidMatch,
             ignoredMalformed = candidate.IsIgnoredMalformed,

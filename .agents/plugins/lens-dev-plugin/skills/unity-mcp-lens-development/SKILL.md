@@ -30,7 +30,7 @@ Do not edit installed Codex cache copies or standalone `$CODEX_HOME/skills` copi
 - `Unity.RunCommand` should use preflight/risk labels for risky snippets and a hard watchdog for execution.
 - `Unity.PlayMode.StepVerifier` is the default safe play-mode primitive. It should enter through the safe path, pause once runtime is observable, step exact counts, capture console deltas, and exit/restore state.
 - `Unity.Workflow.SelectPackThroughMainMenu` is the preferred FallingSands Main Menu pack-selection path. It should enter paused Play Mode, invoke the pack button through runtime UI tools, then verify the active runtime pack without `Unity.RunCommand` or direct pack selectors.
-- `Unity.Editor.RecoverFromHang` starts in `diagnoseOnly=true`; destructive options require explicit user args.
+- `Unity.Editor.RecoverFromHang` starts in `diagnoseOnly=true`; destructive options require explicit user args. On Windows, `Recover-UnityEditorSession.ps1` is the helper path for diagnose, restart, and Lens reacquire orchestration.
 - Status readers are non-destructive by default. Stale malformed files stay visible in diagnostics but must not poison a fresh matching bridge/editor-health pair.
 - Command Center is the Windows-first human UI for status, server refresh, settings, tool summaries, and explanations.
 
@@ -81,8 +81,8 @@ preset, package, and workflow authoring the default agent path.
 - Runtime temporary components are verification equipment only and must not save
   scenes, prefabs, or production assets.
 - Current metadata audit baselines are `foundation=18`, `foundation+scene=50`,
-  `foundation+ui=35`, `foundation+runtime=29`, `foundation+project=37`, and
-  `foundation+assets=47`.
+  `foundation+ui=35`, `foundation+runtime=29`, `foundation+project=38`, and
+  `foundation+assets=48`.
 
 ## Phase 8 Tool Truth
 
@@ -94,6 +94,7 @@ The current Phase 8 scene surface is the split GameObject TSAM surface, now exte
 - Prefer `Unity.Scene.PreviewAssignObjectReferences` and `Unity.Scene.ApplyAssignObjectReferences` over legacy serialized-reference binding aliases.
 - Use `Unity.Scene.GetDirtyState` after scene mutations and `Unity.Scene.Save` only on explicit save requests.
 - Keep `Unity.ManageGameObject` compatible as the legacy facade and fallback for uncovered behavior.
+- Use `Test-UnitySplitGameObjectWorkflow.ps1` on Windows or `Test-UnitySplitGameObjectWorkflow.js` on macOS/Linux as helper smokes for split GameObject create/inspect/change/component/stable-path/delete coverage before declaring scene-tool regressions.
 - Use `debug` plus `Unity.GetLensUsageReport` for telemetry baselines and appended-row smoke reporting.
 
 ## Phase 11 Project Tool Truth
@@ -105,7 +106,8 @@ The current Phase 11 project surface includes package/import/Input System diagno
 - Prefer `Unity.InputSystem.Diagnostics` for one-call Input System package, assembly, device, `.inputactions`, define, compatibility, and editor-log signals.
 - Prefer `Unity.ProjectSettings.PreviewActiveInputHandler` before changing the active input backend.
 - Use `Unity.ProjectSettings.SetActiveInputHandler` for editor-authored active input backend changes; do not hand-edit `ProjectSettings.asset` as the first path.
-- `foundation` now targets `18` tools, `foundation + scene` now targets `50` tools, `foundation + ui` now targets `35`, `foundation + runtime` targets `29`, and `foundation + project` now targets `37` tools.
+- `foundation` now targets `18` tools, `foundation + scene` now targets `50` tools, `foundation + ui` now targets `35`, `foundation + runtime` targets `29`, and `foundation + project` now targets `38` tools.
+- Prefer `Unity.Project.DiagnoseImportSideEffects` for read-only importer/dependency side-effect checks before reimporting assets or grepping logs.
 
 ## Phase 12 UI And Scene Binding Truth
 
@@ -116,6 +118,7 @@ The current Phase 12 authoring surface adds split UI hierarchy/layout preview/ap
 - Prefer `Unity.Scene.PreviewBindSerializedReferences` and `Unity.Scene.ApplyBindSerializedReferences` for scene object-reference fields and arrays before low-level `Unity.Scene.SetSerializedProperties`.
 - Prefer `Unity.UI.VerifyScreenLayout` for measured HUD/layout assertions instead of ad hoc screen-rect probes.
 - Keep `Unity.Scene.SetSerializedProperties` as the low-level fallback, not the first authoring path.
+- Use `Test-UnityUiSceneBindingWorkflow.ps1` on Windows or `Test-UnityUiSceneBindingWorkflow.js` on macOS/Linux as fixture-driven helper smokes for Phase 12 hierarchy/layout/binding/screen-layout coverage before falling back to custom editor probes.
 
 ## Phase 14 Payload And Batch Helper Truth
 
@@ -124,7 +127,7 @@ Phase 14 keeps the public tool surface stable and makes high-volume TSAM results
 - Compact default results are expected for `Unity.InputSystem.Diagnostics`, UI hierarchy preview/apply, scene serialized-reference binding preview/apply, and `Unity.UI.VerifyScreenLayout`.
 - Full bulky data should remain available through `detailRef` when the bridge detail store is available.
 - Use `Invoke-UnityMcpBatch` for focused smoke/workflow sequences that need multiple project/ui/scene/debug calls in one Lens session.
-- Pack baselines after the authoring-first workflow push: `foundation=18`, `foundation+scene=50`, `foundation+ui=35`, `foundation+runtime=29`, `foundation+project=37`, and `foundation+assets=47`.
+- Pack baselines after the authoring-first workflow push: `foundation=18`, `foundation+scene=50`, `foundation+ui=35`, `foundation+runtime=29`, `foundation+project=38`, and `foundation+assets=48`.
 - Current Phase 14 smoke baseline: `NoShapingRecorded=false`, `7` saving rows, `50,566` raw bytes -> `24,025` shaped bytes, `3` connections, `6` schema requests, and `4` pack transitions.
 
 ## Phase 15 RunCommand And Console Truth
@@ -145,6 +148,7 @@ Phase 16 moves the active long-running smoke host to `D:\TintPaint`.
 - Use `D:\TintPaint` for new focused smoke tests unless a task explicitly needs the older `D:\2DUnityNewGame` fixtures.
 - Metadata audit on TintPaint before Phase 17 passed with `foundation=12`, `foundation+scene=32`, `foundation+ui=22`, `project=21`, and `debug=22`; Phase 17 intentionally raises scene/ui and adds runtime.
 - `Check-UnityDevSession.ps1` should settle to `ProceedWithLensHelpers` after recoverable play/reload windows.
+- `Recover-UnityEditorSession.ps1 -DiagnoseOnly` is the safe first recovery pass; without `-DiagnoseOnly`, it wraps `Unity.Editor.RecoverFromHang` and waits for a stable reacquired editor. Use `-AllowKillUnity` only for a confirmed stale or hung Unity PID.
 - The batch helper now treats unwrapped `Unity.ReadDetailRef` structured payloads as successful steps.
 - Large detail-ref payloads should be summarized in batch output, not inlined by default.
 - `Unity.ManageEditor.WaitForStableEditor` should keep final stability state compact inline and store attempts/full editor state behind detail refs.
@@ -184,7 +188,7 @@ Phase 18 addresses the BeeSurvivors Roach BeeCool sprite-upgrade workflow.
 - Use `Unity.Asset.ApplyImportSpriteSheetAndBind` to persist importer metadata and ScriptableObject Sprite-array bindings after the preview plan is acceptable.
 - `Unity.Asset.ImportSpriteSheetAndBind` is a compatibility facade; it previews by default and applies only with `mode=apply` or `apply=true`.
 - Prefer `Unity.Asset.VerifySpriteArrayBinding` over custom `Unity.RunCommand` or YAML reads when verifying Sprite-array counts, names, texture names, or texture GUIDs.
-- The `assets` pack metadata-audit baseline is `foundation+assets=47`.
+- The `assets` pack metadata-audit baseline is `foundation+assets=48`.
 - Phase 18 asset tools must keep pass/fail and changed-count data inline while storing full importer metadata, sprite rows, and serialized-field readback behind `detailRef`.
 
 ## BeeSurvivors Reliability Follow-Up Truth
