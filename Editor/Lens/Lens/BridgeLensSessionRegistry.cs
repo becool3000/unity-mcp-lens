@@ -45,8 +45,38 @@ namespace Becool.UnityMcpLens.Editor.Lens
             string clientTitle,
             BridgeLensClientCapabilities capabilities)
         {
+            return RegisterOrUpdateConnection(
+                connectionId,
+                clientName,
+                clientVersion,
+                clientTitle,
+                capabilities,
+                null,
+                out _);
+        }
+
+        public static BridgeLensConnectionState RegisterOrUpdateConnection(
+            string connectionId,
+            string clientName,
+            string clientVersion,
+            string clientTitle,
+            BridgeLensClientCapabilities capabilities,
+            IEnumerable<string> requestedToolPacks,
+            out string error)
+        {
+            error = null;
             if (string.IsNullOrWhiteSpace(connectionId))
                 throw new ArgumentException("Connection ID cannot be empty.", nameof(connectionId));
+
+            string[] normalizedRequestedPacks = null;
+            var requestedPackArray = requestedToolPacks?
+                .Where(pack => !string.IsNullOrWhiteSpace(pack))
+                .ToArray();
+            if (requestedPackArray?.Length > 0)
+            {
+                if (!ToolPackCatalog.TryNormalizeSelection(requestedPackArray, out normalizedRequestedPacks, out error))
+                    return null;
+            }
 
             lock (s_Lock)
             {
@@ -55,9 +85,15 @@ namespace Becool.UnityMcpLens.Editor.Lens
                     state = new BridgeLensConnectionState
                     {
                         ConnectionId = connectionId,
-                        ActiveToolPacks = ToolPackCatalog.DefaultActivePacks
+                        ActiveToolPacks = normalizedRequestedPacks ?? ToolPackCatalog.DefaultActivePacks
                     };
                     s_States[connectionId] = state;
+                }
+                else if (normalizedRequestedPacks != null)
+                {
+                    var currentPacks = state.ActiveToolPacks ?? ToolPackCatalog.DefaultActivePacks;
+                    if (!currentPacks.SequenceEqual(normalizedRequestedPacks, StringComparer.OrdinalIgnoreCase))
+                        state.ActiveToolPacks = normalizedRequestedPacks;
                 }
 
                 state.ClientName = clientName;

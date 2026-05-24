@@ -1,6 +1,6 @@
 ---
 name: "unity-dev-assistant"
-description: "Lens Dev Plugin v0.1.6. Use when Codex is working in a Unity project and needs the full Unity development workflow: fast HealthCheckFirst status checks, Lens bridge-authoritative editor access, explicit tool-pack selection, compile-idle gating, safe paused StepVerifier play-mode checks, runtime probes, FallingSands Main Menu pack selection, FallingSands GPU probes, screenshot-assisted validation, or edit-mode versus play-mode ownership-drift diagnosis."
+description: "Lens Dev Plugin v0.1.7. Use when Codex is working in a Unity project and needs the full Unity development workflow: fast HealthCheckFirst status checks, Lens bridge-authoritative editor access, static_all tool-surface handling, Unity.Tools.List/Invoke/BatchInvoke client fallback facades, compile-idle gating, safe paused StepVerifier play-mode checks, runtime probes, FallingSands Main Menu pack selection, FallingSands GPU probes, screenshot-assisted validation, or edit-mode versus play-mode ownership-drift diagnosis."
 ---
 
 # Unity Dev Assistant
@@ -9,7 +9,7 @@ Use this as the primary Unity workflow skill. It depends on [$unity-mcp-bridge](
 
 ## Version Marker
 
-- Plugin guidance version: `Lens Dev Plugin v0.1.6`
+- Plugin guidance version: `Lens Dev Plugin v0.1.7`
 - Expected installed Lens host: `0.1.0-alpha.24` or newer
 - If Codex shows an older Lens Dev Plugin version, refresh the plugin cache from the repo-local source before trusting this skill's installed copy.
 
@@ -120,8 +120,8 @@ Use the Phase 1-6 authoring surfaces as the first path for durable work:
    - use `Unity.Tools.Menu` for compact pack-oriented navigation when it is available
    - use `Unity.SetToolPacks` only when the task truly needs a wider tool surface
    - keep at most two additional non-foundation packs active
-   - If `Unity.SetToolPacks` succeeds and `Unity.Tools.Describe` shows an active-pack tool but Codex still cannot call it, treat that as Codex client dynamic-indexing drift. Use the repo helper scripts or `Invoke-UnityMcpBatch` and report active packs, manifest/profile version, and the missing callable tool.
-   - If the host is launched with `UNITY_MCP_LENS_TOOL_SURFACE_MODE=static_all`, all enabled Lens tools are exposed natively up front; `Unity.SetToolPacks` is a compatibility no-op, so use `Unity.Tools.Menu` plus direct real tool calls instead of dynamic pack switching.
+   - If `Unity.SetToolPacks` succeeds and `Unity.Tools.Describe` shows an active-pack tool but Codex still cannot call it directly, treat that as Codex client dynamic-indexing drift. Use `Unity.Tools.List` to confirm the host-visible canonical name, then call the target through `Unity.Tools.Invoke` or `Unity.Tools.BatchInvoke`; use repo helper scripts only if the facade tools are unavailable in the current client.
+   - If the host is launched with `UNITY_MCP_LENS_TOOL_SURFACE_MODE=static_all`, all enabled Lens tools are exposed natively up front and `Unity.SetToolPacks` is a compatibility no-op. Use `Unity.Tools.Menu` or `Unity.Tools.List` for compact navigation, call real native tools directly when Codex exposes them, and use `Unity.Tools.Invoke`/`Unity.Tools.BatchInvoke` when the client tool table omits a host-visible native tool.
 6. Suggested pack mapping:
    - console investigation: `console`
    - project scans and validation: `project`
@@ -139,6 +139,8 @@ Use the Phase 1-6 authoring surfaces as the first path for durable work:
 8. After external edits to compile-affecting files (`*.cs`, `*.asmdef`, `*.asmref`, `*.rsp`, package manifest changes), run `scripts/Sync-UnityScriptChanges.js` on macOS/Linux or `scripts/Sync-UnityScriptChanges.ps1` on Windows before the next Unity-side action.
    - The helper calls `Unity.Editor.SyncScripts`; model-facing calls now wait through scheduled refresh/reload windows and should return `readyForFollowUp=true` only when the editor is safe for follow-up Unity actions.
    - Empty `changedPaths` with no force should still be a fast no-op.
+   - If normal sync returns `pending_refresh`, `source_newer_than_assembly`, `local_package_source_newer_than_assembly`, no compile observed, or stale assembly proof after the short wait, retry once with `-FocusNudgeOnStaleRefresh` on Windows. This focuses the project-matched Unity editor and performs a tiny safe title-bar/chrome click, then waits for compile/import/update and rechecks console plus assembly proof.
+   - Do not treat the click itself as proof. Success still requires Lens health, zero new console errors, editor idle, and updated/non-stale assembly proof.
    - Treat transient pack-restore or compact-state failures during an expected reload window as recoverable unless direct Lens health also fails.
    - Treat `newConsoleErrorsDetected=true` as the sync failure signal. Treat `staleConsoleErrorsPresent=true` as old console state unless new errors are also reported.
    - If compile/play behavior looks wrong after file edits, run `scripts/Test-UnitySourceFileIntegrity.ps1` on Windows to check for NUL-byte or invalid UTF-8 source corruption before interpreting bridge failures.
@@ -199,7 +201,7 @@ Use the Phase 1-6 authoring surfaces as the first path for durable work:
    - For Phase 12 UI/scene-binding dogfood, use `scripts/Test-UnityUiSceneBindingWorkflow.ps1` on Windows or `scripts/Test-UnityUiSceneBindingWorkflow.js` on macOS/Linux with fixture JSON. Add `-Apply`/`--Apply` only for accepted no-op or intentional mutation fixtures.
 29. If a `Unity_RunCommand` starts a long WebGL build on Windows, pass `-MonitorBuildMode WebGL` plus any known output/report/artifact paths so the PowerShell helper can fall back to passive log/disk monitoring when MCP stdout becomes unreliable. On macOS/Linux, launch the build with the JS helper, then use the session check build monitor and `Editor.log` while the build is active.
 30. For autoplay or scripted validation, use `scripts/Run-UnityAutoplayPlaytest.ps1`.
-31. For screenshots, use `Unity.UI.CaptureGameView` when you need direct Game view evidence with play-state, camera/canvas, Game view size, console-delta, and timeout diagnostics. Use `scripts/Capture-UnityPlaytestArtifacts.js` on macOS/Linux or `scripts/Capture-UnityPlaytestArtifacts.ps1` on Windows for broader artifact capture with fallback paths.
+31. For screenshots, use `Unity.UI.CaptureGameView` when you need direct Game view evidence with exact `Width`/`Height`, temporary inactive overlay activation, image-dimension proof, play-state, camera/canvas, Game view size, console-delta, and timeout diagnostics. Treat camera/scene fallback as non-overlay-capable evidence; it may miss Screen Space Overlay UI. Use `scripts/Capture-UnityPlaytestArtifacts.js` on macOS/Linux or `scripts/Capture-UnityPlaytestArtifacts.ps1` on Windows for broader artifact capture with fallback paths.
 32. When a scene looks correct in edit mode but different in play mode, treat runtime ownership drift as the default suspect before retuning values. Read `references/authoring-drift.md` and use a small runtime probe to compare the same fields in edit mode and play mode.
 33. For score, initials, or other first-run gating backed by `PlayerPrefs`, distinguish a missing key from a saved `0` value. Use `HasKey` when deciding whether a flow is truly first-run.
 34. When reading Unity console output, treat known MCP/package chatter as bridge self-noise unless real compiler or gameplay errors are mixed in.
@@ -235,20 +237,20 @@ Prefer a scene-owned debugger component when a project needs fast UI or state it
 - Mandatory first step for Unity work in a fresh chat: `scripts/Check-UnityDevSession.js` on macOS/Linux or `scripts/Check-UnityDevSession.ps1` on Windows
 - Preferred transport: `unity-mcp-lens`
 - Default Lens host tool surface: `static_all` (`foundation+full`); set `UNITY_MCP_LENS_TOOL_SURFACE_MODE=dynamic_packs` only for clients that explicitly need dynamic pack switching
-- Current `foundation` surface: `18` tools
-- Current `foundation` + `scene` surface: `50` tools
-- Current `foundation` + `ui` surface: `35` tools
-- Current `foundation` + `runtime` surface: `29` tools
-- Current `foundation` + `project` surface: `37` tools
-- Current `foundation` + `assets` surface: `45` tools
+- Current `foundation` surface: `21` tools
+- Current `foundation` + `scene` surface: `58` tools
+- Current `foundation` + `ui` surface: `38` tools
+- Current `foundation` + `runtime` surface: `32` tools
+- Current `foundation` + `project` surface: `43` tools
+- Current `foundation` + `assets` surface: `52` tools
 - Prefer authoring-first discovery and reuse checks before generating scripts
 - Prefer split GameObject TSAM tools before legacy `Unity.ManageGameObject`
 - Prefer Phase 11 `project` tools for package/import/Input System diagnostics and active input handler changes
 - Prefer component reuse discovery, package capability resolution, presets, copy-from-existing, prefab override tools, and workflow wrappers before custom editor-side probes
 - Prefer Phase 12 `ui` and scene-binding tools for persistent HUD authoring, scene reference binding, and screen-layout verification before custom editor-side `Unity_RunCommand`
 - Prefer `Invoke-UnityMcpBatch` for repeated multi-step smoke/workflow checks that span packs
-- In `static_all`, start with `Unity.Tools.Menu` and call real native tools directly; `Unity.SetToolPacks` is a compatibility no-op, not a required step
-- `static_all` host-visible does not guarantee the current Codex turn exposes every native tool as directly callable. If a described tool is missing from the client tool table, use the helper fallback: scene/runtime reads via `Invoke-UnityMcpBatch`, script refresh via `Sync-UnityScriptChanges`, UI layout via `Verify-UnityUiScreenLayout`, menu calls via `Unity.Menu.InvokeAndWaitStable` or `Invoke-UnityMcpBatch`, and project checks via the matching `Test-*` helper.
+- In `static_all`, start with `Unity.Tools.Menu` or `Unity.Tools.List` and call real native tools directly when Codex exposes them; `Unity.SetToolPacks` is a compatibility no-op, not a required step
+- `static_all` host-visible does not guarantee the current Codex turn exposes every native tool as directly callable. If a described tool is missing from the client tool table, use `Unity.Tools.List` to confirm the canonical host-visible name, then route through `Unity.Tools.Invoke` for one call or `Unity.Tools.BatchInvoke` for ordered multi-call work. Keep helper scripts such as `Invoke-UnityMcpBatch`, `Sync-UnityScriptChanges`, `Verify-UnityUiScreenLayout`, and `Test-*` checks as fallbacks when the model-facing facade tools themselves are unavailable or when a workflow needs their extra local orchestration.
 - Use `Unity.GetLensUsageReport` in `debug` for telemetry baselines, appended smoke rows, and TSAM stage coverage
 - Session and bridge checks are compact by default; use `-IncludeDiagnostics` only for explicit maintenance
 - `ProceedWithDirectLensTools` means the bridge status and fresh direct health probe are healthy even if the helper wrapper path is not
@@ -260,6 +262,7 @@ Prefer a scene-owned debugger component when a project needs fast UI or state it
 - Exact build-scene preflight before long custom builds when the intended scene list is known
 - External script edits should be synced through `Unity.Editor.SyncScripts` via `Sync-UnityScriptChanges.js` on macOS/Linux or `Sync-UnityScriptChanges.ps1` on Windows before follow-up Unity actions
 - Model-facing `Unity.Editor.SyncScripts` should return `readyForFollowUp=true` only after the host has waited through any scheduled refresh/reload window and verified no new console errors. If a raw/native `status=pending_refresh` appears, treat it as a lower-level scheduled state and wait for editor idle before parallel reads or mutations.
+- On Windows, if normal script sync remains stale (`pending_refresh`, `source_newer_than_assembly`, local package source newer than assembly, no compile observed, or assembly proof unchanged), use `Sync-UnityScriptChanges.ps1 -FocusNudgeOnStaleRefresh` before escalation. The helper's safe click is only a nudge; follow-up safety is proven by Lens health, console delta, idle state, and assembly proof.
 - `Verify-UnityUiScreenLayout.ps1` requires JSON arrays, for example: `-TargetsJson '[{"key":"hud","target":"HUD Canvas","searchMethod":"by_name"}]' -AssertionsJson '[{"type":"inside_screen","targetKey":"hud","margin":0}]'`
 - Prefer `Unity.Bridge.ListConnections` for wrong-project or stale-status diagnosis before retrying project-wide reads
 - If `Unity.Bridge.ListConnections` shows stale duplicate status files, trust the selected fresh connection/project/PID first and keep stale candidates only as recovery evidence.

@@ -1,6 +1,6 @@
 ---
 name: "unity-mcp-bridge"
-description: "Lens Dev Plugin v0.1.6. Use when Codex is working in a Unity project and needs fast file-backed Unity health, bridge diagnostics, safe stop contracts, or recovery diagnosis before touching Unity editor state. Prefer Unity.Editor.HealthCheckFast, the owned unity-mcp-lens stdio server, Command Center status, and explicit user escalation only when Unity or the bridge really needs intervention."
+description: "Lens Dev Plugin v0.1.7. Use when Codex is working in a Unity project and needs fast file-backed Unity health, bridge diagnostics, safe stop contracts, stable Unity.Tools.List/Invoke/BatchInvoke fallback facades, or recovery diagnosis before touching Unity editor state. Prefer Unity.Editor.HealthCheckFast, the owned unity-mcp-lens stdio server, Command Center status, and explicit user escalation only when Unity or the bridge really needs intervention."
 ---
 
 # Unity MCP Bridge
@@ -9,7 +9,7 @@ Use this skill as the operational guide for the local Unity MCP bridge and the o
 
 ## Version Marker
 
-- Plugin guidance version: `Lens Dev Plugin v0.1.6`
+- Plugin guidance version: `Lens Dev Plugin v0.1.7`
 - Expected installed Lens host: `0.1.0-alpha.24` or newer
 - If Codex shows an older Lens Dev Plugin version, refresh the plugin cache from the repo-local source before trusting this skill's installed copy.
 
@@ -81,6 +81,7 @@ node .agents/plugins/lens-dev-plugin/skills/unity-mcp-bridge/scripts/Check-Unity
 
 8. Wait briefly, then retry one lightweight authority check.
    - If the failure came immediately after `Sync-UnityScriptChanges.js`/`Sync-UnityScriptChanges.ps1`, a forced refresh, or package recompilation, still follow the health-check flow before assuming Unity is unavailable.
+   - If script sync reached idle but still reports stale assembly proof (`pending_refresh`, `source_newer_than_assembly`, `local_package_source_newer_than_assembly`, or no compile observed), use the Windows helper fallback `Sync-UnityScriptChanges.ps1 -FocusNudgeOnStaleRefresh` once before bridge recovery escalation. It focuses the project-matched Unity editor and safely clicks editor chrome/title bar; the click is not proof of success.
 9. If the retry still fails and the check classifies the bridge as `EditorReloadingExpected`, wait for Unity to settle and retry instead of notifying the user.
 10. If the retry still fails and the check classifies the bridge as `BuildInProgress`, stop retrying recovery. Switch to passive monitoring of `Editor.log`, the beacon, and any known build artifacts instead of notifying the user.
 11. If the retry still fails and the check classifies the bridge as `ApprovalPending`, `ReconnectRequired`, `UnityNotRunning`, `BridgeNotReady`, or another hard-unavailable state, send a Windows notification:
@@ -114,7 +115,7 @@ $script = Join-Path $PWD ".agents\plugins\lens-dev-plugin\skills\unity-mcp-bridg
 - Treat the legacy relay path as:
   - Windows command: `%USERPROFILE%\.unity\relay\relay_win.exe`
   - args: `--mcp`
-- Do not burn probe budget on repeated broad tool discovery. In Codex, the plugin defaults to `static_all`; use `Unity.Tools.Menu` as the compact facade for navigation, but remember host-visible tools may still be absent from the current client-callable table.
+- Do not burn probe budget on repeated broad tool discovery. In Codex, the plugin defaults to `static_all`; use `Unity.Tools.Menu` for navigation and `Unity.Tools.List` for compact host-visible names, but remember host-visible tools may still be absent from the current client-callable table.
 - Prefer the bootstrap tools before asking for more surface area:
   - `Unity.Editor.HealthCheckFast`
   - `Unity.Bridge.ListConnections`
@@ -122,12 +123,15 @@ $script = Join-Path $PWD ".agents\plugins\lens-dev-plugin\skills\unity-mcp-bridg
   - `Unity.ReadDetailRef`
   - `Unity.Tools.Menu`
   - `Unity.Tools.Describe`
+  - `Unity.Tools.List`
+  - `Unity.Tools.Invoke`
+  - `Unity.Tools.BatchInvoke`
   - `Unity.Tools.ActivateAndVerify`
 - `foundation` is the default pack and is always on.
 - At most two additional non-foundation packs should be active at once.
-- Recommended Codex host mode `UNITY_MCP_LENS_TOOL_SURFACE_MODE=static_all` starts with `foundation+full` and makes `Unity.SetToolPacks` a compatibility no-op. In that mode, use `Unity.Tools.Menu` for compact pack-oriented navigation and call real tools directly when the client exposes them; otherwise use helper scripts or `Invoke-UnityMcpBatch`.
+- Recommended Codex host mode `UNITY_MCP_LENS_TOOL_SURFACE_MODE=static_all` starts with `foundation+full` and makes `Unity.SetToolPacks` a compatibility no-op. In that mode, use `Unity.Tools.Menu` or `Unity.Tools.List` for compact navigation and call real tools directly when the client exposes them; otherwise route host-visible native tools through `Unity.Tools.Invoke` or `Unity.Tools.BatchInvoke`.
 - Helper pack state is per Lens session/process. New helper invocations should auto-prime required packs through the exact map or `Unity.Tools.Describe`; do not assume a pack selected in a previous helper process is still active.
-- If Codex dynamic indexing is stale after `notifications/tools/list_changed`, use `Unity.Tools.ActivateAndVerify`, `Invoke-UnityMcpTool.js`, `Invoke-UnityMcpBatch`, or `Unity.Tools.Describe` to query the live manifest/schema/pack requirements until the client refreshes.
+- If Codex dynamic indexing is stale after `notifications/tools/list_changed`, use `Unity.Tools.ActivateAndVerify`, `Unity.Tools.Describe`, and `Unity.Tools.List` to query the live manifest/schema/pack requirements. If the host shows the tool but the client cannot call it directly, use `Unity.Tools.Invoke` or `Unity.Tools.BatchInvoke`; use `Invoke-UnityMcpTool.js`/`Invoke-UnityMcpBatch` only when the model-facing facade tools are unavailable or local helper orchestration is specifically useful.
 - When `Unity.SetToolPacks` reports `clientSurface.expectedRefresh=true`, Lens has done the server-side part by emitting `notifications/tools/list_changed`. If Codex still cannot call a described tool, record it as client indexing drift rather than a bridge pack failure.
 - Installed Codex plugin cache versions can move. The repo-local `.agents/plugins/lens-dev-plugin` source stays authoritative; locate the active cache version only when debugging Codex's installed view.
 - When a tool result includes `detailRef`, use `Unity.ReadDetailRef` only when the preview/summary is insufficient. Do not immediately expand every large result.
@@ -141,6 +145,7 @@ $script = Join-Path $PWD ".agents\plugins\lens-dev-plugin\skills\unity-mcp-bridg
 - Treat `BuildInProgress` as non-user-actionable when `Editor.log` still shows active WebGL Bee/wasm work and no later terminal build marker. Do not notify the user or keep retrying bridge recovery during that window.
 - Treat `BeaconMissing` as non-blocking when the old editor-status beacon is retired or absent; continue with MCP health and only escalate on hard bridge/editor failures.
 - Treat `EditorReloadingExpected` as a transient state; wait for Unity compile/domain reload settle instead of notifying the user.
+- Treat script-refresh focus nudges as conservative refresh assistance, not recovery: skip them while Unity is compiling/importing/updating, in play-mode transitions, or on unsupported/headless platforms; never restart or kill Unity because a nudge failed.
 - Treat `ReconnectRequired` as user action required even if the bridge status file says `ready`.
 - Treat `UnityNotRunning` or `BridgeNotReady` as unavailable; do not guess your way through scene or prefab work.
 - Only treat the bridge as healthy when MCP succeeds or the check script reports `Ready` with no hard failure signals.

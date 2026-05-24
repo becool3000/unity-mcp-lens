@@ -7,6 +7,7 @@ using System.Linq;
 using System.Reflection;
 using System.Threading.Tasks;
 using Becool.UnityMcpLens.Editor.Helpers;
+using Becool.UnityMcpLens.Editor.Services;
 using Becool.UnityMcpLens.Editor.ToolRegistry;
 using Becool.UnityMcpLens.Editor.Utils;
 using Newtonsoft.Json;
@@ -123,12 +124,13 @@ Returns:
             }
             catch (Exception ex)
             {
+                Exception root = UnwrapInvocationException(ex);
                 success = false;
-                errorKind = ex.GetType().Name;
+                errorKind = root.GetType().Name;
                 response = Response.Error("UNITY_TESTS_RUN_FAILED", new
                 {
                     errorKind,
-                    error = ex.Message,
+                    error = root.Message,
                     elapsedMs = stopwatch.ElapsedMilliseconds,
                     editorState = EditorToolStateHelpers.BuildEditorState()
                 });
@@ -177,7 +179,7 @@ Returns:
 
             try
             {
-                api = Activator.CreateInstance(types.ApiType);
+                api = CreateTestRunnerApi(types.ApiType);
                 object settings = BuildExecutionSettings(types, parameters, mode);
                 callbacks = CreateCallbackProxy(types.CallbacksInterfaceType, (methodName, args) =>
                 {
@@ -270,18 +272,22 @@ Returns:
             }
             catch (TargetInvocationException ex) when (ex.InnerException != null)
             {
-                object data = BuildBaseData(parameters, mode, stopwatch, true, timedOut: false, cancellationRequested: false, finalResult, callbackFailures.ToArray(), callbackErrors.ToArray(), Array.Empty<object>(), ex.InnerException.Message, consoleBefore);
-                return TestRunToolResult.CreateFailure("UNITY_TESTS_RUN_FAILED", ex.InnerException.GetType().Name, data);
+                Exception root = UnwrapInvocationException(ex);
+                object data = BuildBaseData(parameters, mode, stopwatch, true, timedOut: false, cancellationRequested: false, finalResult, callbackFailures.ToArray(), callbackErrors.ToArray(), Array.Empty<object>(), root.Message, consoleBefore);
+                return TestRunToolResult.CreateFailure("UNITY_TESTS_RUN_FAILED", root.GetType().Name, data);
             }
             catch (Exception ex)
             {
-                object data = BuildBaseData(parameters, mode, stopwatch, true, timedOut: false, cancellationRequested: false, finalResult, callbackFailures.ToArray(), callbackErrors.ToArray(), Array.Empty<object>(), ex.Message, consoleBefore);
-                return TestRunToolResult.CreateFailure("UNITY_TESTS_RUN_FAILED", ex.GetType().Name, data);
+                Exception root = UnwrapInvocationException(ex);
+                object data = BuildBaseData(parameters, mode, stopwatch, true, timedOut: false, cancellationRequested: false, finalResult, callbackFailures.ToArray(), callbackErrors.ToArray(), Array.Empty<object>(), root.Message, consoleBefore);
+                return TestRunToolResult.CreateFailure("UNITY_TESTS_RUN_FAILED", root.GetType().Name, data);
             }
             finally
             {
                 if (registered && api != null && callbacks != null)
                     TestRunnerReflection.TryUnregisterCallbacks(api, types, callbacks, out _);
+                if (api is UnityEngine.Object unityObject)
+                    UnityEngine.Object.DestroyImmediate(unityObject);
             }
         }
 
@@ -380,6 +386,22 @@ Returns:
                 .Invoke(null, null);
             ((TestRunnerCallbackProxy)proxy).OnInvoke = onInvoke;
             return proxy;
+        }
+
+        static object CreateTestRunnerApi(Type apiType)
+        {
+            if (typeof(UnityEngine.ScriptableObject).IsAssignableFrom(apiType))
+                return UnityEngine.ScriptableObject.CreateInstance(apiType);
+
+            return Activator.CreateInstance(apiType);
+        }
+
+        static Exception UnwrapInvocationException(Exception exception)
+        {
+            while (exception is TargetInvocationException { InnerException: not null } invocationException)
+                exception = invocationException.InnerException;
+
+            return exception;
         }
 
         static async Task<bool> WaitForCompletionAsync(Task completionTask, int timeoutMs)
@@ -653,17 +675,6 @@ Returns:
             return value is string ? null : value as IEnumerable;
         }
 
-        sealed class TestRunnerCallbackProxy : DispatchProxy
-        {
-            public Action<string, object[]> OnInvoke { get; set; }
-
-            protected override object Invoke(MethodInfo targetMethod, object[] args)
-            {
-                OnInvoke?.Invoke(targetMethod?.Name ?? string.Empty, args ?? Array.Empty<object>());
-                return null;
-            }
-        }
-
         sealed class TestRunToolResult
         {
             public bool Success { get; private set; }
@@ -753,16 +764,17 @@ Returns:
 
                 foreach (var method in methods)
                 {
-                    var parameters = method.GetParameters();
+                    var candidate = CloseCallbackGenericMethod(method, types);
+                    var parameters = candidate.GetParameters();
                     if (parameters.Length == 1 && parameters[0].ParameterType.IsInstanceOfType(callbacks))
                     {
-                        method.Invoke(api, new[] { callbacks });
+                        candidate.Invoke(api, new[] { callbacks });
                         return;
                     }
 
                     if (parameters.Length == 2 && parameters[0].ParameterType.IsInstanceOfType(callbacks))
                     {
-                        method.Invoke(api, new[] { callbacks, (object)0 });
+                        candidate.Invoke(api, new[] { callbacks, (object)0 });
                         return;
                     }
                 }
@@ -775,30 +787,36 @@ Returns:
                 error = null;
                 try
                 {
-                    var method = types.ApiType
+                    var methods = types.ApiType
                         .GetMethods(BindingFlags.Public | BindingFlags.Instance)
-                        .FirstOrDefault(candidate =>
-                        {
-                            if (candidate.Name != "UnregisterCallbacks")
-                                return false;
+                        .Where(method => method.Name == "UnregisterCallbacks");
 
-                            var parameters = candidate.GetParameters();
-                            return parameters.Length == 1 && parameters[0].ParameterType.IsInstanceOfType(callbacks);
-                        });
-                    if (method == null)
+                    foreach (var method in methods)
                     {
-                        error = "UnregisterCallbacks was not found.";
-                        return false;
+                        var candidate = CloseCallbackGenericMethod(method, types);
+                        var parameters = candidate.GetParameters();
+                        if (parameters.Length == 1 && parameters[0].ParameterType.IsInstanceOfType(callbacks))
+                        {
+                            candidate.Invoke(api, new[] { callbacks });
+                            return true;
+                        }
                     }
 
-                    method.Invoke(api, new[] { callbacks });
-                    return true;
+                    error = "UnregisterCallbacks was not found.";
+                    return false;
                 }
                 catch (Exception ex)
                 {
                     error = ex.Message;
                     return false;
                 }
+            }
+
+            static MethodInfo CloseCallbackGenericMethod(MethodInfo method, TestRunnerReflection types)
+            {
+                return method.IsGenericMethodDefinition
+                    ? method.MakeGenericMethod(types.CallbacksInterfaceType)
+                    : method;
             }
 
             public static object InvokeExecute(object api, TestRunnerReflection types, object settings)
@@ -855,6 +873,17 @@ Returns:
 
                 return null;
             }
+        }
+    }
+
+    public class TestRunnerCallbackProxy : DispatchProxy
+    {
+        public Action<string, object[]> OnInvoke { get; set; }
+
+        protected override object Invoke(MethodInfo targetMethod, object[] args)
+        {
+            OnInvoke?.Invoke(targetMethod?.Name ?? string.Empty, args ?? Array.Empty<object>());
+            return null;
         }
     }
 }

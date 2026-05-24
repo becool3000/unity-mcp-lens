@@ -1,0 +1,644 @@
+{
+  "manifest_version": "0.3",
+  "name": "Lens Dev Plugin v0.1.7",
+  "version": "0.1.7",
+  "description": "Unity MCP Lens development workflow bundle for Codex. Plugin v0.1.7, aligned with Lens host 0.1.0-alpha.24+.",
+  "author": {
+    "name": "kanaw",
+    "email": "",
+    "url": ""
+  },
+  "repository": "https://github.com/becool3000/unity-mcp-lens.git",
+  "homepage": "https://github.com/becool3000/unity-mcp-lens",
+  "sourceOfTruth": "discovery_hint_only",
+  "executionSourceOfTruth": "Lens host tools/list and Unity bridge manifest",
+  "server": {
+    "type": "mcp",
+    "mcp_config": {
+      "command": "C:\\Users\\kanaw\\.unity\\unity-mcp-lens\\unity_mcp_lens_win.exe",
+      "args": [],
+      "env": {
+        "UNITY_MCP_LENS_TOOL_SURFACE_MODE": "static_all"
+      },
+      "enabled": true
+    }
+  },
+  "tools": [
+    {
+      "name": "Unity_ApplyTextEdits",
+      "description": "Apply small text edits to a C# script identified by URI. IMPORTANT: This tool replaces EXACT character positions. Always verify content at target lines/columns BEFORE editing! Common mistakes: - Assuming what's on a line without checking - Using wrong line numbers (they're 1-indexed) - Miscounting column positions (also 1-indexed, tabs count as 1) RECOMMENDED WORKFLOW: 1) First call resources/read with start_line/..."
+    },
+    {
+      "name": "Unity_Asset_ApplyImportSpriteSheetAndBind",
+      "description": "Applies sprite-sheet import, slicing, texture settings, and ScriptableObject Sprite-array binding, saving changed assets."
+    },
+    {
+      "name": "Unity_Asset_ConfigureSpriteImport",
+      "description": "Configures sprite import settings for an existing texture asset. Args: AssetPath: Texture asset path under Assets/. SpriteMode: Optional sprite mode ('Single', 'Sheet', or 'Multiple'). AlphaIsTransparency: Optional alpha/transparency import flag. FilterMode: Optional filter mode ('Point', 'Bilinear', or 'Trilinear'). Compression: Optional texture compression ('Uncompressed', 'Compressed', 'CompressedHQ', or 'Compr..."
+    },
+    {
+      "name": "Unity_Asset_ImportSpriteSheetAndBind",
+      "description": "Imports a sprite sheet, slices frames, and binds the resulting Sprite array to a ScriptableObject field. Prefer the split preview/apply tools for routine authoring. This compatibility facade runs preview by default and applies only when mode is 'apply' or apply is true."
+    },
+    {
+      "name": "Unity_Asset_PreviewImportSpriteSheetAndBind",
+      "description": "Previews sprite-sheet import, slicing, texture settings, and ScriptableObject Sprite-array binding without mutating assets."
+    },
+    {
+      "name": "Unity_Asset_Search",
+      "description": "Searches Unity assets and returns compact path, GUID, label, type, and preview metadata."
+    },
+    {
+      "name": "Unity_Asset_SetSerializedProperties",
+      "description": "Previews or applies SerializedObject field assignments on ScriptableObject/data assets under Assets/. Object references must resolve to project assets."
+    },
+    {
+      "name": "Unity_Asset_SpriteSheetVisualDiagnostics",
+      "description": "Diagnoses sprite-sheet visual cells by reading texture alpha bounds, empty cells, oversized transparent padding, likely text artifacts, expected sprite names, and importer settings."
+    },
+    {
+      "name": "Unity_Asset_VerifySpriteArrayBinding",
+      "description": "Verifies a ScriptableObject Sprite-array binding against expected count, texture name, texture GUID, or ordered sprite names without mutation."
+    },
+    {
+      "name": "Unity_Authoring_SuggestReusePlan",
+      "description": "Suggests an authoring-first reuse plan before scripts. The plan checks existing components, scene instances, prefabs, presets, installed packages, and missing package capabilities, and reports whether a new script appears necessary."
+    },
+    {
+      "name": "Unity_Bridge_ListConnections",
+      "description": "Lists Unity MCP bridge connection candidates, project-root match state, heartbeat age, editor PID liveness, quarantine state, and exclusion reasons without touching the bridge."
+    },
+    {
+      "name": "Unity_Camera_FitComposition",
+      "description": "Measures how well target scene objects fill the camera view, suggests camera framing, and optionally captures a screenshot."
+    },
+    {
+      "name": "Unity_Component_InspectSchema",
+      "description": "Inspects a component serialized schema before values are authored. Can inspect an existing scene component or create a hidden unsaved temporary probe component for schema discovery."
+    },
+    {
+      "name": "Unity_Component_ResolveCapability",
+      "description": "Resolves an authoring intent into existing Unity, project, package, prefab, preset, and missing-package reuse candidates."
+    },
+    {
+      "name": "Unity_Component_Search",
+      "description": "Searches reusable Unity component surfaces before script generation. Returns built-in components, installed package components, compiled project components, prefab candidates, preset candidates, installed/missing package capabilities, and missing-package hints with confidence and schema availability."
+    },
+    {
+      "name": "Unity_CreateScript",
+      "description": "Create a new C# script at the given project path. Args: path (e.g., 'Assets/Scripts/My.cs'), contents (string), script_type, namespace. Rules: path must be under Assets/. Contents will be Base64-encoded over transport."
+    },
+    {
+      "name": "Unity_DeleteScript",
+      "description": "Delete a C# script by URI or Assets-relative path. Args: uri (unity://path/... or file://... or Assets/...). Rules: Target must resolve under Assets/."
+    },
+    {
+      "name": "Unity_Editor_ExitPlayMode",
+      "description": "Requests play-mode exit and optionally waits for Unity to settle. Use this instead of Unity.RunCommand for cleanup after play-mode smoke tests. The tool marks play exit as an expected recoverable transition and returns compact final editor state."
+    },
+    {
+      "name": "Unity_Editor_HealthCheckFast",
+      "description": "Returns file-backed Unity editor and bridge health without connecting to Unity, including the stop/continue contract agents should follow before broader Lens calls."
+    },
+    {
+      "name": "Unity_Editor_RecoverFromHang",
+      "description": "Runs a bounded file-backed diagnose/recovery workflow. Kill, restart, and scratch cleanup require explicit arguments."
+    },
+    {
+      "name": "Unity_Editor_SetPlayMode",
+      "description": "Requests a high-level play-mode transition and reports compact transition, runtime-advance, and console-error evidence. Use this instead of Unity.ManageEditor Play/Stop or Unity.RunCommand play-mode snippets for smoke workflows."
+    },
+    {
+      "name": "Unity_Editor_SyncScripts",
+      "description": "Synchronizes external Unity script changes by refreshing/importing compile-affecting paths and optionally waiting for the editor to settle."
+    },
+    {
+      "name": "Unity_FindInFile",
+      "description": "Searches a file with a regex pattern and returns line numbers and excerpts. Ideal for: Finding methods, variables, classes, or any text patterns for renaming/editing. Args: Uri: The resource URI to search under Assets/ Pattern: Regex pattern to search for IgnoreCase: Case-insensitive search (default: true) MaxResults: Maximum results to return (default: 200) ProjectRoot: Override project root path Returns: Diction..."
+    },
+    {
+      "name": "Unity_GameObject_ApplyChanges",
+      "description": "Applies simple scene GameObject changes after the same validation used by PreviewChanges. Supports name, setActive, tag, layer, position, positionType, rotation, scale, and parent. Returns compact readback data and reports repeated identical calls as applied=false."
+    },
+    {
+      "name": "Unity_GameObject_ApplyComponentChanges",
+      "description": "Applies component changes on a scene GameObject after the same validation used by PreviewComponentChanges. Supports add, remove, and setProperties operations. Returns compact readback data and reports no-op property updates as applied=false."
+    },
+    {
+      "name": "Unity_GameObject_Create",
+      "description": "Creates or instantiates a scene GameObject after the same validation used by PreviewCreate. Supports empty objects, primitives, prefab instantiation, save-as-prefab, parent, transform, tag, layer, and initial components."
+    },
+    {
+      "name": "Unity_GameObject_Delete",
+      "description": "Deletes scene GameObjects after the same validation used by PreviewDelete. Defaults to single-target safety and requires findAll=true to delete multiple matches."
+    },
+    {
+      "name": "Unity_GameObject_GetComponent",
+      "description": "Reads one serialized component from a scene GameObject without mutation. Use componentName and optional componentIndex to select among duplicate component types."
+    },
+    {
+      "name": "Unity_GameObject_Inspect",
+      "description": "Inspects scene GameObjects without mutation. Modes: find: Finds scene objects by target/searchTerm and searchMethod. selection: Returns the current Unity selection. bounds: Returns renderer/collider bounds for a target GameObject. Returns compact GameObject data with stable string ids for model-facing use."
+    },
+    {
+      "name": "Unity_GameObject_ListComponents",
+      "description": "Lists components on a scene GameObject without mutation. Returns compact component inventory only. Use Unity.GameObject.GetComponent for serialized component data."
+    },
+    {
+      "name": "Unity_GameObject_PreviewChanges",
+      "description": "Previews simple scene GameObject changes without mutation. Supports name, setActive, tag, layer, position, positionType, rotation, scale, and parent. Does not call Undo, mark scenes dirty, save scenes, or create tags."
+    },
+    {
+      "name": "Unity_GameObject_PreviewComponentChanges",
+      "description": "Previews component changes on a scene GameObject without mutation. Supports add, remove, and setProperties operations. Preview does not call Undo, add/remove components, set properties, or mark objects dirty."
+    },
+    {
+      "name": "Unity_GameObject_PreviewCreate",
+      "description": "Previews GameObject creation without mutation. Supports empty objects, primitives, prefab instantiation, save-as-prefab planning, parent, transform, tag, layer, and initial component validation."
+    },
+    {
+      "name": "Unity_GameObject_PreviewDelete",
+      "description": "Previews scene GameObject deletion without mutation. Defaults to single-target safety and reports ambiguous matches unless findAll=true."
+    },
+    {
+      "name": "Unity_GetLensHealth",
+      "description": "Returns a compact Lens health summary for the current Unity bridge connection, including active packs, exported tool count, bridge status, editor stability, and the recommended next action."
+    },
+    {
+      "name": "Unity_GetLensUsageReport",
+      "description": "Returns a compact read-only report from the current project's Lens PayloadStats.jsonl, including payload totals, bridge churn, TSAM stage coverage, failures, latency, and cost findings."
+    },
+    {
+      "name": "Unity_GetSha",
+      "description": "Get SHA256 and basic metadata for a Unity C# script without returning file contents"
+    },
+    {
+      "name": "Unity_ImportExternalModel",
+      "description": "Import an FBX from a URL in Unity project. Instantiate the model in the scene and saves it as a prefab for reuse. Args: name: Simple name of the asset, needs to be a single word or id string, no spaces. fbx_url: The url to the fbx file to import and instantiate, can be a local file, a url, or a zip file containing an FBX. height: Float value that represents the desired height of the asset in the scene. albedo_text..."
+    },
+    {
+      "name": "Unity_InputActions_InspectAsset",
+      "description": "Reads a .inputactions asset without mutation. Returns compact map/action/binding counts, wrapper-generation metadata, binding rows when requested, and derived asset issues."
+    },
+    {
+      "name": "Unity_InputSystem_Diagnostics",
+      "description": "Reads Input System and active-input-handler diagnostics without mutation. Uses package metadata, reflection, input action JSON parsing, and editor log scanning so it remains safe when com.unity.inputsystem is absent or broken."
+    },
+    {
+      "name": "Unity_ListResources",
+      "description": "Lists project URIs (unity://path/...) under a folder (default: Assets). Returns all files by default; always appends unity://spec/script-edits. Args: Pattern: Glob pattern for filtering files (default: *) Under: Folder under project root to search (default: Assets) Limit: Maximum number of results (default: 200) ProjectRoot: Override project root path Returns: Dictionary with 'success', 'data' (containing 'uris' a..."
+    },
+    {
+      "name": "Unity_ListToolPacks",
+      "description": "Lists the available Unity MCP tool packs, the active packs for this connection, and recommended next expansions."
+    },
+    {
+      "name": "Unity_ManageAsset",
+      "description": "Performs asset operations (import, create, modify, delete, etc.) in Unity. Args: Action: Operation to perform (e.g., 'Import', 'Create', 'Modify', 'Delete', 'Duplicate', 'Move', 'Rename', 'Search', 'GetInfo', 'CreateFolder', 'GetComponents'). Path: Asset path (e.g., \"Assets/Materials/MyMaterial.mat\") or search scope. AssetType: Asset type (e.g., 'Material', 'Folder') - required for 'create'. Properties: Dictionary..."
+    },
+    {
+      "name": "Unity_ManageEditor",
+      "description": "Controls and queries the Unity editor's state and settings. Args: Action: Operation (e.g., 'Play', 'Pause', 'GetState', 'WaitForStableEditor', 'SetActiveTool', 'AddTag'). WaitForCompletion: Optional. If True, waits for certain actions. StablePollCount/PostStableDelayMs: Optional. Used by WaitForStableEditor to require repeated stable polls and a settle delay. Action-specific arguments (e.g., ToolName, TagName, Lay..."
+    },
+    {
+      "name": "Unity_ManageGameObject",
+      "description": "Manages GameObjects: create, modify, delete, find, and component operations. Args: action: Operation (e.g., 'create', 'modify', 'find', 'add_component', 'remove_component', 'set_component_property', 'get_components', 'get_component'). target: GameObject identifier (name or path string) for modify/delete/component actions. search_method: How to find objects ('by_name', 'by_id', 'by_path', etc.). Used with 'find' an..."
+    },
+    {
+      "name": "Unity_ManageMenuItem",
+      "description": "Manages Unity Editor menu items (execute/list/exists/refresh), If you're not sure what menu item to use, use the 'list' action to find it before using 'execute'. Args: Action: Operation to perform (Execute, List, Exists, Refresh). MenuPath: Menu path for execute/exists actions (e.g., 'File/Save Project'). Search: Filter string for list action (case-insensitive). Refresh: Force refresh menu cache before operation...."
+    },
+    {
+      "name": "Unity_ManageScene",
+      "description": "Manages Unity scenes (load, save, create, get hierarchy, etc.). Args: Action: Operation (e.g., 'Load', 'Save', 'Create', 'GetHierarchy'). Name: Scene name (no extension) for create/load/save. Path: Asset path for scene operations (default: \"Assets/\"). BuildIndex: Build index for load/build settings actions. # Add other action-specific args as needed (e.g., for hierarchy depth) Returns: Dictionary with results ('su..."
+    },
+    {
+      "name": "Unity_ManageScript",
+      "description": "Compatibility router for legacy script operations. IMPORTANT: - Direct file reads should use resources/read. - Edits should use Unity.ApplyTextEdits (ranges) or Unity.ScriptApplyEdits (structured). Args: action: Operation ('create', 'read', 'delete'). name: Script name (no .cs extension). path: Asset path (default: \"Assets/\"). contents: C# code for 'create'/'update'. script_type: Type hint (e.g., 'MonoBehaviour')...."
+    },
+    {
+      "name": "Unity_ManageScript_capabilities",
+      "description": "Get Unity.ManageScript capabilities (supported ops, limits, and guards). Returns: - ops: list of supported structured ops - text_ops: list of supported text ops - max_edit_payload_bytes: server edit payload cap - guards: header/using guard enabled flag"
+    },
+    {
+      "name": "Unity_ManageShader",
+      "description": "Manages shader scripts in Unity (create, read, update, delete). Args: Action: Operation ('Create', 'Read', 'Update', 'Delete'). Name: Shader name (no .cs extension). Path: Asset path (default: \"Assets/\"). Contents: Shader code for 'create'/'update'. Returns: Dictionary with results ('success', 'message', 'data')."
+    },
+    {
+      "name": "Unity_Menu_InvokeAndWaitStable",
+      "description": "Invokes a Unity editor menu item and waits for editor/import/scene stability evidence before returning."
+    },
+    {
+      "name": "Unity_Object_ResolveStablePath",
+      "description": "Resolves a hierarchy path emitted by Lens scene, runtime, or UI tools into stable object identity and canonical path rows. Args: Path: Hierarchy path, indexed hierarchy path, object id, or object name to resolve. Target: Alias for Path when passing a target field from another tool. Mode: scene, runtime, ui, or any. UI mode filters to RectTransform-backed objects. IncludeInactive: Include inactive scene objects. Ma..."
+    },
+    {
+      "name": "Unity_Object_ValidateReferences",
+      "description": "Audits serialized object-reference fields on a GameObject, component, or asset. Args: Target: Target GameObject/path, instance id string, or asset path. SearchMethod: How to find a scene object target ('by_name', 'by_id', 'by_path'). ComponentName: Optional component type name to narrow the audit. IncludeInactive: Include inactive scene objects when resolving the target. Returns: Dictionary with success/message/da..."
+    },
+    {
+      "name": "Unity_Package_PreviewInstallForCapability",
+      "description": "Previews a package install plan for a requested capability without mutating Package Manager state. This tool never installs packages. It returns the explicit package mutation tool/action to use only after user approval."
+    },
+    {
+      "name": "Unity_Package_ResolveCapability",
+      "description": "Resolves a requested Unity capability to package-backed solutions without mutation. Reports installed packages, built-in module availability, missing package requirements, compatibility notes, compile/import impact, install risk, fallback plan, and whether a package install appears necessary."
+    },
+    {
+      "name": "Unity_PlayMode_EnterReady",
+      "description": "Requests Play Mode entry and waits until the runtime probe is ready for runtime tools. When called through the Lens host, this workflow survives reconnect-prone domain reloads and reports request, editor-stability, runtime-advance, and console-delta evidence."
+    },
+    {
+      "name": "Unity_PlayMode_PointerInputSmoke",
+      "description": "Runs a play-mode pointer input smoke check with UI and world hit evidence. The tool is intended for verification, not authoring. It can attempt to queue a synthetic Input System mouse state through reflection, then samples observed mouse state, UI raycast hits, and optional world raycast evidence."
+    },
+    {
+      "name": "Unity_PlayMode_StepVerifier",
+      "description": "Runs a bounded paused Play Mode verification step. This tool does not free-run real-time simulation by default. The Lens host should enter Play Mode first, then this tool pauses immediately, applies exactly warmupSteps + steps editor/player steps, captures compact runtime and console evidence, and exits or restores pause state according to arguments."
+    },
+    {
+      "name": "Unity_Prefab_ApplyCopyComponentSerializedValues",
+      "description": "Copies serialized component values between prefab assets and saves the target prefab by tool contract."
+    },
+    {
+      "name": "Unity_Prefab_ApplyOverrides",
+      "description": "Applies selected prefab instance property overrides to prefab assets. This persists prefab asset changes by explicit tool contract."
+    },
+    {
+      "name": "Unity_Prefab_CreateFromSceneObject",
+      "description": "Creates a prefab asset from a scene object. This is an explicit prefab asset save by tool contract."
+    },
+    {
+      "name": "Unity_Prefab_GetOverrides",
+      "description": "Lists inherited prefab content and local prefab instance overrides with risk classifications."
+    },
+    {
+      "name": "Unity_Prefab_Inspect",
+      "description": "Inspects a prefab asset or scene prefab instance hierarchy, components, variants, and nested prefab boundaries."
+    },
+    {
+      "name": "Unity_Prefab_Instantiate",
+      "description": "Instantiates a prefab asset into a loaded scene and reports scene dirty state without saving the scene."
+    },
+    {
+      "name": "Unity_Prefab_PreviewApplyOverrides",
+      "description": "Previews applying selected prefab instance overrides to prefab assets and reports broad/nested risks before mutation."
+    },
+    {
+      "name": "Unity_Prefab_PreviewCopyComponentSerializedValues",
+      "description": "Previews copying serialized component values between prefab assets with explicit object-reference handling."
+    },
+    {
+      "name": "Unity_Prefab_PreviewRevertOverrides",
+      "description": "Previews reverting selected prefab instance overrides and reports broad/nested risks before mutation."
+    },
+    {
+      "name": "Unity_Prefab_RevertOverrides",
+      "description": "Reverts selected prefab instance property overrides in the scene without saving the scene."
+    },
+    {
+      "name": "Unity_Prefab_SetSerializedProperties",
+      "description": "Sets serialized property values on a prefab asset or prefab instance without requiring a custom RunCommand. Args: PrefabPath: Prefab asset path under Assets/. When omitted, Target must resolve to a scene prefab instance. Target: Scene prefab instance GameObject target, path, or instance id. SearchMethod: How to find Target when editing a scene prefab instance. IncludeInactive: Include inactive scene objects when r..."
+    },
+    {
+      "name": "Unity_Prefab_VerifySerializedProperties",
+      "description": "Verifies serialized property values on a prefab asset or prefab instance without mutation. Args: PrefabPath: Prefab asset path under Assets/. When omitted, Target must resolve to a scene prefab instance. Target: Scene prefab instance GameObject target, path, or instance id. Checks: Array of serialized property checks. TargetPath: Relative child path under the prefab root. Use '.' or omit for the root GameObject. C..."
+    },
+    {
+      "name": "Unity_Preset_ApplyToComponent",
+      "description": "Applies a Preset asset to a scene component or prefab asset component. Scene applies mark scenes dirty; prefab applies save the prefab by tool contract."
+    },
+    {
+      "name": "Unity_Preset_Create",
+      "description": "Creates a Preset asset from a scene or prefab component. This persists the Preset asset by explicit tool contract."
+    },
+    {
+      "name": "Unity_Preset_Inspect",
+      "description": "Inspects a Preset asset target type and serialized preset fields without mutation."
+    },
+    {
+      "name": "Unity_Preset_PreviewApplyToComponent",
+      "description": "Previews whether a Preset asset can be applied to a scene or prefab component without mutating or saving."
+    },
+    {
+      "name": "Unity_Preset_PreviewCreate",
+      "description": "Previews creating a Preset asset from a scene or prefab component without saving assets."
+    },
+    {
+      "name": "Unity_Preset_Search",
+      "description": "Searches project and package Preset assets and reports target type plus component compatibility hints."
+    },
+    {
+      "name": "Unity_Profiler_Query",
+      "description": "Queries compact local Unity profiler and memory information. Detailed profiler UI/session controls are intentionally not ported."
+    },
+    {
+      "name": "Unity_Project_BlockedLanguageScan",
+      "description": "Scans scripts, loaded scenes, scene assets, prefabs, ScriptableObjects, and UI/string-bearing serialized fields for project-specific blocked language."
+    },
+    {
+      "name": "Unity_Project_DiagnoseImportSideEffects",
+      "description": "Inspects asset importer and dependency signals that can explain refresh/reimport side effects without mutating assets. Args: Under: Folder under Assets or Packages to inspect. Defaults to Assets. Filter: Optional AssetDatabase.FindAssets filter such as 't:Texture2D', 't:Prefab', or empty for all assets. AssetPaths: Explicit asset paths to inspect in addition to filter results. MaxAssets: Maximum number of candidat..."
+    },
+    {
+      "name": "Unity_Project_GetInfo",
+      "description": "Returns compact Unity project information through canonical Lens sections."
+    },
+    {
+      "name": "Unity_Project_GetPackages",
+      "description": "Returns a compact read-only package list from Unity Package Manager metadata."
+    },
+    {
+      "name": "Unity_Project_ManagePackages",
+      "description": "Performs high-risk package manager mutations. This tool is intended for the full/admin pack only."
+    },
+    {
+      "name": "Unity_Project_PackageCompatibility",
+      "description": "Reads package compatibility, assembly, and editor-log diagnostics without mutation. Returns package install/version state, editor metadata, assembly load/type-load signals, and filtered Editor.log matches when requested."
+    },
+    {
+      "name": "Unity_Project_ScanMissingScripts",
+      "description": "Scans open scenes and prefab assets for missing MonoBehaviour script references. Args: Under: Folder under Assets to scan for prefabs. Defaults to Assets. IncludeOpenScenes: Scan currently open scenes. IncludePrefabs: Scan prefab assets on disk. MaxPrefabs: Maximum number of prefab assets to inspect. Returns: Dictionary with success/message/data. Data contains scene findings, prefab findings, and counts."
+    },
+    {
+      "name": "Unity_ProjectSettings_PreviewActiveInputHandler",
+      "description": "Reads or previews a Unity ProjectSettings active input handler change without mutation. Omit mode to inspect the current state. Modes: legacy, inputSystem, both."
+    },
+    {
+      "name": "Unity_ProjectSettings_SetActiveInputHandler",
+      "description": "Sets Unity ProjectSettings active input handler through editor-authored PlayerSettings mutation. Modes: legacy, inputSystem, both. Usually requires an editor restart or script reload before defines and devices fully settle."
+    },
+    {
+      "name": "Unity_ReadConsole",
+      "description": "Gets messages from or clears the Unity Editor console. Args: Action: Operation ('Get' or 'Clear'). Types: Message types to get ('Error', 'Warning', 'Log', 'Exception', 'Assert', 'All'), as a string or array. Count: Max messages to return. FilterText: Text filter for messages. SinceTimestamp: Get messages after this timestamp (ISO 8601). Cursor: Optional incremental cursor from a previous response. Format: Output f..."
+    },
+    {
+      "name": "Unity_ReadDetailRef",
+      "description": "Reads a stored detail ref payload previously returned by a compact Unity MCP tool result."
+    },
+    {
+      "name": "Unity_ReadResource",
+      "description": "Reads a resource by unity://path/... URI with optional slicing. Args: Uri: The resource URI to read under Assets/ StartLine: Starting line number (1-based) LineCount: Number of lines to read HeadBytes: Number of bytes to read from start TailLines: Number of lines from end Full: When true, return the full file instead of the default preview window Request: Natural language request (e.g., 'last 120 lines', 'show 40..."
+    },
+    {
+      "name": "Unity_Resource_Delete",
+      "description": "Deletes files or directories under allowed Unity project roots. This is an admin/full-pack tool."
+    },
+    {
+      "name": "Unity_Resource_Write",
+      "description": "Writes UTF-8 text under allowed Unity project roots. Existing files require a SHA-256 precondition."
+    },
+    {
+      "name": "Unity_RunCommand",
+      "description": "Compile and execute a C# script in the Unity Editor. This tool first validates that the code can be compiled, then executes it if compilation succeeds. Args: code (required), title (optional). Returns: compilation status, execution status, logs, and results. This is a powerful tool that allows you to programmatically control virtually every aspect of the game, including physics, input, graphics, gameplay logic, pr..."
+    },
+    {
+      "name": "Unity_Runtime_AddTemporaryComponent",
+      "description": "Adds a runtime-only component to a resolved GameObject in Play Mode and returns temporary-component evidence without saving scene or prefab state."
+    },
+    {
+      "name": "Unity_Runtime_GetComponentSnapshot",
+      "description": "Reads public properties and serialized fields from a runtime component without executing arbitrary project code."
+    },
+    {
+      "name": "Unity_Runtime_GetVisualBoundsSnapshot",
+      "description": "Returns a generic runtime visual-bounds snapshot for a live scene object. Args: Target: Target runtime GameObject, hierarchy path, or instance id. SearchMethod: How to find the target ('by_name', 'by_id', 'by_path'). IncludeInactive: Include inactive objects when resolving targets. CameraTarget: Optional camera GameObject used to compute screen-space footprint. CameraSearchMethod: How to find the optional camera t..."
+    },
+    {
+      "name": "Unity_Runtime_InvokeComponentMethod",
+      "description": "Invokes a public instance method on a runtime component with typed JSON arguments, optional post-call wait, and compact state/console evidence."
+    },
+    {
+      "name": "Unity_Runtime_QueryObjects",
+      "description": "Counts runtime objects by multiple component types in play mode and returns capped sample object paths."
+    },
+    {
+      "name": "Unity_Runtime_SetComponentProperty",
+      "description": "Sets a public writable property/field or [SerializeField] runtime field on a resolved component, then returns before/after evidence."
+    },
+    {
+      "name": "Unity_Scene_ApplyAssignObjectReferences",
+      "description": "Applies serialized object-reference assignments on scene components without saving scenes. This is the preferred authoring name for scene object-reference binding. Supports single ObjectReference fields and object-reference arrays/lists only."
+    },
+    {
+      "name": "Unity_Scene_ApplyBindSerializedReferences",
+      "description": "Applies serialized object-reference bindings on scene components without saving scenes. Supports single ObjectReference fields and object-reference arrays/lists only."
+    },
+    {
+      "name": "Unity_Scene_ApplyBulkMutation",
+      "description": "Applies bounded bulk scene mutations for GameObjects selected by component query, with preview-style reporting and optional explicit scene save."
+    },
+    {
+      "name": "Unity_Scene_ApplyCopyComponentSerializedValues",
+      "description": "Copies serialized component values between loaded scene objects with explicit object-reference handling, marking scenes dirty without saving."
+    },
+    {
+      "name": "Unity_Scene_ApplyGridBoardLayout",
+      "description": "Applies a board/isometric layout to scene tile objects found by component query, setting transforms and sprite sorting from grid coordinates."
+    },
+    {
+      "name": "Unity_Scene_ApplyInstantiatePrefabAndBind",
+      "description": "Applies scene prefab instantiation plus serialized reference binding without saving scenes. Use this when a durable scene instance should exist and have component object-reference fields bound."
+    },
+    {
+      "name": "Unity_Scene_CaptureView",
+      "description": "Captures scene, camera, game-view, or compact multi-angle images to disk and returns metadata only."
+    },
+    {
+      "name": "Unity_Scene_FindComponents",
+      "description": "Finds existing loaded-scene components that already solve or partially solve a requested component/capability need."
+    },
+    {
+      "name": "Unity_Scene_GetDirtyState",
+      "description": "Reports dirty state for loaded scenes without saving or mutating scene content."
+    },
+    {
+      "name": "Unity_Scene_PreviewAssignObjectReferences",
+      "description": "Previews serialized object-reference assignments on scene components without mutation. This is the preferred authoring name for scene object-reference binding. Supports single ObjectReference fields and object-reference arrays/lists only."
+    },
+    {
+      "name": "Unity_Scene_PreviewBindSerializedReferences",
+      "description": "Previews serialized object-reference bindings on scene components without mutation. Supports single ObjectReference fields and object-reference arrays/lists only."
+    },
+    {
+      "name": "Unity_Scene_PreviewBulkMutation",
+      "description": "Previews bounded bulk scene mutations for GameObjects selected by component query, including transform, SpriteRenderer, and serialized-property changes."
+    },
+    {
+      "name": "Unity_Scene_PreviewCopyComponentSerializedValues",
+      "description": "Previews copying serialized component values between loaded scene objects with explicit object-reference handling."
+    },
+    {
+      "name": "Unity_Scene_PreviewGridBoardLayout",
+      "description": "Previews a board/isometric layout for scene tile objects found by component query, including bounds, camera coverage, sprite diagnostics, and sorting samples."
+    },
+    {
+      "name": "Unity_Scene_PreviewInstantiatePrefabAndBind",
+      "description": "Previews scene prefab instantiation plus serialized reference binding without mutation. Use this when a durable scene instance should exist and have component object-reference fields bound."
+    },
+    {
+      "name": "Unity_Scene_QueryObjects",
+      "description": "Queries loaded scene GameObjects by name, component type, scene, or root scope and optionally reads serialized component fields without mutation."
+    },
+    {
+      "name": "Unity_Scene_Save",
+      "description": "Explicitly saves a loaded scene or all loaded dirty scenes. No save occurs unless this tool is called. Without arguments, saves the active scene. Use allLoadedScenes=true to save all loaded dirty scenes."
+    },
+    {
+      "name": "Unity_Scene_SetSerializedProperties",
+      "description": "Sets serialized property values on scene objects without requiring a custom RunCommand. Args: Target: Scene GameObject target, path, or instance id. SearchMethod: How to find the target root ('by_name', 'by_id', 'by_path'). Assignments: Array of serialized property assignments. TargetPath: Relative child path under the target root. Use '.' or omit for the root GameObject. ComponentType: Component type name on the..."
+    },
+    {
+      "name": "Unity_Scene_VerifySerializedReferences",
+      "description": "Verifies effective serialized object references on scene components without mutation. Reports effective values, prefab-inherited source values, local override status, and expected-reference assertion results for single object-reference fields and object-reference arrays/lists."
+    },
+    {
+      "name": "Unity_ScriptApplyEdits",
+      "description": "Structured C# edits (methods/classes) with safer boundaries - prefer this over raw text. Best practices: - Prefer anchor_* ops for pattern-based insert/replace near stable markers - Use replace_method/delete_method for whole-method changes (keeps signatures balanced) - Avoid whole-file regex deletes; validators will guard unbalanced braces - For tail insertions, prefer anchor/regex_replace on final brace (class cl..."
+    },
+    {
+      "name": "Unity_Session_SelectProject",
+      "description": "Binds this MCP host session to an explicit Unity project root so subsequent direct Lens tool calls use the matching editor bridge instead of the host current working directory."
+    },
+    {
+      "name": "Unity_SetToolPacks",
+      "description": "Sets the active Unity MCP tool packs for this connection. Foundation stays active automatically and at most two additional packs may be selected."
+    },
+    {
+      "name": "Unity_Tests_Run",
+      "description": "Runs Unity Test Runner tests and returns compact counts, failures, assertion messages, and console delta. Args: Mode: EditMode or PlayMode. Defaults to EditMode. Assembly/Assemblies: Optional test assembly filters. Filter/TestNames: Optional test name or full-name filters. Category/Categories: Optional test category filters. TimeoutMs/TimeoutSeconds: Wall-clock timeout. CaptureConsoleDelta: Include Unity console e..."
+    },
+    {
+      "name": "Unity_Tile_BuildSet",
+      "description": "Build headless tile assets or Unity 6 .tileset assets from sprites. Returns a compact summary by default."
+    },
+    {
+      "name": "Unity_Tilemap_Paint",
+      "description": "Apply batched paint or clear commands to one tilemap layer. Supports set_many, fill_rect, clear_many, and clear_rect."
+    },
+    {
+      "name": "Unity_Tilemap_Setup",
+      "description": "Create or update a standard Grid + Tilemap stack in a scene. Creates Ground, Walls, and Overhead layers and optional wall collision."
+    },
+    {
+      "name": "Unity_Tools_ActivateAndVerify",
+      "description": "Activates Unity MCP Lens tool packs and verifies expected tools against the Lens bridge-visible tool surface."
+    },
+    {
+      "name": "Unity_Tools_BatchInvoke",
+      "description": "Sequentially invokes known Unity MCP Lens tools through the stable facade and returns compact per-call results."
+    },
+    {
+      "name": "Unity_Tools_Describe",
+      "description": "Describes live Unity MCP Lens tools, including current active packs, manifest version, required packs, and schemas when requested."
+    },
+    {
+      "name": "Unity_Tools_Invoke",
+      "description": "Invokes a known Unity MCP Lens tool through a stable facade when the client cannot call the native tool directly."
+    },
+    {
+      "name": "Unity_Tools_List",
+      "description": "Lists compact host-visible Unity MCP Lens tool names, grouped by pack or group, for clients whose callable tool surface is stale."
+    },
+    {
+      "name": "Unity_Tools_Menu",
+      "description": "Returns a compact pack-grouped menu of real Unity MCP Lens tools, including read-only hints and workflow recommendations. It does not route calls; call the real native tools directly."
+    },
+    {
+      "name": "Unity_UI_ApplyCreateCanvasPrefab",
+      "description": "Applies durable uGUI Canvas prefab authoring and saves the prefab asset when changes are required. Creates or updates a root Canvas prefab with common uGUI components and an authored hierarchy spec."
+    },
+    {
+      "name": "Unity_UI_ApplyEnsureHierarchy",
+      "description": "Applies persistent UI hierarchy authoring, marks changed scenes dirty, and does not save scenes. Uses the same target/search semantics as the earlier ensure hierarchy tool, with per-node component and layout support."
+    },
+    {
+      "name": "Unity_UI_ApplyLayoutProperties",
+      "description": "Applies authored UI RectTransform and display-property changes, marks changed scenes dirty, and does not save scenes."
+    },
+    {
+      "name": "Unity_UI_CaptureGameView",
+      "description": "Captures the current Game view to a relative path under the Unity project. Args: SceneName: Optional scene name for logging only. OutputPath: Relative output path under the Unity project, for example Temp/UiCapture/shot.png. Width/Height: Optional fixed Game view resolution for exact UI review captures. RestoreOriginalResolution: Restore the previous Game view size after capture when Width/Height changed it. Warmu..."
+    },
+    {
+      "name": "Unity_UI_GetInteractiveRegions",
+      "description": "Returns stable screen-space interactive regions for authored UI elements. Args: Target: Optional target GameObject, path, or canvas root. When omitted, all root canvases are scanned. SearchMethod: How to find the optional target ('by_name', 'by_id', 'by_path'). IncludeChildren: Include children of the target. IncludeInactive: Include inactive UI elements. Returns: Dictionary with success/message/data. Data contain..."
+    },
+    {
+      "name": "Unity_UI_GetLayoutSnapshot",
+      "description": "Returns a read-only UI layout snapshot for a target GameObject, canvas, or subtree. Args: Target: Optional target GameObject, path, or canvas root. When omitted, all root canvases are used. SearchMethod: How to find the target ('by_name', 'by_id', 'by_path'). IncludeChildren: Include children of the target. IncludeInactive: Include inactive UI elements. Returns: Dictionary with success/message/data. Data contains..."
+    },
+    {
+      "name": "Unity_UI_InvokeControl",
+      "description": "Invokes a runtime UI control through Unity UI events or component value APIs. Args: Target: Target UI GameObject path, name, or id. SearchMethod: How to find the target ('by_name', 'by_id', 'by_path'). IncludeInactive: Include inactive UI objects while resolving the target. Action: click, setSlider, or toggle. Value: Value used by setSlider and toggle. Toggle treats values >= 0.5 as true. WaitFrames: Frames to wai..."
+    },
+    {
+      "name": "Unity_UI_PreviewCreateCanvasPrefab",
+      "description": "Previews durable uGUI Canvas prefab authoring without saving assets. Creates or updates a root Canvas prefab with common uGUI components and an authored hierarchy spec."
+    },
+    {
+      "name": "Unity_UI_PreviewEnsureHierarchy",
+      "description": "Previews persistent UI hierarchy authoring without mutating or saving scenes. Uses the same target/search semantics as the earlier ensure hierarchy tool, but returns deterministic create, recreate, update, and preserve rows."
+    },
+    {
+      "name": "Unity_UI_PreviewLayoutProperties",
+      "description": "Previews authored UI RectTransform and display-property changes without mutating or saving scenes."
+    },
+    {
+      "name": "Unity_UI_QueryRuntimeLayout",
+      "description": "Queries runtime UI layout and control state without requiring custom C# snippets. Args: Target: Optional target GameObject, path, or canvas root. When omitted, all root canvases are scanned. SearchMethod: How to find the optional target ('by_name', 'by_id', 'by_path'). IncludeChildren: Include children of the target. IncludeInactive: Include inactive UI elements. ElementTypes: Optional filters such as text, image,..."
+    },
+    {
+      "name": "Unity_UI_Raycast",
+      "description": "Returns UI raycast information for a screen-space point using authored UI geometry. Args: ScreenX: Screen-space X coordinate in pixels. ScreenY: Screen-space Y coordinate in pixels. Target: Optional target GameObject, path, or canvas root used to scope the raycast. SearchMethod: How to find the optional target ('by_name', 'by_id', 'by_path'). IncludeInactive: Include inactive UI elements. MaxResults: Maximum numbe..."
+    },
+    {
+      "name": "Unity_UI_Toolkit",
+      "description": "Canonical UI Toolkit helper for panel settings, UXML/USS validation, schema generation, and compact asset previews."
+    },
+    {
+      "name": "Unity_UI_VerifyRaycastAndLayout",
+      "description": "Verifies UI raycast stacks and optional layout assertions without mutation. Use this to prove UI points are blocked by the expected element and to combine hit-test evidence with measured screen-layout assertions."
+    },
+    {
+      "name": "Unity_UI_VerifyScreenLayout",
+      "description": "Verifies measured screen-space UI layout assertions without mutation. Supports inside-screen, relative-position, axis-alignment, and ordered-stack assertions over keyed UI targets. Relative-position keeps strict rect relations (`right_of`, `left_of`, `above`, `below`) and also supports center-based comparisons (`right_of_center`, `left_of_center`, `above_center`, `below_center`)."
+    },
+    {
+      "name": "Unity_UI_VerifyScreenLayoutMatrix",
+      "description": "Verifies measured screen-space UI layout assertions across a Game view resolution matrix without persistent scene mutation. The tool creates missing fixed Game view sizes as needed, selects each requested resolution, runs the same assertions as Unity.UI.VerifyScreenLayout, and restores the original selected Game view size by default."
+    },
+    {
+      "name": "Unity_ValidateScript",
+      "description": "Validate a C# script and return diagnostics. Args: uri, level=('basic'|'standard'), include_diagnostics (bool, optional). - basic: quick syntax checks. - standard: deeper checks (performance hints, common pitfalls). - include_diagnostics: when true, returns full diagnostics and summary; default returns counts only."
+    },
+    {
+      "name": "Unity_Workflow_AuthorPrefab",
+      "description": "Authors prefab assets through reuse discovery, explicit preview/apply workflow state, prefab inspection, and optional scene instantiation. Workflow wrappers preserve partial results, run reuse discovery before mutation, use preview/apply phases internally, and keep durable authoring separate from runtime verification."
+    },
+    {
+      "name": "Unity_Workflow_AuthorSceneObject",
+      "description": "Authors a durable scene object through discovery, preview, optional apply, dirty-state reporting, and optional runtime verification. Workflow wrappers preserve partial results, run reuse discovery before mutation, use preview/apply phases internally, and keep durable authoring separate from runtime verification."
+    },
+    {
+      "name": "Unity_Workflow_ConfigureExistingComponent",
+      "description": "Configures an existing scene component or adds a reusable component through discovery, schema inspection, preview/apply, and dirty-state reporting. Workflow wrappers preserve partial results, run reuse discovery before mutation, use preview/apply phases internally, and keep durable authoring separate from runtime verification."
+    },
+    {
+      "name": "Unity_Workflow_RunGpuSimulationProbe",
+      "description": "Runs a bounded deterministic FallingSands GPU simulation probe through the project test API with compact counts and caps."
+    },
+    {
+      "name": "Unity_Workflow_RunPlayModeVerification",
+      "description": "Runs play-mode verification as a separate workflow phase with console deltas, component snapshots, optional pointer smoke, and optional Game view capture. Workflow wrappers preserve partial results, run reuse discovery before mutation, use preview/apply phases internally, and keep durable authoring separate from runtime verification."
+    },
+    {
+      "name": "Unity_Workflow_SelectPackThroughMainMenu",
+      "description": "Enters the FallingSands Main Menu through safe paused Play Mode, clicks a pack button with Unity.UI.InvokeControl, then verifies the active runtime pack without Unity.RunCommand."
+    },
+    {
+      "name": "Unity_Workflow_VerifyRuntimePackSelection",
+      "description": "Optionally selects a FallingSands pack, loads the scene when requested, enters runtime if needed, and verifies the active runtime pack."
+    }
+  ]
+}

@@ -7,7 +7,34 @@ const path = require("path");
 const repoRoot = path.resolve(__dirname, "..");
 const defaultHostPath = path.join(repoRoot, "UnityMcpLensApp~", "src", "UnityMcpLens", "bin", "Debug", "net8.0", "UnityMcpLens.exe");
 const defaultOutputDir = path.join(repoRoot, "artifacts");
+const pluginManifestPath = path.join(repoRoot, ".agents", "plugins", "lens-dev-plugin", "manifest.json");
+const manifestGeneratorPath = path.join(repoRoot, "Tools~", "Export-LensDevPluginManifest.js");
 const packOrder = ["foundation", "console", "project", "scripting", "scene", "ui", "runtime", "assets", "debug"];
+const facadeToolNames = [
+  "Unity_Tools_List",
+  "Unity_Tools_Invoke",
+  "Unity_Tools_BatchInvoke",
+];
+const requiredManifestToolNames = [
+  ...facadeToolNames,
+  "Unity_Tools_Describe",
+  "Unity_Tools_Menu",
+  "Unity_Project_BlockedLanguageScan",
+  "Unity_Tests_Run",
+  "Unity_UI_CaptureGameView",
+];
+const representativeToolNames = [
+  ...facadeToolNames,
+  "Unity_Project_PackageCompatibility",
+  "Unity_Project_BlockedLanguageScan",
+  "Unity_Tests_Run",
+  "Unity_Editor_SetPlayMode",
+  "Unity_Asset_Search",
+  "Unity_GameObject_Inspect",
+  "Unity_UI_VerifyScreenLayout",
+  "Unity_UI_CaptureGameView",
+  "Unity_GetLensUsageReport",
+];
 
 let nextPipeId = 1;
 
@@ -235,7 +262,16 @@ class FakeBridge {
   }
 
   async handleCommand(socket, command) {
+    this.context.recordCommand(command);
     const type = command.type;
+    if (type === "register_client") {
+      const requestedToolPacks = command.params && command.params.requestedToolPacks;
+      if (Array.isArray(requestedToolPacks)) {
+        this.context.setActivePacks(requestedToolPacks);
+        this.writeStatus();
+      }
+    }
+
     if (type === "set_tool_packs") {
       this.context.setActivePacks(command.params && command.params.packs);
       this.writeStatus();
@@ -257,10 +293,18 @@ class ScenarioContext {
     this.statusDir = path.join(this.root, "connections");
     this.projectRoot = path.join(this.root, "Project");
     this.activePacks = ["foundation"];
+    this.commands = [];
     this.toolCatalog = toolCatalog;
     this.bridge = null;
     fs.mkdirSync(this.statusDir, { recursive: true });
     fs.mkdirSync(this.projectRoot, { recursive: true });
+  }
+
+  recordCommand(command) {
+    this.commands.push({
+      type: command && command.type,
+      params: command && command.params ? JSON.parse(JSON.stringify(command.params)) : null,
+    });
   }
 
   setActivePacks(packs) {
@@ -323,7 +367,7 @@ function writeStatus(statusPath, connectionPath, projectRoot, options) {
   }, null, 2));
 }
 
-function resultFor(type, _params, context) {
+function resultFor(type, params, context) {
   switch (type) {
     case "register_client":
       return {
@@ -356,6 +400,10 @@ function resultFor(type, _params, context) {
       };
     case "Unity_Tools_Menu":
       return menuResult(context);
+    case "Unity_Tools_List":
+      return toolListResult(context, params);
+    case "Unity_Tools_Describe":
+      return describeResult(context, params);
     default:
       return { success: true, message: `${type} ok`, data: { activeToolPacks: context.activePacks } };
   }
@@ -428,6 +476,87 @@ function schemaFor(tool) {
     };
   }
 
+  if (tool.name === "Unity_Tools_List") {
+    return {
+      type: "object",
+      properties: {
+        groupBy: { type: "string", enum: ["pack", "group", "flat"] },
+        maxToolsPerGroup: { type: "integer" },
+      },
+    };
+  }
+
+  if (tool.name === "Unity_Tools_Invoke") {
+    return {
+      type: "object",
+      properties: {
+        toolName: { type: "string" },
+        arguments: { type: "object" },
+        timeoutMs: { type: "integer" },
+      },
+      required: ["toolName"],
+    };
+  }
+
+  if (tool.name === "Unity_Tools_BatchInvoke") {
+    return {
+      type: "object",
+      properties: {
+        calls: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              toolName: { type: "string" },
+              arguments: { type: "object" },
+              timeoutMs: { type: "integer" },
+            },
+            required: ["toolName"],
+          },
+        },
+        failFast: { type: "boolean" },
+      },
+      required: ["calls"],
+    };
+  }
+
+  if (tool.name === "Unity_UI_CaptureGameView") {
+    return {
+      type: "object",
+      properties: {
+        SceneName: { type: "string" },
+        OutputPath: { type: "string" },
+        Width: { type: "integer" },
+        Height: { type: "integer" },
+        RestoreOriginalResolution: { type: "boolean" },
+        WarmupMs: { type: "integer" },
+        WarmupFrames: { type: "integer" },
+        PausePlayMode: { type: "boolean" },
+        StepFrames: { type: "integer" },
+        RestorePauseState: { type: "boolean" },
+        RequirePlaying: { type: "boolean" },
+        CaptureConsoleDelta: { type: "boolean" },
+        FallbackSceneView: { type: "boolean" },
+        TemporaryActivations: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              Target: { type: "string" },
+              SearchMethod: { type: "string" },
+              IncludeInactive: { type: "boolean" },
+              Active: { type: "boolean" },
+            },
+            required: ["Target"],
+          },
+        },
+        VerifyImageDimensions: { type: "boolean" },
+        WaitForFileTimeoutMs: { type: "integer" },
+      },
+      required: ["OutputPath"],
+    };
+  }
+
   return {
     type: "object",
     properties: {
@@ -478,12 +607,112 @@ function menuResult(context) {
       activeToolPacks: context.activePacks,
       totalToolCount: context.toolCatalog.length,
       packs,
+      clientSurfaceFallback: clientSurfaceFallback(),
       workflowRecommendations: [
         fullSurface
           ? "Call real native tools directly; no Unity.SetToolPacks step is required in static_all mode."
           : "Use Unity.SetToolPacks before calling pack-gated tools.",
+        "If a direct native tool is unavailable in the MCP client, use Unity.Tools.List and call it through Unity.Tools.Invoke or Unity.Tools.BatchInvoke.",
       ],
     },
+  };
+}
+
+function toolListResult(context, params) {
+  const fullSurface = context.activePacks.includes("full");
+  const groupBy = ["pack", "group", "flat"].includes(params?.groupBy) ? params.groupBy : "pack";
+  const rawMaxToolsPerGroup = Number(params?.maxToolsPerGroup || 100);
+  const maxToolsPerGroup = Math.min(500, Math.max(1, Number.isFinite(rawMaxToolsPerGroup) ? rawMaxToolsPerGroup : 100));
+  const rows = fakeTools(context.toolCatalog, context.activePacks, false)
+    .map((tool) => ({
+      name: tool.name,
+      canonicalToolName: tool.name,
+      title: tool.title,
+      readOnlyHint: tool.readOnlyHint,
+      schemaHash: tool.schemaHash,
+      packs: tool.packs,
+      groups: tool.groups,
+    }))
+    .sort((left, right) => left.name.localeCompare(right.name));
+  const data = {
+    toolSurfaceMode: fullSurface ? "static_all" : "dynamic_packs",
+    activeToolPacks: context.activePacks,
+    exportedToolCount: rows.length,
+    groupBy,
+    maxToolsPerGroup,
+    truncated: false,
+    bridgeRefresh: { attempted: true, success: true, warning: null },
+    clientSurfaceFallback: clientSurfaceFallback(),
+  };
+
+  if (groupBy === "flat") {
+    data.tools = rows;
+  } else {
+    const key = groupBy === "group" ? "groups" : "packs";
+    data.groups = groupRows(rows, key, maxToolsPerGroup);
+    data.truncated = data.groups.some((group) => group.truncated);
+  }
+
+  return {
+    success: true,
+    message: "Fake tool list.",
+    data,
+  };
+}
+
+function groupRows(rows, key, maxToolsPerGroup) {
+  const groups = new Map();
+  for (const row of rows) {
+    const ids = Array.isArray(row[key]) && row[key].length > 0 ? row[key] : ["ungrouped"];
+    for (const id of ids) {
+      if (!groups.has(id)) groups.set(id, []);
+      groups.get(id).push(row);
+    }
+  }
+
+  return [...groups.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([id, tools]) => ({
+      id,
+      toolCount: tools.length,
+      truncated: tools.length > maxToolsPerGroup,
+      tools: tools.slice(0, maxToolsPerGroup),
+    }));
+}
+
+function describeResult(context, params) {
+  const fullSurface = context.activePacks.includes("full");
+  const includeExamples = Boolean(params?.includeExamples);
+  const tools = fakeTools(context.toolCatalog, context.activePacks, false).map((tool) => ({
+    name: tool.name,
+    title: tool.title,
+    description: tool.description,
+    readOnlyHint: tool.readOnlyHint,
+    packs: tool.packs,
+    groups: tool.groups,
+    examples: includeExamples
+      ? [{ tool: "Unity.Tools.Invoke", arguments: { toolName: tool.name, arguments: {} } }]
+      : undefined,
+  }));
+  return {
+    success: true,
+    message: "Fake tool descriptions.",
+    data: {
+      toolSurfaceMode: fullSurface ? "static_all" : "dynamic_packs",
+      activeToolPacks: context.activePacks,
+      exportedToolCount: tools.length,
+      clientSurfaceFallback: clientSurfaceFallback(),
+      fallbackGuidance: "If a native tool is missing from the client callable surface, call it through Unity.Tools.Invoke or Unity.Tools.BatchInvoke.",
+      tools,
+    },
+  };
+}
+
+function clientSurfaceFallback() {
+  return {
+    listTool: "Unity.Tools.List",
+    invokeTool: "Unity.Tools.Invoke",
+    batchInvokeTool: "Unity.Tools.BatchInvoke",
   };
 }
 
@@ -495,6 +724,9 @@ function buildToolCatalog(targetToolCount) {
     ["foundation", "Unity_ReadDetailRef", true],
     ["foundation", "Unity_Tools_Menu", true],
     ["foundation", "Unity_Tools_Describe", true],
+    ["foundation", "Unity_Tools_List", true],
+    ["foundation", "Unity_Tools_Invoke", false],
+    ["foundation", "Unity_Tools_BatchInvoke", false],
     ["foundation", "Unity_Tools_ActivateAndVerify", false],
     ["foundation", "Unity_ReadConsole", true],
     ["foundation", "Unity_ListResources", true],
@@ -506,10 +738,13 @@ function buildToolCatalog(targetToolCount) {
     ["foundation", "Unity_Project_GetInfo", true],
     ["foundation", "Unity_Editor_ScriptUpdatingConsentModal", false],
     ["project", "Unity_Project_PackageCompatibility", true],
+    ["project", "Unity_Project_BlockedLanguageScan", true],
+    ["project", "Unity_Tests_Run", false],
     ["runtime", "Unity_Editor_SetPlayMode", false],
     ["assets", "Unity_Asset_Search", true],
     ["scene", "Unity_GameObject_Inspect", true],
     ["ui", "Unity_UI_VerifyScreenLayout", true],
+    ["ui", "Unity_UI_CaptureGameView", false],
     ["debug", "Unity_GetLensUsageReport", true],
     ["scripting", "Unity_Editor_SyncScripts", false],
     ["console", "Unity_ManageEditor", false],
@@ -560,20 +795,34 @@ async function runScenario(toolSurfaceMode, toolCatalog, hostPath) {
     client = new McpHostClient(context.projectRoot, context.statusDir, toolSurfaceMode, hostPath);
     const initialize = await client.initialize();
     const startupList = await client.listTools();
+    const startupBridgeCommands = context.commands.slice();
     const setAssetsBefore = client.notificationCount("notifications/tools/list_changed");
     const setAssets = await client.callTool("Unity_SetToolPacks", { Packs: ["assets"] });
     const sawListChanged = await client.waitForNotification("notifications/tools/list_changed", setAssetsBefore, 1500);
     const afterSetList = await client.listTools();
     const menu = await client.callTool("Unity_Tools_Menu", {});
+    const listFacade = await client.callTool("Unity_Tools_List", { groupBy: "flat", maxToolsPerGroup: 500 });
+    const describe = await client.callTool("Unity_Tools_Describe", { includeExamples: true });
+    const menuSummary = summarizeToolCall(menu);
+    const listFacadeSummary = summarizeToolCall(listFacade);
+    const describeSummary = summarizeToolCall(describe);
 
     return {
       toolSurfaceMode,
       initialize: summarizeEnvelope(initialize),
       startupToolsList: summarizeToolsList(startupList),
+      startupBridgeCommands: summarizeBridgeCommands(startupBridgeCommands),
       setAssets: summarizeToolCall(setAssets),
       sawListChanged,
       afterSetToolsList: summarizeToolsList(afterSetList),
-      menu: summarizeToolCall(menu),
+      menu: menuSummary,
+      listFacade: listFacadeSummary,
+      describe: describeSummary,
+      fallbackGuidance: summarizeFallbackGuidance({
+        menu: menuSummary,
+        listFacade: listFacadeSummary,
+        describe: describeSummary,
+      }),
       stderr: client.stderr.trim(),
     };
   } finally {
@@ -603,8 +852,22 @@ function summarizeToolsList(envelope) {
     descriptorApproxTokens: approxTokens(descriptorBytes),
     schemaBytes,
     schemaApproxTokens: approxTokens(schemaBytes),
+    facadePresence: facadePresence(names),
     representativePresence: representativePresence(names),
     toolNames: names,
+  };
+}
+
+function summarizeBridgeCommands(commands) {
+  const registerClient = commands.find((command) => command.type === "register_client") || null;
+  const setToolPacks = commands.filter((command) => command.type === "set_tool_packs");
+  return {
+    count: commands.length,
+    types: commands.map((command) => command.type),
+    registerRequestedToolPacks: registerClient?.params?.requestedToolPacks ?? null,
+    registerToolSurfaceMode: registerClient?.params?.toolSurfaceMode ?? null,
+    setToolPacksCount: setToolPacks.length,
+    setToolPacksReasons: setToolPacks.map((command) => command.params?.reason ?? null),
   };
 }
 
@@ -618,25 +881,131 @@ function summarizeToolCall(envelope) {
   };
 }
 
-function representativePresence(names) {
-  const wanted = [
-    "Unity_Project_PackageCompatibility",
-    "Unity_Editor_SetPlayMode",
-    "Unity_Asset_Search",
-    "Unity_GameObject_Inspect",
-    "Unity_UI_VerifyScreenLayout",
-    "Unity_GetLensUsageReport",
-  ];
-  return Object.fromEntries(wanted.map((name) => [name, names.includes(name)]));
+function summarizeFallbackGuidance(calls) {
+  return Object.fromEntries(Object.entries(calls).map(([key, call]) => {
+    const data = call?.data || {};
+    const recommendations = Array.isArray(data.workflowRecommendations) ? data.workflowRecommendations : [];
+    const fallback = data.clientSurfaceFallback || null;
+    const serializedData = JSON.stringify(data);
+    return [key, {
+      hasClientSurfaceFallback:
+        fallback?.listTool === "Unity.Tools.List" &&
+        fallback?.invokeTool === "Unity.Tools.Invoke" &&
+        fallback?.batchInvokeTool === "Unity.Tools.BatchInvoke",
+      mentionsInvoke:
+        serializedData.includes("Unity.Tools.Invoke") ||
+        recommendations.some((line) => String(line).includes("Unity.Tools.Invoke")),
+      mentionsBatchInvoke:
+        serializedData.includes("Unity.Tools.BatchInvoke") ||
+        recommendations.some((line) => String(line).includes("Unity.Tools.BatchInvoke")),
+    }];
+  }));
 }
 
-function buildConclusion(dynamicScenario, staticScenario) {
+function facadePresence(names) {
+  const presence = Object.fromEntries(facadeToolNames.map((name) => [name, names.includes(name)]));
+  return {
+    ...presence,
+    allPresent: Object.values(presence).every(Boolean),
+  };
+}
+
+function representativePresence(names) {
+  return Object.fromEntries(representativeToolNames.map((name) => [name, names.includes(name)]));
+}
+
+function loadPluginManifestStatus() {
+  const status = {
+    path: path.relative(repoRoot, pluginManifestPath).replace(/\\/g, "/"),
+    generatorPath: path.relative(repoRoot, manifestGeneratorPath).replace(/\\/g, "/"),
+    exists: fs.existsSync(pluginManifestPath),
+    checkPassed: false,
+    checkOutput: null,
+    checkError: null,
+    manifestVersion: null,
+    toolCount: null,
+    sourceOfTruth: null,
+    executionSourceOfTruth: null,
+    staticAllConfigured: null,
+    requiredToolPresence: Object.fromEntries(requiredManifestToolNames.map((name) => [name, false])),
+    requiredToolsPresent: false,
+  };
+
+  try {
+    status.checkOutput = childProcess.execFileSync(process.execPath, [manifestGeneratorPath, "--check"], {
+      cwd: repoRoot,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    }).trim();
+    status.checkPassed = true;
+  } catch (error) {
+    status.checkError = [
+      error.stdout ? String(error.stdout).trim() : "",
+      error.stderr ? String(error.stderr).trim() : "",
+      error.message ? String(error.message).trim() : "",
+    ].filter(Boolean).join("\n");
+  }
+
+  if (!status.exists) return status;
+
+  try {
+    const manifest = JSON.parse(fs.readFileSync(pluginManifestPath, "utf8"));
+    const toolNames = Array.isArray(manifest.tools) ? manifest.tools.map((tool) => tool.name).filter(Boolean) : [];
+    status.manifestVersion = manifest.manifest_version ?? null;
+    status.toolCount = toolNames.length;
+    status.sourceOfTruth = manifest.sourceOfTruth ?? null;
+    status.executionSourceOfTruth = manifest.executionSourceOfTruth ?? null;
+    status.staticAllConfigured =
+      manifest.server?.mcp_config?.env?.UNITY_MCP_LENS_TOOL_SURFACE_MODE === "static_all";
+    status.requiredToolPresence = Object.fromEntries(requiredManifestToolNames.map((name) => [name, toolNames.includes(name)]));
+    status.requiredToolsPresent = Object.values(status.requiredToolPresence).every(Boolean);
+  } catch (error) {
+    status.checkError = [status.checkError, `Could not read manifest: ${error.message}`].filter(Boolean).join("\n");
+  }
+
+  return status;
+}
+
+function buildFacadeResilience(dynamicScenario, staticScenario, pluginManifest) {
+  const dynamicStartup = dynamicScenario.startupToolsList;
+  const staticStartup = staticScenario.startupToolsList;
+  const staticGuidance = staticScenario.fallbackGuidance || {};
+  const fallbackGuidancePresent = Object.values(staticGuidance).every((entry) =>
+    entry.hasClientSurfaceFallback && entry.mentionsInvoke && entry.mentionsBatchInvoke);
+
+  return {
+    foundationFacadesPresent: Boolean(dynamicStartup.facadePresence?.allPresent),
+    staticAllFacadesPresent: Boolean(staticStartup.facadePresence?.allPresent),
+    staticAllNativeMissedToolRepresentativesPresent:
+      Boolean(staticStartup.representativePresence.Unity_Project_BlockedLanguageScan) &&
+      Boolean(staticStartup.representativePresence.Unity_Tests_Run),
+    fallbackGuidancePresent,
+    pluginManifestFresh: Boolean(pluginManifest.checkPassed),
+    pluginManifestHasRequiredTools: Boolean(pluginManifest.requiredToolsPresent),
+    escapeHatchReady:
+      Boolean(dynamicStartup.facadePresence?.allPresent) &&
+      Boolean(staticStartup.facadePresence?.allPresent) &&
+      fallbackGuidancePresent &&
+      Boolean(pluginManifest.checkPassed) &&
+      Boolean(pluginManifest.requiredToolsPresent),
+  };
+}
+
+function buildConclusion(dynamicScenario, staticScenario, pluginManifest) {
   const dynamicStartup = dynamicScenario.startupToolsList;
   const staticStartup = staticScenario.startupToolsList;
   const staticHasRepresentatives = Object.values(staticStartup.representativePresence).every(Boolean);
+  const facadeResilience = buildFacadeResilience(dynamicScenario, staticScenario, pluginManifest);
   return {
     protocolLevelStaticAllHandsClientFullToolList:
       staticHasRepresentatives && staticStartup.toolCount > dynamicStartup.toolCount,
+    clientResilientFacadeEscapeHatchReady: facadeResilience.escapeHatchReady,
+    foundationFacadesPresent: facadeResilience.foundationFacadesPresent,
+    staticAllFacadesPresent: facadeResilience.staticAllFacadesPresent,
+    staticAllNativeMissedToolRepresentativesPresent: facadeResilience.staticAllNativeMissedToolRepresentativesPresent,
+    fallbackGuidancePresent: facadeResilience.fallbackGuidancePresent,
+    pluginManifestFresh: facadeResilience.pluginManifestFresh,
+    pluginManifestHasRequiredTools: facadeResilience.pluginManifestHasRequiredTools,
     staticAllStartupToolCount: staticStartup.toolCount,
     dynamicStartupToolCount: dynamicStartup.toolCount,
     staticAllStartupResponseBytes: staticStartup.responseBodyBytes,
@@ -648,6 +1017,12 @@ function buildConclusion(dynamicScenario, staticScenario) {
       staticScenario.afterSetToolsList.toolCount === staticStartup.toolCount &&
       staticScenario.setAssets.data?.toolSurfaceMode === "static_all" &&
       staticScenario.setAssets.data?.toolsListChangedNotificationSent === false,
+    staticAllRegisterRequestedFull:
+      Array.isArray(staticScenario.startupBridgeCommands?.registerRequestedToolPacks) &&
+      staticScenario.startupBridgeCommands.registerRequestedToolPacks.includes("full") &&
+      staticScenario.startupBridgeCommands?.registerToolSurfaceMode === "static_all",
+    staticAllAvoidedStartupPackRestore:
+      staticScenario.startupBridgeCommands?.setToolPacksCount === 0,
     canDirectlyObserveCodexPromptInjection: false,
     promptInjectionLimit:
       "This artifact proves what the MCP host sends to a client over tools/list. It cannot prove whether Codex injects every received tool schema into model context without a Codex-side prompt/tool-snapshot trace.",
@@ -658,6 +1033,8 @@ function writeMarkdownReport(report, markdownPath) {
   const c = report.conclusion;
   const dynamic = report.scenarios.dynamic_packs.startupToolsList;
   const stat = report.scenarios.static_all.startupToolsList;
+  const manifest = report.pluginManifest;
+  const facade = report.facadeResilience;
   const lines = [
     "# MCP Tool Surface Mode Evidence",
     "",
@@ -668,7 +1045,14 @@ function writeMarkdownReport(report, markdownPath) {
     "## Verdict",
     "",
     `- Protocol-level static-all hands the client the full tool list at startup: **${c.protocolLevelStaticAllHandsClientFullToolList ? "yes" : "no"}**.`,
+    `- Client-resilient facade escape hatch ready: **${c.clientResilientFacadeEscapeHatchReady ? "yes" : "no"}**.`,
+    `- Foundation exposes List/Invoke/BatchInvoke facades: **${c.foundationFacadesPresent ? "yes" : "no"}**.`,
+    `- Static-all exposes representative missed native tools: **${c.staticAllNativeMissedToolRepresentativesPresent ? "yes" : "no"}**.`,
+    `- Menu/List/Describe fallback guidance present: **${c.fallbackGuidancePresent ? "yes" : "no"}**.`,
+    `- Repo-local plugin manifest fresh: **${c.pluginManifestFresh ? "yes" : "no"}**.`,
     `- Direct Codex prompt/context injection observed: **no**. ${c.promptInjectionLimit}`,
+    `- Static-all startup register requested the full surface: **${c.staticAllRegisterRequestedFull ? "yes" : "no"}**.`,
+    `- Static-all avoided startup pack-restore before first tools/list: **${c.staticAllAvoidedStartupPackRestore ? "yes" : "no"}**.`,
     `- Static \`Unity.SetToolPacks([\"assets\"])\` preserved full surface without list-changed: **${c.setToolPacksNoopKeptStaticToolCount ? "yes" : "no"}**.`,
     "",
     "## Startup tools/list",
@@ -678,9 +1062,40 @@ function writeMarkdownReport(report, markdownPath) {
     `| dynamic_packs | ${dynamic.toolCount} | ${dynamic.responseBodyBytes} | ${dynamic.responseBodyApproxTokens} | ${dynamic.descriptorBytes} | ${dynamic.schemaApproxTokens} |`,
     `| static_all | ${stat.toolCount} | ${stat.responseBodyBytes} | ${stat.responseBodyApproxTokens} | ${stat.descriptorBytes} | ${stat.schemaApproxTokens} |`,
     "",
+    "## Facade presence",
+    "",
+    "| Mode | Unity_Tools_List | Unity_Tools_Invoke | Unity_Tools_BatchInvoke |",
+    "| --- | --- | --- | --- |",
+    `| dynamic_packs startup | ${dynamic.facadePresence.Unity_Tools_List ? "present" : "missing"} | ${dynamic.facadePresence.Unity_Tools_Invoke ? "present" : "missing"} | ${dynamic.facadePresence.Unity_Tools_BatchInvoke ? "present" : "missing"} |`,
+    `| static_all startup | ${stat.facadePresence.Unity_Tools_List ? "present" : "missing"} | ${stat.facadePresence.Unity_Tools_Invoke ? "present" : "missing"} | ${stat.facadePresence.Unity_Tools_BatchInvoke ? "present" : "missing"} |`,
+    "",
     "## Representative static-all tools present at startup",
     "",
     ...Object.entries(stat.representativePresence).map(([name, present]) => `- \`${name}\`: ${present ? "present" : "missing"}`),
+    "",
+    "## Plugin manifest discovery hint",
+    "",
+    `- Path: \`${manifest.path}\``,
+    `- Fresh against generator: **${manifest.checkPassed ? "yes" : "no"}**`,
+    `- Tool count: ${manifest.toolCount ?? "unknown"}`,
+    `- Source of truth: \`${manifest.sourceOfTruth ?? "unknown"}\``,
+    `- Execution source of truth: \`${manifest.executionSourceOfTruth ?? "unknown"}\``,
+    `- Static-all configured: **${manifest.staticAllConfigured ? "yes" : "no"}**`,
+    "",
+    "Required manifest tools:",
+    "",
+    ...Object.entries(manifest.requiredToolPresence).map(([name, present]) => `- \`${name}\`: ${present ? "present" : "missing"}`),
+    "",
+    "## Facade fallback guidance",
+    "",
+    ...Object.entries(report.scenarios.static_all.fallbackGuidance).map(([name, value]) =>
+      `- \`${name}\`: fallback=${value.hasClientSurfaceFallback ? "yes" : "no"}, invoke=${value.mentionsInvoke ? "yes" : "no"}, batch=${value.mentionsBatchInvoke ? "yes" : "no"}`),
+    "",
+    "## Resilience interpretation",
+    "",
+    `- Escape hatch ready: **${facade.escapeHatchReady ? "yes" : "no"}**.`,
+    "- `Unity_Tools_List` gives clients a compact live index when direct tool tables are stale.",
+    "- `Unity_Tools_Invoke` and `Unity_Tools_BatchInvoke` keep missed native tools callable through one stable surface.",
     "",
     "## Interpretation",
     "",
@@ -707,7 +1122,7 @@ async function main() {
   const args = parseArgs(process.argv.slice(2));
   const hostPath = path.resolve(args.hostPath || process.env.UNITY_MCP_LENS_HOST || defaultHostPath);
   const outputDir = path.resolve(args.outputDir || defaultOutputDir);
-  const fakeFullToolCount = Math.max(24, Number(args.fakeFullToolCount || 80));
+  const fakeFullToolCount = Math.max(40, Number(args.fakeFullToolCount || 80));
 
   if (!fs.existsSync(hostPath)) {
     throw new Error(`Host path does not exist: ${hostPath}`);
@@ -721,16 +1136,20 @@ async function main() {
 
   const dynamicScenario = await runScenario("dynamic_packs", toolCatalog, hostPath);
   const staticScenario = await runScenario("static_all", toolCatalog, hostPath);
+  const pluginManifest = loadPluginManifestStatus();
+  const facadeResilience = buildFacadeResilience(dynamicScenario, staticScenario, pluginManifest);
   const report = {
-    schemaVersion: "tool-surface-mode-evidence.v1",
+    schemaVersion: "tool-surface-mode-evidence.v2",
     capturedAtUtc: new Date().toISOString(),
     hostPath,
     fakeFullToolCount,
+    pluginManifest,
+    facadeResilience,
     scenarios: {
       dynamic_packs: dynamicScenario,
       static_all: staticScenario,
     },
-    conclusion: buildConclusion(dynamicScenario, staticScenario),
+    conclusion: buildConclusion(dynamicScenario, staticScenario, pluginManifest),
   };
 
   fs.writeFileSync(jsonPath, JSON.stringify(report, null, 2), "utf8");
@@ -739,6 +1158,8 @@ async function main() {
     success: true,
     jsonPath,
     markdownPath,
+    facadeResilience: report.facadeResilience,
+    pluginManifest: report.pluginManifest,
     conclusion: report.conclusion,
   }, null, 2));
 }

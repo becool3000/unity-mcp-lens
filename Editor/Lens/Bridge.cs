@@ -1997,10 +1997,29 @@ namespace Becool.UnityMcpLens.Editor
                     string name = command.@params?.Value<string>("name") ?? "unity-mcp-lens";
                     string version = command.@params?.Value<string>("version") ?? "unknown";
                     string title = command.@params?.Value<string>("title");
+                    var requestedToolPacks = (command.@params?["requestedToolPacks"] as JArray)?.Values<string>().ToArray()
+                        ?? (command.@params?["activeToolPacks"] as JArray)?.Values<string>().ToArray()
+                        ?? Array.Empty<string>();
+                    string toolSurfaceMode = GetCommandParamString(command, "toolSurfaceMode");
                     var capabilities = ParseLensCapabilities(command.@params);
 
                     UpdateClientInfoRecord(client, name, version, title);
-                    var state = BridgeLensSessionRegistry.RegisterOrUpdateConnection(client.ConnectionId, name, version, title, capabilities);
+                    var state = BridgeLensSessionRegistry.RegisterOrUpdateConnection(
+                        client.ConnectionId,
+                        name,
+                        version,
+                        title,
+                        capabilities,
+                        requestedToolPacks,
+                        out var requestedToolPacksError);
+                    if (state == null)
+                    {
+                        return ReturnResponse(JsonConvert.SerializeObject(new
+                        {
+                            status = "error",
+                            error = requestedToolPacksError ?? "Failed to apply requested startup tool packs."
+                        }), "error", requestedToolPacksError ?? "Failed to apply requested startup tool packs.");
+                    }
                     UpdateBridgeToolSyncStatus();
 
                     string displayName = string.IsNullOrEmpty(title) ? name : title;
@@ -2017,6 +2036,7 @@ namespace Becool.UnityMcpLens.Editor
                             manifestVersion = status.ManifestVersion,
                             profileCatalogVersion = status.ProfileCatalogVersion,
                             activeToolPacks = state.ActiveToolPacks,
+                            toolSurfaceMode,
                             supportsToolSyncLens = true,
                             supportsToolDeltas = true,
                             supportsToolProfiles = true,
@@ -2029,6 +2049,7 @@ namespace Becool.UnityMcpLens.Editor
                         ExtraFields = new
                         {
                             commandType = command.type,
+                            toolSurfaceMode,
                             bridgeSessionId = status.BridgeSessionId,
                             manifestVersion = status.ManifestVersion,
                             activeToolPacks = state.ActiveToolPacks

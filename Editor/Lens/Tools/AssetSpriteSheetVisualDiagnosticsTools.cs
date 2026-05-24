@@ -6,6 +6,7 @@ using System.Linq;
 using System.Reflection;
 using Becool.UnityMcpLens.Editor.Helpers;
 using Becool.UnityMcpLens.Editor.Lens;
+using Becool.UnityMcpLens.Editor.Services;
 using Becool.UnityMcpLens.Editor.ToolRegistry;
 using Becool.UnityMcpLens.Editor.Utils;
 using Becool.UnityMcpLens.Editor.Utils.Graphics;

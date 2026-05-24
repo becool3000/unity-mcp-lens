@@ -372,6 +372,7 @@ namespace Becool.UnityMcpLens.Editor.Lens
                     returnedToolCount = returnedTools.Length,
                     truncated = matchedTools.Length > returnedTools.Length,
                     maxTools,
+                    clientSurfaceFallback = BuildClientSurfaceFallback(),
                     tools = returnedTools
                 };
             }
@@ -436,6 +437,7 @@ namespace Becool.UnityMcpLens.Editor.Lens
                     totalToolCount = allTools.Length,
                     maxToolsPerPack,
                     packs,
+                    clientSurfaceFallback = BuildClientSurfaceFallback(),
                     workflowRecommendations = BuildToolMenuRecommendations(fullSurface, activeToolPacks)
                 };
             }
@@ -646,9 +648,52 @@ namespace Becool.UnityMcpLens.Editor.Lens
                         {
                             tool = tool.name,
                             arguments = new { }
+                        },
+                        facadeFallback = new
+                        {
+                            list = new
+                            {
+                                tool = "Unity.Tools.List",
+                                arguments = new { groupBy = "pack" }
+                            },
+                            invoke = new
+                            {
+                                tool = "Unity.Tools.Invoke",
+                                arguments = new
+                                {
+                                    toolName = tool.name,
+                                    arguments = new { }
+                                }
+                            },
+                            batchInvoke = new
+                            {
+                                tool = "Unity.Tools.BatchInvoke",
+                                arguments = new
+                                {
+                                    calls = new[]
+                                    {
+                                        new
+                                        {
+                                            toolName = tool.name,
+                                            arguments = new { }
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                     : null
+            };
+        }
+
+        static object BuildClientSurfaceFallback()
+        {
+            return new
+            {
+                listTool = "Unity.Tools.List",
+                invokeTool = "Unity.Tools.Invoke",
+                batchInvokeTool = "Unity.Tools.BatchInvoke",
+                note = "If a direct native tool is not callable in the MCP client, use Unity.Tools.List to confirm the host-visible name, then Unity.Tools.Invoke or Unity.Tools.BatchInvoke to call it through the stable facade."
             };
         }
 
@@ -694,6 +739,7 @@ namespace Becool.UnityMcpLens.Editor.Lens
                 return new[]
                 {
                     "Call real native tools directly; no Unity.SetToolPacks step is required in static_all mode.",
+                    "If a direct native tool is unavailable in the MCP client, use Unity.Tools.List and call it through Unity.Tools.Invoke or Unity.Tools.BatchInvoke.",
                     "Use Unity.Tools.Describe when a named tool needs exact schema or pack metadata.",
                     "Prefer read-only, preview, or verify tools before mutating apply tools."
                 };
@@ -707,6 +753,7 @@ namespace Becool.UnityMcpLens.Editor.Lens
             return new[]
             {
                 activationHint,
+                "If a direct native tool is unavailable in the MCP client, use Unity.Tools.List and call it through Unity.Tools.Invoke or Unity.Tools.BatchInvoke.",
                 "Use Unity.Tools.Describe when a named tool needs exact schema or pack metadata.",
                 "Prefer read-only, preview, or verify tools before mutating apply tools."
             };

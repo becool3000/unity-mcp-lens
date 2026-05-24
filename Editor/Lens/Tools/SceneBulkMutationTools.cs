@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Reflection;
 using Becool.UnityMcpLens.Editor.Adapters.Unity;
 using Becool.UnityMcpLens.Editor.Helpers;
 using Becool.UnityMcpLens.Editor.Lens;
@@ -861,15 +862,15 @@ namespace Becool.UnityMcpLens.Editor.Tools
                 ResolveCoordinate(GetToken(mutation, "z", "Z"), current.z, row));
         }
 
-        static double ResolveCoordinate(JToken token, double fallback, TargetRow row)
+        static float ResolveCoordinate(JToken token, float fallback, TargetRow row)
         {
             if (token == null || token.Type == JTokenType.Null)
                 return fallback;
 
             if (token.Type == JTokenType.String)
-                return EvaluateExpression(token.ToString(), row.NumericVariables);
+                return (float)EvaluateExpression(token.ToString(), row.NumericVariables);
 
-            return token.Value<double>();
+            return token.Value<float>();
         }
 
         static double ResolveNumber(JObject mutation, TargetRow row)
@@ -1490,9 +1491,9 @@ namespace Becool.UnityMcpLens.Editor.Tools
                 SkipWhitespace();
                 if (Match('('))
                 {
-                    double value = ParseExpression();
+                    double groupedValue = ParseExpression();
                     Expect(')');
-                    return value;
+                    return groupedValue;
                 }
 
                 if (m_Index < m_Text.Length && (char.IsDigit(m_Text[m_Index]) || m_Text[m_Index] == '.'))

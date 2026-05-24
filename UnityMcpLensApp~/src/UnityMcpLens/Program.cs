@@ -3,6 +3,9 @@ using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using System.Diagnostics;
 using System.Reflection;
+using System.Runtime.InteropServices;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace UnityMcpLens;
 
@@ -19,6 +22,8 @@ sealed class UnityMcpLensHost
     const string DynamicPacksToolSurfaceMode = "dynamic_packs";
     const string StaticAllToolSurfaceMode = "static_all";
     const int SessionRetryBudgetLimit = 2;
+    const int FacadeInvokeMinTimeoutMs = 1000;
+    const int FacadeInvokeMaxTimeoutMs = 120000;
     static readonly string s_ToolSurfaceMode = ResolveToolSurfaceMode();
 
     static readonly HashSet<string> s_ReadOnlyTools = new(StringComparer.OrdinalIgnoreCase)
@@ -52,6 +57,7 @@ sealed class UnityMcpLensHost
         "Unity_ReadDetailRef",
         "Unity_Tools_Menu",
         "Unity_Tools_Describe",
+        "Unity_Tools_List",
         "Unity_ReadConsole",
         "Unity_ListResources",
         "Unity_ReadResource",
@@ -116,6 +122,8 @@ sealed class UnityMcpLensHost
         "Unity_Resource_Delete",
         "Unity_Project_ManagePackages",
         "Unity_Tools_ActivateAndVerify",
+        "Unity_Tools_Invoke",
+        "Unity_Tools_BatchInvoke",
         "Unity_Asset_ConfigureSpriteImport",
         "Unity_Asset_SetSerializedProperties",
         "Unity_Asset_ImportSpriteSheetAndBind",
@@ -173,6 +181,32 @@ sealed class UnityMcpLensHost
         public JsonElement InputSchema { get; init; }
         public JsonElement OutputSchema { get; init; }
         public JsonElement Annotations { get; init; }
+    }
+
+    sealed class FacadeInvocationOutcome
+    {
+        public bool Success { get; init; }
+        public bool IsError { get; init; }
+        public bool IsFacadeError { get; init; }
+        public string? Message { get; init; }
+        public string? Error { get; init; }
+        public string? Code { get; init; }
+        public string RequestedToolName { get; init; } = string.Empty;
+        public string CanonicalToolName { get; init; } = string.Empty;
+        public int? TimeoutMs { get; init; }
+        public JsonElement Content { get; init; }
+        public JsonElement StructuredContent { get; init; }
+    }
+
+    sealed class ToolListRow
+    {
+        public string Name { get; init; } = string.Empty;
+        public string CanonicalToolName { get; init; } = string.Empty;
+        public string? Title { get; init; }
+        public bool ReadOnlyHint { get; init; }
+        public string SchemaHash { get; init; } = string.Empty;
+        public string[] Packs { get; init; } = [];
+        public string[] Groups { get; init; } = [];
     }
 
     sealed class BridgeConnectionSnapshot
@@ -336,6 +370,56 @@ sealed class UnityMcpLensHost
         public List<object> Attempts { get; init; } = [];
         public object? LastState { get; init; }
         public string? LastError { get; init; }
+    }
+
+    sealed class ScriptRefreshActivityStartWait
+    {
+        public bool Started { get; init; }
+        public bool TimedOut { get; init; }
+        public bool LikelyStartedByTransientBridgeFailure { get; init; }
+        public string Message { get; init; } = string.Empty;
+        public List<object> Attempts { get; init; } = [];
+        public object? LastState { get; init; }
+        public string? LastError { get; init; }
+    }
+
+    sealed class ScriptRefreshFocusNudgeResult
+    {
+        public bool Requested { get; init; }
+        public bool Attempted { get; init; }
+        public bool Skipped { get; init; }
+        public bool Supported { get; init; }
+        public string Outcome { get; init; } = string.Empty;
+        public string Message { get; init; } = string.Empty;
+        public string? Reason { get; init; }
+        public int? EditorPid { get; init; }
+        public object? PreNudgeEditorState { get; init; }
+        public object? Window { get; init; }
+        public bool FocusAttempted { get; init; }
+        public bool FocusSucceeded { get; init; }
+        public bool ClickAttempted { get; init; }
+        public bool ClickSucceeded { get; init; }
+        public ScriptRefreshActivityStartWait? ActivityStartWait { get; init; }
+        public HostSyncReadyResult? ReadyWait { get; init; }
+        public bool CompileOrUpdateObserved { get; init; }
+        public string? Error { get; init; }
+    }
+
+    sealed class WindowsFocusNudgeNativeResult
+    {
+        public bool WindowFound { get; init; }
+        public string? WindowTitle { get; init; }
+        public int Left { get; init; }
+        public int Top { get; init; }
+        public int Width { get; init; }
+        public int Height { get; init; }
+        public bool FocusAttempted { get; init; }
+        public bool FocusSucceeded { get; init; }
+        public bool ClickAttempted { get; init; }
+        public bool ClickSucceeded { get; init; }
+        public int? ClickX { get; init; }
+        public int? ClickY { get; init; }
+        public string? Error { get; init; }
     }
 
     sealed class AssemblyReloadProofSnapshot
@@ -646,6 +730,91 @@ sealed class UnityMcpLensHost
             }
         }, m_JsonOptions);
 
+        JsonElement toolsInvokeInputSchema = JsonSerializer.SerializeToElement(new
+        {
+            type = "object",
+            properties = new
+            {
+                toolName = new
+                {
+                    type = "string",
+                    description = "The Unity MCP Lens tool to invoke. Dot and underscore forms are equivalent."
+                },
+                arguments = new
+                {
+                    type = "object",
+                    description = "Arguments to pass to the target tool. Defaults to an empty object."
+                },
+                timeoutMs = new
+                {
+                    type = "integer",
+                    description = "Optional facade timeout in milliseconds. Clamped to 1000-120000 when provided."
+                }
+            },
+            required = new[] { "toolName" }
+        }, m_JsonOptions);
+
+        JsonElement toolsListInputSchema = JsonSerializer.SerializeToElement(new
+        {
+            type = "object",
+            properties = new
+            {
+                groupBy = new
+                {
+                    type = "string",
+                    @enum = new[] { "pack", "group", "flat" },
+                    description = "How to organize the compact tool list. Defaults to pack."
+                },
+                maxToolsPerGroup = new
+                {
+                    type = "integer",
+                    description = "Maximum number of tools to return per group. Defaults to 100 and is clamped to 1-500."
+                }
+            }
+        }, m_JsonOptions);
+
+        JsonElement toolsBatchInvokeInputSchema = JsonSerializer.SerializeToElement(new
+        {
+            type = "object",
+            properties = new
+            {
+                calls = new
+                {
+                    type = "array",
+                    description = "Sequential Unity MCP Lens tool calls to invoke through the stable facade.",
+                    items = new
+                    {
+                        type = "object",
+                        properties = new
+                        {
+                            toolName = new
+                            {
+                                type = "string",
+                                description = "The Unity MCP Lens tool to invoke. Dot and underscore forms are equivalent."
+                            },
+                            arguments = new
+                            {
+                                type = "object",
+                                description = "Arguments to pass to the target tool. Defaults to an empty object."
+                            },
+                            timeoutMs = new
+                            {
+                                type = "integer",
+                                description = "Optional facade timeout in milliseconds. Clamped to 1000-120000 when provided."
+                            }
+                        },
+                        required = new[] { "toolName" }
+                    }
+                },
+                failFast = new
+                {
+                    type = "boolean",
+                    description = "Stop after the first failed call. Defaults to false."
+                }
+            },
+            required = new[] { "calls" }
+        }, m_JsonOptions);
+
         JsonElement toolsMenuInputSchema = JsonSerializer.SerializeToElement(new
         {
             type = "object",
@@ -918,6 +1087,24 @@ sealed class UnityMcpLensHost
                 toolsDescribeInputSchema,
                 readOnlyHint: true),
             BuildBootstrapTool(
+                "Unity_Tools_List",
+                "List Unity Tools",
+                "Lists compact host-visible Unity MCP Lens tool names, grouped by pack or group, for clients whose callable tool surface is stale.",
+                toolsListInputSchema,
+                readOnlyHint: true),
+            BuildBootstrapTool(
+                "Unity_Tools_Invoke",
+                "Invoke Unity Tool",
+                "Invokes a known Unity MCP Lens tool through a stable facade when the client cannot call the native tool directly.",
+                toolsInvokeInputSchema,
+                readOnlyHint: false),
+            BuildBootstrapTool(
+                "Unity_Tools_BatchInvoke",
+                "Batch Invoke Unity Tools",
+                "Sequentially invokes known Unity MCP Lens tools through the stable facade and returns compact per-call results.",
+                toolsBatchInvokeInputSchema,
+                readOnlyHint: false),
+            BuildBootstrapTool(
                 "Unity_Tools_Menu",
                 "Unity Tools Menu",
                 "Returns a compact pack-grouped menu of Unity MCP Lens tools and workflow recommendations.",
@@ -1095,6 +1282,15 @@ sealed class UnityMcpLensHost
 
         if (ToolNamesMatch(canonicalToolName, "Unity.Bridge.ListConnections"))
             return BuildToolCallResult(CreateBridgeListConnectionsPayload(argumentsElement));
+
+        if (ToolNamesMatch(canonicalToolName, "Unity.Tools.Invoke"))
+            return await InvokeFacadeToolAsync(argumentsElement, cancellationToken).ConfigureAwait(false);
+
+        if (ToolNamesMatch(canonicalToolName, "Unity.Tools.BatchInvoke"))
+            return await InvokeBatchFacadeToolAsync(argumentsElement, cancellationToken).ConfigureAwait(false);
+
+        if (ToolNamesMatch(canonicalToolName, "Unity.Tools.List"))
+            return await InvokeToolsListAsync(argumentsElement, cancellationToken).ConfigureAwait(false);
 
         if (ToolNamesMatch(canonicalToolName, "Unity.Session.SelectProject"))
         {
@@ -1385,6 +1581,694 @@ sealed class UnityMcpLensHost
         return BuildToolCallResult(toolEnvelope.Result, isError);
     }
 
+    async Task<object> InvokeToolsListAsync(JsonElement argumentsElement, CancellationToken cancellationToken)
+    {
+        JsonElement payload = await CreateToolsListPayloadAsync(argumentsElement, cancellationToken).ConfigureAwait(false);
+        return BuildToolCallResult(payload);
+    }
+
+    async Task<JsonElement> CreateToolsListPayloadAsync(JsonElement argumentsElement, CancellationToken cancellationToken)
+    {
+        EnsureBootstrapToolsAvailable();
+
+        string requestedGroupBy = ExtractString(argumentsElement, "groupBy", "GroupBy") ?? "pack";
+        string groupBy = requestedGroupBy.Trim().ToLowerInvariant();
+        var warnings = new List<object>();
+        if (groupBy is not ("pack" or "group" or "flat"))
+        {
+            warnings.Add(new
+            {
+                kind = "invalid_group_by_defaulted",
+                requestedGroupBy,
+                groupBy = "pack"
+            });
+            groupBy = "pack";
+        }
+
+        int maxToolsPerGroup = Math.Clamp(ExtractInt(argumentsElement, 100, "maxToolsPerGroup", "MaxToolsPerGroup"), 1, 500);
+        bool bridgeRefreshAttempted = false;
+        bool bridgeRefreshSucceeded = false;
+        string? bridgeRefreshSkippedReason = null;
+        string? bridgeRefreshError = null;
+
+        if (IsSessionUnsafe())
+        {
+            bridgeRefreshSkippedReason = "session_unsafe";
+        }
+        else
+        {
+            bridgeRefreshAttempted = true;
+            try
+            {
+                await EnsureBridgeReadyAsync(cancellationToken).ConfigureAwait(false);
+                bridgeRefreshSucceeded = true;
+            }
+            catch (Exception ex)
+            {
+                bridgeRefreshError = ex.Message;
+                warnings.Add(new
+                {
+                    kind = "bridge_refresh_failed",
+                    message = ex.Message
+                });
+            }
+            finally
+            {
+                EnsureBootstrapToolsAvailable();
+            }
+        }
+
+        EnsureBootstrapToolsAvailable();
+        ToolListRow[] toolRows = m_ToolCache.Values
+            .OrderBy(tool => tool.Name, StringComparer.Ordinal)
+            .Select(BuildToolListRow)
+            .ToArray();
+
+        bool truncated = false;
+        object? tools = null;
+        object? groups = null;
+        if (string.Equals(groupBy, "flat", StringComparison.OrdinalIgnoreCase))
+        {
+            tools = toolRows;
+        }
+        else
+        {
+            groups = BuildToolListGroups(toolRows, groupBy, maxToolsPerGroup, out truncated);
+        }
+
+        return JsonSerializer.SerializeToElement(new
+        {
+            success = true,
+            message = $"Listed {toolRows.Length} host-visible Unity MCP Lens tool(s).",
+            data = new
+            {
+                toolSurfaceMode = s_ToolSurfaceMode,
+                activeToolPacks = m_ActiveToolPacks,
+                exportedToolCount = toolRows.Length,
+                groupBy,
+                requestedGroupBy,
+                maxToolsPerGroup,
+                truncated,
+                bridgeRefresh = new
+                {
+                    attempted = bridgeRefreshAttempted,
+                    succeeded = bridgeRefreshSucceeded,
+                    skippedReason = bridgeRefreshSkippedReason,
+                    error = bridgeRefreshError
+                },
+                warnings = warnings.ToArray(),
+                tools,
+                groups,
+                clientSurfaceFallback = CreateClientSurfaceFallbackData()
+            }
+        }, m_JsonOptions);
+    }
+
+    ToolListRow BuildToolListRow(BridgeToolDescriptor tool)
+    {
+        return new ToolListRow
+        {
+            Name = tool.Name,
+            CanonicalToolName = CanonicalizeToolName(tool.Name),
+            Title = tool.Title,
+            ReadOnlyHint = DeriveReadOnlyHint(tool.Name, tool.ReadOnlyHint),
+            SchemaHash = ResolveToolListSchemaHash(tool),
+            Packs = NormalizeToolListStrings(tool.Packs),
+            Groups = NormalizeToolListStrings(tool.Groups)
+        };
+    }
+
+    object[] BuildToolListGroups(ToolListRow[] toolRows, string groupBy, int maxToolsPerGroup, out bool truncated)
+    {
+        var groups = new Dictionary<string, List<ToolListRow>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var row in toolRows)
+        {
+            foreach (string groupKey in GetToolListGroupKeys(row, groupBy))
+            {
+                if (!groups.TryGetValue(groupKey, out var rows))
+                {
+                    rows = [];
+                    groups[groupKey] = rows;
+                }
+
+                rows.Add(row);
+            }
+        }
+
+        truncated = false;
+        var result = new List<object>();
+        foreach (var pair in groups
+            .OrderBy(pair => GetToolListGroupOrder(pair.Key))
+            .ThenBy(pair => pair.Key, StringComparer.Ordinal))
+        {
+            ToolListRow[] sortedRows = pair.Value
+                .OrderBy(row => row.Name, StringComparer.Ordinal)
+                .ToArray();
+            ToolListRow[] returnedRows = sortedRows
+                .Take(maxToolsPerGroup)
+                .ToArray();
+            bool groupTruncated = sortedRows.Length > returnedRows.Length;
+            truncated |= groupTruncated;
+            result.Add(new
+            {
+                id = pair.Key,
+                toolCount = sortedRows.Length,
+                readOnlyToolCount = sortedRows.Count(row => row.ReadOnlyHint),
+                mutatingToolCount = sortedRows.Count(row => !row.ReadOnlyHint),
+                truncated = groupTruncated,
+                tools = returnedRows
+            });
+        }
+
+        return result.ToArray();
+    }
+
+    static string[] GetToolListGroupKeys(ToolListRow row, string groupBy)
+    {
+        string[] values = string.Equals(groupBy, "group", StringComparison.OrdinalIgnoreCase)
+            ? row.Groups
+            : row.Packs.Where(pack => !string.Equals(pack, "full", StringComparison.OrdinalIgnoreCase)).ToArray();
+        string[] keys = values
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(value => value, StringComparer.Ordinal)
+            .ToArray();
+        return keys.Length == 0 ? ["ungrouped"] : keys;
+    }
+
+    static int GetToolListGroupOrder(string groupKey)
+    {
+        if (string.Equals(groupKey, "foundation", StringComparison.OrdinalIgnoreCase))
+            return 0;
+        if (string.Equals(groupKey, "console", StringComparison.OrdinalIgnoreCase))
+            return 10;
+        if (string.Equals(groupKey, "project", StringComparison.OrdinalIgnoreCase))
+            return 20;
+        if (string.Equals(groupKey, "scripting", StringComparison.OrdinalIgnoreCase))
+            return 30;
+        if (string.Equals(groupKey, "scene", StringComparison.OrdinalIgnoreCase))
+            return 40;
+        if (string.Equals(groupKey, "ui", StringComparison.OrdinalIgnoreCase))
+            return 50;
+        if (string.Equals(groupKey, "runtime", StringComparison.OrdinalIgnoreCase))
+            return 60;
+        if (string.Equals(groupKey, "assets", StringComparison.OrdinalIgnoreCase))
+            return 70;
+        if (string.Equals(groupKey, "debug", StringComparison.OrdinalIgnoreCase))
+            return 80;
+        if (string.Equals(groupKey, "ungrouped", StringComparison.OrdinalIgnoreCase))
+            return 1000;
+
+        return 100;
+    }
+
+    string ResolveToolListSchemaHash(BridgeToolDescriptor tool)
+    {
+        if (!string.IsNullOrWhiteSpace(tool.SchemaHash))
+            return tool.SchemaHash;
+
+        var metadata = new JsonObject
+        {
+            ["name"] = tool.Name,
+            ["inputSchema"] = CloneJsonNodeOrNull(tool.InputSchema),
+            ["outputSchema"] = CloneJsonNodeOrNull(tool.OutputSchema),
+            ["annotations"] = CloneJsonNodeOrNull(tool.Annotations)
+        };
+        return $"host-{ComputeSha256Hex(metadata.ToJsonString(m_JsonOptions))}";
+    }
+
+    static JsonNode? CloneJsonNodeOrNull(JsonElement element)
+    {
+        return HasSchemaPayload(element) ? JsonNode.Parse(element.GetRawText()) : null;
+    }
+
+    static string[] NormalizeToolListStrings(string[] values)
+    {
+        return (values ?? [])
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(value => value, StringComparer.Ordinal)
+            .ToArray();
+    }
+
+    static string ComputeSha256Hex(string text)
+    {
+        byte[] bytes = Encoding.UTF8.GetBytes(text ?? string.Empty);
+        return Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
+    }
+
+    static object CreateClientSurfaceFallbackData()
+    {
+        return new
+        {
+            listTool = "Unity.Tools.List",
+            invokeTool = "Unity.Tools.Invoke",
+            batchInvokeTool = "Unity.Tools.BatchInvoke",
+            note = "If a direct native tool is not callable in the MCP client, use Unity.Tools.List to confirm the host-visible name, then Unity.Tools.Invoke or Unity.Tools.BatchInvoke to call it through the stable facade."
+        };
+    }
+
+    async Task<object> InvokeFacadeToolAsync(JsonElement argumentsElement, CancellationToken cancellationToken)
+    {
+        FacadeInvocationOutcome outcome = await ExecuteFacadeInvocationAsync(
+            argumentsElement,
+            "Unity.Tools.Invoke",
+            cancellationToken).ConfigureAwait(false);
+        return BuildFacadeInvokeToolCallResult(outcome);
+    }
+
+    async Task<object> InvokeBatchFacadeToolAsync(JsonElement argumentsElement, CancellationToken cancellationToken)
+    {
+        if (argumentsElement.ValueKind != JsonValueKind.Object ||
+            (!argumentsElement.TryGetProperty("calls", out var callsElement) &&
+             !argumentsElement.TryGetProperty("Calls", out callsElement)) ||
+            callsElement.ValueKind != JsonValueKind.Array ||
+            callsElement.GetArrayLength() == 0)
+        {
+            return BuildToolCallResult(
+                CreateErrorPayload(
+                    "Unity.Tools.BatchInvoke requires a non-empty calls array.",
+                    "UNITY_MCP_BATCH_CALLS_REQUIRED"),
+                isError: true);
+        }
+
+        bool failFast = ExtractBool(argumentsElement, false, "failFast", "FailFast");
+        int requestedCallCount = callsElement.GetArrayLength();
+        var rows = new List<object>();
+        int failedCount = 0;
+        bool stoppedEarly = false;
+        int index = 0;
+
+        foreach (var callElement in callsElement.EnumerateArray())
+        {
+            FacadeInvocationOutcome outcome = callElement.ValueKind == JsonValueKind.Object
+                ? await ExecuteFacadeInvocationAsync(callElement, "Unity.Tools.BatchInvoke", cancellationToken).ConfigureAwait(false)
+                : CreateFacadeErrorOutcome(
+                    requestedToolName: string.Empty,
+                    canonicalToolName: string.Empty,
+                    timeoutMs: null,
+                    message: $"Unity.Tools.BatchInvoke call at index {index} must be an object.",
+                    code: "UNITY_MCP_INVALID_BATCH_CALL",
+                    data: new
+                    {
+                        index,
+                        invokedThroughFacade = true
+                    });
+
+            rows.Add(BuildBatchInvokeRow(index, outcome));
+            if (outcome.IsError || !outcome.Success)
+            {
+                failedCount++;
+                if (failFast)
+                {
+                    stoppedEarly = index < requestedCallCount - 1;
+                    break;
+                }
+            }
+
+            index++;
+        }
+
+        string message = failedCount == 0
+            ? $"Unity.Tools.BatchInvoke completed {rows.Count} call(s)."
+            : stoppedEarly
+                ? $"Unity.Tools.BatchInvoke stopped after {rows.Count} of {requestedCallCount} call(s) with {failedCount} failure(s)."
+                : $"Unity.Tools.BatchInvoke completed {rows.Count} call(s) with {failedCount} failure(s).";
+
+        JsonElement payload = JsonSerializer.SerializeToElement(new
+        {
+            success = failedCount == 0,
+            message,
+            data = new
+            {
+                requestedCallCount,
+                executedCount = rows.Count,
+                failedCount,
+                failFast,
+                stoppedEarly,
+                invokedThroughFacade = true,
+                results = rows
+            }
+        }, m_JsonOptions);
+        return BuildToolCallResult(payload, isError: false);
+    }
+
+    async Task<FacadeInvocationOutcome> ExecuteFacadeInvocationAsync(
+        JsonElement argumentsElement,
+        string facadeToolName,
+        CancellationToken cancellationToken)
+    {
+        string requestedToolName = ExtractString(argumentsElement, "toolName", "ToolName") ?? string.Empty;
+        string canonicalTargetToolName = CanonicalizeToolName(requestedToolName);
+        if (string.IsNullOrWhiteSpace(canonicalTargetToolName))
+        {
+            return CreateFacadeErrorOutcome(
+                requestedToolName,
+                canonicalTargetToolName,
+                timeoutMs: null,
+                message: "toolName is required.",
+                code: "UNITY_MCP_TOOL_NAME_REQUIRED");
+        }
+
+        if (ToolNamesMatch(canonicalTargetToolName, "Unity.Tools.Invoke") ||
+            ToolNamesMatch(canonicalTargetToolName, "Unity.Tools.BatchInvoke"))
+        {
+            return CreateFacadeErrorOutcome(
+                requestedToolName,
+                canonicalTargetToolName,
+                timeoutMs: null,
+                message: $"{facadeToolName} cannot invoke facade tool '{requestedToolName}'.",
+                code: "UNITY_MCP_FACADE_RECURSION_BLOCKED");
+        }
+
+        if (!TryExtractFacadeArguments(argumentsElement, out var targetArguments, out var argumentsError))
+        {
+            return CreateFacadeErrorOutcome(
+                requestedToolName,
+                canonicalTargetToolName,
+                timeoutMs: null,
+                message: argumentsError ?? "arguments must be an object.",
+                code: "UNITY_MCP_INVALID_ARGUMENTS");
+        }
+
+        if (!TryExtractFacadeTimeoutMs(argumentsElement, out int? timeoutMs, out var timeoutError))
+        {
+            return CreateFacadeErrorOutcome(
+                requestedToolName,
+                canonicalTargetToolName,
+                timeoutMs: null,
+                message: timeoutError ?? "timeoutMs must be an integer.",
+                code: "UNITY_MCP_INVALID_TIMEOUT");
+        }
+
+        EnsureBootstrapToolsAvailable();
+        if (!TryFindCachedTool(canonicalTargetToolName, out var targetTool) && !IsSessionUnsafe())
+        {
+            await EnsureBridgeReadyAsync(cancellationToken).ConfigureAwait(false);
+            EnsureBootstrapToolsAvailable();
+        }
+
+        if (!TryFindCachedTool(canonicalTargetToolName, out targetTool))
+        {
+            string[] suggestions = SuggestKnownToolNames(canonicalTargetToolName, maxSuggestions: 8);
+            return CreateFacadeErrorOutcome(
+                requestedToolName,
+                canonicalTargetToolName,
+                timeoutMs,
+                $"Tool '{requestedToolName}' is not known in the current Unity MCP Lens host surface.",
+                "UNITY_MCP_TOOL_NOT_FOUND",
+                new
+                {
+                    requestedToolName,
+                    canonicalToolName = canonicalTargetToolName,
+                    invokedThroughFacade = true,
+                    timeoutMs,
+                    suggestions
+                });
+        }
+
+        string targetToolName = targetTool.Name;
+        string canonicalResolvedToolName = CanonicalizeToolName(targetToolName);
+        using CancellationTokenSource? timeoutCts = timeoutMs.HasValue
+            ? CancellationTokenSource.CreateLinkedTokenSource(cancellationToken)
+            : null;
+        if (timeoutCts != null)
+            timeoutCts.CancelAfter(timeoutMs.GetValueOrDefault());
+
+        CancellationToken effectiveCancellationToken = timeoutCts?.Token ?? cancellationToken;
+        try
+        {
+            object targetResult = await InvokeToolCallAsync(
+                targetToolName,
+                canonicalResolvedToolName,
+                targetArguments,
+                effectiveCancellationToken).ConfigureAwait(false);
+            return CreateFacadeOutcomeFromToolCallResult(targetResult, requestedToolName, canonicalResolvedToolName, timeoutMs);
+        }
+        catch (OperationCanceledException) when (timeoutCts?.IsCancellationRequested == true && !cancellationToken.IsCancellationRequested)
+        {
+            return CreateFacadeErrorOutcome(
+                requestedToolName,
+                canonicalResolvedToolName,
+                timeoutMs,
+                $"{facadeToolName} timed out after {timeoutMs.GetValueOrDefault()}ms while invoking '{targetToolName}'.",
+                "UNITY_MCP_INVOKE_TIMEOUT");
+        }
+    }
+
+    bool TryExtractFacadeArguments(JsonElement argumentsElement, out JsonElement targetArguments, out string? error)
+    {
+        targetArguments = JsonSerializer.SerializeToElement(new { }, m_JsonOptions);
+        error = null;
+        if (argumentsElement.ValueKind != JsonValueKind.Object ||
+            (!argumentsElement.TryGetProperty("arguments", out var rawArguments) &&
+             !argumentsElement.TryGetProperty("Arguments", out rawArguments)))
+        {
+            return true;
+        }
+
+        if (rawArguments.ValueKind == JsonValueKind.Null || rawArguments.ValueKind == JsonValueKind.Undefined)
+            return true;
+
+        if (rawArguments.ValueKind != JsonValueKind.Object)
+        {
+            error = "Unity.Tools.Invoke arguments must be an object when provided.";
+            return false;
+        }
+
+        targetArguments = rawArguments.Clone();
+        return true;
+    }
+
+    static bool TryExtractFacadeTimeoutMs(JsonElement argumentsElement, out int? timeoutMs, out string? error)
+    {
+        timeoutMs = null;
+        error = null;
+        if (argumentsElement.ValueKind != JsonValueKind.Object ||
+            (!argumentsElement.TryGetProperty("timeoutMs", out var timeoutElement) &&
+             !argumentsElement.TryGetProperty("TimeoutMs", out timeoutElement)))
+        {
+            return true;
+        }
+
+        if (timeoutElement.ValueKind == JsonValueKind.Null || timeoutElement.ValueKind == JsonValueKind.Undefined)
+            return true;
+
+        if (timeoutElement.ValueKind != JsonValueKind.Number || !timeoutElement.TryGetInt32(out int rawTimeoutMs))
+        {
+            error = "Unity.Tools.Invoke timeoutMs must be an integer when provided.";
+            return false;
+        }
+
+        timeoutMs = Math.Clamp(rawTimeoutMs, FacadeInvokeMinTimeoutMs, FacadeInvokeMaxTimeoutMs);
+        return true;
+    }
+
+    object BuildFacadeInvokeToolCallResult(FacadeInvocationOutcome outcome)
+    {
+        if (outcome.IsFacadeError)
+            return BuildToolCallResult(outcome.StructuredContent, isError: true);
+
+        JsonElement wrappedStructuredContent = JsonSerializer.SerializeToElement(new
+        {
+            success = outcome.Success,
+            message = outcome.IsError
+                ? $"Unity.Tools.Invoke relayed failure from '{outcome.CanonicalToolName}'."
+                : $"Unity.Tools.Invoke completed '{outcome.CanonicalToolName}'.",
+            requestedToolName = outcome.RequestedToolName,
+            canonicalToolName = outcome.CanonicalToolName,
+            invokedThroughFacade = true,
+            timeoutMs = outcome.TimeoutMs,
+            result = outcome.StructuredContent
+        }, m_JsonOptions);
+
+        return new
+        {
+            content = outcome.Content,
+            structuredContent = wrappedStructuredContent,
+            isError = outcome.IsError
+        };
+    }
+
+    object BuildBatchInvokeRow(int index, FacadeInvocationOutcome outcome)
+    {
+        string? message = outcome.Success
+            ? outcome.Message ?? $"Unity.Tools.BatchInvoke completed '{outcome.CanonicalToolName}'."
+            : null;
+        string? error = outcome.Success
+            ? null
+            : outcome.Error ?? outcome.Message ?? $"Unity.Tools.BatchInvoke failed '{outcome.CanonicalToolName}'.";
+        return new
+        {
+            index,
+            requestedToolName = outcome.RequestedToolName,
+            canonicalToolName = outcome.CanonicalToolName,
+            success = outcome.Success,
+            isError = outcome.IsError,
+            message,
+            error,
+            code = outcome.Code,
+            structuredContent = outcome.StructuredContent
+        };
+    }
+
+    FacadeInvocationOutcome CreateFacadeOutcomeFromToolCallResult(object targetResult, string requestedToolName, string canonicalToolName, int? timeoutMs)
+    {
+        JsonElement targetResultElement = JsonSerializer.SerializeToElement(targetResult, m_JsonOptions);
+        JsonElement targetContent = targetResultElement.TryGetProperty("content", out var contentElement)
+            ? contentElement.Clone()
+            : JsonSerializer.SerializeToElement(new[]
+            {
+                new
+                {
+                    type = "text",
+                    text = "Unity.Tools.Invoke completed."
+                }
+            }, m_JsonOptions);
+        JsonElement targetStructuredContent = targetResultElement.TryGetProperty("structuredContent", out var structuredContentElement)
+            ? structuredContentElement.Clone()
+            : targetResultElement.Clone();
+        bool targetIsError = targetResultElement.TryGetProperty("isError", out var isErrorElement) &&
+            isErrorElement.ValueKind == JsonValueKind.True;
+
+        return new FacadeInvocationOutcome
+        {
+            Success = !targetIsError,
+            IsError = targetIsError,
+            IsFacadeError = false,
+            Message = TryGetJsonString(targetStructuredContent, "message"),
+            Error = TryGetJsonString(targetStructuredContent, "error"),
+            Code = TryGetJsonString(targetStructuredContent, "code"),
+            RequestedToolName = requestedToolName,
+            CanonicalToolName = canonicalToolName,
+            TimeoutMs = timeoutMs,
+            Content = targetContent,
+            StructuredContent = targetStructuredContent
+        };
+    }
+
+    FacadeInvocationOutcome CreateFacadeErrorOutcome(
+        string requestedToolName,
+        string canonicalToolName,
+        int? timeoutMs,
+        string message,
+        string code,
+        object? data = null)
+    {
+        object errorData = data ?? new
+        {
+            requestedToolName,
+            canonicalToolName,
+            invokedThroughFacade = true,
+            timeoutMs
+        };
+        JsonElement structuredContent = CreateErrorPayload(message, code, errorData);
+        return new FacadeInvocationOutcome
+        {
+            Success = false,
+            IsError = true,
+            IsFacadeError = true,
+            Error = message,
+            Code = code,
+            RequestedToolName = requestedToolName,
+            CanonicalToolName = canonicalToolName,
+            TimeoutMs = timeoutMs,
+            Content = BuildFacadeTextContent(TryGetSummaryText(structuredContent)),
+            StructuredContent = structuredContent
+        };
+    }
+
+    JsonElement BuildFacadeTextContent(string text)
+    {
+        return JsonSerializer.SerializeToElement(new[]
+        {
+            new
+            {
+                type = "text",
+                text
+            }
+        }, m_JsonOptions);
+    }
+
+    static string? TryGetJsonString(JsonElement element, string name)
+    {
+        return element.ValueKind == JsonValueKind.Object &&
+            element.TryGetProperty(name, out var property) &&
+            property.ValueKind == JsonValueKind.String
+                ? property.GetString()
+                : null;
+    }
+
+    bool TryFindCachedTool(string canonicalToolName, out BridgeToolDescriptor tool)
+    {
+        if (m_ToolCache.TryGetValue(canonicalToolName, out var cachedTool))
+        {
+            tool = cachedTool;
+            return true;
+        }
+
+        foreach (var candidate in m_ToolCache.Values)
+        {
+            if (!ToolNamesMatch(candidate.Name, canonicalToolName))
+                continue;
+
+            tool = candidate;
+            return true;
+        }
+
+        tool = null!;
+        return false;
+    }
+
+    string[] SuggestKnownToolNames(string canonicalToolName, int maxSuggestions)
+    {
+        return m_ToolCache.Keys
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Select(name => new
+            {
+                Name = name,
+                Score = ScoreToolNameSuggestion(canonicalToolName, CanonicalizeToolName(name))
+            })
+            .Where(candidate => candidate.Score < int.MaxValue)
+            .OrderBy(candidate => candidate.Score)
+            .ThenBy(candidate => candidate.Name, StringComparer.Ordinal)
+            .Take(maxSuggestions)
+            .Select(candidate => candidate.Name)
+            .ToArray();
+    }
+
+    static int ScoreToolNameSuggestion(string query, string candidate)
+    {
+        if (string.IsNullOrWhiteSpace(query) || string.IsNullOrWhiteSpace(candidate))
+            return int.MaxValue;
+
+        string normalizedQuery = query.ToLowerInvariant();
+        string normalizedCandidate = candidate.ToLowerInvariant();
+        if (string.Equals(normalizedQuery, normalizedCandidate, StringComparison.Ordinal))
+            return 0;
+
+        if (normalizedCandidate.StartsWith(normalizedQuery, StringComparison.Ordinal) ||
+            normalizedQuery.StartsWith(normalizedCandidate, StringComparison.Ordinal))
+        {
+            return 10 + Math.Abs(normalizedCandidate.Length - normalizedQuery.Length);
+        }
+
+        if (normalizedCandidate.Contains(normalizedQuery, StringComparison.Ordinal) ||
+            normalizedQuery.Contains(normalizedCandidate, StringComparison.Ordinal))
+        {
+            return 100 + Math.Abs(normalizedCandidate.Length - normalizedQuery.Length);
+        }
+
+        string[] queryParts = normalizedQuery.Split('_', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var candidateParts = normalizedCandidate
+            .Split('_', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .ToHashSet(StringComparer.Ordinal);
+        int overlap = queryParts.Count(part => part.Length > 2 && candidateParts.Contains(part));
+        return overlap > 0
+            ? 1000 - (overlap * 100) + Math.Abs(normalizedCandidate.Length - normalizedQuery.Length)
+            : int.MaxValue;
+    }
+
     async Task EnsureBridgeReadyWithRecoveryAsync(string operationName, CancellationToken cancellationToken)
     {
         BridgeRecoveryState recoveryState = new()
@@ -1435,7 +2319,13 @@ sealed class UnityMcpLensHost
         m_BridgeClient.ToolsChanged += HandleBridgeToolsChangedAsync;
         await m_BridgeClient.ConnectAsync(discoveryResult, cancellationToken).ConfigureAwait(false);
 
-        var registerEnvelope = await m_BridgeClient.RegisterClientAsync("unity-mcp-lens", s_HostVersion, "Unity MCP Lens", cancellationToken).ConfigureAwait(false);
+        var registerEnvelope = await m_BridgeClient.RegisterClientAsync(
+            "unity-mcp-lens",
+            s_HostVersion,
+            "Unity MCP Lens",
+            desiredActivePacks,
+            s_ToolSurfaceMode,
+            cancellationToken).ConfigureAwait(false);
         if (!string.Equals(registerEnvelope.Status, "success", StringComparison.OrdinalIgnoreCase) || registerEnvelope.Result == null)
             throw new InvalidOperationException(registerEnvelope.Error ?? "Unity bridge rejected Lens client registration.");
 
@@ -1448,7 +2338,7 @@ sealed class UnityMcpLensHost
             m_BridgeConnection.ManifestVersion = m_ManifestVersion;
         }
 
-        var manifestEnvelope = await m_BridgeClient.GetManifestAsync(null, null, includeSchemas: false, cancellationToken).ConfigureAwait(false);
+        var manifestEnvelope = await m_BridgeClient.GetManifestAsync(null, null, includeSchemas: IsStaticAllToolSurface, cancellationToken).ConfigureAwait(false);
         if (!string.Equals(manifestEnvelope.Status, "success", StringComparison.OrdinalIgnoreCase) || manifestEnvelope.Result == null)
             throw new InvalidOperationException(manifestEnvelope.Error ?? "Unity bridge did not return an initial manifest.");
 
@@ -3240,6 +4130,8 @@ sealed class UnityMcpLensHost
         int postStableDelayMs = Math.Clamp(ExtractInt(argumentsElement, 500, "postStableDelayMs", "PostStableDelayMs"), 0, 10000);
         bool waitForCompile = ExtractBool(argumentsElement, true, "waitForCompile", "WaitForCompile");
         bool captureConsoleDelta = ExtractBool(argumentsElement, true, "captureConsoleDelta", "CaptureConsoleDelta");
+        bool focusNudgeOnStaleRefresh = ExtractBool(argumentsElement, false, "focusNudgeOnStaleRefresh", "FocusNudgeOnStaleRefresh");
+        bool safeClickNudge = ExtractBool(argumentsElement, true, "safeClickNudge", "SafeClickNudge", "clickNudge", "ClickNudge");
 
         DateTime startedUtc = DateTime.UtcNow;
         DateTime deadlineUtc = startedUtc.AddMilliseconds(timeoutMs);
@@ -3325,27 +4217,81 @@ sealed class UnityMcpLensHost
                 : nativeNewConsoleErrorCount;
             bool newConsoleErrorsDetected = newConsoleErrorCount > 0;
             bool staleConsoleErrorsPresent = finalConsoleErrorCount > 0 && !newConsoleErrorsDetected;
+            bool compileObserved = nativeCompileObserved;
+            ScriptRefreshFocusNudgeResult? focusNudge = null;
             object[] nativeWarnings = CloneJsonArray(nativeData, "warnings") ?? [];
             var warnings = new List<object>(nativeWarnings);
             AssemblyReloadProofSnapshot? assemblyProofAfter = CaptureAssemblyReloadProofSnapshot(nativeArgumentsElement);
             AssemblyReloadProofResult assemblyReloadProof = BuildAssemblyReloadProofResult(
                 assemblyProofBefore,
                 assemblyProofAfter,
-                nativeCompileObserved,
+                compileObserved,
                 finalTimedOut,
                 nativeRefused);
+
+            if (ShouldAttemptScriptRefreshFocusNudge(
+                focusNudgeOnStaleRefresh,
+                hasNativeData,
+                nativeRefused,
+                newConsoleErrorsDetected,
+                consoleCheckSucceeded,
+                finalReadyForFollowUp,
+                nativeStatus,
+                nativeRefreshScheduled,
+                compileObserved,
+                assemblyReloadProof))
+            {
+                focusNudge = await TryFocusNudgeUnityEditorForScriptRefreshAsync(
+                    deadlineUtc,
+                    pollIntervalMs,
+                    stablePollCount,
+                    postStableDelayMs,
+                    initialConsoleErrorCount,
+                    finalConsoleErrorCount,
+                    nativeConsoleCursor,
+                    captureConsoleDelta,
+                    safeClickNudge,
+                    cancellationToken).ConfigureAwait(false);
+
+                compileObserved |= focusNudge.CompileOrUpdateObserved;
+                if (focusNudge.ReadyWait != null)
+                {
+                    finalTimedOut = focusNudge.ReadyWait.TimedOut;
+                    consoleCheckSucceeded = focusNudge.ReadyWait.ConsoleCheckSucceeded;
+                    finalConsoleErrorCount = focusNudge.ReadyWait.FinalConsoleErrorCount;
+                    newConsoleErrorCount = focusNudge.ReadyWait.NewConsoleErrorCount;
+                    newConsoleErrorsDetected = newConsoleErrorCount > 0;
+                    staleConsoleErrorsPresent = finalConsoleErrorCount > 0 && !newConsoleErrorsDetected;
+                }
+
+                assemblyProofAfter = CaptureAssemblyReloadProofSnapshot(nativeArgumentsElement);
+                assemblyReloadProof = BuildAssemblyReloadProofResult(
+                    assemblyProofBefore,
+                    assemblyProofAfter,
+                    compileObserved,
+                    finalTimedOut,
+                    nativeRefused);
+            }
+
+            if (assemblyReloadProof.SourceNewerThanAssembly)
+                finalReadyForFollowUp = false;
+            else if (focusNudge?.ReadyWait != null)
+                finalReadyForFollowUp = focusNudge.ReadyWait.Success &&
+                    consoleCheckSucceeded &&
+                    !newConsoleErrorsDetected &&
+                    !nativeRefused &&
+                    !finalTimedOut;
+
             if (assemblyReloadProof.WarningKind != null)
             {
                 warnings.Add(new
                 {
                     kind = assemblyReloadProof.WarningKind,
                     message = assemblyReloadProof.WarningMessage,
-                    proofStatus = assemblyReloadProof.ProofStatus
+                    proofStatus = assemblyReloadProof.ProofStatus,
+                    focusNudgeAttempted = focusNudge?.Attempted == true
                 });
             }
-
-            if (assemblyReloadProof.SourceNewerThanAssembly)
-                finalReadyForFollowUp = false;
 
             string finalStatus = finalReadyForFollowUp
                 ? "ready"
@@ -3360,6 +4306,15 @@ sealed class UnityMcpLensHost
                             : nativeRefused
                                 ? "refused"
                                 : nativeStatus ?? "failed";
+            string scriptRefreshOutcome = finalReadyForFollowUp
+                ? focusNudge?.ReadyWait?.Success == true
+                    ? "succeeded_after_focus_nudge"
+                    : "succeeded_normally"
+                : focusNudge == null
+                    ? "failed_without_focus_nudge"
+                    : focusNudge.Skipped
+                        ? "focus_nudge_skipped"
+                        : "focus_nudge_failed";
             int elapsedMs = (int)Math.Round((DateTime.UtcNow - startedUtc).TotalMilliseconds);
             if (hostWaitAttempted && ready?.ConsoleCheckSucceeded == false)
             {
@@ -3369,16 +4324,31 @@ sealed class UnityMcpLensHost
                     message = "The editor became idle after script refresh, but Lens could not read a post-refresh console summary."
                 });
             }
+            if (focusNudge != null)
+            {
+                warnings.Add(new
+                {
+                    kind = "script_refresh_focus_nudge",
+                    message = focusNudge.Message,
+                    outcome = focusNudge.Outcome,
+                    attempted = focusNudge.Attempted,
+                    skipped = focusNudge.Skipped,
+                    compileOrUpdateObserved = focusNudge.CompileOrUpdateObserved
+                });
+            }
 
             return JsonSerializer.SerializeToElement(new
             {
                 success = finalReadyForFollowUp,
                 message = finalReadyForFollowUp
-                    ? "Unity script sync completed and the editor is ready for follow-up Unity actions."
+                    ? focusNudge?.ReadyWait?.Success == true
+                        ? "Unity script sync completed after a Unity editor focus nudge and the editor is ready for follow-up Unity actions."
+                        : "Unity script sync completed and the editor is ready for follow-up Unity actions."
                     : "Unity script sync did not reach a follow-up-ready state.",
                 data = new
                 {
                     status = finalStatus,
+                    scriptRefreshOutcome,
                     readyForFollowUp = finalReadyForFollowUp,
                     noChangesDetected = GetJsonBool(nativeData, false, "noChangesDetected"),
                     changedPaths = CloneJsonProperty(nativeData, "changedPaths"),
@@ -3392,13 +4362,16 @@ sealed class UnityMcpLensHost
                         [],
                     force = GetJsonBool(nativeData, false, "force"),
                     waitForCompile,
+                    focusNudgeOnStaleRefresh,
+                    safeClickNudge,
                     refreshRequested = GetJsonBool(nativeData, false, "refreshRequested"),
                     refreshScheduledAfterResponse = nativeRefreshScheduled && !hostWaitAttempted,
                     refreshWasScheduledAfterResponse = nativeRefreshScheduled,
                     hostWaitAttempted,
                     hostWaitCompleted = hostWaitAttempted && ready?.EditorIdle == true,
                     compileStarted = GetJsonBool(nativeData, false, "compileStarted"),
-                    compileObserved = nativeCompileObserved,
+                    compileObserved,
+                    nativeCompileObserved,
                     assemblyReloadProof,
                     assemblyChanged = assemblyReloadProof.AssemblyChanged,
                     sourceNewerThanAssembly = assemblyReloadProof.SourceNewerThanAssembly,
@@ -3420,11 +4393,15 @@ sealed class UnityMcpLensHost
                     stablePollCount,
                     postStableDelayMs,
                     captureConsoleDelta,
+                    focusNudge,
                     warningCount = warnings.Count,
                     warnings = warnings.ToArray(),
-                    finalState = hostWaitAttempted ? ready?.LastState : CloneJsonProperty(nativeData, "finalState"),
-                    postRefreshConsole = hostWaitAttempted ? ready?.FinalConsole : null,
+                    finalState = focusNudge?.ReadyWait?.LastState ??
+                        (hostWaitAttempted ? ready?.LastState : CloneJsonProperty(nativeData, "finalState")),
+                    postRefreshConsole = focusNudge?.ReadyWait?.FinalConsole ??
+                        (hostWaitAttempted ? ready?.FinalConsole : null),
                     pollAttemptCount = (hostWaitAttempted ? ready?.Attempts.Count ?? 0 : 0) +
+                        (focusNudge?.ReadyWait?.Attempts.Count ?? 0) +
                         GetJsonInt(nativeData, 0, "pollAttemptCount"),
                     hostReadyWait = hostWaitAttempted
                         ? new
@@ -3467,6 +4444,8 @@ sealed class UnityMcpLensHost
                     postStableDelayMs,
                     waitForCompile,
                     captureConsoleDelta,
+                    focusNudgeOnStaleRefresh,
+                    safeClickNudge,
                     syncRequest,
                     nativeArguments = nativeArgumentsElement,
                     packActivation,
@@ -3475,6 +4454,367 @@ sealed class UnityMcpLensHost
                     host = CreateHostDiagnostics()
                 });
         }
+    }
+
+    static bool ShouldAttemptScriptRefreshFocusNudge(
+        bool requested,
+        bool hasNativeData,
+        bool nativeRefused,
+        bool newConsoleErrorsDetected,
+        bool consoleCheckSucceeded,
+        bool finalReadyForFollowUp,
+        string? nativeStatus,
+        bool nativeRefreshScheduled,
+        bool compileObserved,
+        AssemblyReloadProofResult assemblyReloadProof)
+    {
+        if (!requested ||
+            !hasNativeData ||
+            nativeRefused ||
+            newConsoleErrorsDetected ||
+            !consoleCheckSucceeded)
+        {
+            return false;
+        }
+
+        string proofStatus = assemblyReloadProof.ProofStatus ?? string.Empty;
+        bool staleProof = assemblyReloadProof.SourceNewerThanAssembly ||
+            string.Equals(proofStatus, "source_newer_than_assembly", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(proofStatus, "local_package_source_newer_than_assembly", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(proofStatus, "assembly_reload_not_observed", StringComparison.OrdinalIgnoreCase);
+        bool pendingRefresh = string.Equals(nativeStatus, "pending_refresh", StringComparison.OrdinalIgnoreCase);
+        bool noCompileObservedAfterRefresh = nativeRefreshScheduled && !compileObserved;
+
+        return staleProof || pendingRefresh || (!finalReadyForFollowUp && noCompileObservedAfterRefresh);
+    }
+
+    async Task<ScriptRefreshFocusNudgeResult> TryFocusNudgeUnityEditorForScriptRefreshAsync(
+        DateTime deadlineUtc,
+        int pollIntervalMs,
+        int stablePollCount,
+        int postStableDelayMs,
+        int initialConsoleErrorCount,
+        int fallbackFinalConsoleErrorCount,
+        int? consoleCursor,
+        bool captureConsoleDelta,
+        bool safeClickNudge,
+        CancellationToken cancellationToken)
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return new ScriptRefreshFocusNudgeResult
+            {
+                Requested = true,
+                Attempted = false,
+                Skipped = true,
+                Supported = false,
+                Outcome = "skipped_unsupported_platform",
+                Message = "Unity editor focus nudge was skipped because this platform does not expose the Windows foreground/click nudge path.",
+                Reason = "unsupported_platform"
+            };
+        }
+
+        if ((deadlineUtc - DateTime.UtcNow).TotalMilliseconds < 1500)
+        {
+            return new ScriptRefreshFocusNudgeResult
+            {
+                Requested = true,
+                Attempted = false,
+                Skipped = true,
+                Supported = true,
+                Outcome = "skipped_timeout_budget_exhausted",
+                Message = "Unity editor focus nudge was skipped because the script-refresh timeout budget was nearly exhausted.",
+                Reason = "timeout_budget_exhausted"
+            };
+        }
+
+        JsonElement preNudgeState;
+        try
+        {
+            preNudgeState = await CallBridgeToolResultAsync(
+                "Unity.ManageEditor",
+                new { action = "GetCompactState" },
+                cancellationToken,
+                TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            return new ScriptRefreshFocusNudgeResult
+            {
+                Requested = true,
+                Attempted = false,
+                Skipped = true,
+                Supported = true,
+                Outcome = "skipped_state_probe_failed",
+                Message = $"Unity editor focus nudge was skipped because Lens could not verify editor idle state first: {ex.Message}",
+                Reason = "state_probe_failed",
+                Error = ex.Message
+            };
+        }
+
+        if (!IsEditorStateSafeForFocusNudge(preNudgeState, out string? unsafeReason))
+        {
+            return new ScriptRefreshFocusNudgeResult
+            {
+                Requested = true,
+                Attempted = false,
+                Skipped = true,
+                Supported = true,
+                Outcome = "skipped_editor_not_idle",
+                Message = $"Unity editor focus nudge was skipped because the editor was not safe to interact with: {unsafeReason}.",
+                Reason = unsafeReason,
+                PreNudgeEditorState = preNudgeState.Clone()
+            };
+        }
+
+        int? editorPid = ResolveCurrentUnityEditorPidForNudge();
+        if (editorPid.GetValueOrDefault() <= 0)
+        {
+            return new ScriptRefreshFocusNudgeResult
+            {
+                Requested = true,
+                Attempted = false,
+                Skipped = true,
+                Supported = true,
+                Outcome = "skipped_editor_pid_missing",
+                Message = "Unity editor focus nudge was skipped because Lens could not resolve a live project-matched Unity editor process.",
+                Reason = "editor_pid_missing",
+                PreNudgeEditorState = preNudgeState.Clone()
+            };
+        }
+
+        int editorPidValue = editorPid.GetValueOrDefault();
+        WindowsFocusNudgeNativeResult nativeNudge = WindowsUnityEditorFocusNudge.TryNudge(editorPidValue, safeClickNudge);
+        if (!nativeNudge.WindowFound)
+        {
+            return new ScriptRefreshFocusNudgeResult
+            {
+                Requested = true,
+                Attempted = true,
+                Skipped = false,
+                Supported = true,
+                Outcome = "window_not_found",
+                Message = $"Unity editor focus nudge could not find a visible top-level window for editor pid {editorPidValue}.",
+                Reason = "window_not_found",
+                EditorPid = editorPidValue,
+                PreNudgeEditorState = preNudgeState.Clone(),
+                Window = nativeNudge,
+                FocusAttempted = nativeNudge.FocusAttempted,
+                FocusSucceeded = nativeNudge.FocusSucceeded,
+                ClickAttempted = nativeNudge.ClickAttempted,
+                ClickSucceeded = nativeNudge.ClickSucceeded,
+                Error = nativeNudge.Error
+            };
+        }
+
+        ScriptRefreshActivityStartWait activityStartWait = await WaitForScriptRefreshActivityStartFromHostAsync(
+            deadlineUtc,
+            pollIntervalMs,
+            cancellationToken).ConfigureAwait(false);
+        bool compileOrUpdateObserved = activityStartWait.Started ||
+            activityStartWait.LikelyStartedByTransientBridgeFailure;
+        HostSyncReadyResult? readyWait = null;
+        if (compileOrUpdateObserved && DateTime.UtcNow < deadlineUtc)
+        {
+            readyWait = await WaitForScriptSyncReadyFromHostAsync(
+                deadlineUtc,
+                pollIntervalMs,
+                stablePollCount,
+                postStableDelayMs,
+                initialConsoleErrorCount,
+                fallbackFinalConsoleErrorCount,
+                consoleCursor,
+                captureConsoleDelta,
+                cancellationToken).ConfigureAwait(false);
+        }
+
+        string outcome =
+            readyWait?.Success == true ? "succeeded_after_focus_nudge" :
+            compileOrUpdateObserved ? "compile_observed_after_focus_nudge" :
+            nativeNudge.ClickSucceeded ? "clicked_no_compile_observed" :
+            nativeNudge.FocusSucceeded ? "focused_no_compile_observed" :
+            "focus_nudge_failed";
+
+        string message =
+            readyWait?.Success == true
+                ? "Unity script refresh recovered after focusing and safely clicking the Unity editor title bar."
+                : compileOrUpdateObserved
+                    ? "Unity editor activity was observed after the focus nudge, but the editor did not reach a clean follow-up-ready state before the current timeout."
+                    : nativeNudge.ClickSucceeded
+                        ? "Unity editor focus nudge and safe title-bar click completed, but no compile/update activity was observed."
+                        : nativeNudge.FocusSucceeded
+                            ? "Unity editor was focused, but no safe click or compile/update activity was observed."
+                            : "Unity editor focus nudge failed.";
+
+        return new ScriptRefreshFocusNudgeResult
+        {
+            Requested = true,
+            Attempted = true,
+            Skipped = false,
+            Supported = true,
+            Outcome = outcome,
+            Message = message,
+            EditorPid = editorPidValue,
+            PreNudgeEditorState = preNudgeState.Clone(),
+            Window = nativeNudge,
+            FocusAttempted = nativeNudge.FocusAttempted,
+            FocusSucceeded = nativeNudge.FocusSucceeded,
+            ClickAttempted = nativeNudge.ClickAttempted,
+            ClickSucceeded = nativeNudge.ClickSucceeded,
+            ActivityStartWait = activityStartWait,
+            ReadyWait = readyWait,
+            CompileOrUpdateObserved = compileOrUpdateObserved,
+            Error = nativeNudge.Error
+        };
+    }
+
+    static bool IsEditorStateSafeForFocusNudge(JsonElement state, out string? reason)
+    {
+        reason = null;
+        if (!GetJsonBool(state, false, "success"))
+        {
+            reason = "state_probe_unsuccessful";
+            return false;
+        }
+
+        if (GetEditorStateDataBool(state, false, "isCompiling", "IsCompiling"))
+        {
+            reason = "editor_compiling";
+            return false;
+        }
+
+        if (GetEditorStateDataBool(state, false, "isUpdating", "IsUpdating"))
+        {
+            reason = "editor_updating";
+            return false;
+        }
+
+        if (GetEditorStateDataBool(state, false, "isBuildingPlayer", "IsBuildingPlayer"))
+        {
+            reason = "editor_building_player";
+            return false;
+        }
+
+        if (GetEditorStateDataBool(state, false, "isPlayingOrWillChangePlaymode", "IsPlayingOrWillChangePlaymode"))
+        {
+            reason = "play_mode_transition";
+            return false;
+        }
+
+        return true;
+    }
+
+    static bool GetEditorStateDataBool(JsonElement state, bool fallback, params string[] names)
+    {
+        return TryGetNestedProperty(state, out var data, "data")
+            ? GetJsonBool(data, fallback, names)
+            : fallback;
+    }
+
+    int? ResolveCurrentUnityEditorPidForNudge()
+    {
+        if (m_BridgeConnection?.EditorPidAlive == true && m_BridgeConnection.EditorPid > 0)
+            return m_BridgeConnection.EditorPid;
+
+        BridgeDiscoveryResult? selected = FindCurrentBridge();
+        if (selected?.EditorPidAlive == true && selected.EditorPid > 0)
+            return selected.EditorPid;
+
+        return null;
+    }
+
+    async Task<ScriptRefreshActivityStartWait> WaitForScriptRefreshActivityStartFromHostAsync(
+        DateTime deadlineUtc,
+        int pollIntervalMs,
+        CancellationToken cancellationToken)
+    {
+        DateTime startDeadlineUtc = DateTime.UtcNow.AddSeconds(6);
+        if (deadlineUtc < startDeadlineUtc)
+            startDeadlineUtc = deadlineUtc;
+
+        var attempts = new List<object>();
+        object? lastState = null;
+        string? lastError = null;
+        int transientBridgeFailureCount = 0;
+
+        while (DateTime.UtcNow < startDeadlineUtc)
+        {
+            try
+            {
+                JsonElement state = await CallBridgeToolResultAsync(
+                    "Unity.ManageEditor",
+                    new { action = "GetCompactState" },
+                    cancellationToken,
+                    TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+                bool stateSuccess = GetJsonBool(state, false, "success");
+                bool isCompiling = GetEditorStateDataBool(state, false, "isCompiling", "IsCompiling");
+                bool isUpdating = GetEditorStateDataBool(state, false, "isUpdating", "IsUpdating");
+                bool isBuildingPlayer = GetEditorStateDataBool(state, false, "isBuildingPlayer", "IsBuildingPlayer");
+                object attempt = new
+                {
+                    timestamp = DateTime.UtcNow.ToString("O"),
+                    success = stateSuccess,
+                    isCompiling,
+                    isUpdating,
+                    isBuildingPlayer,
+                    editorIdle = GetEditorStateDataBool(state, false, "isEditorIdle", "IsEditorIdle"),
+                    raw = state.Clone()
+                };
+                attempts.Add(attempt);
+                lastState = attempt;
+
+                if (stateSuccess && (isCompiling || isUpdating || isBuildingPlayer))
+                {
+                    return new ScriptRefreshActivityStartWait
+                    {
+                        Started = true,
+                        TimedOut = false,
+                        Message = "Unity compile/import/update activity started after the focus nudge.",
+                        Attempts = attempts,
+                        LastState = lastState,
+                        LastError = lastError
+                    };
+                }
+            }
+            catch (Exception ex)
+            {
+                lastError = ex.Message;
+                bool transientBridgeFailure = IsBridgeTransportFailure(ex);
+                if (transientBridgeFailure)
+                    transientBridgeFailureCount++;
+                attempts.Add(new
+                {
+                    timestamp = DateTime.UtcNow.ToString("O"),
+                    success = false,
+                    error = ex.Message,
+                    exceptionType = ex.GetType().Name,
+                    transientBridgeFailure
+                });
+
+                if (transientBridgeFailure)
+                    await ResetBridgeClientAsync(preserveActivePacks: true, clearToolCache: true).ConfigureAwait(false);
+            }
+
+            TimeSpan remaining = startDeadlineUtc - DateTime.UtcNow;
+            if (remaining <= TimeSpan.Zero)
+                break;
+
+            await Task.Delay((int)Math.Min(Math.Max(100, pollIntervalMs), remaining.TotalMilliseconds), cancellationToken).ConfigureAwait(false);
+        }
+
+        bool likelyStartedByTransientBridgeFailure = transientBridgeFailureCount > 0;
+        return new ScriptRefreshActivityStartWait
+        {
+            Started = false,
+            TimedOut = true,
+            LikelyStartedByTransientBridgeFailure = likelyStartedByTransientBridgeFailure,
+            Message = likelyStartedByTransientBridgeFailure
+                ? "Lens saw a transient bridge failure after the focus nudge; this can indicate a compile/domain reload started."
+                : "Unity compile/import/update activity did not start shortly after the focus nudge.",
+            Attempts = attempts,
+            LastState = lastState,
+            LastError = lastError
+        };
     }
 
     JsonElement BuildSyncScriptsNativeArguments(JsonElement argumentsElement, AssemblyReloadProofSnapshot? proofSnapshot)
@@ -6480,6 +7820,157 @@ sealed class UnityMcpLensHost
     static bool ActivePacksAreStaticAll(IEnumerable<string> packs)
     {
         return (packs ?? Array.Empty<string>()).Any(pack => string.Equals(pack, "full", StringComparison.OrdinalIgnoreCase));
+    }
+
+    static class WindowsUnityEditorFocusNudge
+    {
+        const int SW_RESTORE = 9;
+        const uint MOUSEEVENTF_LEFTDOWN = 0x0002;
+        const uint MOUSEEVENTF_LEFTUP = 0x0004;
+
+        public static WindowsFocusNudgeNativeResult TryNudge(int editorPid, bool safeClickNudge)
+        {
+            try
+            {
+                IntPtr window = FindLargestVisibleTopLevelWindow(editorPid, out string? title, out RECT rect);
+                if (window == IntPtr.Zero)
+                {
+                    return new WindowsFocusNudgeNativeResult
+                    {
+                        WindowFound = false,
+                        Error = "No visible top-level window matched the Unity editor process id."
+                    };
+                }
+
+                int width = Math.Max(0, rect.Right - rect.Left);
+                int height = Math.Max(0, rect.Bottom - rect.Top);
+                ShowWindow(window, SW_RESTORE);
+                bool focusSucceeded = SetForegroundWindow(window);
+                bool clickAttempted = false;
+                bool clickSucceeded = false;
+                int? clickX = null;
+                int? clickY = null;
+
+                if (safeClickNudge && width >= 240 && height >= 80)
+                {
+                    clickAttempted = true;
+                    clickX = rect.Left + Math.Clamp(width / 2, 120, Math.Max(120, width - 120));
+                    clickY = rect.Top + Math.Clamp(10, 1, Math.Max(1, height - 1));
+                    clickSucceeded = SetCursorPos(clickX.Value, clickY.Value);
+                    if (clickSucceeded)
+                    {
+                        mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, UIntPtr.Zero);
+                        mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, UIntPtr.Zero);
+                    }
+                }
+
+                return new WindowsFocusNudgeNativeResult
+                {
+                    WindowFound = true,
+                    WindowTitle = title,
+                    Left = rect.Left,
+                    Top = rect.Top,
+                    Width = width,
+                    Height = height,
+                    FocusAttempted = true,
+                    FocusSucceeded = focusSucceeded,
+                    ClickAttempted = clickAttempted,
+                    ClickSucceeded = clickSucceeded,
+                    ClickX = clickX,
+                    ClickY = clickY
+                };
+            }
+            catch (Exception ex)
+            {
+                return new WindowsFocusNudgeNativeResult
+                {
+                    WindowFound = false,
+                    Error = ex.Message
+                };
+            }
+        }
+
+        static IntPtr FindLargestVisibleTopLevelWindow(int editorPid, out string? title, out RECT rect)
+        {
+            IntPtr bestWindow = IntPtr.Zero;
+            string? bestTitle = null;
+            RECT bestRect = default;
+            long bestArea = 0;
+
+            EnumWindows((hWnd, _) =>
+            {
+                if (!IsWindowVisible(hWnd))
+                    return true;
+
+                GetWindowThreadProcessId(hWnd, out uint processId);
+                if (processId != (uint)editorPid)
+                    return true;
+
+                if (!GetWindowRect(hWnd, out RECT candidateRect))
+                    return true;
+
+                int width = Math.Max(0, candidateRect.Right - candidateRect.Left);
+                int height = Math.Max(0, candidateRect.Bottom - candidateRect.Top);
+                long area = (long)width * height;
+                if (area <= bestArea)
+                    return true;
+
+                bestWindow = hWnd;
+                bestRect = candidateRect;
+                bestArea = area;
+                bestTitle = GetWindowTitle(hWnd);
+                return true;
+            }, IntPtr.Zero);
+
+            title = bestTitle;
+            rect = bestRect;
+            return bestWindow;
+        }
+
+        static string? GetWindowTitle(IntPtr hWnd)
+        {
+            var builder = new StringBuilder(512);
+            int length = GetWindowText(hWnd, builder, builder.Capacity);
+            return length <= 0 ? null : builder.ToString(0, length);
+        }
+
+        delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+
+        [StructLayout(LayoutKind.Sequential)]
+        struct RECT
+        {
+            public int Left;
+            public int Top;
+            public int Right;
+            public int Bottom;
+        }
+
+        [DllImport("user32.dll")]
+        static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
+
+        [DllImport("user32.dll")]
+        static extern bool IsWindowVisible(IntPtr hWnd);
+
+        [DllImport("user32.dll")]
+        static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
+
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
+
+        [DllImport("user32.dll")]
+        static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
+
+        [DllImport("user32.dll")]
+        static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+        [DllImport("user32.dll")]
+        static extern bool SetForegroundWindow(IntPtr hWnd);
+
+        [DllImport("user32.dll")]
+        static extern bool SetCursorPos(int x, int y);
+
+        [DllImport("user32.dll")]
+        static extern void mouse_event(uint dwFlags, uint dx, uint dy, uint dwData, UIntPtr dwExtraInfo);
     }
 
     static string ResolveToolSurfaceMode()

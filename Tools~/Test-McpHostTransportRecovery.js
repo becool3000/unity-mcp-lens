@@ -976,6 +976,34 @@ async function main() {
     );
   });
 
+  await withScenario("syncscripts-focus-nudge-skips-busy-editor", null, async (context, client) => {
+    await assertFullTools(client);
+    writeBeeStyleLocalFilePackage(context);
+    const result = await client.callTool("Unity_Editor_SyncScripts", {
+      waitForCompile: false,
+      timeoutSeconds: 2,
+      focusNudgeOnStaleRefresh: true,
+      safeClickNudge: true,
+    });
+
+    const syncCommand = context.commands.find((command) => command.type === "Unity.Editor.SyncScripts");
+    assert(syncCommand, "native SyncScripts command should be recorded");
+    assert.strictEqual(syncCommand.params.focusNudgeOnStaleRefresh, true, "host should forward focus nudge hint to native SyncScripts schema");
+    assert.strictEqual(syncCommand.params.safeClickNudge, true, "host should forward safe click nudge hint");
+    assert.strictEqual(result.structuredContent.success, false, "busy-editor focus nudge skip should not mask stale proof");
+    assert.strictEqual(result.structuredContent.data.scriptRefreshOutcome, "focus_nudge_skipped");
+    assert.strictEqual(result.structuredContent.data.focusNudgeOnStaleRefresh, true);
+    assert.strictEqual(result.structuredContent.data.safeClickNudge, true);
+    assert(result.structuredContent.data.focusNudge, "focus nudge diagnostics should be present");
+    assert.strictEqual(result.structuredContent.data.focusNudge.requested, true);
+    assert.strictEqual(result.structuredContent.data.focusNudge.attempted, false);
+    assert.strictEqual(result.structuredContent.data.focusNudge.skipped, true);
+    assert.strictEqual(result.structuredContent.data.focusNudge.outcome, "skipped_editor_not_idle");
+    assert.strictEqual(result.structuredContent.data.focusNudge.reason, "play_mode_transition");
+    const warningKinds = result.structuredContent.data.warnings.map((warning) => warning.kind);
+    assert(warningKinds.includes("script_refresh_focus_nudge"), "focus nudge diagnostics should also be summarized in warnings");
+  });
+
   await withScenario("step-verifier-wrapper", null, async (context, client) => {
     await assertFullTools(client);
     const result = await client.callTool("Unity_PlayMode_StepVerifier", {

@@ -107,7 +107,13 @@ sealed class UnityBridgeClient : IAsyncDisposable
         m_ReadLoopTask = Task.Run(() => ReadLoopAsync(m_ReadLoopCts.Token), m_ReadLoopCts.Token);
     }
 
-    public Task<BridgeEnvelope<RegisterClientResult>> RegisterClientAsync(string name, string version, string? title, CancellationToken cancellationToken)
+    public Task<BridgeEnvelope<RegisterClientResult>> RegisterClientAsync(
+        string name,
+        string version,
+        string? title,
+        string[] requestedToolPacks,
+        string? toolSurfaceMode,
+        CancellationToken cancellationToken)
     {
         return SendCommandAsync<RegisterClientResult>(
             "register_client",
@@ -116,6 +122,8 @@ sealed class UnityBridgeClient : IAsyncDisposable
                 name,
                 version,
                 title,
+                requestedToolPacks,
+                toolSurfaceMode,
                 capabilities = new
                 {
                     supportsToolSyncLens = true,
@@ -138,7 +146,7 @@ sealed class UnityBridgeClient : IAsyncDisposable
                 knownManifestVersion,
                 includeSchemas
             },
-            TimeSpan.FromSeconds(10),
+            TimeSpan.FromSeconds(includeSchemas ? 30 : 10),
             cancellationToken);
     }
 
@@ -158,7 +166,7 @@ sealed class UnityBridgeClient : IAsyncDisposable
                 reason,
                 toolSurfaceMode
             },
-            TimeSpan.FromSeconds(10),
+            TimeSpan.FromSeconds(includeSchemas ? 30 : 10),
             cancellationToken);
     }
 
@@ -170,7 +178,7 @@ sealed class UnityBridgeClient : IAsyncDisposable
             {
                 toolNames
             },
-            TimeSpan.FromSeconds(10),
+            TimeSpan.FromSeconds(30),
             cancellationToken);
     }
 

@@ -23,6 +23,8 @@ async function main() {
   const timeoutSeconds = common.getArgNumber(args, ["ReloadTimeoutSeconds"], 120);
   const pollIntervalMs = Math.max(50, Math.round(common.getArgNumber(args, ["PollIntervalSeconds"], 0.5) * 1000));
   const stablePollCount = Math.max(1, Math.round(common.getArgNumber(args, ["IdleStablePollCount"], 3)));
+  const focusNudgeOnStaleRefresh = common.getArgBool(args, ["FocusNudgeOnStaleRefresh"], false);
+  const safeClickNudge = common.getArgBool(args, ["SafeClickNudge"], true);
 
   const payload = {
     changedPaths: normalizedChangedPaths,
@@ -31,6 +33,8 @@ async function main() {
     timeoutSeconds,
     pollIntervalMs,
     stablePollCount,
+    focusNudgeOnStaleRefresh,
+    safeClickNudge,
   };
 
   try {
@@ -86,6 +90,7 @@ async function main() {
       success: toolResult?.success === true && postRefreshIdleSucceeded && postRefreshConsoleClean && data.newConsoleErrorsDetected !== true,
       message: toolResult?.message || toolResult?.error || "Unity.Editor.SyncScripts returned no message.",
       projectPath,
+      scriptRefreshOutcome: data.scriptRefreshOutcome || null,
       changedPaths: data.changedPaths || normalizedChangedPaths,
       relevantChangedPaths: data.relevantChangedPaths || [],
       relevantChangesDetected: force || (data.relevantChangedPaths || []).length > 0,
@@ -94,6 +99,11 @@ async function main() {
       forcedRefresh: data.refreshRequested === true && force === true,
       refreshRequested: data.refreshRequested === true,
       refreshScheduledAfterResponse: data.refreshScheduledAfterResponse === true,
+      focusNudgeOnStaleRefresh,
+      safeClickNudge,
+      focusNudge: data.focusNudge || null,
+      focusNudgeAttempted: data.focusNudge?.attempted === true || data.focusNudge?.Attempted === true,
+      focusNudgeOutcome: data.focusNudge?.outcome || data.focusNudge?.Outcome || null,
       editorIdle: data.editorIdle === true || postRefreshIdleWait?.success === true,
       initialConsoleErrorCount: data.initialConsoleErrorCount,
       finalConsoleErrorCount: postRefreshFinalConsoleErrorCount,

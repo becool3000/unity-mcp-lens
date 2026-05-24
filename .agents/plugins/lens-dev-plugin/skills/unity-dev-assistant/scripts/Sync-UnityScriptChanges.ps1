@@ -9,6 +9,8 @@ param(
     [int]$IdleStablePollCount = 3,
     [double]$PollIntervalSeconds = 0.5,
     [double]$PostIdleDelaySeconds = 1.0,
+    [switch]$FocusNudgeOnStaleRefresh,
+    [switch]$DisableSafeClickNudge,
     [switch]$Force
 )
 
@@ -35,6 +37,14 @@ foreach ($changedPath in $ChangedPaths) {
 
 if ($Force) {
     $scriptArgs += @("--Force", "true")
+}
+
+if ($FocusNudgeOnStaleRefresh) {
+    $scriptArgs += @("--FocusNudgeOnStaleRefresh", "true")
+}
+
+if ($DisableSafeClickNudge) {
+    $scriptArgs += @("--SafeClickNudge", "false")
 }
 
 & $nodePath @scriptArgs

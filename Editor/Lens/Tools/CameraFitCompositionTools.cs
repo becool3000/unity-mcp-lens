@@ -332,7 +332,8 @@ namespace Becool.UnityMcpLens.Editor.Tools
         {
             var inactiveMode = request.IncludeInactive ? FindObjectsInactive.Include : FindObjectsInactive.Exclude;
             var allObjects = UnityApiAdapter.FindObjectsByType<GameObject>(inactiveMode);
-            var resolvedTypes = ResolveComponentTypes(request.ComponentTypes, out missingTypes);
+            var resolvedTypes = ResolveComponentTypes(request.ComponentTypes, out string[] resolvedMissingTypes);
+            missingTypes = resolvedMissingTypes;
             bool matchAny = string.Equals(request.ComponentMatch, "any", StringComparison.OrdinalIgnoreCase);
             GameObject rootObject = ResolveRoot(request);
             rootData = rootObject == null ? null : new
@@ -365,7 +366,7 @@ namespace Becool.UnityMcpLens.Editor.Tools
                 .Where(go => MatchesScene(go, request.Scene))
                 .Where(go => MatchesRoot(go, rootObject))
                 .Where(go => MatchesName(go, request.NamePrefix, request.NameExact))
-                .Where(go => MatchesComponents(go, resolvedTypes, request.ComponentTypes.Length, missingTypes.Length, matchAny))
+                .Where(go => MatchesComponents(go, resolvedTypes, request.ComponentTypes.Length, resolvedMissingTypes.Length, matchAny))
                 .GroupBy(go => go.GetInstanceID())
                 .Select(group => group.First())
                 .OrderBy(go => UiDiagnosticsHelper.GetHierarchyPath(go.transform), StringComparer.Ordinal)

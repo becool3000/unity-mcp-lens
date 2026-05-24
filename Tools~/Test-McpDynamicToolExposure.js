@@ -36,6 +36,9 @@ const foundationToolNames = [
   "Unity_ReadDetailRef",
   "Unity_Tools_Menu",
   "Unity_Tools_Describe",
+  "Unity_Tools_List",
+  "Unity_Tools_Invoke",
+  "Unity_Tools_BatchInvoke",
   "Unity_Tools_ActivateAndVerify",
   "Unity_ReadConsole",
   "Unity_ListResources",
@@ -72,6 +75,7 @@ const sceneToolNames = [
 
 const uiToolNames = [
   "Unity_UI_VerifyScreenLayout",
+  "Unity_UI_CaptureGameView",
   "Unity_UI_ApplyEnsureHierarchy",
 ];
 
@@ -437,7 +441,7 @@ function writeHealth(healthPath, projectRoot, options) {
   }, null, 2));
 }
 
-function resultFor(type, _params, context) {
+function resultFor(type, params, context) {
   switch (type) {
     case "register_client":
       return {
@@ -477,6 +481,10 @@ function resultFor(type, _params, context) {
           availableToolPacks: ["foundation", "project", "runtime", "assets", "scene", "ui", "debug", "full"],
         },
       };
+    case "Unity_Tools_List":
+      return toolListResult(context.activePacks, params || {});
+    case "Unity_Tools_Describe":
+      return describeResult(context.activePacks);
     case "Unity_Tools_Menu":
       return menuResult(context.activePacks);
     default:
@@ -566,12 +574,97 @@ function menuResult(activeToolPacks) {
       activeToolPacks,
       totalToolCount: fakeTools(["foundation", "full"], false).length,
       packs,
+      clientSurfaceFallback: clientSurfaceFallback(),
       workflowRecommendations: [
         fullSurface
           ? "Call real native tools directly; no Unity.SetToolPacks step is required in static_all mode."
           : "Use Unity.SetToolPacks before calling pack-gated tools.",
+        "If a direct native tool is unavailable in the MCP client, use Unity.Tools.List and call it through Unity.Tools.Invoke or Unity.Tools.BatchInvoke.",
       ],
     },
+  };
+}
+
+function describeResult(activeToolPacks) {
+  const fullSurface = activeToolPacks.some((pack) => pack.toLowerCase() === "full");
+  return {
+    success: true,
+    message: "Described fake Unity MCP Lens tools.",
+    data: {
+      toolSurfaceMode: fullSurface ? "static_all" : "dynamic_packs",
+      activeToolPacks,
+      totalToolCount: fakeTools(["foundation", "full"], false).length,
+      returnedToolCount: 0,
+      clientSurfaceFallback: clientSurfaceFallback(),
+      tools: [],
+    },
+  };
+}
+
+function toolListResult(activeToolPacks, params) {
+  const fullSurface = activeToolPacks.some((pack) => pack.toLowerCase() === "full");
+  const groupBy = params.groupBy || "pack";
+  const maxToolsPerGroup = Math.min(500, Math.max(1, Number(params.maxToolsPerGroup || 100)));
+  const rows = fakeTools(activeToolPacks, false)
+    .map((tool) => ({
+      name: tool.name,
+      canonicalToolName: tool.name,
+      title: tool.title,
+      readOnlyHint: tool.readOnlyHint,
+      schemaHash: tool.schemaHash,
+      packs: tool.packs || [],
+      groups: tool.groups || [],
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  const data = {
+    toolSurfaceMode: fullSurface ? "static_all" : "dynamic_packs",
+    activeToolPacks,
+    exportedToolCount: rows.length,
+    groupBy,
+    maxToolsPerGroup,
+    truncated: false,
+    bridgeRefresh: { attempted: true, succeeded: true, skippedReason: null, error: null },
+    clientSurfaceFallback: clientSurfaceFallback(),
+  };
+
+  if (groupBy === "flat") {
+    data.tools = rows;
+    data.groups = null;
+  } else {
+    const grouped = new Map();
+    for (const row of rows) {
+      const keys = (groupBy === "group" ? row.groups : row.packs.filter((pack) => pack !== "full"));
+      for (const key of keys.length ? keys : ["ungrouped"]) {
+        if (!grouped.has(key)) grouped.set(key, []);
+        grouped.get(key).push(row);
+      }
+    }
+    data.tools = null;
+    data.groups = [...grouped.entries()]
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([id, tools]) => ({
+        id,
+        toolCount: tools.length,
+        readOnlyToolCount: tools.filter((tool) => tool.readOnlyHint).length,
+        mutatingToolCount: tools.filter((tool) => !tool.readOnlyHint).length,
+        truncated: tools.length > maxToolsPerGroup,
+        tools: tools.slice(0, maxToolsPerGroup),
+      }));
+    data.truncated = data.groups.some((group) => group.truncated);
+  }
+
+  return {
+    success: true,
+    message: `Listed ${rows.length} fake tools.`,
+    data,
+  };
+}
+
+function clientSurfaceFallback() {
+  return {
+    listTool: "Unity.Tools.List",
+    invokeTool: "Unity.Tools.Invoke",
+    batchInvokeTool: "Unity.Tools.BatchInvoke",
   };
 }
 
@@ -614,6 +707,8 @@ function isReadOnlyTool(name) {
 function isReadOnlyFoundationTool(name) {
   return name === "Unity_Bridge_ListConnections" ||
     name !== "Unity_SetToolPacks" &&
+    name !== "Unity_Tools_Invoke" &&
+    name !== "Unity_Tools_BatchInvoke" &&
     name !== "Unity_Tools_ActivateAndVerify" &&
     name !== "Unity_ManageEditor" &&
     name !== "Unity_RunCommand" &&
@@ -639,6 +734,47 @@ function schemaFor(name) {
       properties: {
         maxToolsPerPack: { type: "integer" },
       },
+    };
+  }
+  if (name === "Unity_Tools_List") {
+    return {
+      type: "object",
+      properties: {
+        groupBy: { type: "string", enum: ["pack", "group", "flat"] },
+        maxToolsPerGroup: { type: "integer" },
+      },
+    };
+  }
+  if (name === "Unity_Tools_Invoke") {
+    return {
+      type: "object",
+      properties: {
+        toolName: { type: "string" },
+        arguments: { type: "object" },
+        timeoutMs: { type: "integer" },
+      },
+      required: ["toolName"],
+    };
+  }
+  if (name === "Unity_Tools_BatchInvoke") {
+    return {
+      type: "object",
+      properties: {
+        calls: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              toolName: { type: "string" },
+              arguments: { type: "object" },
+              timeoutMs: { type: "integer" },
+            },
+            required: ["toolName"],
+          },
+        },
+        failFast: { type: "boolean" },
+      },
+      required: ["calls"],
     };
   }
   if (name === "Unity_Bridge_ListConnections") {
@@ -726,6 +862,7 @@ function schemaFor(name) {
       },
     };
   }
+  if (name === "Unity_UI_CaptureGameView") return captureGameViewSchema();
   if (name === "Unity_Camera_FitComposition") {
     return {
       type: "object",
@@ -894,6 +1031,43 @@ function verifySpriteArrayBindingSchema() {
   };
 }
 
+function captureGameViewSchema() {
+  return {
+    type: "object",
+    properties: {
+      SceneName: { type: "string" },
+      OutputPath: { type: "string" },
+      Width: { type: "integer" },
+      Height: { type: "integer" },
+      RestoreOriginalResolution: { type: "boolean" },
+      WarmupMs: { type: "integer" },
+      WarmupFrames: { type: "integer" },
+      PausePlayMode: { type: "boolean" },
+      StepFrames: { type: "integer" },
+      RestorePauseState: { type: "boolean" },
+      RequirePlaying: { type: "boolean" },
+      CaptureConsoleDelta: { type: "boolean" },
+      FallbackSceneView: { type: "boolean" },
+      TemporaryActivations: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            Target: { type: "string" },
+            SearchMethod: { type: "string" },
+            IncludeInactive: { type: "boolean" },
+            Active: { type: "boolean" },
+          },
+          required: ["Target"],
+        },
+      },
+      VerifyImageDimensions: { type: "boolean" },
+      WaitForFileTimeoutMs: { type: "integer" },
+    },
+    required: ["OutputPath"],
+  };
+}
+
 function spriteSheetVisualDiagnosticsSchema() {
   return {
     type: "object",
@@ -974,6 +1148,111 @@ function assertReadOnlyHint(tools, name, expected) {
   assert.strictEqual(actual, expected, `${name} readOnlyHint`);
 }
 
+function assertToolSchemaProperties(tools, name, propertyNames, requiredNames = []) {
+  const tool = tools.find((item) => item.name === name);
+  assert(tool, `tools/list missing ${name}`);
+  assert(tool.inputSchema && tool.inputSchema.properties, `${name} should expose inputSchema.properties`);
+  for (const propertyName of propertyNames) {
+    assert(
+      Object.prototype.hasOwnProperty.call(tool.inputSchema.properties, propertyName),
+      `${name} schema should include ${propertyName}`,
+    );
+  }
+  for (const requiredName of requiredNames) {
+    assert(
+      Array.isArray(tool.inputSchema.required) && tool.inputSchema.required.includes(requiredName),
+      `${name} schema should require ${requiredName}`,
+    );
+  }
+}
+
+function assertBatchInvokeSchema(tools) {
+  assertToolSchemaProperties(tools, "Unity_Tools_BatchInvoke", ["calls", "failFast"], ["calls"]);
+  const tool = tools.find((item) => item.name === "Unity_Tools_BatchInvoke");
+  const callItemSchema = tool.inputSchema.properties.calls.items;
+  assert(callItemSchema && callItemSchema.properties, "Unity_Tools_BatchInvoke calls.items should expose properties");
+  for (const propertyName of ["toolName", "arguments", "timeoutMs"]) {
+    assert(
+      Object.prototype.hasOwnProperty.call(callItemSchema.properties, propertyName),
+      `Unity_Tools_BatchInvoke call schema should include ${propertyName}`,
+    );
+  }
+  assert(
+    Array.isArray(callItemSchema.required) && callItemSchema.required.includes("toolName"),
+    "Unity_Tools_BatchInvoke call schema should require toolName",
+  );
+}
+
+function assertToolsListFacadePayload(result, expectedNames) {
+  assert.strictEqual(result.isError, false, "Unity_Tools_List should not return an MCP error");
+  assert.strictEqual(result.structuredContent.success, true, "Unity_Tools_List should report success");
+  assert(result.structuredContent.data.clientSurfaceFallback, "Unity_Tools_List should include facade fallback metadata");
+  assert.strictEqual(result.structuredContent.data.clientSurfaceFallback.invokeTool, "Unity.Tools.Invoke");
+
+  const rows = result.structuredContent.data.groupBy === "flat"
+    ? result.structuredContent.data.tools
+    : result.structuredContent.data.groups.flatMap((group) => group.tools);
+  assert(rows.length > 0, "Unity_Tools_List should return tool rows");
+  for (const row of rows) {
+    assert(row.name, "Unity_Tools_List row should include name");
+    assert(row.canonicalToolName, "Unity_Tools_List row should include canonicalToolName");
+    assert.strictEqual(typeof row.readOnlyHint, "boolean", "Unity_Tools_List row should include readOnlyHint");
+    assert(row.schemaHash, "Unity_Tools_List row should include schemaHash");
+    assert(Array.isArray(row.packs), "Unity_Tools_List row should include packs");
+    assert(Array.isArray(row.groups), "Unity_Tools_List row should include groups");
+  }
+
+  assertNamesInclude(rows.map((row) => row.name), expectedNames, "Unity_Tools_List rows");
+}
+
+function assertLensDevPluginManifest(pluginConfig) {
+  const manifestGenerator = path.join(repoRoot, "Tools~", "Export-LensDevPluginManifest.js");
+  childProcess.execFileSync(process.execPath, [manifestGenerator, "--check"], {
+    cwd: repoRoot,
+    encoding: "utf8",
+    stdio: "pipe",
+  });
+
+  const manifestPath = path.join(repoRoot, ".agents", "plugins", "lens-dev-plugin", "manifest.json");
+  const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+  assert.strictEqual(manifest.manifest_version, "0.3", "Lens plugin manifest version");
+  assert.strictEqual(manifest.sourceOfTruth, "discovery_hint_only", "Lens plugin manifest should be a discovery hint only");
+  assert.strictEqual(
+    manifest.executionSourceOfTruth,
+    "Lens host tools/list and Unity bridge manifest",
+    "Lens plugin manifest should not be execution source of truth",
+  );
+  assert.strictEqual(
+    manifest.server.mcp_config.env.UNITY_MCP_LENS_TOOL_SURFACE_MODE,
+    "static_all",
+    "Lens plugin manifest should preserve static_all MCP config hint",
+  );
+  assert.deepStrictEqual(
+    manifest.server.mcp_config,
+    pluginConfig.mcpServers.unity_mcp_lens,
+    "Lens plugin manifest MCP config should mirror repo-local plugin .mcp.json",
+  );
+
+  assert(Array.isArray(manifest.tools), "Lens plugin manifest tools should be an array");
+  assert(manifest.tools.length > foundationToolNames.length, "Lens plugin manifest should be broader than foundation-only");
+  const toolNames = manifest.tools.map((tool) => tool.name);
+  assert.strictEqual(new Set(toolNames).size, toolNames.length, "Lens plugin manifest tool names should be unique");
+  assertNamesInclude(toolNames, [
+    "Unity_Tools_List",
+    "Unity_Tools_Invoke",
+    "Unity_Tools_BatchInvoke",
+    "Unity_Tools_Describe",
+    "Unity_Tools_Menu",
+    "Unity_Project_BlockedLanguageScan",
+    "Unity_Tests_Run",
+    "Unity_UI_CaptureGameView",
+  ], "Lens plugin manifest tools");
+  for (const tool of manifest.tools) {
+    assert(tool.name && typeof tool.name === "string", "Lens plugin manifest tool should include name");
+    assert(tool.description && typeof tool.description === "string", `Lens plugin manifest tool ${tool.name} should include description`);
+  }
+}
+
 function walkSchema(schema, schemaPath) {
   if (!schema || typeof schema !== "object" || Array.isArray(schema)) return;
   if (schema.type === "array" && !Object.prototype.hasOwnProperty.call(schema, "items")) {
@@ -1006,9 +1285,18 @@ async function runDynamicPacksScenario() {
     assert(foundationNames.includes("Unity_SetToolPacks"), "foundation tools/list should expose Unity_SetToolPacks");
     assert(foundationNames.includes("Unity_Tools_Menu"), "foundation tools/list should expose Unity_Tools_Menu");
     assert(foundationNames.includes("Unity_Tools_Describe"), "foundation tools/list should expose Unity_Tools_Describe");
+    assert(foundationNames.includes("Unity_Tools_List"), "foundation tools/list should expose Unity_Tools_List");
+    assert(foundationNames.includes("Unity_Tools_Invoke"), "foundation tools/list should expose Unity_Tools_Invoke");
+    assert(foundationNames.includes("Unity_Tools_BatchInvoke"), "foundation tools/list should expose Unity_Tools_BatchInvoke");
     assert(foundationNames.includes("Unity_Tools_ActivateAndVerify"), "foundation tools/list should expose Unity_Tools_ActivateAndVerify");
     assertNamesInclude(foundationNames, requiredBootstrapWorkflowTools, "foundation bootstrap workflow tools/list");
     assertReadOnlyHint(foundationList.tools, "Unity_Editor_HealthCheckFast", true);
+    assertReadOnlyHint(foundationList.tools, "Unity_Tools_List", true);
+    assertToolSchemaProperties(foundationList.tools, "Unity_Tools_List", ["groupBy", "maxToolsPerGroup"], []);
+    assertReadOnlyHint(foundationList.tools, "Unity_Tools_Invoke", false);
+    assertToolSchemaProperties(foundationList.tools, "Unity_Tools_Invoke", ["toolName", "arguments", "timeoutMs"], ["toolName"]);
+    assertReadOnlyHint(foundationList.tools, "Unity_Tools_BatchInvoke", false);
+    assertBatchInvokeSchema(foundationList.tools);
     assertReadOnlyHint(foundationList.tools, "Unity_PlayMode_StepVerifier", false);
     assertReadOnlyHint(foundationList.tools, "Unity_Editor_RecoverFromHang", false);
     assertReadOnlyHint(foundationList.tools, "Unity_Workflow_RunGpuSimulationProbe", false);
@@ -1017,6 +1305,9 @@ async function runDynamicPacksScenario() {
     for (const assetToolName of requiredAssetTools) {
       assert(!foundationNames.includes(assetToolName), `foundation tools/list should not expose ${assetToolName}`);
     }
+
+    const foundationToolsListResult = await client.callTool("Unity_Tools_List", {});
+    assertToolsListFacadePayload(foundationToolsListResult, ["Unity_Tools_List", "Unity_Tools_Invoke", "Unity_Tools_BatchInvoke"]);
 
     const notificationCount = client.notificationCount("notifications/tools/list_changed");
     const setResult = await client.callTool("Unity_SetToolPacks", { Packs: ["assets"] });
@@ -1027,6 +1318,9 @@ async function runDynamicPacksScenario() {
     const assetsList = await client.listTools();
     const assetNames = assetsList.tools.map((tool) => tool.name);
     assertNamesInclude(assetNames, requiredAssetTools, "foundation+assets tools/list");
+    assert(assetNames.includes("Unity_Tools_List"), "foundation+assets tools/list should keep Unity_Tools_List");
+    assert(assetNames.includes("Unity_Tools_Invoke"), "foundation+assets tools/list should keep Unity_Tools_Invoke");
+    assert(assetNames.includes("Unity_Tools_BatchInvoke"), "foundation+assets tools/list should keep Unity_Tools_BatchInvoke");
     assertArraySchemasHaveItems(assetsList.tools);
 
     const verifyResult = await client.callTool("Unity_Tools_ActivateAndVerify", {
@@ -1053,6 +1347,9 @@ async function runStaticAllScenario() {
     const staticList = await client.listTools();
     const staticNames = staticList.tools.map((tool) => tool.name);
     assertNamesInclude(staticNames, [
+      "Unity_Tools_List",
+      "Unity_Tools_Invoke",
+      "Unity_Tools_BatchInvoke",
       "Unity_Project_PackageCompatibility",
       "Unity_Project_BlockedLanguageScan",
       "Unity_Tests_Run",
@@ -1066,9 +1363,16 @@ async function runStaticAllScenario() {
       "Unity_Scene_PreviewBulkMutation",
       "Unity_Scene_ApplyBulkMutation",
       "Unity_UI_VerifyScreenLayout",
+      "Unity_UI_CaptureGameView",
       "Unity_GetLensUsageReport",
     ], "static_all startup tools/list");
     assertArraySchemasHaveItems(staticList.tools);
+    assertReadOnlyHint(staticList.tools, "Unity_Tools_List", true);
+    assertToolSchemaProperties(staticList.tools, "Unity_Tools_List", ["groupBy", "maxToolsPerGroup"], []);
+    assertReadOnlyHint(staticList.tools, "Unity_Tools_Invoke", false);
+    assertToolSchemaProperties(staticList.tools, "Unity_Tools_Invoke", ["toolName", "arguments", "timeoutMs"], ["toolName"]);
+    assertReadOnlyHint(staticList.tools, "Unity_Tools_BatchInvoke", false);
+    assertBatchInvokeSchema(staticList.tools);
     assertReadOnlyHint(staticList.tools, "Unity_PlayMode_StepVerifier", false);
     assertReadOnlyHint(staticList.tools, "Unity_Editor_RecoverFromHang", false);
     assertReadOnlyHint(staticList.tools, "Unity_Workflow_RunGpuSimulationProbe", false);
@@ -1081,15 +1385,139 @@ async function runStaticAllScenario() {
     assertReadOnlyHint(staticList.tools, "Unity_Scene_ApplyGridBoardLayout", false);
     assertReadOnlyHint(staticList.tools, "Unity_Scene_PreviewBulkMutation", true);
     assertReadOnlyHint(staticList.tools, "Unity_Scene_ApplyBulkMutation", false);
+    assertReadOnlyHint(staticList.tools, "Unity_UI_CaptureGameView", false);
+    assertToolSchemaProperties(staticList.tools, "Unity_UI_CaptureGameView", [
+      "OutputPath",
+      "Width",
+      "Height",
+      "RestoreOriginalResolution",
+      "TemporaryActivations",
+      "VerifyImageDimensions",
+      "WaitForFileTimeoutMs",
+    ], ["OutputPath"]);
 
     const projectResult = await client.callTool("Unity_Project_PackageCompatibility", {});
     assert.strictEqual(projectResult.structuredContent.success, true, "pack-gated project tool should succeed in static_all without pack switching");
 
+    const groupedListResult = await client.callTool("Unity_Tools_List", { groupBy: "pack", maxToolsPerGroup: 100 });
+    assertToolsListFacadePayload(groupedListResult, [
+      "Unity_Tools_List",
+      "Unity_Tools_Invoke",
+      "Unity_Tools_BatchInvoke",
+      "Unity_Project_BlockedLanguageScan",
+      "Unity_Tests_Run",
+    ]);
+    assert.strictEqual(groupedListResult.structuredContent.data.groupBy, "pack");
+    assert(groupedListResult.structuredContent.data.groups.some((group) => group.id === "foundation"), "Unity_Tools_List should include a foundation group");
+
+    const flatListResult = await client.callTool("Unity_Tools_List", { groupBy: "flat" });
+    assertToolsListFacadePayload(flatListResult, ["Unity_Project_BlockedLanguageScan", "Unity_Tests_Run"]);
+    assert.strictEqual(flatListResult.structuredContent.data.groupBy, "flat");
+    const flatNames = flatListResult.structuredContent.data.tools.map((row) => row.name);
+    assert.deepStrictEqual([...flatNames].sort((a, b) => a.localeCompare(b)), flatNames, "Unity_Tools_List flat tools should be sorted");
+
+    const facadePackageResult = await client.callTool("Unity_Tools_Invoke", {
+      toolName: "Unity.Project.PackageCompatibility",
+      arguments: {},
+      timeoutMs: 5000,
+    });
+    assert.strictEqual(facadePackageResult.isError, false, "Unity_Tools_Invoke should relay package compatibility success");
+    assert.strictEqual(facadePackageResult.structuredContent.success, true, "Unity_Tools_Invoke package compatibility success flag");
+    assert.strictEqual(facadePackageResult.structuredContent.invokedThroughFacade, true, "Unity_Tools_Invoke should mark facade metadata");
+    assert.strictEqual(facadePackageResult.structuredContent.canonicalToolName, "Unity_Project_PackageCompatibility");
+    assert.strictEqual(facadePackageResult.structuredContent.timeoutMs, 5000);
+    assert.strictEqual(facadePackageResult.structuredContent.result.success, true, "Unity_Tools_Invoke should preserve target structuredContent");
+
+    const facadeBlockedLanguageResult = await client.callTool("Unity_Tools_Invoke", {
+      toolName: "Unity_Project_BlockedLanguageScan",
+      arguments: {},
+    });
+    assert.strictEqual(facadeBlockedLanguageResult.isError, false, "Unity_Tools_Invoke should accept underscore target names");
+    assert.strictEqual(facadeBlockedLanguageResult.structuredContent.canonicalToolName, "Unity_Project_BlockedLanguageScan");
+
+    const facadeTestsRunResult = await client.callTool("Unity_Tools_Invoke", {
+      toolName: "Unity.Tests.Run",
+      arguments: {},
+    });
+    assert.strictEqual(facadeTestsRunResult.isError, false, "Unity_Tools_Invoke should call Unity.Tests.Run by dot name");
+    assert.strictEqual(facadeTestsRunResult.structuredContent.canonicalToolName, "Unity_Tests_Run");
+
+    const unknownFacadeResult = await client.callTool("Unity_Tools_Invoke", {
+      toolName: "Unity.Project.PackageCompatibilty",
+    });
+    assert.strictEqual(unknownFacadeResult.isError, true, "Unity_Tools_Invoke should fail unknown target names");
+    assert.strictEqual(unknownFacadeResult.structuredContent.code, "UNITY_MCP_TOOL_NOT_FOUND");
+    assert(
+      unknownFacadeResult.structuredContent.data.suggestions.includes("Unity_Project_PackageCompatibility"),
+      "Unity_Tools_Invoke unknown target should suggest similar known tools",
+    );
+
+    const recursiveFacadeResult = await client.callTool("Unity_Tools_Invoke", {
+      toolName: "Unity.Tools.Invoke",
+    });
+    assert.strictEqual(recursiveFacadeResult.isError, true, "Unity_Tools_Invoke should block self-recursion");
+    assert.strictEqual(recursiveFacadeResult.structuredContent.code, "UNITY_MCP_FACADE_RECURSION_BLOCKED");
+
+    const batchResult = await client.callTool("Unity_Tools_BatchInvoke", {
+      calls: [
+        { toolName: "Unity.Project.PackageCompatibility", arguments: {}, timeoutMs: 5000 },
+        { toolName: "Unity_Project_BlockedLanguageScan", arguments: {} },
+        { toolName: "Unity.Tests.Run", arguments: {} },
+        { toolName: "Unity.Project.PackageCompatibilty" },
+        { toolName: "Unity.Tools.BatchInvoke" },
+        { toolName: "Unity_Tools_Invoke" },
+      ],
+    });
+    assert.strictEqual(batchResult.isError, false, "Unity_Tools_BatchInvoke mixed results should not make the batch MCP call an error");
+    assert.strictEqual(batchResult.structuredContent.success, false, "Unity_Tools_BatchInvoke mixed results should report success=false");
+    assert.strictEqual(batchResult.structuredContent.data.executedCount, 6);
+    assert.strictEqual(batchResult.structuredContent.data.failedCount, 3);
+    assert.strictEqual(batchResult.structuredContent.data.stoppedEarly, false);
+    assert.strictEqual(batchResult.structuredContent.data.results.length, 6);
+    assert.deepStrictEqual(
+      batchResult.structuredContent.data.results.slice(0, 3).map((row) => row.canonicalToolName),
+      ["Unity_Project_PackageCompatibility", "Unity_Project_BlockedLanguageScan", "Unity_Tests_Run"],
+      "Unity_Tools_BatchInvoke should accept dot and underscore target names",
+    );
+    assert.strictEqual(batchResult.structuredContent.data.results[0].success, true);
+    assert.strictEqual(batchResult.structuredContent.data.results[0].structuredContent.success, true);
+    assert.strictEqual(batchResult.structuredContent.data.results[3].code, "UNITY_MCP_TOOL_NOT_FOUND");
+    assert.strictEqual(batchResult.structuredContent.data.results[4].code, "UNITY_MCP_FACADE_RECURSION_BLOCKED");
+    assert.strictEqual(batchResult.structuredContent.data.results[5].code, "UNITY_MCP_FACADE_RECURSION_BLOCKED");
+
+    const failFastBatchResult = await client.callTool("Unity_Tools_BatchInvoke", {
+      failFast: true,
+      calls: [
+        { toolName: "Unity.Project.PackageCompatibilty" },
+        { toolName: "Unity.Project.PackageCompatibility", arguments: {} },
+      ],
+    });
+    assert.strictEqual(failFastBatchResult.isError, false, "Unity_Tools_BatchInvoke failFast target failure should not make the batch MCP call an error");
+    assert.strictEqual(failFastBatchResult.structuredContent.success, false);
+    assert.strictEqual(failFastBatchResult.structuredContent.data.executedCount, 1);
+    assert.strictEqual(failFastBatchResult.structuredContent.data.failedCount, 1);
+    assert.strictEqual(failFastBatchResult.structuredContent.data.stoppedEarly, true);
+
+    const malformedBatchResult = await client.callTool("Unity_Tools_BatchInvoke", {
+      calls: [],
+    });
+    assert.strictEqual(malformedBatchResult.isError, true, "Unity_Tools_BatchInvoke should reject empty calls");
+    assert.strictEqual(malformedBatchResult.structuredContent.code, "UNITY_MCP_BATCH_CALLS_REQUIRED");
+
     const menuResultPayload = await client.callTool("Unity_Tools_Menu", {});
     assert.strictEqual(menuResultPayload.structuredContent.success, true, "Unity_Tools_Menu should succeed");
     assert.strictEqual(menuResultPayload.structuredContent.data.toolSurfaceMode, "static_all");
+    assert.strictEqual(menuResultPayload.structuredContent.data.clientSurfaceFallback.invokeTool, "Unity.Tools.Invoke");
+    assert(
+      menuResultPayload.structuredContent.data.workflowRecommendations.some((line) => line.includes("Unity.Tools.Invoke")),
+      "Unity_Tools_Menu should recommend the invoke facade when direct client tools are stale",
+    );
     const menuPackIds = menuResultPayload.structuredContent.data.packs.map((pack) => pack.packId);
     assertNamesInclude(menuPackIds, ["project", "runtime", "assets", "scene", "ui", "debug"], "Unity_Tools_Menu packs");
+
+    const describeResultPayload = await client.callTool("Unity_Tools_Describe", { includeExamples: true });
+    assert.strictEqual(describeResultPayload.structuredContent.success, true, "Unity_Tools_Describe should succeed");
+    assert.strictEqual(describeResultPayload.structuredContent.data.clientSurfaceFallback.batchInvokeTool, "Unity.Tools.BatchInvoke");
 
     const notificationCount = client.notificationCount("notifications/tools/list_changed");
     const setToolPacksCountBeforeNoop = context.commandCounts.set_tool_packs || 0;
@@ -1105,6 +1533,7 @@ async function runStaticAllScenario() {
     const afterNoopList = await client.listTools();
     const afterNoopNames = afterNoopList.tools.map((tool) => tool.name);
     assertNamesInclude(afterNoopNames, [
+      "Unity_Tools_List",
       "Unity_Project_PackageCompatibility",
       "Unity_Project_BlockedLanguageScan",
       "Unity_Tests_Run",
@@ -1118,6 +1547,7 @@ async function runStaticAllScenario() {
       "Unity_Scene_PreviewBulkMutation",
       "Unity_Scene_ApplyBulkMutation",
       "Unity_UI_VerifyScreenLayout",
+      "Unity_UI_CaptureGameView",
       "Unity_GetLensUsageReport",
     ], "static_all tools/list after Unity_SetToolPacks no-op");
   } finally {
@@ -1137,6 +1567,9 @@ async function runDefaultStaticAllScenario() {
     const list = await client.listTools();
     const names = list.tools.map((tool) => tool.name);
     assertNamesInclude(names, [
+      "Unity_Tools_List",
+      "Unity_Tools_Invoke",
+      "Unity_Tools_BatchInvoke",
       "Unity_Project_PackageCompatibility",
       "Unity_Project_BlockedLanguageScan",
       "Unity_Tests_Run",
@@ -1147,7 +1580,17 @@ async function runDefaultStaticAllScenario() {
       "Unity_Scene_PreviewBulkMutation",
       "Unity_Scene_ApplyBulkMutation",
       "Unity_UI_VerifyScreenLayout",
+      "Unity_UI_CaptureGameView",
     ], "default startup tools/list should be static_all");
+    assertToolSchemaProperties(list.tools, "Unity_UI_CaptureGameView", [
+      "OutputPath",
+      "Width",
+      "Height",
+      "RestoreOriginalResolution",
+      "TemporaryActivations",
+      "VerifyImageDimensions",
+      "WaitForFileTimeoutMs",
+    ], ["OutputPath"]);
 
     const menuResultPayload = await client.callTool("Unity_Tools_Menu", {});
     assert.strictEqual(menuResultPayload.structuredContent.success, true, "Unity_Tools_Menu should succeed in default mode");
@@ -1166,6 +1609,7 @@ async function main() {
     "static_all",
     "Codex plugin config should default Lens to static_all",
   );
+  assertLensDevPluginManifest(pluginConfig);
 
   await runDefaultStaticAllScenario();
   await runDynamicPacksScenario();

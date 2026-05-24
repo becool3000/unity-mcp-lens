@@ -42,6 +42,12 @@ namespace Becool.UnityMcpLens.Editor.Tools
 
         [McpDescription("Host-side hint that stale local file-package sources were detected and package asset paths were injected into changedPaths.", Required = false, Default = false)]
         public bool LocalPackageRefreshRequested { get; set; } = false;
+
+        [McpDescription("Optional host/plugin fallback: if normal refresh leaves stale assembly proof, bring the project-matched Unity editor window to foreground before rechecking.", Required = false, Default = false)]
+        public bool FocusNudgeOnStaleRefresh { get; set; } = false;
+
+        [McpDescription("When FocusNudgeOnStaleRefresh is enabled, allow a tiny safe click in Unity editor chrome/title bar after focusing.", Required = false, Default = true)]
+        public bool SafeClickNudge { get; set; } = true;
     }
 
     [McpTool(ToolPackCatalog.EditorSyncScriptsToolName,
@@ -174,6 +180,8 @@ namespace Becool.UnityMcpLens.Editor.Tools
                     relevantChangedPaths,
                     packageResolveRequested,
                     packageResolvePaths,
+                    focusNudgeOnStaleRefresh = parameters.FocusNudgeOnStaleRefresh,
+                    safeClickNudge = parameters.SafeClickNudge,
                     refreshRequested = false,
                     refreshScheduledAfterResponse = false,
                     compileStarted = false,
@@ -280,6 +288,8 @@ namespace Becool.UnityMcpLens.Editor.Tools
                 packageResolvePaths,
                 force = parameters.Force,
                 waitForCompile = parameters.WaitForCompile,
+                focusNudgeOnStaleRefresh = parameters.FocusNudgeOnStaleRefresh,
+                safeClickNudge = parameters.SafeClickNudge,
                 refreshRequested,
                 refreshScheduledAfterResponse,
                 compileStarted,
@@ -317,6 +327,8 @@ namespace Becool.UnityMcpLens.Editor.Tools
                 rawData.relevantChangedPaths,
                 rawData.force,
                 rawData.waitForCompile,
+                rawData.focusNudgeOnStaleRefresh,
+                rawData.safeClickNudge,
                 rawData.refreshRequested,
                 rawData.refreshScheduledAfterResponse,
                 rawData.compileStarted,
@@ -373,6 +385,8 @@ namespace Becool.UnityMcpLens.Editor.Tools
                     relevantChangedPaths,
                     packageResolveRequested,
                     packageResolvePaths,
+                    focusNudgeOnStaleRefresh = parameters.FocusNudgeOnStaleRefresh,
+                    safeClickNudge = parameters.SafeClickNudge,
                     refreshRequested = false,
                     refreshScheduledAfterResponse = false,
                     compileStarted,

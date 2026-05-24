@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Threading.Tasks;
 using Becool.UnityMcpLens.Editor.Adapters.Unity;
 using Becool.UnityMcpLens.Editor.Helpers;
@@ -9,6 +10,7 @@ using Becool.UnityMcpLens.Editor.ToolRegistry;
 using Becool.UnityMcpLens.Editor.Lens;
 using Becool.UnityMcpLens.Editor.Tools.Parameters;
 using Becool.UnityMcpLens.Editor.Utils;
+using Newtonsoft.Json.Linq;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -89,6 +91,8 @@ Returns:
 Args:
     SceneName: Optional scene name for logging only.
     OutputPath: Relative output path under the Unity project, for example Temp/UiCapture/shot.png.
+    Width/Height: Optional fixed Game view resolution for exact UI review captures.
+    RestoreOriginalResolution: Restore the previous Game view size after capture when Width/Height changed it.
     WarmupMs: Optional warmup delay in milliseconds before capture.
     WarmupFrames: Approximate rendered/runtime frames to wait or step before capture.
     PausePlayMode: Pause play mode before capture when Unity is already playing.
@@ -97,10 +101,12 @@ Args:
     RequirePlaying: Require Unity to be in Play Mode before capture.
     CaptureConsoleDelta: Capture console error-count delta around capture.
     FallbackSceneView: Try a camera/scene-view fallback if Game view capture times out.
+    TemporaryActivations: Optional UI targets to temporarily set active/inactive before capture and restore afterward.
+    VerifyImageDimensions: Verify PNG dimensions against requested Width/Height when supplied.
     WaitForFileTimeoutMs: Timeout while waiting for the PNG to appear on disk.
 
 Returns:
-    Dictionary with success/message/data. Data contains capture path, file state, play/pause state, camera/canvas counts, Game view size, console delta, and failure reason when capture is not ready.";
+    Dictionary with success/message/data. Data contains capture path, capture technique, overlay capability, requested/actual dimensions, restore state, play/pause state, camera/canvas counts, Game view size, console delta, and failure reason when capture is not ready.";
 
         [McpSchema("Unity.UI.QueryRuntimeLayout")]
         public static object GetQueryRuntimeLayoutSchema()
@@ -598,6 +604,14 @@ Returns:
         public static async Task<object> CaptureGameView(CaptureGameViewParams parameters)
         {
             parameters ??= new CaptureGameViewParams();
+            int requestedWidth = Math.Max(0, parameters.Width);
+            int requestedHeight = Math.Max(0, parameters.Height);
+            bool resolutionRequested = requestedWidth > 0 || requestedHeight > 0;
+            if (resolutionRequested && (requestedWidth <= 0 || requestedHeight <= 0))
+            {
+                return Response.Error("Width and Height must both be positive when requesting an exact Game view capture resolution.");
+            }
+
             if (string.IsNullOrWhiteSpace(parameters.OutputPath))
             {
                 return Response.Error("OutputPath is required.");
@@ -622,171 +636,601 @@ Returns:
 
             bool wasPlaying = EditorApplication.isPlaying;
             bool wasPaused = EditorApplication.isPaused;
+            bool pauseApplied = false;
+            bool captureSucceeded = false;
+            bool responseSuccess = false;
+            bool overlayCapable = true;
+            bool restoreSucceeded = true;
+            string responseMessage = "Game view capture failed.";
+            string captureTechnique = null;
+            string failureReason = null;
+            string error = null;
+            int stepFrames = 0;
+            int warmupFrames = Math.Max(0, parameters.WarmupFrames);
+            int warmupFramesApplied = 0;
+            object focusInfo = null;
+            object captureDiagnostics = null;
+            object finalDiagnostics = null;
+            object fallback = null;
+            object resolution = resolutionRequested
+                ? new { requested = true, width = requestedWidth, height = requestedHeight }
+                : new { requested = false };
+            object imageDimensions = null;
+            object temporaryActivations = null;
+            object restore = null;
+            GameViewSelectionSnapshot originalGameViewSelection = null;
+            var restoreRows = new List<object>();
+            List<TemporaryActivationState> temporaryActivationStates = new();
             ConsoleCursorSnapshot consoleBefore = parameters.CaptureConsoleDelta ? ConsoleCursorDelta.Capture() : null;
             object initialDiagnostics = BuildCaptureDiagnostics("initial", null);
+            bool shouldAttemptCapture = true;
 
             try
             {
                 if (parameters.RequirePlaying && !EditorApplication.isPlaying)
                 {
-                    return Response.Error("GAME_VIEW_CAPTURE_NOT_PLAYING", BuildCaptureResult(
-                        relativeOutputPath,
-                        absoluteOutputPath,
-                        wasPlaying,
-                        wasPaused,
-                        pauseApplied: false,
-                        stepFrames: 0,
-                        warmupFrames: Math.Max(0, parameters.WarmupFrames),
-                        warmupFramesApplied: 0,
-                        failureReason: "not_in_play_mode",
-                        error: "RequirePlaying was true, but Unity was not in Play Mode.",
-                        focusInfo: null,
-                        initialDiagnostics: initialDiagnostics,
-                        captureDiagnostics: BuildCaptureDiagnostics("require_playing_failed", null),
-                        finalDiagnostics: null,
-                        consoleDelta: BuildConsoleDelta(parameters.CaptureConsoleDelta, consoleBefore, "capture_game_view"),
-                        fallback: null));
+                    failureReason = "not_in_play_mode";
+                    error = "RequirePlaying was true, but Unity was not in Play Mode.";
+                    captureDiagnostics = BuildCaptureDiagnostics("require_playing_failed", null);
+                    responseMessage = "GAME_VIEW_CAPTURE_NOT_PLAYING";
+                    responseSuccess = false;
+                    shouldAttemptCapture = false;
                 }
 
-                if (parameters.WarmupMs > 0)
+                if (shouldAttemptCapture && resolutionRequested)
+                {
+                    bool capturedOriginal = TryCaptureGameViewSelection(out originalGameViewSelection, out string originalError);
+                    bool setSucceeded = false;
+                    string setError = originalError;
+                    object selection = null;
+                    if (capturedOriginal)
+                    {
+                        setSucceeded = TrySetGameViewResolution(
+                            requestedWidth,
+                            requestedHeight,
+                            $"Lens Capture {requestedWidth}x{requestedHeight}",
+                            out selection,
+                            out setError);
+                    }
+
+                    resolution = new
+                    {
+                        requested = true,
+                        width = requestedWidth,
+                        height = requestedHeight,
+                        original = originalGameViewSelection,
+                        setSucceeded,
+                        setError,
+                        selection
+                    };
+
+                    if (!setSucceeded)
+                    {
+                        failureReason = "game_view_resolution_unavailable";
+                        error = setError ?? "The requested Game view resolution could not be selected.";
+                        captureDiagnostics = BuildCaptureDiagnostics("resolution_failed", null);
+                        responseMessage = "GAME_VIEW_RESOLUTION_UNAVAILABLE";
+                        responseSuccess = false;
+                        shouldAttemptCapture = false;
+                    }
+
+                    if (shouldAttemptCapture)
+                        await Task.Delay(100);
+                }
+
+                if (shouldAttemptCapture)
+                {
+                    temporaryActivationStates = ApplyTemporaryActivations(parameters.TemporaryActivations, out temporaryActivations);
+                    bool activationFailed = temporaryActivationStates.Any(state => !state.ApplySucceeded);
+                    if (activationFailed)
+                    {
+                        failureReason = "temporary_activation_failed";
+                        error = "One or more temporary UI activation targets could not be resolved or changed.";
+                        captureDiagnostics = BuildCaptureDiagnostics("temporary_activation_failed", null);
+                        responseMessage = "GAME_VIEW_TEMPORARY_ACTIVATION_FAILED";
+                        responseSuccess = false;
+                        shouldAttemptCapture = false;
+                    }
+                }
+
+                if (shouldAttemptCapture && parameters.WarmupMs > 0)
                 {
                     await Task.Delay(Math.Max(0, parameters.WarmupMs));
                 }
 
-                if (parameters.PausePlayMode && wasPlaying && !EditorApplication.isPaused)
+                if (shouldAttemptCapture && parameters.PausePlayMode && wasPlaying && !EditorApplication.isPaused)
                 {
                     EditorApplication.isPaused = true;
+                    pauseApplied = true;
                     await Task.Delay(100);
                 }
 
-                int stepFrames = Math.Max(0, parameters.StepFrames);
-                for (int i = 0; i < stepFrames && EditorApplication.isPlaying && EditorApplication.isPaused; i++)
+                if (shouldAttemptCapture)
                 {
-                    EditorApplication.Step();
-                    await Task.Delay(50);
+                    stepFrames = Math.Max(0, parameters.StepFrames);
+                    for (int i = 0; i < stepFrames && EditorApplication.isPlaying && EditorApplication.isPaused; i++)
+                    {
+                        EditorApplication.Step();
+                        await Task.Delay(50);
+                    }
+
+                    warmupFramesApplied = await WaitForApproximateFramesAsync(warmupFrames);
                 }
 
-                int warmupFrames = Math.Max(0, parameters.WarmupFrames);
-                int warmupFramesApplied = await WaitForApproximateFramesAsync(warmupFrames);
-
-                if (!TryFocusGameView(out object focusInfo, out string focusError))
+                if (shouldAttemptCapture && !TryFocusGameView(out focusInfo, out string focusError))
                 {
-                    return Response.Error("GAME_VIEW_UNAVAILABLE", BuildCaptureResult(
-                        relativeOutputPath,
+                    failureReason = "game_view_unavailable";
+                    error = focusError;
+                    captureDiagnostics = BuildCaptureDiagnostics("game_view_unavailable", focusInfo);
+                    responseMessage = "GAME_VIEW_UNAVAILABLE";
+                    responseSuccess = false;
+                    shouldAttemptCapture = false;
+                }
+
+                if (shouldAttemptCapture)
+                {
+                    await Task.Delay(100);
+
+                    captureDiagnostics = BuildCaptureDiagnostics("before_capture", focusInfo);
+                    Vector2? mainGameViewSize = TryGetMainGameViewSize();
+                    int captureWidth = requestedWidth > 0
+                        ? requestedWidth
+                        : Math.Max(1, Mathf.RoundToInt(mainGameViewSize?.x ?? Screen.width));
+                    int captureHeight = requestedHeight > 0
+                        ? requestedHeight
+                        : Math.Max(1, Mathf.RoundToInt(mainGameViewSize?.y ?? Screen.height));
+                    bool renderTextureSucceeded = TryCaptureGameViewIntoRenderTexture(
                         absoluteOutputPath,
-                        wasPlaying,
-                        wasPaused,
-                        pauseApplied: parameters.PausePlayMode && wasPlaying && !wasPaused,
-                        stepFrames: stepFrames,
-                        warmupFrames: warmupFrames,
-                        warmupFramesApplied: warmupFramesApplied,
-                        failureReason: "game_view_unavailable",
-                        error: focusError,
-                        focusInfo: focusInfo,
-                        initialDiagnostics: initialDiagnostics,
-                        captureDiagnostics: BuildCaptureDiagnostics("game_view_unavailable", focusInfo),
-                        finalDiagnostics: null,
-                        consoleDelta: BuildConsoleDelta(parameters.CaptureConsoleDelta, consoleBefore, "capture_game_view"),
-                        fallback: null));
-                }
+                        captureWidth,
+                        captureHeight,
+                        out _,
+                        out object renderTextureDiagnostics,
+                        out string renderTextureError);
 
-                await Task.Delay(100);
-
-                object captureDiagnostics = BuildCaptureDiagnostics("before_capture", focusInfo);
-                ScreenCapture.CaptureScreenshot(absoluteOutputPath);
-
-                FileInfo writtenInfo = await WaitForCaptureOutputAsync(absoluteOutputPath, Math.Max(250, parameters.WaitForFileTimeoutMs));
-                if (writtenInfo != null && writtenInfo.Exists && writtenInfo.Length > 0)
-                {
-                    return Response.Success("Game view captured successfully.", new
+                    FileInfo writtenInfo = null;
+                    object secondaryCapture = null;
+                    if (renderTextureSucceeded)
                     {
-                        relativeOutputPath,
-                        absoluteOutputPath,
-                        fileSize = writtenInfo.Length,
-                        wasPlaying,
-                        wasPaused,
-                        pauseApplied = parameters.PausePlayMode && wasPlaying && !wasPaused,
-                        stepFrames,
-                        warmupFrames,
-                        warmupFramesApplied,
-                        requirePlaying = parameters.RequirePlaying,
-                        fallbackUsed = false,
-                        focusInfo,
-                        diagnostics = new
+                        writtenInfo = new FileInfo(absoluteOutputPath);
+                        captureTechnique = "game_view_render_texture";
+                    }
+                    else
+                    {
+                        ScreenCapture.CaptureScreenshot(absoluteOutputPath);
+                        writtenInfo = await WaitForCaptureOutputAsync(absoluteOutputPath, Math.Max(250, parameters.WaitForFileTimeoutMs));
+                        bool secondarySucceeded = writtenInfo != null && writtenInfo.Exists && writtenInfo.Length > 0;
+                        secondaryCapture = new
                         {
-                            initial = initialDiagnostics,
-                            capture = captureDiagnostics,
-                            final = BuildCaptureDiagnostics("final", focusInfo)
-                        },
-                        consoleDelta = BuildConsoleDelta(parameters.CaptureConsoleDelta, consoleBefore, "capture_game_view")
-                    });
-                }
+                            attempted = true,
+                            technique = "screen_capture_file",
+                            succeeded = secondarySucceeded,
+                            error = secondarySucceeded ? null : "Timed out waiting for ScreenCapture.CaptureScreenshot output.",
+                            primary = renderTextureDiagnostics,
+                            primaryError = renderTextureError
+                        };
+                        captureTechnique = secondarySucceeded ? "screen_capture_file" : null;
+                    }
 
-                object fallback = null;
-                if (parameters.FallbackSceneView)
-                {
-                    bool fallbackSucceeded = TryCaptureFallbackSceneView(absoluteOutputPath, out long fallbackFileSize, out object fallbackDiagnostics, out string fallbackError);
-                    fallback = new
+                    if (writtenInfo != null && writtenInfo.Exists && writtenInfo.Length > 0)
                     {
-                        attempted = true,
-                        succeeded = fallbackSucceeded,
-                        fileSize = fallbackFileSize,
-                        error = fallbackError,
-                        diagnostics = fallbackDiagnostics
-                    };
-
-                    if (fallbackSucceeded)
-                    {
-                        return Response.Success("Game view capture timed out; fallback scene/camera capture succeeded.", new
+                        captureSucceeded = true;
+                        imageDimensions = ReadPngDimensions(absoluteOutputPath);
+                        if (parameters.VerifyImageDimensions &&
+                            requestedWidth > 0 &&
+                            requestedHeight > 0 &&
+                            !ImageDimensionsMatch(imageDimensions, requestedWidth, requestedHeight))
                         {
-                            relativeOutputPath,
+                            failureReason = "image_dimension_mismatch";
+                            error = $"Captured PNG dimensions did not match requested resolution {requestedWidth}x{requestedHeight}.";
+                            responseMessage = "Game view capture completed, but captured PNG dimensions did not match the requested resolution.";
+                            responseSuccess = false;
+                        }
+                        else
+                        {
+                            fallback = secondaryCapture;
+                            responseMessage = "Game view captured successfully.";
+                            responseSuccess = true;
+                        }
+                    }
+                    else if (parameters.FallbackSceneView)
+                    {
+                        bool fallbackSucceeded = TryCaptureFallbackSceneView(
                             absoluteOutputPath,
+                            requestedWidth > 0 ? requestedWidth : (int?)null,
+                            requestedHeight > 0 ? requestedHeight : (int?)null,
+                            out long fallbackFileSize,
+                            out object fallbackDiagnostics,
+                            out string fallbackError);
+                        fallback = new
+                        {
+                            attempted = true,
+                            succeeded = fallbackSucceeded,
                             fileSize = fallbackFileSize,
-                            wasPlaying,
-                            wasPaused,
-                            pauseApplied = parameters.PausePlayMode && wasPlaying && !wasPaused,
-                            stepFrames,
-                            warmupFrames,
-                            warmupFramesApplied,
-                            requirePlaying = parameters.RequirePlaying,
-                            fallbackUsed = true,
-                            focusInfo,
-                            diagnostics = new
+                            error = fallbackError,
+                            overlayCapable = false,
+                            warning = "Camera/scene fallback captures may omit Screen Space Overlay UI.",
+                            diagnostics = fallbackDiagnostics,
+                            primary = renderTextureDiagnostics,
+                            primaryError = renderTextureError,
+                            secondary = secondaryCapture
+                        };
+
+                        if (fallbackSucceeded)
+                        {
+                            captureSucceeded = true;
+                            overlayCapable = false;
+                            captureTechnique = "camera_render_texture_fallback";
+                            imageDimensions = ReadPngDimensions(absoluteOutputPath);
+                            if (parameters.VerifyImageDimensions &&
+                                requestedWidth > 0 &&
+                                requestedHeight > 0 &&
+                                !ImageDimensionsMatch(imageDimensions, requestedWidth, requestedHeight))
                             {
-                                initial = initialDiagnostics,
-                                capture = captureDiagnostics,
-                                final = BuildCaptureDiagnostics("final", focusInfo)
-                            },
-                            consoleDelta = BuildConsoleDelta(parameters.CaptureConsoleDelta, consoleBefore, "capture_game_view"),
-                            fallback
-                        });
+                                failureReason = "image_dimension_mismatch";
+                                error = $"Fallback PNG dimensions did not match requested resolution {requestedWidth}x{requestedHeight}.";
+                                responseMessage = "Fallback scene/camera capture completed, but captured PNG dimensions did not match the requested resolution.";
+                                responseSuccess = false;
+                            }
+                            else
+                            {
+                                responseMessage = "Game view capture timed out; fallback scene/camera capture succeeded.";
+                                responseSuccess = true;
+                            }
+                        }
+                        else
+                        {
+                            failureReason = "capture_timeout";
+                            error = fallbackError ?? "Game view capture timed out and fallback scene/camera capture failed.";
+                            responseMessage = "CAPTURE_TIMEOUT";
+                            responseSuccess = false;
+                        }
+                    }
+                    else
+                    {
+                        fallback = secondaryCapture;
+                        failureReason = "capture_timeout";
+                        error = renderTextureError ?? "Game view capture timed out.";
+                        responseMessage = "CAPTURE_TIMEOUT";
+                        responseSuccess = false;
                     }
                 }
 
-                return Response.Error("CAPTURE_TIMEOUT", BuildCaptureResult(
-                    relativeOutputPath,
-                    absoluteOutputPath,
-                    wasPlaying,
-                    wasPaused,
-                    pauseApplied: parameters.PausePlayMode && wasPlaying && !wasPaused,
-                    stepFrames: stepFrames,
-                    warmupFrames: warmupFrames,
-                    warmupFramesApplied: warmupFramesApplied,
-                    failureReason: "capture_timeout",
-                    focusInfo: focusInfo,
-                    initialDiagnostics: initialDiagnostics,
-                    captureDiagnostics: captureDiagnostics,
-                    finalDiagnostics: BuildCaptureDiagnostics("final", focusInfo),
-                    consoleDelta: BuildConsoleDelta(parameters.CaptureConsoleDelta, consoleBefore, "capture_game_view"),
-                    fallback: fallback));
+                finalDiagnostics = BuildCaptureDiagnostics("final", focusInfo);
+            }
+            catch (Exception ex)
+            {
+                failureReason = "capture_exception";
+                error = ex.Message;
+                responseMessage = "GAME_VIEW_CAPTURE_EXCEPTION";
+                responseSuccess = false;
+                finalDiagnostics ??= BuildCaptureDiagnostics("exception", focusInfo);
             }
             finally
             {
                 if (parameters.RestorePauseState && parameters.PausePlayMode && wasPlaying && !wasPaused && EditorApplication.isPaused)
                 {
-                    EditorApplication.isPaused = false;
+                    bool restored = false;
+                    string restoreError = null;
+                    try
+                    {
+                        EditorApplication.isPaused = false;
+                        restored = !EditorApplication.isPaused;
+                    }
+                    catch (Exception ex)
+                    {
+                        restoreError = ex.Message;
+                    }
+
+                    restoreRows.Add(new
+                    {
+                        kind = "pause_state",
+                        requested = true,
+                        succeeded = restored,
+                        originalPaused = wasPaused,
+                        error = restoreError
+                    });
+                    restoreSucceeded &= restored;
+                }
+
+                object activationRestore = RestoreTemporaryActivations(temporaryActivationStates);
+                temporaryActivations = new
+                {
+                    requested = parameters.TemporaryActivations?.Length ?? 0,
+                    rows = temporaryActivationStates.Select(state => state.ToResultRow()).ToArray(),
+                    restore = activationRestore
+                };
+                restoreSucceeded &= !temporaryActivationStates.Any(state => !state.RestoreSucceeded);
+
+                if (resolutionRequested && parameters.RestoreOriginalResolution && originalGameViewSelection != null)
+                {
+                    bool restored = TrySetGameViewSizeIndex(originalGameViewSelection.SelectedSizeIndex, out string restoreError);
+                    restoreRows.Add(new
+                    {
+                        kind = "game_view_resolution",
+                        requested = true,
+                        succeeded = restored,
+                        original = originalGameViewSelection,
+                        error = restoreError,
+                        finalGameViewSize = ToVector2Object(TryGetMainGameViewSize() ?? Vector2.zero)
+                    });
+                    restoreSucceeded &= restored;
+                }
+
+                restore = new
+                {
+                    succeeded = restoreSucceeded,
+                    rows = restoreRows.ToArray()
+                };
+            }
+
+            object consoleDelta = BuildConsoleDelta(parameters.CaptureConsoleDelta, consoleBefore, "capture_game_view");
+            object result = BuildCaptureResult(
+                relativeOutputPath,
+                absoluteOutputPath,
+                wasPlaying,
+                wasPaused,
+                pauseApplied,
+                stepFrames,
+                warmupFrames,
+                warmupFramesApplied,
+                failureReason,
+                focusInfo,
+                initialDiagnostics,
+                captureDiagnostics,
+                finalDiagnostics,
+                consoleDelta,
+                fallback,
+                error,
+                captureSucceeded,
+                captureTechnique,
+                overlayCapable,
+                resolution,
+                imageDimensions,
+                temporaryActivations,
+                restore,
+                parameters.VerifyImageDimensions);
+
+            if (!restoreSucceeded)
+            {
+                return Response.Error("GAME_VIEW_CAPTURE_RESTORE_FAILED", result);
+            }
+
+            return responseSuccess
+                ? Response.Success(responseMessage, result)
+                : Response.Error(responseMessage, result);
+        }
+
+        sealed class GameViewSelectionSnapshot
+        {
+            public int SelectedSizeIndex { get; init; }
+            public int ScreenWidth { get; init; }
+            public int ScreenHeight { get; init; }
+        }
+
+        sealed class TemporaryActivationState
+        {
+            public TemporaryUiActivationParams Request { get; init; }
+            public GameObject TargetObject { get; init; }
+            public string Path { get; init; }
+            public bool OriginalActive { get; init; }
+            public bool RequestedActive { get; init; }
+            public bool ApplySucceeded { get; set; }
+            public bool RestoreSucceeded { get; set; } = true;
+            public string ApplyError { get; set; }
+            public string RestoreError { get; set; }
+
+            public object ToResultRow()
+            {
+                return new
+                {
+                    target = Request?.Target,
+                    searchMethod = Request?.SearchMethod,
+                    includeInactive = Request?.IncludeInactive,
+                    requestedActive = RequestedActive,
+                    originalActive = TargetObject != null ? OriginalActive : (bool?)null,
+                    path = Path,
+                    applySucceeded = ApplySucceeded,
+                    restoreSucceeded = RestoreSucceeded,
+                    applyError = ApplyError,
+                    restoreError = RestoreError
+                };
+            }
+        }
+
+        static List<TemporaryActivationState> ApplyTemporaryActivations(TemporaryUiActivationParams[] requests, out object data)
+        {
+            var states = new List<TemporaryActivationState>();
+            foreach (TemporaryUiActivationParams request in requests ?? Array.Empty<TemporaryUiActivationParams>())
+            {
+                if (request == null || string.IsNullOrWhiteSpace(request.Target))
+                {
+                    states.Add(new TemporaryActivationState
+                    {
+                        Request = request,
+                        RequestedActive = request?.Active ?? true,
+                        ApplySucceeded = false,
+                        RestoreSucceeded = true,
+                        ApplyError = "Temporary activation target is required."
+                    });
+                    continue;
+                }
+
+                string searchMethod = string.IsNullOrWhiteSpace(request.SearchMethod) ? "by_name" : request.SearchMethod;
+                GameObject target = UiDiagnosticsHelper.ResolveUiRoots(request.Target, searchMethod, request.IncludeInactive).FirstOrDefault();
+                if (target == null)
+                {
+                    states.Add(new TemporaryActivationState
+                    {
+                        Request = request,
+                        RequestedActive = request.Active,
+                        ApplySucceeded = false,
+                        RestoreSucceeded = true,
+                        ApplyError = $"No UI target matched '{request.Target}'."
+                    });
+                    continue;
+                }
+
+                var state = new TemporaryActivationState
+                {
+                    Request = request,
+                    TargetObject = target,
+                    Path = UiDiagnosticsHelper.GetHierarchyPath(target.transform),
+                    OriginalActive = target.activeSelf,
+                    RequestedActive = request.Active,
+                    ApplySucceeded = true
+                };
+
+                try
+                {
+                    if (target.activeSelf != request.Active)
+                        target.SetActive(request.Active);
+                }
+                catch (Exception ex)
+                {
+                    state.ApplySucceeded = false;
+                    state.ApplyError = ex.Message;
+                }
+
+                states.Add(state);
+            }
+
+            data = new
+            {
+                requested = requests?.Length ?? 0,
+                rows = states.Select(state => state.ToResultRow()).ToArray()
+            };
+            return states;
+        }
+
+        static object RestoreTemporaryActivations(List<TemporaryActivationState> states)
+        {
+            foreach (TemporaryActivationState state in states ?? new List<TemporaryActivationState>())
+            {
+                if (state.TargetObject == null || !state.ApplySucceeded)
+                    continue;
+
+                try
+                {
+                    if (state.TargetObject.activeSelf != state.OriginalActive)
+                        state.TargetObject.SetActive(state.OriginalActive);
+                    state.RestoreSucceeded = state.TargetObject.activeSelf == state.OriginalActive;
+                    if (!state.RestoreSucceeded)
+                        state.RestoreError = "Target activeSelf did not match the original value after restore.";
+                }
+                catch (Exception ex)
+                {
+                    state.RestoreSucceeded = false;
+                    state.RestoreError = ex.Message;
                 }
             }
+
+            return new
+            {
+                succeeded = !(states ?? new List<TemporaryActivationState>()).Any(state => !state.RestoreSucceeded),
+                rows = (states ?? new List<TemporaryActivationState>()).Select(state => state.ToResultRow()).ToArray()
+            };
+        }
+
+        static bool TryCaptureGameViewIntoRenderTexture(string absoluteOutputPath, int width, int height, out long fileSize, out object diagnostics, out string error)
+        {
+            fileSize = 0;
+            diagnostics = null;
+            error = null;
+            MethodInfo captureMethod = typeof(ScreenCapture).GetMethod(
+                "CaptureScreenshotIntoRenderTexture",
+                BindingFlags.Public | BindingFlags.Static,
+                null,
+                new[] { typeof(RenderTexture) },
+                null);
+            if (captureMethod == null)
+            {
+                error = "ScreenCapture.CaptureScreenshotIntoRenderTexture is unavailable in this Unity version.";
+                diagnostics = new { technique = "game_view_render_texture", available = false, error };
+                return false;
+            }
+
+            RenderTexture previousActive = RenderTexture.active;
+            RenderTexture renderTexture = null;
+            Texture2D texture = null;
+            try
+            {
+                renderTexture = new RenderTexture(Math.Max(1, width), Math.Max(1, height), 24, RenderTextureFormat.ARGB32);
+                captureMethod.Invoke(null, new object[] { renderTexture });
+                RenderTexture.active = renderTexture;
+                texture = new Texture2D(renderTexture.width, renderTexture.height, TextureFormat.RGBA32, false);
+                texture.ReadPixels(new Rect(0, 0, renderTexture.width, renderTexture.height), 0, 0);
+                texture.Apply();
+                File.WriteAllBytes(absoluteOutputPath, texture.EncodeToPNG());
+                fileSize = new FileInfo(absoluteOutputPath).Length;
+                diagnostics = new
+                {
+                    technique = "game_view_render_texture",
+                    available = true,
+                    width = renderTexture.width,
+                    height = renderTexture.height,
+                    fileSize
+                };
+                return fileSize > 0;
+            }
+            catch (TargetInvocationException ex)
+            {
+                error = ex.InnerException?.Message ?? ex.Message;
+                diagnostics = new { technique = "game_view_render_texture", available = true, error };
+                return false;
+            }
+            catch (Exception ex)
+            {
+                error = ex.Message;
+                diagnostics = new { technique = "game_view_render_texture", available = true, error };
+                return false;
+            }
+            finally
+            {
+                RenderTexture.active = previousActive;
+                if (texture != null)
+                    UnityEngine.Object.DestroyImmediate(texture);
+                if (renderTexture != null)
+                    UnityEngine.Object.DestroyImmediate(renderTexture);
+            }
+        }
+
+        static object ReadPngDimensions(string absoluteOutputPath)
+        {
+            if (!File.Exists(absoluteOutputPath))
+            {
+                return new { available = false, error = "Captured PNG does not exist." };
+            }
+
+            Texture2D texture = null;
+            try
+            {
+                texture = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+                bool loaded = texture.LoadImage(File.ReadAllBytes(absoluteOutputPath));
+                return new
+                {
+                    available = loaded,
+                    width = loaded ? texture.width : 0,
+                    height = loaded ? texture.height : 0,
+                    error = loaded ? null : "Texture2D.LoadImage failed."
+                };
+            }
+            catch (Exception ex)
+            {
+                return new { available = false, width = 0, height = 0, error = ex.Message };
+            }
+            finally
+            {
+                if (texture != null)
+                    UnityEngine.Object.DestroyImmediate(texture);
+            }
+        }
+
+        static bool ImageDimensionsMatch(object imageDimensions, int expectedWidth, int expectedHeight)
+        {
+            JObject obj = JObject.FromObject(imageDimensions ?? new { });
+            return obj["available"]?.Value<bool>() == true &&
+                obj["width"]?.Value<int>() == expectedWidth &&
+                obj["height"]?.Value<int>() == expectedHeight;
         }
 
         static async Task<int> WaitForApproximateFramesAsync(int frameCount)
@@ -845,7 +1289,15 @@ Returns:
             object finalDiagnostics,
             object consoleDelta,
             object fallback,
-            string error = null)
+            string error = null,
+            bool captureSucceeded = false,
+            string captureTechnique = null,
+            bool overlayCapable = true,
+            object resolution = null,
+            object imageDimensions = null,
+            object temporaryActivations = null,
+            object restore = null,
+            bool verifyImageDimensions = true)
         {
             bool fileExists = File.Exists(absoluteOutputPath);
             long fileSize = fileExists ? new FileInfo(absoluteOutputPath).Length : 0;
@@ -855,6 +1307,11 @@ Returns:
                 absoluteOutputPath,
                 fileExists,
                 fileSize,
+                captureSucceeded,
+                captureTechnique,
+                overlayCapable,
+                verifyImageDimensions,
+                imageDimensions,
                 wasPlaying,
                 wasPaused,
                 isPlaying = EditorApplication.isPlaying,
@@ -866,6 +1323,9 @@ Returns:
                 failureReason,
                 error,
                 focusInfo,
+                resolution,
+                temporaryActivations,
+                restore,
                 diagnostics = new
                 {
                     initial = initialDiagnostics,
@@ -937,7 +1397,296 @@ Returns:
             }
         }
 
-        static bool TryCaptureFallbackSceneView(string absoluteOutputPath, out long fileSize, out object diagnostics, out string error)
+        static bool TryCaptureGameViewSelection(out GameViewSelectionSnapshot snapshot, out string error)
+        {
+            snapshot = null;
+            if (!TryResolveGameViewForSize(out EditorWindow gameView, out _, out _, out error))
+                return false;
+
+            if (!TryGetSelectedGameViewSizeIndex(gameView, out int selectedIndex, out error))
+                return false;
+
+            snapshot = new GameViewSelectionSnapshot
+            {
+                SelectedSizeIndex = selectedIndex,
+                ScreenWidth = Screen.width,
+                ScreenHeight = Screen.height
+            };
+            return true;
+        }
+
+        static bool TrySetGameViewResolution(int width, int height, string label, out object selection, out string error)
+        {
+            selection = null;
+            if (!TryResolveGameViewForSize(out EditorWindow gameView, out object group, out Type groupType, out error))
+                return false;
+
+            int index = FindGameViewSizeIndex(group, groupType, width, height);
+            bool created = false;
+            if (index < 0)
+            {
+                if (!TryAddCustomGameViewSize(group, groupType, width, height, label, out error))
+                    return false;
+
+                created = true;
+                index = FindGameViewSizeIndex(group, groupType, width, height);
+                if (index < 0)
+                {
+                    error = "Custom Game view size was added but could not be selected.";
+                    return false;
+                }
+            }
+
+            if (!TrySetGameViewSizeIndex(gameView, index, out error))
+                return false;
+
+            selection = new
+            {
+                selectedSizeIndex = index,
+                created,
+                label,
+                width,
+                height
+            };
+            return true;
+        }
+
+        static bool TrySetGameViewSizeIndex(int index, out string error)
+        {
+            if (!TryResolveGameViewForSize(out EditorWindow gameView, out object group, out Type groupType, out error))
+                return false;
+
+            int count = GetGameViewSizeCount(group, groupType);
+            if (index < 0 || index >= count)
+            {
+                error = $"Game view size index {index} is outside the available range 0..{Math.Max(0, count - 1)}.";
+                return false;
+            }
+
+            return TrySetGameViewSizeIndex(gameView, index, out error);
+        }
+
+        static bool TryResolveGameViewForSize(out EditorWindow gameView, out object sizeGroup, out Type sizeGroupType, out string error)
+        {
+            gameView = null;
+            sizeGroup = null;
+            sizeGroupType = null;
+            error = null;
+            Type gameViewType = Type.GetType("UnityEditor.GameView,UnityEditor");
+            if (gameViewType == null)
+            {
+                error = "UnityEditor.GameView type could not be resolved.";
+                return false;
+            }
+
+            gameView = EditorWindow.GetWindow(gameViewType, false, "Game", false);
+            if (gameView == null)
+            {
+                error = "Game view window could not be created or resolved.";
+                return false;
+            }
+
+            Type gameViewSizesType = Type.GetType("UnityEditor.GameViewSizes,UnityEditor");
+            if (gameViewSizesType == null)
+            {
+                error = "UnityEditor.GameViewSizes type could not be resolved.";
+                return false;
+            }
+
+            Type singletonType = typeof(ScriptableSingleton<>).MakeGenericType(gameViewSizesType);
+            object singleton = singletonType.GetProperty("instance", BindingFlags.Public | BindingFlags.Static)?.GetValue(null);
+            MethodInfo getGroup = gameViewSizesType.GetMethod("GetGroup", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+            if (singleton == null || getGroup == null)
+            {
+                error = "GameViewSizes singleton or GetGroup method could not be resolved.";
+                return false;
+            }
+
+            sizeGroup = getGroup.Invoke(singleton, new object[] { GameViewSizeGroupType.Standalone });
+            if (sizeGroup == null)
+            {
+                error = "Standalone Game view size group could not be resolved.";
+                return false;
+            }
+
+            sizeGroupType = sizeGroup.GetType();
+            gameView.Focus();
+            gameView.Repaint();
+            return true;
+        }
+
+        static bool TryGetSelectedGameViewSizeIndex(EditorWindow gameView, out int selectedIndex, out string error)
+        {
+            selectedIndex = -1;
+            error = null;
+            Type gameViewType = gameView.GetType();
+            PropertyInfo property = gameViewType.GetProperty("selectedSizeIndex", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+            if (property != null)
+            {
+                selectedIndex = Convert.ToInt32(property.GetValue(gameView));
+                return true;
+            }
+
+            FieldInfo field = gameViewType.GetField("m_SelectedSizeIndex", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+            if (field != null)
+            {
+                selectedIndex = Convert.ToInt32(field.GetValue(gameView));
+                return true;
+            }
+
+            error = "Game view selected size index could not be read.";
+            return false;
+        }
+
+        static bool TrySetGameViewSizeIndex(EditorWindow gameView, int index, out string error)
+        {
+            error = null;
+            Type gameViewType = gameView.GetType();
+
+            MethodInfo callback = gameViewType.GetMethod("SizeSelectionCallback", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+            if (callback != null)
+            {
+                ParameterInfo[] parameters = callback.GetParameters();
+                object[] args = parameters.Length switch
+                {
+                    1 => new object[] { index },
+                    2 when parameters[0].ParameterType == typeof(int) => new object[] { index, null },
+                    2 => new object[] { null, index },
+                    3 when parameters[0].ParameterType == typeof(int) => new object[] { index, null, null },
+                    3 => new object[] { null, index, null },
+                    _ => null
+                };
+
+                if (args != null)
+                {
+                    try
+                    {
+                        callback.Invoke(gameView, args);
+                        gameView.Repaint();
+                        EditorApplication.QueuePlayerLoopUpdate();
+                        return true;
+                    }
+                    catch (TargetInvocationException ex)
+                    {
+                        error = ex.InnerException?.Message ?? ex.Message;
+                    }
+                    catch (Exception ex)
+                    {
+                        error = ex.Message;
+                    }
+                }
+            }
+
+            PropertyInfo property = gameViewType.GetProperty("selectedSizeIndex", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+            if (property != null && property.CanWrite)
+            {
+                property.SetValue(gameView, index);
+                gameView.Repaint();
+                EditorApplication.QueuePlayerLoopUpdate();
+                return true;
+            }
+
+            FieldInfo field = gameViewType.GetField("m_SelectedSizeIndex", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+            if (field != null)
+            {
+                field.SetValue(gameView, index);
+                gameView.Repaint();
+                EditorApplication.QueuePlayerLoopUpdate();
+                return true;
+            }
+
+            error ??= "Game view selected size index could not be set.";
+            return false;
+        }
+
+        static int FindGameViewSizeIndex(object group, Type groupType, int width, int height)
+        {
+            int count = GetGameViewSizeCount(group, groupType);
+            MethodInfo getSize = groupType.GetMethod("GetGameViewSize", BindingFlags.Public | BindingFlags.Instance);
+            if (getSize == null)
+                return -1;
+
+            for (int i = 0; i < count; i++)
+            {
+                object size = getSize.Invoke(group, new object[] { i });
+                if (TryReadIntMember(size, "width", out int candidateWidth) &&
+                    TryReadIntMember(size, "height", out int candidateHeight) &&
+                    candidateWidth == width &&
+                    candidateHeight == height)
+                {
+                    return i;
+                }
+            }
+
+            return -1;
+        }
+
+        static int GetGameViewSizeCount(object group, Type groupType)
+        {
+            MethodInfo count = groupType.GetMethod("GetTotalCount", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+            return count != null ? Convert.ToInt32(count.Invoke(group, null)) : 0;
+        }
+
+        static bool TryAddCustomGameViewSize(object group, Type groupType, int width, int height, string label, out string error)
+        {
+            error = null;
+            Type sizeType = Type.GetType("UnityEditor.GameViewSize,UnityEditor");
+            Type sizeKindType = Type.GetType("UnityEditor.GameViewSizeType,UnityEditor");
+            MethodInfo addCustomSize = groupType.GetMethod("AddCustomSize", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+            if (sizeType == null || sizeKindType == null || addCustomSize == null)
+            {
+                error = "Game view custom-size APIs could not be resolved.";
+                return false;
+            }
+
+            object fixedResolution = Enum.Parse(sizeKindType, "FixedResolution");
+            ConstructorInfo ctor = sizeType.GetConstructor(
+                BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance,
+                null,
+                new[] { sizeKindType, typeof(int), typeof(int), typeof(string) },
+                null);
+            if (ctor == null)
+            {
+                error = "GameViewSize fixed-resolution constructor could not be resolved.";
+                return false;
+            }
+
+            object size = ctor.Invoke(new[] { fixedResolution, width, height, label });
+            addCustomSize.Invoke(group, new[] { size });
+            return true;
+        }
+
+        static bool TryReadIntMember(object target, string name, out int value)
+        {
+            value = 0;
+            if (target == null)
+                return false;
+
+            Type type = target.GetType();
+            PropertyInfo property = type.GetProperty(name, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.IgnoreCase);
+            if (property != null)
+            {
+                value = Convert.ToInt32(property.GetValue(target));
+                return true;
+            }
+
+            FieldInfo field = type.GetField(name, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.IgnoreCase);
+            if (field != null)
+            {
+                value = Convert.ToInt32(field.GetValue(target));
+                return true;
+            }
+
+            return false;
+        }
+
+        static bool TryCaptureFallbackSceneView(
+            string absoluteOutputPath,
+            int? requestedWidth,
+            int? requestedHeight,
+            out long fileSize,
+            out object diagnostics,
+            out string error)
         {
             fileSize = 0;
             diagnostics = null;
@@ -964,8 +1713,12 @@ Returns:
             }
 
             Vector2? gameViewSize = TryGetMainGameViewSize();
-            int width = gameViewSize.HasValue ? Math.Max(1, Mathf.RoundToInt(gameViewSize.Value.x)) : 1280;
-            int height = gameViewSize.HasValue ? Math.Max(1, Mathf.RoundToInt(gameViewSize.Value.y)) : 720;
+            int width = requestedWidth.GetValueOrDefault() > 0
+                ? requestedWidth.Value
+                : gameViewSize.HasValue ? Math.Max(1, Mathf.RoundToInt(gameViewSize.Value.x)) : 1280;
+            int height = requestedHeight.GetValueOrDefault() > 0
+                ? requestedHeight.Value
+                : gameViewSize.HasValue ? Math.Max(1, Mathf.RoundToInt(gameViewSize.Value.y)) : 720;
             RenderTexture previousTarget = camera.targetTexture;
             RenderTexture previousActive = RenderTexture.active;
             RenderTexture renderTexture = null;
@@ -990,7 +1743,9 @@ Returns:
                     cameraPath = UiDiagnosticsHelper.GetHierarchyPath(camera.transform),
                     width,
                     height,
-                    fileSize
+                    fileSize,
+                    overlayCapable = false,
+                    warning = "Camera fallback renders through a Camera and may omit Screen Space Overlay UI."
                 };
                 return fileSize > 0;
             }

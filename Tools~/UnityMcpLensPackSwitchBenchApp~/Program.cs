@@ -169,12 +169,12 @@ sealed class BenchmarkOptions
 
 sealed class MetadataAudit(BenchmarkOptions options)
 {
-    const int ExpectedFoundationToolCount = 18;
-    const int ExpectedSceneToolCount = 55;
-    const int ExpectedUiToolCount = 35;
-    const int ExpectedRuntimeToolCount = 29;
-    const int ExpectedProjectToolCount = 40;
-    const int ExpectedAssetsToolCount = 49;
+    const int ExpectedFoundationToolCount = 21;
+    const int ExpectedSceneToolCount = 58;
+    const int ExpectedUiToolCount = 38;
+    const int ExpectedRuntimeToolCount = 32;
+    const int ExpectedProjectToolCount = 43;
+    const int ExpectedAssetsToolCount = 52;
 
     static readonly string[] k_RequiredFoundationTools =
     [
@@ -186,6 +186,9 @@ sealed class MetadataAudit(BenchmarkOptions options)
         "Unity_ReadDetailRef",
         "Unity_Tools_Menu",
         "Unity_Tools_Describe",
+        "Unity_Tools_List",
+        "Unity_Tools_Invoke",
+        "Unity_Tools_BatchInvoke",
         "Unity_Tools_ActivateAndVerify",
         "Unity_ReadConsole",
         "Unity_ListResources",
@@ -410,10 +413,16 @@ sealed class MetadataAudit(BenchmarkOptions options)
         ValidateToolSet("foundation+debug", debugTools, null, k_RequiredDebugTools, failures);
         ValidateReadOnlyHint(foundationTools, "Unity_Tools_Menu", expected: true, failures);
         ValidateReadOnlyHint(foundationTools, "Unity_Tools_Describe", expected: true, failures);
+        ValidateReadOnlyHint(foundationTools, "Unity_Tools_List", expected: true, failures);
+        ValidateReadOnlyHint(foundationTools, "Unity_Tools_Invoke", expected: false, failures);
+        ValidateReadOnlyHint(foundationTools, "Unity_Tools_BatchInvoke", expected: false, failures);
         ValidateReadOnlyHint(foundationTools, "Unity_Tools_ActivateAndVerify", expected: false, failures);
         ValidateReadOnlyHint(foundationTools, "Unity_Session_SelectProject", expected: false, failures);
         ValidateReadOnlyHint(foundationTools, "Unity_Editor_ScriptUpdatingConsentModal", expected: false, failures);
         ValidateSplitGameObjectSchema(foundationTools, "Unity_Tools_Menu", ["maxToolsPerPack"], [], failures);
+        ValidateSplitGameObjectSchema(foundationTools, "Unity_Tools_List", ["groupBy", "maxToolsPerGroup"], [], failures);
+        ValidateSplitGameObjectSchema(foundationTools, "Unity_Tools_Invoke", ["toolName", "arguments", "timeoutMs"], ["toolName"], failures);
+        ValidateSplitGameObjectSchema(foundationTools, "Unity_Tools_BatchInvoke", ["calls", "failFast"], ["calls"], failures);
         ValidateSplitGameObjectSchema(foundationTools, "Unity_Session_SelectProject", ["projectPath", "requireFreshBridge", "connect", "maxCandidates"], ["projectPath"], failures);
         ValidateReadOnlyHint(sceneTools, "Unity_GameObject_Inspect", expected: true, failures);
         ValidateReadOnlyHint(sceneTools, "Unity_GameObject_ListComponents", expected: true, failures);
@@ -1076,7 +1085,7 @@ sealed class MetadataAudit(BenchmarkOptions options)
         ValidateSplitGameObjectSchema(
             tools,
             "Unity_UI_CaptureGameView",
-            ["SceneName", "OutputPath", "WarmupMs", "WarmupFrames", "PausePlayMode", "StepFrames", "RestorePauseState", "RequirePlaying", "CaptureConsoleDelta", "FallbackSceneView", "WaitForFileTimeoutMs"],
+            ["SceneName", "OutputPath", "Width", "Height", "RestoreOriginalResolution", "WarmupMs", "WarmupFrames", "PausePlayMode", "StepFrames", "RestorePauseState", "RequirePlaying", "CaptureConsoleDelta", "FallbackSceneView", "TemporaryActivations", "VerifyImageDimensions", "WaitForFileTimeoutMs"],
             ["OutputPath"],
             failures);
 
