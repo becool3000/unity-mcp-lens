@@ -401,6 +401,7 @@ const exactPackMap = new Map(
     Unity_Object_ResolveStablePath: ["scene"],
     Unity_Runtime_GetVisualBoundsSnapshot: ["runtime"],
     Unity_PlayMode_PointerInputSmoke: ["runtime"],
+    Unity_PlayMode_InteractionSmoke: ["runtime", "debug"],
     Unity_Editor_ExitPlayMode: ["runtime"],
     Unity_Editor_SetPlayMode: ["runtime"],
     Unity_Editor_SyncScripts: ["scripting"],

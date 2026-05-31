@@ -1,6 +1,6 @@
 ---
 name: "unity-mcp-bridge"
-description: "Lens Dev Plugin v0.1.7. Use when Codex is working in a Unity project and needs fast file-backed Unity health, bridge diagnostics, safe stop contracts, stable Unity.Tools.List/Invoke/BatchInvoke fallback facades, or recovery diagnosis before touching Unity editor state. Prefer Unity.Editor.HealthCheckFast, the owned unity-mcp-lens stdio server, Command Center status, and explicit user escalation only when Unity or the bridge really needs intervention."
+description: "Lens Dev Plugin v0.1.17. Use when Codex is working in a Unity project and needs fast file-backed Unity health, bridge diagnostics, safe stop contracts, stable Unity.Tools.List/Invoke/BatchInvoke fallback facades, script-sync registry proof, documented installed-host refresh and raw registry proof, bounded InteractionSmoke play-mode probes, or recovery diagnosis before touching Unity editor state. Prefer Unity.Editor.HealthCheckFast, the owned unity-mcp-lens stdio server, Command Center status, and explicit user escalation only when Unity or the bridge really needs intervention."
 ---
 
 # Unity MCP Bridge
@@ -9,7 +9,7 @@ Use this skill as the operational guide for the local Unity MCP bridge and the o
 
 ## Version Marker
 
-- Plugin guidance version: `Lens Dev Plugin v0.1.7`
+- Plugin guidance version: `Lens Dev Plugin v0.1.17`
 - Expected installed Lens host: `0.1.0-alpha.24` or newer
 - If Codex shows an older Lens Dev Plugin version, refresh the plugin cache from the repo-local source before trusting this skill's installed copy.
 
@@ -82,6 +82,7 @@ node .agents/plugins/lens-dev-plugin/skills/unity-mcp-bridge/scripts/Check-Unity
 8. Wait briefly, then retry one lightweight authority check.
    - If the failure came immediately after `Sync-UnityScriptChanges.js`/`Sync-UnityScriptChanges.ps1`, a forced refresh, or package recompilation, still follow the health-check flow before assuming Unity is unavailable.
    - If script sync reached idle but still reports stale assembly proof (`pending_refresh`, `source_newer_than_assembly`, `local_package_source_newer_than_assembly`, or no compile observed), use the Windows helper fallback `Sync-UnityScriptChanges.ps1 -FocusNudgeOnStaleRefresh` once before bridge recovery escalation. It focuses the project-matched Unity editor and safely clicks editor chrome/title bar; the click is not proof of success.
+   - If script sync ends with `bridge_reacquire_pending`, `bridge_reacquire_timed_out`, stale registry proof, or missing `expectedTools`, stop Unity-facing calls. Use only `Unity.Editor.HealthCheckFast`, `Unity.Bridge.ListConnections`, Command Center status, or explicit recovery until the target-project bridge and tool registry are current.
 9. If the retry still fails and the check classifies the bridge as `EditorReloadingExpected`, wait for Unity to settle and retry instead of notifying the user.
 10. If the retry still fails and the check classifies the bridge as `BuildInProgress`, stop retrying recovery. Switch to passive monitoring of `Editor.log`, the beacon, and any known build artifacts instead of notifying the user.
 11. If the retry still fails and the check classifies the bridge as `ApprovalPending`, `ReconnectRequired`, `UnityNotRunning`, `BridgeNotReady`, or another hard-unavailable state, send a Windows notification:
@@ -100,7 +101,7 @@ $script = Join-Path $PWD ".agents\plugins\lens-dev-plugin\skills\unity-mcp-bridg
 - Do not kill, restart, or clean scratch artifacts unless the user explicitly requested those destructive options.
 - Use `-AllowKillUnity` only when a stale or hung Unity PID is confirmed and the user has accepted that recovery path.
 - Never rely on a live Unity call to decide whether Unity is hung; use health files, process identity, heartbeat age, and bridge state.
-- Use Command Center when the user needs a visible status dashboard, server refresh, or explanation of bridge/editor state.
+- Use Command Center when the user needs a visible status dashboard, server refresh, or explanation of bridge/editor state. For local `file:` Lens package installs, prefer `Tools~/Invoke-LensInstalledHostRefreshWorkflow.ps1 -ProjectPath <project>` for one-command installed-host stale/current proof, safe refresh, and raw `tools/list` registry proof; if it reports `blocked_running_host`, restart/reconnect the MCP host instead of trying Unity-backed calls. See `docs/installed-host-refresh-proof.md` for result states and safe next actions.
 
 ## Lens-Specific Rules
 

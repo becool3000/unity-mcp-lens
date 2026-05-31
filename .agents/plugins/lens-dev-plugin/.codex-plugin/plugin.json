@@ -1,7 +1,7 @@
 {
   "name": "lens-dev-plugin",
-  "version": "0.1.7",
-  "description": "Unity MCP Lens development workflow bundle for Codex. Plugin v0.1.7, aligned with Lens host 0.1.0-alpha.24+.",
+  "version": "0.1.17",
+  "description": "Unity MCP Lens development workflow bundle for Codex. Plugin v0.1.17, aligned with Lens host 0.1.0-alpha.24+.",
   "author": {
     "name": "kanaw",
     "email": "",
@@ -19,9 +19,9 @@
   "skills": "./skills/",
   "mcpServers": "./.mcp.json",
   "interface": {
-    "displayName": "Lens Dev Plugin v0.1.7",
-    "shortDescription": "v0.1.7 Unity MCP Lens workflows with fast health, static_all, stable tool facades, recovery diagnostics, and bridge access.",
-    "longDescription": "Lens Dev Plugin v0.1.7 bundles Unity MCP Bridge, Unity Dev Assistant, Unity MCP Lens Development, and the local Lens MCP server config for Codex. This plugin version teaches Codex to use Unity.Editor.HealthCheckFast first, static_all by default, Unity.Tools.List/Invoke/BatchInvoke as client-surface fallback facades, paused Unity.PlayMode.StepVerifier for play-mode smoke checks, Unity.Workflow.SelectPackThroughMainMenu for FallingSands Main Menu pack selection, diagnose-only Unity.Editor.RecoverFromHang, FallingSands GPU probes, and status-file hygiene from Lens host 0.1.0-alpha.24+.",
+    "displayName": "Lens Dev Plugin v0.1.17",
+    "shortDescription": "v0.1.17 Unity MCP Lens workflows with fast health, static_all, stable tool facades, script-sync registry proof, documented installed-host refresh/raw registry proof, manual interaction smoke, prefab layout matrices, prefab override explainers, sprite slice verification, and bridge access.",
+    "longDescription": "Lens Dev Plugin v0.1.17 bundles Unity MCP Bridge, Unity Dev Assistant, Unity MCP Lens Development, and the local Lens MCP server config for Codex. This plugin version teaches Codex to use Unity.Editor.HealthCheckFast first, static_all by default, Unity.Tools.List/Invoke/BatchInvoke as client-surface fallback facades, script sync with target-project local-package path mapping and expected-tool registry proof, the documented installed-host refresh plus raw registry proof workflow through Tools~/Invoke-LensInstalledHostRefreshWorkflow.ps1 and docs/installed-host-refresh-proof.md, lower-level standalone refresh/proof helpers when needed, paused Unity.PlayMode.StepVerifier and Unity.PlayMode.InteractionSmoke for play-mode smoke checks, Unity.Workflow.SelectPackThroughMainMenu for FallingSands Main Menu pack selection, diagnose-only Unity.Editor.RecoverFromHang, prefab layout matrices, prefab override explainers, sprite slice/reference verification, FallingSands GPU probes, and status-file hygiene from Lens host 0.1.0-alpha.24+.",
     "developerName": "kanaw",
     "category": "Productivity",
     "capabilities": [

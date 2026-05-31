@@ -24,6 +24,7 @@ namespace Becool.UnityMcpLens.Editor.Tools
         const string InstantiateToolName = "Unity.Prefab.Instantiate";
         const string CreateFromSceneObjectToolName = "Unity.Prefab.CreateFromSceneObject";
         const string GetOverridesToolName = "Unity.Prefab.GetOverrides";
+        const string ExplainOverridesToolName = "Unity.Prefab.ExplainOverrides";
         const string PreviewApplyOverridesToolName = "Unity.Prefab.PreviewApplyOverrides";
         const string ApplyOverridesToolName = "Unity.Prefab.ApplyOverrides";
         const string PreviewRevertOverridesToolName = "Unity.Prefab.PreviewRevertOverrides";
@@ -122,6 +123,30 @@ namespace Becool.UnityMcpLens.Editor.Tools
             };
         }
 
+        [McpSchema(ExplainOverridesToolName)]
+        public static object GetExplainOverridesSchema()
+        {
+            return new
+            {
+                type = "object",
+                properties = new
+                {
+                    target = new { description = "Scene prefab instance GameObject target, path, or instance id." },
+                    searchMethod = new { type = "string", description = "How to find target. Defaults to by_id_or_name_or_path." },
+                    includeInactive = new { type = "boolean", description = "Include inactive scene objects when resolving target. Defaults to true." },
+                    action = new { type = "string", @enum = new[] { "apply", "revert", "both" }, description = "Which override action to explain. Defaults to both." },
+                    overrideIds = new { type = "array", items = new { type = "string" }, description = "Override ids returned by Unity.Prefab.GetOverrides or preview tools." },
+                    propertyPaths = new { type = "array", items = new { type = "string" }, description = "Serialized property paths to select." },
+                    targetPaths = new { type = "array", items = new { type = "string" }, description = "Override target paths to select." },
+                    includeNested = new { type = "boolean", description = "Allow selected nested prefab overrides. Defaults to false, matching mutation tools." },
+                    applyAll = new { type = "boolean", description = "Explicitly select every local override for apply explanation." },
+                    revertAll = new { type = "boolean", description = "Explicitly select every local override for revert explanation." },
+                    maxOverrides = new { type = "integer", description = "Maximum override rows to include inline. Clamped to 1..500, defaults to 200." }
+                },
+                required = new[] { "target" }
+            };
+        }
+
         [McpSchema(PreviewApplyOverridesToolName)]
         public static object GetPreviewApplyOverridesSchema() => GetOverrideMutationSchema("applyAll");
 
@@ -176,6 +201,12 @@ namespace Becool.UnityMcpLens.Editor.Tools
         public static object GetOverrides(JObject @params)
         {
             return Handle(GetOverridesToolName, "get_overrides", @params, ExecuteGetOverrides);
+        }
+
+        [McpTool(ExplainOverridesToolName, "Explains prefab instance connection state, override actionability, and why apply/revert is available or blocked without mutating scenes or assets.", "Explain Prefab Overrides", Groups = new[] { AssetsGroup }, EnabledByDefault = true)]
+        public static object ExplainOverrides(JObject @params)
+        {
+            return Handle(ExplainOverridesToolName, "explain_overrides", @params, ExecuteExplainOverrides);
         }
 
         [McpTool(PreviewApplyOverridesToolName, "Previews applying selected prefab instance overrides to prefab assets and reports broad/nested risks before mutation.", "Preview Apply Prefab Overrides", Groups = new[] { AssetsGroup }, EnabledByDefault = true)]
@@ -533,6 +564,132 @@ namespace Becool.UnityMcpLens.Editor.Tools
             return (true, $"Listed prefab overrides for '{UiDiagnosticsHelper.GetHierarchyPath(instanceRoot.transform)}'.", data, null);
         }
 
+        static (bool success, string message, object data, string errorKind) ExecuteExplainOverrides(JObject parameters)
+        {
+            if (!TryResolveSceneTarget(parameters, out GameObject targetObject, out string targetError))
+                return Failure("PREFAB_INSTANCE_REQUIRED", targetError, new { status = "failed", error = targetError });
+
+            GameObject instanceRoot = PrefabUtility.GetNearestPrefabInstanceRoot(targetObject);
+            if (instanceRoot == null)
+            {
+                string error = $"Target '{UiDiagnosticsHelper.GetHierarchyPath(targetObject.transform)}' is not part of a prefab instance.";
+                return Failure("PREFAB_INSTANCE_REQUIRED", error, new
+                {
+                    status = "failed",
+                    error,
+                    target = DescribeGameObject(targetObject, ".")
+                });
+            }
+
+            int maxOverrides = Mathf.Clamp(GetInt(parameters, 200, "maxOverrides", "MaxOverrides", "maxRows", "MaxRows"), 1, 500);
+            bool includeNested = GetBool(parameters, false, "includeNested", "IncludeNested");
+            string requestedAction = NormalizeExplainAction(GetString(parameters, "action", "Action"));
+            var warnings = new List<string>();
+            List<PrefabOverrideCandidate> allCandidates = BuildOverrideCandidates(instanceRoot, includeNested: true, warnings);
+            object dirtyStateBefore = SceneDirtyStateUtility.CaptureLoadedScenes();
+            string sourcePrefabPath = PrefabUtility.GetPrefabAssetPathOfNearestInstanceRoot(instanceRoot);
+            GameObject sourceAsset = string.IsNullOrWhiteSpace(sourcePrefabPath)
+                ? null
+                : AssetDatabase.LoadAssetAtPath<GameObject>(sourcePrefabPath);
+            PrefabInstanceStatus instanceStatus = PrefabUtility.GetPrefabInstanceStatus(instanceRoot);
+            PrefabAssetType assetType = PrefabUtility.GetPrefabAssetType(instanceRoot);
+            bool sourceAssetExists = sourceAsset != null;
+            bool hasExplicitSelectors = HasAnySelector(parameters);
+
+            var selectedById = new Dictionary<string, PrefabOverrideCandidate>(StringComparer.OrdinalIgnoreCase);
+            var explanationRows = new List<object>();
+            if (requestedAction == "apply" || requestedAction == "both")
+            {
+                explanationRows.Add(BuildOverrideActionExplanation(
+                    parameters,
+                    "apply",
+                    includeNested,
+                    hasExplicitSelectors,
+                    allCandidates,
+                    sourcePrefabPath,
+                    sourceAssetExists,
+                    instanceStatus,
+                    maxOverrides,
+                    selectedById));
+            }
+
+            if (requestedAction == "revert" || requestedAction == "both")
+            {
+                explanationRows.Add(BuildOverrideActionExplanation(
+                    parameters,
+                    "revert",
+                    includeNested,
+                    hasExplicitSelectors,
+                    allCandidates,
+                    sourcePrefabPath,
+                    sourceAssetExists,
+                    instanceStatus,
+                    maxOverrides,
+                    selectedById));
+            }
+
+            object[] candidateRows = allCandidates
+                .Take(maxOverrides)
+                .Select(candidate => candidate.Row)
+                .ToArray();
+            object[] selectedRows = selectedById.Values
+                .Take(maxOverrides)
+                .Select(candidate => candidate.Row)
+                .ToArray();
+            object[] allRows = allCandidates.Select(candidate => candidate.Row).ToArray();
+            bool targetIsRoot = ReferenceEquals(targetObject, instanceRoot);
+            string targetRole = targetIsRoot
+                ? "instance_root"
+                : IsNestedTransform(instanceRoot, targetObject) ? "nested_prefab_child" : "instance_child";
+
+            object data = new
+            {
+                status = "explained",
+                readOnly = true,
+                target = DescribeGameObject(targetObject, GetRelativePath(instanceRoot.transform, targetObject.transform)),
+                instanceRoot = DescribeGameObject(instanceRoot, "."),
+                sourcePrefabPath = string.IsNullOrWhiteSpace(sourcePrefabPath) ? null : sourcePrefabPath,
+                targetRole,
+                connection = new
+                {
+                    prefabInstanceStatus = instanceStatus.ToString(),
+                    prefabAssetType = assetType.ToString(),
+                    sourcePrefabPath = string.IsNullOrWhiteSpace(sourcePrefabPath) ? null : sourcePrefabPath,
+                    sourceAssetExists,
+                    sourceAsset = DescribeObject(sourceAsset),
+                    connected = instanceStatus == PrefabInstanceStatus.Connected && sourceAssetExists,
+                    targetIsNearestPrefabInstanceRoot = PrefabUtility.IsAnyPrefabInstanceRoot(targetObject),
+                    targetIsNestedPrefabBoundary = IsNestedTransform(instanceRoot, targetObject)
+                },
+                action = requestedAction,
+                includeNested,
+                hasExplicitSelectors,
+                totalLocalOverrideCount = allCandidates.Count,
+                returnedOverrideCount = candidateRows.Length,
+                selectedOverrideCount = selectedById.Count,
+                returnedSelectedOverrideCount = selectedRows.Length,
+                nestedOverrideCount = allCandidates.Count(candidate => candidate.IsNested),
+                missingReferenceOverrideCount = allCandidates.Count(candidate => string.Equals(candidate.Classification, "missing reference", StringComparison.OrdinalIgnoreCase)),
+                localNullOverrideCount = allCandidates.Count(candidate => string.Equals(candidate.Classification, "local null override", StringComparison.OrdinalIgnoreCase)),
+                classificationCounts = CountClassifications(allRows),
+                truncated = allCandidates.Count > candidateRows.Length || selectedById.Count > selectedRows.Length,
+                explanations = explanationRows.ToArray(),
+                selectedOverrides = selectedRows,
+                candidateOverrides = candidateRows,
+                warnings = warnings.ToArray(),
+                dirtyStateBefore,
+                dirtyStateAfter = SceneDirtyStateUtility.CaptureLoadedScenes(),
+                prefabStateBefore = CapturePrefabState(sourcePrefabPath),
+                prefabStateAfter = CapturePrefabState(sourcePrefabPath),
+                assetStateBefore = CaptureAssetState(sourcePrefabPath),
+                assetStateAfter = CaptureAssetState(sourcePrefabPath),
+                saveState = BuildAssetSaveState(message: "not_requested_read_only_override_explain")
+            };
+
+            string message = $"Explained prefab overrides for '{UiDiagnosticsHelper.GetHierarchyPath(instanceRoot.transform)}': {allCandidates.Count} local override(s), {selectedById.Count} selected.";
+            return (true, message, data, null);
+        }
+
         static (bool success, string message, object data, string errorKind) ExecuteOverrideMutation(JObject parameters, bool previewOnly, bool applyToAsset)
         {
             if (!TryResolvePrefabInstance(parameters, out GameObject targetObject, out GameObject instanceRoot, out string sourcePrefabPath, out string error))
@@ -672,6 +829,221 @@ namespace Becool.UnityMcpLens.Editor.Tools
                 ? $"Previewed {verb} for {selected.Count} prefab override(s)."
                 : $"{(applyToAsset ? "Applied" : "Reverted")} {appliedRows.Count} of {selected.Count} prefab override(s).";
             return (true, message, data, null);
+        }
+
+        static object BuildOverrideActionExplanation(
+            JObject parameters,
+            string action,
+            bool includeNested,
+            bool hasExplicitSelectors,
+            List<PrefabOverrideCandidate> allCandidates,
+            string sourcePrefabPath,
+            bool sourceAssetExists,
+            PrefabInstanceStatus instanceStatus,
+            int maxOverrides,
+            Dictionary<string, PrefabOverrideCandidate> selectedById)
+        {
+            bool applyToAsset = string.Equals(action, "apply", StringComparison.OrdinalIgnoreCase);
+            string broadProperty = applyToAsset ? "applyAll" : "revertAll";
+            bool broadSelectionRequested = GetBool(parameters, false, broadProperty, ToPascalCase(broadProperty), "all", "All");
+            var warnings = new List<object>();
+            var blockedReasons = new List<object>();
+            var selectorWarnings = new List<string>();
+            List<PrefabOverrideCandidate> selected = SelectOverrideCandidates(parameters, allCandidates, broadSelectionRequested, selectorWarnings, out string selectionError);
+
+            foreach (PrefabOverrideCandidate candidate in selected)
+            {
+                if (!string.IsNullOrWhiteSpace(candidate?.Id))
+                    selectedById[candidate.Id] = candidate;
+            }
+
+            foreach (string warning in selectorWarnings)
+                AddReason(warnings, "selector_warning", warning);
+
+            if (!string.IsNullOrWhiteSpace(selectionError))
+                AddReason(blockedReasons, "selector_not_found", selectionError);
+
+            AddMissingSelectorBlocks(parameters, allCandidates, blockedReasons);
+
+            string instanceStatusText = instanceStatus.ToString();
+            if (string.IsNullOrWhiteSpace(sourcePrefabPath) ||
+                !sourceAssetExists ||
+                !string.Equals(instanceStatusText, "Connected", StringComparison.OrdinalIgnoreCase))
+            {
+                AddReason(
+                    blockedReasons,
+                    "missing_or_disconnected_prefab_asset",
+                    "The prefab instance is not connected to a loadable source prefab asset.",
+                    new
+                    {
+                        sourcePrefabPath = string.IsNullOrWhiteSpace(sourcePrefabPath) ? null : sourcePrefabPath,
+                        sourceAssetExists,
+                        prefabInstanceStatus = instanceStatusText
+                    });
+            }
+
+            if (allCandidates.Count == 0)
+            {
+                AddReason(blockedReasons, "no_overrides", "The prefab instance has no local property overrides to apply or revert.");
+            }
+            else if (!hasExplicitSelectors && !broadSelectionRequested)
+            {
+                AddReason(
+                    blockedReasons,
+                    "no_explicit_mutation_selection",
+                    $"Select overrideIds/propertyPaths/targetPaths or set {broadProperty}=true before mutating prefab overrides.");
+            }
+
+            bool selectedNested = selected.Any(candidate => candidate.IsNested);
+            if (selectedNested && !includeNested)
+            {
+                AddReason(
+                    blockedReasons,
+                    "nested_override_selected_without_include_nested",
+                    "Selected overrides include nested prefab boundaries. Set includeNested=true only after reviewing the nested-prefab risk.");
+            }
+
+            PrefabOverrideCandidate[] missingReferenceSelections = selected
+                .Where(candidate => string.Equals(candidate.Classification, "missing reference", StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+            if (missingReferenceSelections.Length > 0)
+            {
+                AddReason(
+                    warnings,
+                    "missing_reference_risk_warning",
+                    applyToAsset
+                        ? "Selected overrides include missing-reference rows. Applying can persist missing references to prefab assets."
+                        : "Selected overrides include missing-reference rows. Reverting clears the local missing-reference override.",
+                    new
+                    {
+                        overrideIds = missingReferenceSelections.Select(candidate => candidate.Id).ToArray()
+                    });
+            }
+
+            foreach (PrefabOverrideCandidate candidate in selected)
+            {
+                if (TryResolveOverrideProperty(candidate, out _, out string propertyError))
+                    continue;
+
+                AddReason(
+                    blockedReasons,
+                    "unresolved_instance_property_target",
+                    propertyError,
+                    new
+                    {
+                        overrideId = candidate.Id,
+                        targetPath = candidate.TargetPath,
+                        propertyPath = candidate.PropertyPath
+                    });
+            }
+
+            bool available = blockedReasons.Count == 0;
+            return new
+            {
+                action,
+                available,
+                selectedOverrideCount = selected.Count,
+                returnedSelectedOverrideCount = Math.Min(selected.Count, maxOverrides),
+                broadSelectionRequested,
+                explicitSelectionProvided = hasExplicitSelectors,
+                includeNested,
+                blockedReasons = blockedReasons.ToArray(),
+                warnings = warnings.ToArray(),
+                recommendedPreviewTool = applyToAsset ? PreviewApplyOverridesToolName : PreviewRevertOverridesToolName,
+                recommendedApplyTool = applyToAsset ? ApplyOverridesToolName : RevertOverridesToolName,
+                normalizedArguments = BuildNormalizedOverrideArgs(parameters, action, includeNested, broadSelectionRequested, hasExplicitSelectors, selected),
+                selectedOverrides = selected
+                    .Take(maxOverrides)
+                    .Select(candidate => candidate.Row)
+                    .ToArray()
+            };
+        }
+
+        static string NormalizeExplainAction(string action)
+        {
+            if (string.Equals(action, "apply", StringComparison.OrdinalIgnoreCase))
+                return "apply";
+
+            if (string.Equals(action, "revert", StringComparison.OrdinalIgnoreCase))
+                return "revert";
+
+            return "both";
+        }
+
+        static JObject BuildNormalizedOverrideArgs(
+            JObject parameters,
+            string action,
+            bool includeNested,
+            bool broadSelectionRequested,
+            bool hasExplicitSelectors,
+            List<PrefabOverrideCandidate> selected)
+        {
+            bool applyToAsset = string.Equals(action, "apply", StringComparison.OrdinalIgnoreCase);
+            string broadProperty = applyToAsset ? "applyAll" : "revertAll";
+            var args = new JObject
+            {
+                ["searchMethod"] = GetString(parameters, "searchMethod", "SearchMethod") ?? "by_id_or_name_or_path",
+                ["includeInactive"] = GetBool(parameters, true, "includeInactive", "IncludeInactive"),
+                ["includeNested"] = includeNested
+            };
+
+            JToken target = GetToken(parameters, "target", "Target");
+            if (target != null && target.Type != JTokenType.Null)
+                args["target"] = target.DeepClone();
+
+            if (broadSelectionRequested && !hasExplicitSelectors)
+            {
+                args[broadProperty] = true;
+            }
+            else if (selected.Count > 0)
+            {
+                args["overrideIds"] = new JArray(selected.Select(candidate => candidate.Id));
+            }
+
+            return args;
+        }
+
+        static void AddMissingSelectorBlocks(JObject parameters, List<PrefabOverrideCandidate> candidates, List<object> blockedReasons)
+        {
+            string[] missingOverrideIds = FindMissingSelectors(GetStringArray(parameters, "overrideIds", "OverrideIds"), candidates.Select(candidate => candidate.Id));
+            string[] missingPropertyPaths = FindMissingSelectors(GetStringArray(parameters, "propertyPaths", "PropertyPaths"), candidates.Select(candidate => candidate.PropertyPath));
+            string[] missingTargetPaths = FindMissingSelectors(GetStringArray(parameters, "targetPaths", "TargetPaths"), candidates.Select(candidate => candidate.TargetPath));
+            if (missingOverrideIds.Length == 0 && missingPropertyPaths.Length == 0 && missingTargetPaths.Length == 0)
+                return;
+
+            AddReason(
+                blockedReasons,
+                "selector_not_found",
+                "One or more selectors matched no local prefab overrides.",
+                new
+                {
+                    overrideIds = missingOverrideIds,
+                    propertyPaths = missingPropertyPaths,
+                    targetPaths = missingTargetPaths
+                });
+        }
+
+        static string[] FindMissingSelectors(string[] requested, IEnumerable<string> known)
+        {
+            if (requested == null || requested.Length == 0)
+                return Array.Empty<string>();
+
+            var knownSet = new HashSet<string>(
+                known.Where(value => !string.IsNullOrWhiteSpace(value)),
+                StringComparer.OrdinalIgnoreCase);
+            return requested
+                .Where(value => !string.IsNullOrWhiteSpace(value) && !knownSet.Contains(value))
+                .ToArray();
+        }
+
+        static void AddReason(List<object> rows, string code, string message, object data = null)
+        {
+            rows.Add(new
+            {
+                code,
+                message,
+                data
+            });
         }
 
         static object[] BuildOverrideRows(
@@ -1418,6 +1790,7 @@ namespace Becool.UnityMcpLens.Editor.Tools
             JObject root = JObject.FromObject(data ?? new { });
             TruncateArray(root, "hierarchy", 20);
             TruncateArray(root, "overrides", 20);
+            TruncateArray(root, "candidateOverrides", 20);
             TruncateArray(root, "selectedOverrides", 20);
             TruncateArray(root, "appliedOverrides", 20);
             TruncateArray(root, "changedObjects", 12);

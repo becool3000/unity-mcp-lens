@@ -33,10 +33,12 @@ namespace Becool.UnityMcpLens.Editor.Lens
             NormalizeToolName("Unity.Preset.PreviewApplyToComponent"),
             NormalizeToolName("Unity.Prefab.Inspect"),
             NormalizeToolName("Unity.Prefab.GetOverrides"),
+            NormalizeToolName("Unity.Prefab.ExplainOverrides"),
             NormalizeToolName("Unity.Prefab.PreviewApplyOverrides"),
             NormalizeToolName("Unity.Prefab.PreviewRevertOverrides"),
             NormalizeToolName("Unity.Prefab.PreviewCopyComponentSerializedValues"),
             NormalizeToolName("Unity.Prefab.VerifySerializedProperties"),
+            NormalizeToolName("Unity.Prefab.AuditSerializedReferences"),
             NormalizeToolName("Unity.GetLensUsageReport"),
             NormalizeToolName("Unity.InputSystem.Diagnostics"),
             NormalizeToolName("Unity.Project.PackageCompatibility"),
@@ -46,6 +48,7 @@ namespace Becool.UnityMcpLens.Editor.Lens
             NormalizeToolName("Unity.UI.PreviewLayoutProperties"),
             NormalizeToolName("Unity.UI.VerifyScreenLayout"),
             NormalizeToolName("Unity.UI.VerifyScreenLayoutMatrix"),
+            NormalizeToolName("Unity.UI.VerifyPrefabLayoutMatrix"),
             NormalizeToolName("Unity.UI.PreviewCreateCanvasPrefab"),
             NormalizeToolName("Unity.UI.VerifyRaycastAndLayout"),
             NormalizeToolName("Unity.Scene.PreviewBindSerializedReferences"),
@@ -61,6 +64,7 @@ namespace Becool.UnityMcpLens.Editor.Lens
             NormalizeToolName("Unity.Asset.PreviewImportSpriteSheetAndBind"),
             NormalizeToolName("Unity.Asset.VerifySpriteArrayBinding"),
             NormalizeToolName("Unity.Asset.SpriteSheetVisualDiagnostics"),
+            NormalizeToolName("Unity.Asset.VerifySpriteSlicesAndReferences"),
             NormalizeToolName("Unity.Runtime.QueryObjects"),
             NormalizeToolName("Unity.Bridge.ListConnections"),
             NormalizeToolName("Unity.Object.ResolveStablePath"),
@@ -152,6 +156,7 @@ namespace Becool.UnityMcpLens.Editor.Lens
             NormalizeToolName("Unity.UI.ApplyCreateCanvasPrefab"),
             NormalizeToolName("Unity.UI.InvokeControl"),
             NormalizeToolName("Unity.PlayMode.PointerInputSmoke"),
+            NormalizeToolName("Unity.PlayMode.InteractionSmoke"),
             NormalizeToolName("Unity.UI.Toolkit")
         };
 

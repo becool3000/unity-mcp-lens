@@ -41,7 +41,7 @@ namespace Becool.UnityMcpLens.Editor.Settings.UI
                     FileName = commandCenterPath,
                     Arguments = BuildArguments(
                         ("--project-root", GetProjectRoot()),
-                        ("--package-root", Path.GetFullPath(MCPConstants.unityMcpLensAppPath)),
+                        ("--package-root", Path.GetFullPath(MCPConstants.ResolvedUnityMcpLensAppPath)),
                         ("--status-dir", MCPConstants.StatusDirectory),
                         ("--unity-pid", process.Id.ToString())),
                     UseShellExecute = true,

@@ -48,6 +48,9 @@ namespace Becool.UnityMcpLens.Editor.Tools
 
         [McpDescription("When FocusNudgeOnStaleRefresh is enabled, allow a tiny safe click in Unity editor chrome/title bar after focusing.", Required = false, Default = true)]
         public bool SafeClickNudge { get; set; } = true;
+
+        [McpDescription("Optional host/client registry proof list. The Lens host verifies these tool names after refresh before reporting follow-up readiness.", Required = false)]
+        public string[] ExpectedTools { get; set; } = Array.Empty<string>();
     }
 
     [McpTool(ToolPackCatalog.EditorSyncScriptsToolName,
@@ -180,6 +183,7 @@ namespace Becool.UnityMcpLens.Editor.Tools
                     relevantChangedPaths,
                     packageResolveRequested,
                     packageResolvePaths,
+                    expectedTools = parameters.ExpectedTools ?? Array.Empty<string>(),
                     focusNudgeOnStaleRefresh = parameters.FocusNudgeOnStaleRefresh,
                     safeClickNudge = parameters.SafeClickNudge,
                     refreshRequested = false,
@@ -286,6 +290,7 @@ namespace Becool.UnityMcpLens.Editor.Tools
                 relevantChangedPaths,
                 packageResolveRequested,
                 packageResolvePaths,
+                expectedTools = parameters.ExpectedTools ?? Array.Empty<string>(),
                 force = parameters.Force,
                 waitForCompile = parameters.WaitForCompile,
                 focusNudgeOnStaleRefresh = parameters.FocusNudgeOnStaleRefresh,
@@ -327,6 +332,7 @@ namespace Becool.UnityMcpLens.Editor.Tools
                 rawData.relevantChangedPaths,
                 rawData.force,
                 rawData.waitForCompile,
+                rawData.expectedTools,
                 rawData.focusNudgeOnStaleRefresh,
                 rawData.safeClickNudge,
                 rawData.refreshRequested,
@@ -385,6 +391,7 @@ namespace Becool.UnityMcpLens.Editor.Tools
                     relevantChangedPaths,
                     packageResolveRequested,
                     packageResolvePaths,
+                    expectedTools = parameters.ExpectedTools ?? Array.Empty<string>(),
                     focusNudgeOnStaleRefresh = parameters.FocusNudgeOnStaleRefresh,
                     safeClickNudge = parameters.SafeClickNudge,
                     refreshRequested = false,

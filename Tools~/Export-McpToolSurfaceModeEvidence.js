@@ -22,6 +22,11 @@ const requiredManifestToolNames = [
   "Unity_Project_BlockedLanguageScan",
   "Unity_Tests_Run",
   "Unity_UI_CaptureGameView",
+  "Unity_PlayMode_InteractionSmoke",
+  "Unity_Prefab_AuditSerializedReferences",
+  "Unity_Prefab_ExplainOverrides",
+  "Unity_Asset_VerifySpriteSlicesAndReferences",
+  "Unity_UI_VerifyPrefabLayoutMatrix",
 ];
 const representativeToolNames = [
   ...facadeToolNames,
@@ -29,7 +34,12 @@ const representativeToolNames = [
   "Unity_Project_BlockedLanguageScan",
   "Unity_Tests_Run",
   "Unity_Editor_SetPlayMode",
+  "Unity_PlayMode_InteractionSmoke",
   "Unity_Asset_Search",
+  "Unity_Prefab_AuditSerializedReferences",
+  "Unity_Prefab_ExplainOverrides",
+  "Unity_Asset_VerifySpriteSlicesAndReferences",
+  "Unity_UI_VerifyPrefabLayoutMatrix",
   "Unity_GameObject_Inspect",
   "Unity_UI_VerifyScreenLayout",
   "Unity_UI_CaptureGameView",
@@ -520,6 +530,135 @@ function schemaFor(tool) {
     };
   }
 
+  if (tool.name === "Unity_Editor_SyncScripts") {
+    return {
+      type: "object",
+      properties: {
+        changedPaths: { type: "array", items: { type: "string" } },
+        expectedTools: { type: "array", items: { type: "string" } },
+        force: { type: "boolean" },
+        waitForCompile: { type: "boolean" },
+        timeoutSeconds: { type: "integer" },
+        pollIntervalMs: { type: "integer" },
+        stablePollCount: { type: "integer" },
+        focusNudgeOnStaleRefresh: { type: "boolean" },
+        safeClickNudge: { type: "boolean" },
+      },
+    };
+  }
+
+  if (tool.name === "Unity_PlayMode_InteractionSmoke") {
+    return {
+      type: "object",
+      properties: {
+        scenePath: { type: "string" },
+        enterPlayMode: { type: "boolean" },
+        exitAfter: { type: "boolean" },
+        waitMs: { type: "integer" },
+        consoleCount: { type: "integer" },
+        failFast: { type: "boolean" },
+        steps: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              type: { type: "string" },
+              target: { type: "string" },
+              targetPath: { type: "string" },
+              action: { type: "string" },
+              key: { type: "string" },
+              keys: { type: "array", items: { type: "string" } },
+              holdFrames: { type: "integer" },
+              waitFrames: { type: "integer" },
+            },
+            required: ["type"],
+          },
+        },
+      },
+      required: ["steps"],
+    };
+  }
+
+  if (tool.name === "Unity_Prefab_AuditSerializedReferences") {
+    return {
+      type: "object",
+      properties: {
+        prefabPath: { type: "string" },
+        prefabPaths: { type: "array", items: { type: "string" } },
+        under: { type: "string" },
+        nameFilter: { type: "string" },
+        maxPrefabs: { type: "integer" },
+        maxFindings: { type: "integer" },
+        referenceNullPolicy: { type: "string", enum: ["broken_only", "likely_required", "all"] },
+        includeNestedPrefabInstances: { type: "boolean" },
+        includeRuntimeLoadPatterns: { type: "boolean" },
+      },
+    };
+  }
+
+  if (tool.name === "Unity_Prefab_ExplainOverrides") {
+    return {
+      type: "object",
+      properties: {
+        target: {},
+        searchMethod: { type: "string" },
+        includeInactive: { type: "boolean" },
+        action: { type: "string", enum: ["apply", "revert", "both"] },
+        overrideIds: { type: "array", items: { type: "string" } },
+        propertyPaths: { type: "array", items: { type: "string" } },
+        targetPaths: { type: "array", items: { type: "string" } },
+        includeNested: { type: "boolean" },
+        applyAll: { type: "boolean" },
+        revertAll: { type: "boolean" },
+        maxOverrides: { type: "integer" },
+      },
+      required: ["target"],
+    };
+  }
+
+  if (tool.name === "Unity_Asset_VerifySpriteSlicesAndReferences") {
+    return {
+      type: "object",
+      properties: {
+        assetPath: { type: "string" },
+        expectedSpriteNames: { type: "array", items: { type: "string" } },
+        expectedSprites: { type: "array", items: { type: "object" } },
+        expectedSettings: { type: "object" },
+        prefabPath: { type: "string" },
+        prefabPaths: { type: "array", items: { type: "string" } },
+        under: { type: "string" },
+        nameFilter: { type: "string" },
+        expectedPrefabReferences: { type: "array", items: { type: "object" } },
+        requireAllScannedImagesUseAtlas: { type: "boolean" },
+        includeInactive: { type: "boolean" },
+        verifyAlpha: { type: "boolean" },
+        alphaThreshold: { type: "number" },
+        emptyAlphaCoverageThreshold: { type: "number" },
+        maxPrefabs: { type: "integer" },
+        maxSprites: { type: "integer" },
+        maxFindings: { type: "integer" },
+      },
+      required: ["assetPath"],
+    };
+  }
+
+  if (tool.name === "Unity_UI_VerifyPrefabLayoutMatrix") {
+    return {
+      type: "object",
+      properties: {
+        prefabPath: { type: "string" },
+        resolutions: { type: "array", items: { type: "object" } },
+        states: { type: "array", items: { type: "object" } },
+        temporaryActivations: { type: "array", items: { type: "object" } },
+        includeInactive: { type: "boolean" },
+        maxElements: { type: "integer" },
+        maxFindings: { type: "integer" },
+        checks: { type: "object" },
+      },
+      required: ["prefabPath"],
+    };
+  }
+
   if (tool.name === "Unity_UI_CaptureGameView") {
     return {
       type: "object",
@@ -741,9 +880,14 @@ function buildToolCatalog(targetToolCount) {
     ["project", "Unity_Project_BlockedLanguageScan", true],
     ["project", "Unity_Tests_Run", false],
     ["runtime", "Unity_Editor_SetPlayMode", false],
+    ["runtime", "Unity_PlayMode_InteractionSmoke", false],
     ["assets", "Unity_Asset_Search", true],
+    ["assets", "Unity_Prefab_AuditSerializedReferences", true],
+    ["assets", "Unity_Prefab_ExplainOverrides", true],
+    ["assets", "Unity_Asset_VerifySpriteSlicesAndReferences", true],
     ["scene", "Unity_GameObject_Inspect", true],
     ["ui", "Unity_UI_VerifyScreenLayout", true],
+    ["ui", "Unity_UI_VerifyPrefabLayoutMatrix", true],
     ["ui", "Unity_UI_CaptureGameView", false],
     ["debug", "Unity_GetLensUsageReport", true],
     ["scripting", "Unity_Editor_SyncScripts", false],

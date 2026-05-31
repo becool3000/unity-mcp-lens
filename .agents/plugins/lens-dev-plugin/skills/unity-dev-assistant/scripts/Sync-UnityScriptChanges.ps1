@@ -1,6 +1,7 @@
 param(
     [string]$ProjectPath = (Get-Location).Path,
     [string[]]$ChangedPaths = @(),
+    [string[]]$ExpectedTools = @(),
     [int]$NaturalDetectTimeoutSeconds = 6,
     [int]$ForcedDetectTimeoutSeconds = 20,
     [int]$ReloadTimeoutSeconds = 120,
@@ -32,6 +33,12 @@ $scriptArgs = @(
 foreach ($changedPath in $ChangedPaths) {
     if (-not [string]::IsNullOrWhiteSpace($changedPath)) {
         $scriptArgs += @("--ChangedPaths", $changedPath)
+    }
+}
+
+foreach ($expectedTool in $ExpectedTools) {
+    if (-not [string]::IsNullOrWhiteSpace($expectedTool)) {
+        $scriptArgs += @("--ExpectedTools", $expectedTool)
     }
 }
 

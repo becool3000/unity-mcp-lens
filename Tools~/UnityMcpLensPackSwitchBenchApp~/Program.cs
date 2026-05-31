@@ -171,10 +171,10 @@ sealed class MetadataAudit(BenchmarkOptions options)
 {
     const int ExpectedFoundationToolCount = 21;
     const int ExpectedSceneToolCount = 58;
-    const int ExpectedUiToolCount = 38;
-    const int ExpectedRuntimeToolCount = 32;
+    const int ExpectedUiToolCount = 39;
+    const int ExpectedRuntimeToolCount = 33;
     const int ExpectedProjectToolCount = 43;
-    const int ExpectedAssetsToolCount = 52;
+    const int ExpectedAssetsToolCount = 56;
 
     static readonly string[] k_RequiredFoundationTools =
     [
@@ -250,6 +250,7 @@ sealed class MetadataAudit(BenchmarkOptions options)
         "Unity_UI_ApplyLayoutProperties",
         "Unity_UI_VerifyScreenLayout",
         "Unity_UI_VerifyScreenLayoutMatrix",
+        "Unity_UI_VerifyPrefabLayoutMatrix",
         "Unity_UI_PreviewCreateCanvasPrefab",
         "Unity_UI_ApplyCreateCanvasPrefab",
         "Unity_UI_VerifyRaycastAndLayout",
@@ -265,7 +266,8 @@ sealed class MetadataAudit(BenchmarkOptions options)
 
     static readonly string[] k_RequiredDebugTools =
     [
-        "Unity_GetLensUsageReport"
+        "Unity_GetLensUsageReport",
+        "Unity_PlayMode_InteractionSmoke"
     ];
 
     static readonly string[] k_RequiredRuntimeTools =
@@ -278,6 +280,7 @@ sealed class MetadataAudit(BenchmarkOptions options)
         "Unity_Runtime_SetComponentProperty",
         "Unity_Runtime_AddTemporaryComponent",
         "Unity_PlayMode_PointerInputSmoke",
+        "Unity_PlayMode_InteractionSmoke",
         "Unity_PlayMode_EnterReady",
         "Unity_Editor_ExitPlayMode",
         "Unity_Editor_SetPlayMode"
@@ -317,6 +320,7 @@ sealed class MetadataAudit(BenchmarkOptions options)
         "Unity_Asset_ApplyImportSpriteSheetAndBind",
         "Unity_Asset_VerifySpriteArrayBinding",
         "Unity_Asset_SpriteSheetVisualDiagnostics",
+        "Unity_Asset_VerifySpriteSlicesAndReferences",
         "Unity_ManageAsset",
         "Unity_Preset_Search",
         "Unity_Preset_Inspect",
@@ -328,6 +332,7 @@ sealed class MetadataAudit(BenchmarkOptions options)
         "Unity_Prefab_Instantiate",
         "Unity_Prefab_CreateFromSceneObject",
         "Unity_Prefab_GetOverrides",
+        "Unity_Prefab_ExplainOverrides",
         "Unity_Prefab_PreviewApplyOverrides",
         "Unity_Prefab_ApplyOverrides",
         "Unity_Prefab_PreviewRevertOverrides",
@@ -336,6 +341,8 @@ sealed class MetadataAudit(BenchmarkOptions options)
         "Unity_Prefab_ApplyCopyComponentSerializedValues",
         "Unity_Prefab_SetSerializedProperties",
         "Unity_Prefab_VerifySerializedProperties",
+        "Unity_Prefab_AuditSerializedReferences",
+        "Unity_UI_VerifyPrefabLayoutMatrix",
         "Unity_Resource_Write",
         "Unity_Tile_BuildSet",
         "Unity_ImportExternalModel"
@@ -457,6 +464,7 @@ sealed class MetadataAudit(BenchmarkOptions options)
         ValidateReadOnlyHint(uiTools, "Unity_UI_ApplyLayoutProperties", expected: false, failures);
         ValidateReadOnlyHint(uiTools, "Unity_UI_VerifyScreenLayout", expected: true, failures);
         ValidateReadOnlyHint(uiTools, "Unity_UI_VerifyScreenLayoutMatrix", expected: true, failures);
+        ValidateReadOnlyHint(uiTools, "Unity_UI_VerifyPrefabLayoutMatrix", expected: true, failures);
         ValidateReadOnlyHint(uiTools, "Unity_UI_PreviewCreateCanvasPrefab", expected: true, failures);
         ValidateReadOnlyHint(uiTools, "Unity_UI_ApplyCreateCanvasPrefab", expected: false, failures);
         ValidateReadOnlyHint(uiTools, "Unity_UI_VerifyRaycastAndLayout", expected: true, failures);
@@ -466,6 +474,7 @@ sealed class MetadataAudit(BenchmarkOptions options)
         ValidateReadOnlyHint(sceneTools, "Unity_Scene_PreviewInstantiatePrefabAndBind", expected: true, failures);
         ValidateReadOnlyHint(sceneTools, "Unity_Scene_ApplyInstantiatePrefabAndBind", expected: false, failures);
         ValidateReadOnlyHint(runtimeTools, "Unity_PlayMode_PointerInputSmoke", expected: false, failures);
+        ValidateReadOnlyHint(runtimeTools, "Unity_PlayMode_InteractionSmoke", expected: false, failures);
         ValidateReadOnlyHint(runtimeTools, "Unity_PlayMode_EnterReady", expected: false, failures);
         ValidateReadOnlyHint(runtimeTools, "Unity_Editor_ExitPlayMode", expected: false, failures);
         ValidateReadOnlyHint(runtimeTools, "Unity_Editor_SetPlayMode", expected: false, failures);
@@ -498,6 +507,7 @@ sealed class MetadataAudit(BenchmarkOptions options)
         ValidateReadOnlyHint(assetsTools, "Unity_Asset_ApplyImportSpriteSheetAndBind", expected: false, failures);
         ValidateReadOnlyHint(assetsTools, "Unity_Asset_VerifySpriteArrayBinding", expected: true, failures);
         ValidateReadOnlyHint(assetsTools, "Unity_Asset_SpriteSheetVisualDiagnostics", expected: true, failures);
+        ValidateReadOnlyHint(assetsTools, "Unity_Asset_VerifySpriteSlicesAndReferences", expected: true, failures);
         ValidateReadOnlyHint(assetsTools, "Unity_Preset_Search", expected: true, failures);
         ValidateReadOnlyHint(assetsTools, "Unity_Preset_Inspect", expected: true, failures);
         ValidateReadOnlyHint(assetsTools, "Unity_Preset_PreviewCreate", expected: true, failures);
@@ -508,6 +518,7 @@ sealed class MetadataAudit(BenchmarkOptions options)
         ValidateReadOnlyHint(assetsTools, "Unity_Prefab_Instantiate", expected: false, failures);
         ValidateReadOnlyHint(assetsTools, "Unity_Prefab_CreateFromSceneObject", expected: false, failures);
         ValidateReadOnlyHint(assetsTools, "Unity_Prefab_GetOverrides", expected: true, failures);
+        ValidateReadOnlyHint(assetsTools, "Unity_Prefab_ExplainOverrides", expected: true, failures);
         ValidateReadOnlyHint(assetsTools, "Unity_Prefab_PreviewApplyOverrides", expected: true, failures);
         ValidateReadOnlyHint(assetsTools, "Unity_Prefab_ApplyOverrides", expected: false, failures);
         ValidateReadOnlyHint(assetsTools, "Unity_Prefab_PreviewRevertOverrides", expected: true, failures);
@@ -516,7 +527,10 @@ sealed class MetadataAudit(BenchmarkOptions options)
         ValidateReadOnlyHint(assetsTools, "Unity_Prefab_ApplyCopyComponentSerializedValues", expected: false, failures);
         ValidateReadOnlyHint(assetsTools, "Unity_Prefab_SetSerializedProperties", expected: false, failures);
         ValidateReadOnlyHint(assetsTools, "Unity_Prefab_VerifySerializedProperties", expected: true, failures);
+        ValidateReadOnlyHint(assetsTools, "Unity_Prefab_AuditSerializedReferences", expected: true, failures);
+        ValidateReadOnlyHint(assetsTools, "Unity_UI_VerifyPrefabLayoutMatrix", expected: true, failures);
         ValidateReadOnlyHint(debugTools, "Unity_GetLensUsageReport", expected: true, failures);
+        ValidateReadOnlyHint(debugTools, "Unity_PlayMode_InteractionSmoke", expected: false, failures);
         ValidateGameObjectSchemas(sceneTools, failures);
         ValidateUiToolSchemas(uiTools, failures);
         ValidateSceneBindingSchemas(sceneTools, failures);
@@ -866,7 +880,7 @@ sealed class MetadataAudit(BenchmarkOptions options)
         ValidateSplitGameObjectSchema(
             tools,
             "Unity_Workflow_RunPlayModeVerification",
-            ["enterPlayMode", "exitAfter", "scenePath", "waitMs", "consoleCount", "componentSnapshots", "pointerSmoke", "captureGameView"],
+            ["enterPlayMode", "exitAfter", "scenePath", "waitMs", "consoleCount", "componentSnapshots", "pointerSmoke", "interactionSmoke", "captureGameView"],
             [],
             failures);
     }
@@ -901,6 +915,12 @@ sealed class MetadataAudit(BenchmarkOptions options)
             tools,
             "Unity_Asset_SpriteSheetVisualDiagnostics",
             ["assetPath", "frameCount", "frameWidth", "frameHeight", "columns", "rows", "paddingX", "paddingY", "offsetX", "offsetY", "spriteNamePrefix", "expectedSpriteNames", "alphaThreshold", "emptyAlphaCoverageThreshold", "oversizedPaddingRatio", "minUsableAreaCoverage", "textArtifactSensitivity", "maxCells"],
+            ["assetPath"],
+            failures);
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_Asset_VerifySpriteSlicesAndReferences",
+            ["assetPath", "expectedSpriteNames", "expectedSprites", "expectedSettings", "prefabPath", "prefabPaths", "under", "nameFilter", "expectedPrefabReferences", "requireAllScannedImagesUseAtlas", "includeInactive", "verifyAlpha", "alphaThreshold", "emptyAlphaCoverageThreshold", "maxPrefabs", "maxSprites", "maxFindings"],
             ["assetPath"],
             failures);
         ValidateSplitGameObjectSchema(
@@ -1011,6 +1031,24 @@ sealed class MetadataAudit(BenchmarkOptions options)
             ["prefabPath", "target", "searchMethod", "includeInactive", "checks"],
             ["checks"],
             failures);
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_Prefab_AuditSerializedReferences",
+            ["prefabPath", "prefabPaths", "under", "nameFilter", "maxPrefabs", "maxFindings", "referenceNullPolicy", "includeNestedPrefabInstances", "includeRuntimeLoadPatterns"],
+            [],
+            failures);
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_Prefab_ExplainOverrides",
+            ["target", "searchMethod", "includeInactive", "action", "overrideIds", "propertyPaths", "targetPaths", "includeNested", "applyAll", "revertAll", "maxOverrides"],
+            ["target"],
+            failures);
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_UI_VerifyPrefabLayoutMatrix",
+            ["prefabPath", "resolutions", "states", "temporaryActivations", "includeInactive", "maxElements", "maxFindings", "checks"],
+            ["prefabPath"],
+            failures);
     }
 
     static void ValidateUiToolSchemas(IReadOnlyList<ToolDescriptor> tools, List<string> failures)
@@ -1050,6 +1088,12 @@ sealed class MetadataAudit(BenchmarkOptions options)
             "Unity_UI_VerifyScreenLayoutMatrix",
             ["resolutions", "targets", "assertions", "restoreOriginal", "warmupMs"],
             ["resolutions", "targets", "assertions"],
+            failures);
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_UI_VerifyPrefabLayoutMatrix",
+            ["prefabPath", "resolutions", "states", "temporaryActivations", "includeInactive", "maxElements", "maxFindings", "checks"],
+            ["prefabPath"],
             failures);
         ValidateSplitGameObjectSchema(
             tools,
@@ -1215,6 +1259,12 @@ sealed class MetadataAudit(BenchmarkOptions options)
             "Unity_PlayMode_PointerInputSmoke",
             ["screenX", "screenY", "button", "scrollX", "scrollY", "queueInput", "stepFrames", "advanceFrames", "settleMs", "uiTarget", "uiSearchMethod", "includeInactive", "cameraTarget", "cameraSearchMethod", "layerMask", "stateTargets", "stateAssertions"],
             [],
+            failures);
+        ValidateSplitGameObjectSchema(
+            tools,
+            "Unity_PlayMode_InteractionSmoke",
+            ["scenePath", "enterPlayMode", "exitAfter", "waitMs", "consoleCount", "failFast", "steps"],
+            ["steps"],
             failures);
         ValidateSplitGameObjectSchema(
             tools,

@@ -818,7 +818,22 @@ function toolDescriptor(name, readOnlyHint, withSchemas) {
     readOnlyHint,
   };
   if (withSchemas) {
-    descriptor.inputSchema = { type: "object", properties: {} };
+    descriptor.inputSchema = name === "Unity.Editor.SyncScripts"
+      ? {
+          type: "object",
+          properties: {
+            changedPaths: { type: "array", items: { type: "string" } },
+            expectedTools: { type: "array", items: { type: "string" } },
+            force: { type: "boolean" },
+            waitForCompile: { type: "boolean" },
+            timeoutSeconds: { type: "integer" },
+            pollIntervalMs: { type: "integer" },
+            stablePollCount: { type: "integer" },
+            focusNudgeOnStaleRefresh: { type: "boolean" },
+            safeClickNudge: { type: "boolean" },
+          },
+        }
+      : { type: "object", properties: {} };
     descriptor.outputSchema = { type: "object", properties: {} };
     descriptor.annotations = { readOnlyHint };
   }
@@ -1002,6 +1017,33 @@ async function main() {
     assert.strictEqual(result.structuredContent.data.focusNudge.reason, "play_mode_transition");
     const warningKinds = result.structuredContent.data.warnings.map((warning) => warning.kind);
     assert(warningKinds.includes("script_refresh_focus_nudge"), "focus nudge diagnostics should also be summarized in warnings");
+  });
+
+  await withScenario("syncscripts-expected-tools-registry-proof", null, async (context, client) => {
+    await assertFullTools(client);
+    const result = await client.callTool("Unity_Editor_SyncScripts", {
+      waitForCompile: false,
+      timeoutSeconds: 2,
+      expectedTools: ["Unity.GetLensHealth", "Unity.Tests.Run"],
+    });
+
+    const syncCommand = context.commands.find((command) => command.type === "Unity.Editor.SyncScripts");
+    assert(syncCommand, "native SyncScripts command should be recorded");
+    assert.deepStrictEqual(
+      syncCommand.params.expectedTools,
+      ["Unity.GetLensHealth", "Unity.Tests.Run"],
+      "host should forward expectedTools to native SyncScripts for schema compatibility"
+    );
+    assert.strictEqual(result.structuredContent.success, false, "missing expected tools should block follow-up readiness");
+    assert.strictEqual(result.structuredContent.data.readyForFollowUp, false);
+    assert.strictEqual(result.structuredContent.data.status, "stale");
+    assert.strictEqual(result.structuredContent.data.toolRegistryProof.proofStatus, "stale");
+    assert(
+      result.structuredContent.data.missingExpectedTools.includes("Unity_Tests_Run"),
+      `expected Unity_Tests_Run to be reported missing; got ${JSON.stringify(result.structuredContent.data.missingExpectedTools)}`
+    );
+    const warningKinds = result.structuredContent.data.warnings.map((warning) => warning.kind);
+    assert(warningKinds.includes("tool_registry_missing_expected_tools"), "missing registry proof should be summarized in warnings");
   });
 
   await withScenario("step-verifier-wrapper", null, async (context, client) => {

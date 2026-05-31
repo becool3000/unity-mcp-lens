@@ -1,6 +1,6 @@
 {
   "name": "unity-mcp-lens",
-  "version": "0.1.0-alpha.270",
+  "version": "0.1.0-alpha.308",
   "protocolVersion": "1.0",
   "capabilities": [
     "mcp",

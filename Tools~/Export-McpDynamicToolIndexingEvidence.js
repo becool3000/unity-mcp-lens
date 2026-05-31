@@ -8,6 +8,13 @@ const requiredAssetTools = [
   "Unity_Asset_ApplyImportSpriteSheetAndBind",
   "Unity_Asset_ImportSpriteSheetAndBind",
   "Unity_Asset_VerifySpriteArrayBinding",
+  "Unity_Asset_VerifySpriteSlicesAndReferences",
+  "Unity_Prefab_AuditSerializedReferences",
+  "Unity_Prefab_ExplainOverrides",
+  "Unity_UI_VerifyPrefabLayoutMatrix",
+];
+const requiredRuntimeTools = [
+  "Unity_PlayMode_InteractionSmoke",
 ];
 
 function parseArgs(argv) {
@@ -196,8 +203,8 @@ function pickVerifierSchema(toolsListResult) {
   return verifier?.inputSchema?.properties?.expectedSpriteNames ?? null;
 }
 
-function buildPresence(names) {
-  return Object.fromEntries(requiredAssetTools.map((toolName) => [toolName, names.includes(toolName)]));
+function buildPresence(names, requiredTools) {
+  return Object.fromEntries(requiredTools.map((toolName) => [toolName, names.includes(toolName)]));
 }
 
 function schemaHasStringItems(schema) {
@@ -230,15 +237,25 @@ async function main() {
     const sawListChanged = await client.waitForNotification("notifications/tools/list_changed");
     const assetList = await client.listTools();
     const assetNames = toolNames(assetList);
-    const assetPresence = buildPresence(assetNames);
+    const assetPresence = buildPresence(assetNames, requiredAssetTools);
     const verifierSchema = pickVerifierSchema(assetList);
+    client.clearNotifications();
+    const setRuntimeResult = await client.callTool("Unity_SetToolPacks", { Packs: ["runtime"] });
+    const sawRuntimeListChanged = await client.waitForNotification("notifications/tools/list_changed");
+    const runtimeList = await client.listTools();
+    const runtimeNames = toolNames(runtimeList);
+    const runtimePresence = buildPresence(runtimeNames, requiredRuntimeTools);
 
+    const setRuntimeStructured = structuredContent(setRuntimeResult);
     const setAssetsStructured = structuredContent(setAssetsResult);
     const hostContractPass =
       setAssetsStructured?.success === true &&
+      setRuntimeStructured?.success === true &&
       sawListChanged &&
+      sawRuntimeListChanged &&
       foundationNames.length < assetNames.length &&
       requiredAssetTools.every((toolName) => assetPresence[toolName]) &&
+      requiredRuntimeTools.every((toolName) => runtimePresence[toolName]) &&
       schemaHasStringItems(verifierSchema);
 
     const evidence = {
@@ -254,6 +271,9 @@ async function main() {
         "Unity_SetToolPacks([\"assets\"])",
         "notifications/tools/list_changed",
         "tools/list foundation+assets",
+        "Unity_SetToolPacks([\"runtime\"])",
+        "notifications/tools/list_changed",
+        "tools/list foundation+runtime",
       ],
       foundationTools: {
         count: foundationNames.length,
@@ -277,6 +297,11 @@ async function main() {
         requiredPresence: assetPresence,
         verifierExpectedSpriteNamesSchema: verifierSchema,
         names: assetNames,
+      },
+      runtimeTools: {
+        count: runtimeNames.length,
+        requiredPresence: runtimePresence,
+        names: runtimeNames,
       },
       hostContractPass,
       codexComparison: {

@@ -32,6 +32,8 @@ All notable Unity MCP Lens package changes are documented here.
 - Added `Export-McpDynamicToolIndexingEvidence.ps1` plus a Codex dynamic-tool indexing evidence note for comparing raw installed-host `tools/list` results against Codex `tool_search` exposure after pack switches.
 - Added `Unity.Tools.Describe` and `Unity.Tools.ActivateAndVerify` foundation tools for live Lens tool metadata and pack activation verification when MCP client tool indexing lags pack switches.
 - Added experimental `UNITY_MCP_LENS_TOOL_SURFACE_MODE=static_all` host mode plus `Unity.Tools.Menu` so Codex can receive native per-tool schemas for all enabled tools while agents navigate through compact pack-grouped guidance.
+- Added installed-host refresh/proof helpers: `Refresh-LensInstalledHost.ps1`, `Test-LensInstalledHostProof.ps1`, and the one-command `Invoke-LensInstalledHostRefreshWorkflow.ps1` wrapper.
+- Added `docs/installed-host-refresh-proof.md` as the concise recovery path for stale installed hosts, local `file:` package refreshes, and raw MCP registry proof.
 
 ### Changed
 
@@ -65,6 +67,8 @@ All notable Unity MCP Lens package changes are documented here.
 - Extended metadata-audit coverage to the `assets` pack with a `foundation+assets=24` baseline and read-only/schema assertions for the Phase 18 sprite tools.
 - Hardened the direct model-facing Lens host so stale/broken bridge pipes are quarantined, rediscovered, and retried once for safe read-only/control-plane calls, while mutating calls return structured maybe-applied transport errors.
 - Improved Lens server install freshness so explicit refreshes bypass the metadata-only up-to-date check and source-newer-than-prebuilt dev builds republish the native host.
+- Improved local `file:` package install handling so Command Center/server refresh resolves the real Lens package root before checking source, metadata, prebuilt binaries, and publish inputs.
+- Improved installed-host refresh safety so repo helpers prove stale/current state, refuse to overwrite a running installed executable, and report raw registry proof before Codex trusts refreshed tools.
 - Improved helper readiness classification so fresh successful Lens health authority probes override stale Editor.log handshake/auth signals.
 - Normalized the `Unity.Asset.VerifySpriteArrayBinding` input schema so `expectedSpriteNames` declares string array `items`, and expanded metadata audit coverage to reject exported array input schemas without `items`.
 
@@ -91,6 +95,7 @@ All notable Unity MCP Lens package changes are documented here.
 - Post-Unity/Codex-restart raw installed-host validation confirmed `Unity.SetToolPacks(["assets"])` emits `notifications/tools/list_changed`, follow-up `tools/list` exposes all Phase 18 asset tools, and `Unity_Asset_VerifySpriteArrayBinding.expectedSpriteNames` includes string `items`; Codex `tool_search` still did not expose the verifier in the current client thread.
 - Phase 20 evidence exporter passed against `D:\BeeSurvivors`, confirming the installed Lens host contract independently of Codex's dynamic tool index.
 - Post-Codex-reload direct BeeSurvivors validation passed for `Unity.GetLensHealth`, `Unity.ListToolPacks`, `Unity.SetToolPacks` to `foundation+assets`, and `Unity.ListResources` against RoachWars assets.
+- Phase 7B-7F installed-host refresh consolidation passed static validation; live `D:\Glitch Patrol` proof correctly reports `blocked_running_host` while the old installed executable is still in use, with repo host metadata newer than installed host metadata.
 - Earlier Phase 16 metadata audit passed with `foundation=12`, `foundation+scene=32`, `foundation+ui=22`, `project=21`, and `debug=22`; the current expected baselines are `foundation=16`, `foundation+scene=39`, `foundation+ui=30`, `foundation+runtime=20`, `project=25`, `foundation+assets=28`, and live `debug=27`.
 - Phase 11 package compatibility, input-actions inspection, diagnostics, preview, and set calls emitted complete TSAM stage coverage with no failure classes.
 - Phase 12 UI hierarchy, scene binding, layout, and verify calls emitted complete TSAM stage coverage with no tool failure rows in the focused helper-driven scope.

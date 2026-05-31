@@ -16,7 +16,11 @@ const requiredAssetTools = [
   "Unity_Asset_ImportSpriteSheetAndBind",
   "Unity_Asset_VerifySpriteArrayBinding",
   "Unity_Asset_SpriteSheetVisualDiagnostics",
+  "Unity_Asset_VerifySpriteSlicesAndReferences",
   "Unity_Prefab_VerifySerializedProperties",
+  "Unity_Prefab_AuditSerializedReferences",
+  "Unity_Prefab_ExplainOverrides",
+  "Unity_UI_VerifyPrefabLayoutMatrix",
 ];
 
 const requiredBootstrapWorkflowTools = [
@@ -60,6 +64,7 @@ const projectToolNames = [
 const runtimeToolNames = [
   "Unity_Editor_SetPlayMode",
   "Unity_PlayMode_PointerInputSmoke",
+  "Unity_PlayMode_InteractionSmoke",
   "Unity_Runtime_QueryObjects",
 ];
 
@@ -75,12 +80,14 @@ const sceneToolNames = [
 
 const uiToolNames = [
   "Unity_UI_VerifyScreenLayout",
+  "Unity_UI_VerifyPrefabLayoutMatrix",
   "Unity_UI_CaptureGameView",
   "Unity_UI_ApplyEnsureHierarchy",
 ];
 
 const debugToolNames = [
   "Unity_GetLensUsageReport",
+  "Unity_PlayMode_InteractionSmoke",
 ];
 
 const assetToolNames = [
@@ -92,9 +99,13 @@ const assetToolNames = [
   "Unity_Asset_ApplyImportSpriteSheetAndBind",
   "Unity_Asset_VerifySpriteArrayBinding",
   "Unity_Asset_SpriteSheetVisualDiagnostics",
+  "Unity_Asset_VerifySpriteSlicesAndReferences",
   "Unity_ManageAsset",
   "Unity_Prefab_SetSerializedProperties",
   "Unity_Prefab_VerifySerializedProperties",
+  "Unity_Prefab_AuditSerializedReferences",
+  "Unity_Prefab_ExplainOverrides",
+  "Unity_UI_VerifyPrefabLayoutMatrix",
   "Unity_Resource_Write",
   "Unity_Tile_BuildSet",
   "Unity_ImportExternalModel",
@@ -508,26 +519,29 @@ function manifestResult(activeToolPacks, withSchemas) {
 }
 
 function fakeTools(activeToolPacks, withSchemas) {
-  const tools = foundationToolNames.map((name) => toolDescriptor(name, ["foundation"], isReadOnlyFoundationTool(name), withSchemas));
+  const tools = [];
+  for (const name of foundationToolNames) {
+    addToolDescriptor(tools, name, ["foundation"], isReadOnlyFoundationTool(name), withSchemas);
+  }
   const active = new Set((activeToolPacks || []).map((pack) => String(pack).toLowerCase()));
   const hasFull = active.has("full");
   if (hasFull || active.has("project")) {
-    tools.push(...projectToolNames.map((name) => toolDescriptor(name, ["project"], isReadOnlyTool(name), withSchemas)));
+    for (const name of projectToolNames) addToolDescriptor(tools, name, ["project"], isReadOnlyTool(name), withSchemas);
   }
   if (hasFull || active.has("runtime")) {
-    tools.push(...runtimeToolNames.map((name) => toolDescriptor(name, ["runtime"], isReadOnlyTool(name), withSchemas)));
+    for (const name of runtimeToolNames) addToolDescriptor(tools, name, ["runtime"], isReadOnlyTool(name), withSchemas);
   }
   if (hasFull || active.has("scene")) {
-    tools.push(...sceneToolNames.map((name) => toolDescriptor(name, ["scene"], isReadOnlyTool(name), withSchemas)));
+    for (const name of sceneToolNames) addToolDescriptor(tools, name, ["scene"], isReadOnlyTool(name), withSchemas);
   }
   if (hasFull || active.has("ui")) {
-    tools.push(...uiToolNames.map((name) => toolDescriptor(name, ["ui"], isReadOnlyTool(name), withSchemas)));
+    for (const name of uiToolNames) addToolDescriptor(tools, name, ["ui"], isReadOnlyTool(name), withSchemas);
   }
   if (hasFull || active.has("debug")) {
-    tools.push(...debugToolNames.map((name) => toolDescriptor(name, ["debug"], isReadOnlyTool(name), withSchemas)));
+    for (const name of debugToolNames) addToolDescriptor(tools, name, ["debug"], isReadOnlyTool(name), withSchemas);
   }
   if (hasFull || active.has("assets")) {
-    tools.push(...assetToolNames.map((name) => toolDescriptor(name, ["assets"], isReadOnlyTool(name), withSchemas)));
+    for (const name of assetToolNames) addToolDescriptor(tools, name, ["assets"], isReadOnlyTool(name), withSchemas);
   }
   return tools;
 }
@@ -686,6 +700,19 @@ function toolDescriptor(name, packs, readOnlyHint, withSchemas) {
   return descriptor;
 }
 
+function addToolDescriptor(tools, name, packs, readOnlyHint, withSchemas) {
+  const existing = tools.find((tool) => tool.name === name);
+  if (!existing) {
+    tools.push(toolDescriptor(name, packs, readOnlyHint, withSchemas));
+    return;
+  }
+
+  existing.packs = [...new Set([...(existing.packs || []), ...packs])];
+  existing.groups = [...new Set([...(existing.groups || []), ...packs])];
+  existing.readOnlyHint = existing.readOnlyHint && readOnlyHint;
+  if (existing.annotations) existing.annotations.readOnlyHint = existing.readOnlyHint;
+}
+
 function isReadOnlyTool(name) {
   return name === "Unity_Project_GetInfo" ||
     name === "Unity_Project_PackageCompatibility" ||
@@ -701,7 +728,11 @@ function isReadOnlyTool(name) {
     name === "Unity_Asset_PreviewImportSpriteSheetAndBind" ||
     name === "Unity_Asset_VerifySpriteArrayBinding" ||
     name === "Unity_Asset_SpriteSheetVisualDiagnostics" ||
-    name === "Unity_Prefab_VerifySerializedProperties";
+    name === "Unity_Asset_VerifySpriteSlicesAndReferences" ||
+    name === "Unity_Prefab_VerifySerializedProperties" ||
+    name === "Unity_Prefab_AuditSerializedReferences" ||
+    name === "Unity_Prefab_ExplainOverrides" ||
+    name === "Unity_UI_VerifyPrefabLayoutMatrix";
 }
 
 function isReadOnlyFoundationTool(name) {
@@ -808,6 +839,7 @@ function schemaFor(name) {
       },
     };
   }
+  if (name === "Unity_PlayMode_InteractionSmoke") return interactionSmokeSchema();
   if (name === "Unity_Asset_SetSerializedProperties") {
     return {
       type: "object",
@@ -833,6 +865,10 @@ function schemaFor(name) {
   if (name === "Unity_Asset_ApplyImportSpriteSheetAndBind") return importSpriteSheetSchema(false);
   if (name === "Unity_Asset_VerifySpriteArrayBinding") return verifySpriteArrayBindingSchema();
   if (name === "Unity_Asset_SpriteSheetVisualDiagnostics") return spriteSheetVisualDiagnosticsSchema();
+  if (name === "Unity_Asset_VerifySpriteSlicesAndReferences") return verifySpriteSlicesAndReferencesSchema();
+  if (name === "Unity_Prefab_AuditSerializedReferences") return prefabAuditSerializedReferencesSchema();
+  if (name === "Unity_Prefab_ExplainOverrides") return prefabExplainOverridesSchema();
+  if (name === "Unity_UI_VerifyPrefabLayoutMatrix") return uiPrefabLayoutMatrixSchema();
   if (name === "Unity_Project_BlockedLanguageScan") return blockedLanguageScanSchema();
   if (name === "Unity_Asset_Search") {
     return {
@@ -1068,6 +1104,49 @@ function captureGameViewSchema() {
   };
 }
 
+function interactionSmokeSchema() {
+  return {
+    type: "object",
+    properties: {
+      scenePath: { type: "string" },
+      enterPlayMode: { type: "boolean" },
+      exitAfter: { type: "boolean" },
+      waitMs: { type: "integer" },
+      consoleCount: { type: "integer" },
+      failFast: { type: "boolean" },
+      steps: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            type: { type: "string" },
+            label: { type: "string" },
+            target: { type: "string" },
+            targetPath: { type: "string" },
+            searchMethod: { type: "string" },
+            includeInactive: { type: "boolean" },
+            action: { type: "string" },
+            value: {},
+            screenX: { type: "number" },
+            screenY: { type: "number" },
+            key: { type: "string" },
+            keys: { type: "array", items: { type: "string" } },
+            holdFrames: { type: "integer" },
+            waitFrames: { type: "integer" },
+            waitMs: { type: "integer" },
+            expectedActive: { type: "boolean" },
+            active: { type: "boolean" },
+            componentType: { type: "string" },
+            outputPath: { type: "string" },
+          },
+          required: ["type"],
+        },
+      },
+    },
+    required: ["steps"],
+  };
+}
+
 function spriteSheetVisualDiagnosticsSchema() {
   return {
     type: "object",
@@ -1092,6 +1171,155 @@ function spriteSheetVisualDiagnosticsSchema() {
       maxCells: { type: "integer" },
     },
     required: ["assetPath"],
+  };
+}
+
+function verifySpriteSlicesAndReferencesSchema() {
+  return {
+    type: "object",
+    properties: {
+      assetPath: { type: "string" },
+      expectedSpriteNames: { type: "array", items: { type: "string" } },
+      expectedSprites: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            name: { type: "string" },
+            x: { type: "number" },
+            y: { type: "number" },
+            width: { type: "number" },
+            height: { type: "number" },
+            pixelsPerUnit: { type: "number" },
+          },
+        },
+      },
+      expectedSettings: { type: "object" },
+      prefabPath: { type: "string" },
+      prefabPaths: { type: "array", items: { type: "string" } },
+      under: { type: "string" },
+      nameFilter: { type: "string" },
+      expectedPrefabReferences: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            prefabPath: { type: "string" },
+            target: { type: "string" },
+            targetPath: { type: "string" },
+            searchMethod: { type: "string" },
+            expectedSpriteName: { type: "string" },
+          },
+        },
+      },
+      requireAllScannedImagesUseAtlas: { type: "boolean" },
+      includeInactive: { type: "boolean" },
+      verifyAlpha: { type: "boolean" },
+      alphaThreshold: { type: "number" },
+      emptyAlphaCoverageThreshold: { type: "number" },
+      maxPrefabs: { type: "integer" },
+      maxSprites: { type: "integer" },
+      maxFindings: { type: "integer" },
+    },
+    required: ["assetPath"],
+  };
+}
+
+function prefabAuditSerializedReferencesSchema() {
+  return {
+    type: "object",
+    properties: {
+      prefabPath: { type: "string" },
+      prefabPaths: { type: "array", items: { type: "string" } },
+      under: { type: "string" },
+      nameFilter: { type: "string" },
+      maxPrefabs: { type: "integer" },
+      maxFindings: { type: "integer" },
+      referenceNullPolicy: { type: "string", enum: ["broken_only", "likely_required", "all"] },
+      includeNestedPrefabInstances: { type: "boolean" },
+      includeRuntimeLoadPatterns: { type: "boolean" },
+    },
+    required: [],
+  };
+}
+
+function prefabExplainOverridesSchema() {
+  return {
+    type: "object",
+    properties: {
+      target: {},
+      searchMethod: { type: "string" },
+      includeInactive: { type: "boolean" },
+      action: { type: "string", enum: ["apply", "revert", "both"] },
+      overrideIds: { type: "array", items: { type: "string" } },
+      propertyPaths: { type: "array", items: { type: "string" } },
+      targetPaths: { type: "array", items: { type: "string" } },
+      includeNested: { type: "boolean" },
+      applyAll: { type: "boolean" },
+      revertAll: { type: "boolean" },
+      maxOverrides: { type: "integer" },
+    },
+    required: ["target"],
+  };
+}
+
+function uiPrefabLayoutMatrixSchema() {
+  return {
+    type: "object",
+    properties: {
+      prefabPath: { type: "string" },
+      resolutions: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            key: { type: "string" },
+            width: { type: "integer" },
+            height: { type: "integer" },
+          },
+          required: ["width", "height"],
+        },
+      },
+      states: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            name: { type: "string" },
+            temporaryActivations: temporaryActivationsSchema(),
+          },
+        },
+      },
+      temporaryActivations: temporaryActivationsSchema(),
+      includeInactive: { type: "boolean" },
+      maxElements: { type: "integer" },
+      maxFindings: { type: "integer" },
+      checks: {
+        type: "object",
+        properties: {
+          boundsWithinCanvas: { type: "boolean" },
+          textOverflow: { type: "boolean" },
+          zeroOrNegativeSize: { type: "boolean" },
+        },
+      },
+    },
+    required: ["prefabPath"],
+  };
+}
+
+function temporaryActivationsSchema() {
+  return {
+    type: "array",
+    items: {
+      type: "object",
+      properties: {
+        target: { type: "string" },
+        targetPath: { type: "string" },
+        searchMethod: { type: "string" },
+        includeInactive: { type: "boolean" },
+        active: { type: "boolean" },
+      },
+    },
   };
 }
 
@@ -1183,6 +1411,86 @@ function assertBatchInvokeSchema(tools) {
   );
 }
 
+function assertPrefabLayoutMatrixSchema(tools) {
+  assertReadOnlyHint(tools, "Unity_UI_VerifyPrefabLayoutMatrix", true);
+  assertToolSchemaProperties(tools, "Unity_UI_VerifyPrefabLayoutMatrix", [
+    "prefabPath",
+    "resolutions",
+    "states",
+    "temporaryActivations",
+    "includeInactive",
+    "maxElements",
+    "maxFindings",
+    "checks",
+  ], ["prefabPath"]);
+}
+
+function assertPrefabExplainOverridesSchema(tools) {
+  assertReadOnlyHint(tools, "Unity_Prefab_ExplainOverrides", true);
+  assertToolSchemaProperties(tools, "Unity_Prefab_ExplainOverrides", [
+    "target",
+    "searchMethod",
+    "includeInactive",
+    "action",
+    "overrideIds",
+    "propertyPaths",
+    "targetPaths",
+    "includeNested",
+    "applyAll",
+    "revertAll",
+    "maxOverrides",
+  ], ["target"]);
+}
+
+function assertSpriteSliceReferenceVerifierSchema(tools) {
+  assertReadOnlyHint(tools, "Unity_Asset_VerifySpriteSlicesAndReferences", true);
+  assertToolSchemaProperties(tools, "Unity_Asset_VerifySpriteSlicesAndReferences", [
+    "assetPath",
+    "expectedSpriteNames",
+    "expectedSprites",
+    "expectedSettings",
+    "prefabPath",
+    "prefabPaths",
+    "under",
+    "nameFilter",
+    "expectedPrefabReferences",
+    "requireAllScannedImagesUseAtlas",
+    "includeInactive",
+    "verifyAlpha",
+    "alphaThreshold",
+    "emptyAlphaCoverageThreshold",
+    "maxPrefabs",
+    "maxSprites",
+    "maxFindings",
+  ], ["assetPath"]);
+}
+
+function assertInteractionSmokeSchema(tools) {
+  assertReadOnlyHint(tools, "Unity_PlayMode_InteractionSmoke", false);
+  assertToolSchemaProperties(tools, "Unity_PlayMode_InteractionSmoke", [
+    "scenePath",
+    "enterPlayMode",
+    "exitAfter",
+    "waitMs",
+    "consoleCount",
+    "failFast",
+    "steps",
+  ], ["steps"]);
+  const tool = tools.find((item) => item.name === "Unity_PlayMode_InteractionSmoke");
+  const stepSchema = tool.inputSchema.properties.steps.items;
+  assert(stepSchema && stepSchema.properties, "Unity_PlayMode_InteractionSmoke steps.items should expose properties");
+  for (const propertyName of ["type", "key", "keys", "holdFrames", "waitFrames"]) {
+    assert(
+      Object.prototype.hasOwnProperty.call(stepSchema.properties, propertyName),
+      `Unity_PlayMode_InteractionSmoke step schema should include ${propertyName}`,
+    );
+  }
+  assert(
+    Array.isArray(stepSchema.required) && stepSchema.required.includes("type"),
+    "Unity_PlayMode_InteractionSmoke step schema should require type",
+  );
+}
+
 function assertToolsListFacadePayload(result, expectedNames) {
   assert.strictEqual(result.isError, false, "Unity_Tools_List should not return an MCP error");
   assert.strictEqual(result.structuredContent.success, true, "Unity_Tools_List should report success");
@@ -1246,6 +1554,11 @@ function assertLensDevPluginManifest(pluginConfig) {
     "Unity_Project_BlockedLanguageScan",
     "Unity_Tests_Run",
     "Unity_UI_CaptureGameView",
+    "Unity_PlayMode_InteractionSmoke",
+    "Unity_Prefab_AuditSerializedReferences",
+    "Unity_Prefab_ExplainOverrides",
+    "Unity_Asset_VerifySpriteSlicesAndReferences",
+    "Unity_UI_VerifyPrefabLayoutMatrix",
   ], "Lens plugin manifest tools");
   for (const tool of manifest.tools) {
     assert(tool.name && typeof tool.name === "string", "Lens plugin manifest tool should include name");
@@ -1321,6 +1634,21 @@ async function runDynamicPacksScenario() {
     assert(assetNames.includes("Unity_Tools_List"), "foundation+assets tools/list should keep Unity_Tools_List");
     assert(assetNames.includes("Unity_Tools_Invoke"), "foundation+assets tools/list should keep Unity_Tools_Invoke");
     assert(assetNames.includes("Unity_Tools_BatchInvoke"), "foundation+assets tools/list should keep Unity_Tools_BatchInvoke");
+    assertReadOnlyHint(assetsList.tools, "Unity_Prefab_AuditSerializedReferences", true);
+    assertSpriteSliceReferenceVerifierSchema(assetsList.tools);
+    assertPrefabExplainOverridesSchema(assetsList.tools);
+    assertToolSchemaProperties(assetsList.tools, "Unity_Prefab_AuditSerializedReferences", [
+      "prefabPath",
+      "prefabPaths",
+      "under",
+      "nameFilter",
+      "maxPrefabs",
+      "maxFindings",
+      "referenceNullPolicy",
+      "includeNestedPrefabInstances",
+      "includeRuntimeLoadPatterns",
+    ], []);
+    assertPrefabLayoutMatrixSchema(assetsList.tools);
     assertArraySchemasHaveItems(assetsList.tools);
 
     const verifyResult = await client.callTool("Unity_Tools_ActivateAndVerify", {
@@ -1330,6 +1658,39 @@ async function runDynamicPacksScenario() {
     assert.strictEqual(verifyResult.structuredContent.success, true, "Unity_Tools_ActivateAndVerify should succeed");
     assert.deepStrictEqual(verifyResult.structuredContent.data.missingFromClient, []);
     assert.strictEqual(verifyResult.structuredContent.data.clientSurface.serverSurfaceVerified, true);
+
+    const uiNotificationCount = client.notificationCount("notifications/tools/list_changed");
+    const setUiResult = await client.callTool("Unity_SetToolPacks", { Packs: ["ui"] });
+    assert.strictEqual(setUiResult.structuredContent.success, true, "Unity_SetToolPacks ui should succeed");
+    assert.deepStrictEqual(setUiResult.structuredContent.data.activeToolPacks, ["foundation", "ui"]);
+    await client.waitForNotification("notifications/tools/list_changed", uiNotificationCount);
+
+    const uiList = await client.listTools();
+    const uiNames = uiList.tools.map((tool) => tool.name);
+    assert(uiNames.includes("Unity_UI_VerifyPrefabLayoutMatrix"), "foundation+ui tools/list should expose Unity_UI_VerifyPrefabLayoutMatrix");
+    assertPrefabLayoutMatrixSchema(uiList.tools);
+
+    const runtimeNotificationCount = client.notificationCount("notifications/tools/list_changed");
+    const setRuntimeResult = await client.callTool("Unity_SetToolPacks", { Packs: ["runtime"] });
+    assert.strictEqual(setRuntimeResult.structuredContent.success, true, "Unity_SetToolPacks runtime should succeed");
+    assert.deepStrictEqual(setRuntimeResult.structuredContent.data.activeToolPacks, ["foundation", "runtime"]);
+    await client.waitForNotification("notifications/tools/list_changed", runtimeNotificationCount);
+
+    const runtimeList = await client.listTools();
+    const runtimeNames = runtimeList.tools.map((tool) => tool.name);
+    assert(runtimeNames.includes("Unity_PlayMode_InteractionSmoke"), "foundation+runtime tools/list should expose Unity_PlayMode_InteractionSmoke");
+    assertInteractionSmokeSchema(runtimeList.tools);
+
+    const debugNotificationCount = client.notificationCount("notifications/tools/list_changed");
+    const setDebugResult = await client.callTool("Unity_SetToolPacks", { Packs: ["debug"] });
+    assert.strictEqual(setDebugResult.structuredContent.success, true, "Unity_SetToolPacks debug should succeed");
+    assert.deepStrictEqual(setDebugResult.structuredContent.data.activeToolPacks, ["foundation", "debug"]);
+    await client.waitForNotification("notifications/tools/list_changed", debugNotificationCount);
+
+    const debugList = await client.listTools();
+    const debugNames = debugList.tools.map((tool) => tool.name);
+    assert(debugNames.includes("Unity_PlayMode_InteractionSmoke"), "foundation+debug tools/list should expose Unity_PlayMode_InteractionSmoke");
+    assertInteractionSmokeSchema(debugList.tools);
   } finally {
     if (client) await client.dispose().catch(() => {});
     await context.dispose();
@@ -1354,8 +1715,13 @@ async function runStaticAllScenario() {
       "Unity_Project_BlockedLanguageScan",
       "Unity_Tests_Run",
       "Unity_Editor_SetPlayMode",
+      "Unity_PlayMode_InteractionSmoke",
       ...requiredBootstrapWorkflowTools,
       "Unity_Asset_Search",
+      "Unity_Asset_VerifySpriteSlicesAndReferences",
+      "Unity_Prefab_AuditSerializedReferences",
+      "Unity_Prefab_ExplainOverrides",
+      "Unity_UI_VerifyPrefabLayoutMatrix",
       "Unity_GameObject_Inspect",
       "Unity_Camera_FitComposition",
       "Unity_Scene_PreviewGridBoardLayout",
@@ -1378,6 +1744,7 @@ async function runStaticAllScenario() {
     assertReadOnlyHint(staticList.tools, "Unity_Workflow_RunGpuSimulationProbe", false);
     assertReadOnlyHint(staticList.tools, "Unity_Workflow_VerifyRuntimePackSelection", false);
     assertReadOnlyHint(staticList.tools, "Unity_Workflow_SelectPackThroughMainMenu", false);
+    assertInteractionSmokeSchema(staticList.tools);
     assertReadOnlyHint(staticList.tools, "Unity_Tests_Run", false);
     assertReadOnlyHint(staticList.tools, "Unity_Project_BlockedLanguageScan", true);
     assertReadOnlyHint(staticList.tools, "Unity_Camera_FitComposition", false);
@@ -1386,6 +1753,21 @@ async function runStaticAllScenario() {
     assertReadOnlyHint(staticList.tools, "Unity_Scene_PreviewBulkMutation", true);
     assertReadOnlyHint(staticList.tools, "Unity_Scene_ApplyBulkMutation", false);
     assertReadOnlyHint(staticList.tools, "Unity_UI_CaptureGameView", false);
+    assertReadOnlyHint(staticList.tools, "Unity_Prefab_AuditSerializedReferences", true);
+    assertSpriteSliceReferenceVerifierSchema(staticList.tools);
+    assertPrefabExplainOverridesSchema(staticList.tools);
+    assertPrefabLayoutMatrixSchema(staticList.tools);
+    assertToolSchemaProperties(staticList.tools, "Unity_Prefab_AuditSerializedReferences", [
+      "prefabPath",
+      "prefabPaths",
+      "under",
+      "nameFilter",
+      "maxPrefabs",
+      "maxFindings",
+      "referenceNullPolicy",
+      "includeNestedPrefabInstances",
+      "includeRuntimeLoadPatterns",
+    ], []);
     assertToolSchemaProperties(staticList.tools, "Unity_UI_CaptureGameView", [
       "OutputPath",
       "Width",
@@ -1406,12 +1788,17 @@ async function runStaticAllScenario() {
       "Unity_Tools_BatchInvoke",
       "Unity_Project_BlockedLanguageScan",
       "Unity_Tests_Run",
+      "Unity_PlayMode_InteractionSmoke",
+      "Unity_Prefab_AuditSerializedReferences",
+      "Unity_Prefab_ExplainOverrides",
+      "Unity_Asset_VerifySpriteSlicesAndReferences",
+      "Unity_UI_VerifyPrefabLayoutMatrix",
     ]);
     assert.strictEqual(groupedListResult.structuredContent.data.groupBy, "pack");
     assert(groupedListResult.structuredContent.data.groups.some((group) => group.id === "foundation"), "Unity_Tools_List should include a foundation group");
 
     const flatListResult = await client.callTool("Unity_Tools_List", { groupBy: "flat" });
-    assertToolsListFacadePayload(flatListResult, ["Unity_Project_BlockedLanguageScan", "Unity_Tests_Run"]);
+    assertToolsListFacadePayload(flatListResult, ["Unity_Project_BlockedLanguageScan", "Unity_Tests_Run", "Unity_PlayMode_InteractionSmoke", "Unity_Prefab_AuditSerializedReferences", "Unity_Prefab_ExplainOverrides", "Unity_Asset_VerifySpriteSlicesAndReferences", "Unity_UI_VerifyPrefabLayoutMatrix"]);
     assert.strictEqual(flatListResult.structuredContent.data.groupBy, "flat");
     const flatNames = flatListResult.structuredContent.data.tools.map((row) => row.name);
     assert.deepStrictEqual([...flatNames].sort((a, b) => a.localeCompare(b)), flatNames, "Unity_Tools_List flat tools should be sorted");
@@ -1538,8 +1925,13 @@ async function runStaticAllScenario() {
       "Unity_Project_BlockedLanguageScan",
       "Unity_Tests_Run",
       "Unity_Editor_SetPlayMode",
+      "Unity_PlayMode_InteractionSmoke",
       ...requiredBootstrapWorkflowTools,
       "Unity_Asset_Search",
+      "Unity_Asset_VerifySpriteSlicesAndReferences",
+      "Unity_Prefab_AuditSerializedReferences",
+      "Unity_Prefab_ExplainOverrides",
+      "Unity_UI_VerifyPrefabLayoutMatrix",
       "Unity_GameObject_Inspect",
       "Unity_Camera_FitComposition",
       "Unity_Scene_PreviewGridBoardLayout",
@@ -1573,7 +1965,12 @@ async function runDefaultStaticAllScenario() {
       "Unity_Project_PackageCompatibility",
       "Unity_Project_BlockedLanguageScan",
       "Unity_Tests_Run",
+      "Unity_PlayMode_InteractionSmoke",
       "Unity_Asset_Search",
+      "Unity_Asset_VerifySpriteSlicesAndReferences",
+      "Unity_Prefab_AuditSerializedReferences",
+      "Unity_Prefab_ExplainOverrides",
+      "Unity_UI_VerifyPrefabLayoutMatrix",
       "Unity_Camera_FitComposition",
       "Unity_Scene_PreviewGridBoardLayout",
       "Unity_Scene_ApplyGridBoardLayout",
@@ -1582,6 +1979,10 @@ async function runDefaultStaticAllScenario() {
       "Unity_UI_VerifyScreenLayout",
       "Unity_UI_CaptureGameView",
     ], "default startup tools/list should be static_all");
+    assertPrefabLayoutMatrixSchema(list.tools);
+    assertPrefabExplainOverridesSchema(list.tools);
+    assertSpriteSliceReferenceVerifierSchema(list.tools);
+    assertInteractionSmokeSchema(list.tools);
     assertToolSchemaProperties(list.tools, "Unity_UI_CaptureGameView", [
       "OutputPath",
       "Width",
@@ -1591,6 +1992,19 @@ async function runDefaultStaticAllScenario() {
       "VerifyImageDimensions",
       "WaitForFileTimeoutMs",
     ], ["OutputPath"]);
+    assertReadOnlyHint(list.tools, "Unity_Prefab_AuditSerializedReferences", true);
+    assertPrefabLayoutMatrixSchema(list.tools);
+    assertToolSchemaProperties(list.tools, "Unity_Prefab_AuditSerializedReferences", [
+      "prefabPath",
+      "prefabPaths",
+      "under",
+      "nameFilter",
+      "maxPrefabs",
+      "maxFindings",
+      "referenceNullPolicy",
+      "includeNestedPrefabInstances",
+      "includeRuntimeLoadPatterns",
+    ], []);
 
     const menuResultPayload = await client.callTool("Unity_Tools_Menu", {});
     assert.strictEqual(menuResultPayload.structuredContent.success, true, "Unity_Tools_Menu should succeed in default mode");

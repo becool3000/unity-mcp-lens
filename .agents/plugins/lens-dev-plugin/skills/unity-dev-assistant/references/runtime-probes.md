@@ -1,8 +1,10 @@
 # Runtime Probes
 
-Use runtime Lens tools first for Play Mode verification: `Unity.Runtime.QueryObjects`,
-`Unity.Runtime.GetComponentSnapshot`, `Unity.Runtime.InvokeComponentMethod`,
-`Unity.Runtime.SetComponentProperty`, and `Unity.Runtime.AddTemporaryComponent`.
+Use runtime Lens tools first for Play Mode verification: `Unity.PlayMode.InteractionSmoke`
+for bounded manual-style UI/pointer/key/wait/snapshot/capture sequences,
+`Unity.Runtime.QueryObjects`, `Unity.Runtime.GetComponentSnapshot`,
+`Unity.Runtime.InvokeComponentMethod`, `Unity.Runtime.SetComponentProperty`, and
+`Unity.Runtime.AddTemporaryComponent`.
 Use `Invoke-UnityRunCommand.js` on macOS/Linux or `Invoke-UnityRunCommand.ps1`
 on Windows only when the native runtime tools cannot answer the question.
 
@@ -29,12 +31,19 @@ If the UI shows a new state but the side effect did not happen, suspect that the
 
 For visual ownership diagnostics, prefer authoring and runtime Lens tools before writing custom probe code:
 
-- `Unity.Asset.PreviewImportSpriteSheetAndBind`, `Unity.Asset.ApplyImportSpriteSheetAndBind`, and `Unity.Asset.VerifySpriteArrayBinding` for sprite-sheet import and binding workflows
+- `Unity.Asset.PreviewImportSpriteSheetAndBind`, `Unity.Asset.ApplyImportSpriteSheetAndBind`, `Unity.Asset.VerifySpriteArrayBinding`, and `Unity.Asset.VerifySpriteSlicesAndReferences` for sprite-sheet import, slice, atlas-reference, and binding workflows
 - `Unity.Prefab.Inspect`, `Unity.Prefab.GetOverrides`, and prefab serialized-property tools for narrow prefab asset checks
 - `Get-UnityVisualOwnership.ps1` for runtime scale, tint, sprite, bounds, and baseline inspection
 
 Helper scripts are acceptable when they wrap the Lens path or when the current
 client session cannot expose the native tool directly.
+
+For non-test manual sanity checks, prefer `Unity.PlayMode.InteractionSmoke`
+before custom Play Mode `Unity_RunCommand` snippets. Keep each run short and
+bounded: enter Play Mode only when needed, click or invoke one UI control,
+press a key such as `C` or `Escape` only when that interaction is relevant,
+collect snapshots/captures/console delta, and exit Play Mode by default.
+Treat an unsupported key delivery result as evidence, not success.
 
 After a mutating `Unity_RunCommand`, run one narrow verification probe first. Do not jump straight to a broad scene or playtest validation pass.
 

@@ -1,6 +1,6 @@
 ---
 name: "unity-dev-assistant"
-description: "Lens Dev Plugin v0.1.7. Use when Codex is working in a Unity project and needs the full Unity development workflow: fast HealthCheckFirst status checks, Lens bridge-authoritative editor access, static_all tool-surface handling, Unity.Tools.List/Invoke/BatchInvoke client fallback facades, compile-idle gating, safe paused StepVerifier play-mode checks, runtime probes, FallingSands Main Menu pack selection, FallingSands GPU probes, screenshot-assisted validation, or edit-mode versus play-mode ownership-drift diagnosis."
+description: "Lens Dev Plugin v0.1.17. Use when Codex is working in a Unity project and needs the full Unity development workflow: fast HealthCheckFirst status checks, Lens bridge-authoritative editor access, static_all tool-surface handling, Unity.Tools.List/Invoke/BatchInvoke client fallback facades, target-project script-sync registry proof, documented installed-host refresh and raw registry proof, safe paused StepVerifier and manual-style InteractionSmoke play-mode checks, runtime probes, FallingSands Main Menu pack selection, FallingSands GPU probes, screenshot-assisted validation, prefab layout matrices, prefab override explainers, sprite slice/reference verification, or edit-mode versus play-mode ownership-drift diagnosis."
 ---
 
 # Unity Dev Assistant
@@ -9,7 +9,7 @@ Use this as the primary Unity workflow skill. It depends on [$unity-mcp-bridge](
 
 ## Version Marker
 
-- Plugin guidance version: `Lens Dev Plugin v0.1.7`
+- Plugin guidance version: `Lens Dev Plugin v0.1.17`
 - Expected installed Lens host: `0.1.0-alpha.24` or newer
 - If Codex shows an older Lens Dev Plugin version, refresh the plugin cache from the repo-local source before trusting this skill's installed copy.
 
@@ -78,7 +78,7 @@ or YAML edits.
 - Preview backend changes: `Unity.ProjectSettings.PreviewActiveInputHandler`
 - Apply backend changes: `Unity.ProjectSettings.SetActiveInputHandler`
 - Use `Unity.RunCommand` only for project-specific probes not covered by Lens tools.
-- For FallingSands Main Menu pack selection, prefer `Unity.Workflow.SelectPackThroughMainMenu`. For other play-mode UI state and interaction, prefer `Unity.UI.QueryRuntimeLayout` and `Unity.UI.InvokeControl` before project-specific `Unity.RunCommand` snippets.
+- For FallingSands Main Menu pack selection, prefer `Unity.Workflow.SelectPackThroughMainMenu`. For other bounded play-mode sanity probes, prefer `Unity.PlayMode.InteractionSmoke` for short UI/pointer/key/wait/snapshot/capture sequences before project-specific `Unity.RunCommand` snippets.
 - Treat active input handler changes as editor-authored ProjectSettings mutations that may need script reload or editor restart before defines and devices settle.
 
 ## Authoring-First Tool Preference
@@ -87,10 +87,10 @@ Use the Phase 1-6 authoring surfaces as the first path for durable work:
 
 - Scene authoring: `Unity.GameObject.PreviewCreate`/`Create`, object/change/component preview/apply tools, `Unity.Scene.SetSerializedProperties`, `Unity.Scene.PreviewAssignObjectReferences`, `Unity.Scene.ApplyAssignObjectReferences`, `Unity.Scene.GetDirtyState`, and `Unity.Scene.Save`.
 - Component reuse: `Unity.Component.Search`, `Unity.Component.ResolveCapability`, `Unity.Component.InspectSchema`, `Unity.Scene.FindComponents`, and `Unity.Authoring.SuggestReusePlan`.
-- Prefabs and overrides: `Unity.Prefab.Inspect`, `Unity.Prefab.Instantiate`, `Unity.Prefab.CreateFromSceneObject`, `Unity.Prefab.GetOverrides`, selected preview/apply or preview/revert override tools, `Unity.Prefab.SetSerializedProperties`, and `Unity.Prefab.VerifySerializedProperties`.
+- Prefabs and overrides: `Unity.Prefab.Inspect`, `Unity.Prefab.Instantiate`, `Unity.Prefab.CreateFromSceneObject`, `Unity.Prefab.GetOverrides`, read-only `Unity.Prefab.ExplainOverrides`, selected preview/apply or preview/revert override tools, `Unity.Prefab.SetSerializedProperties`, `Unity.Prefab.VerifySerializedProperties`, and read-only `Unity.Prefab.AuditSerializedReferences`.
 - Presets and copy-from-existing: `Unity.Preset.Search`, `Unity.Preset.Inspect`, `Unity.Preset.PreviewCreate`/`Create` for reusable component preset assets, preset preview/apply tools, and scene/prefab component serialized-value copy tools with explicit `referencePolicy`.
 - Package capabilities: `Unity.Package.ResolveCapability` and `Unity.Package.PreviewInstallForCapability`; installation remains preview-only until the user explicitly approves.
-- Workflow wrappers: `Unity.Workflow.AuthorSceneObject`, `Unity.Workflow.AuthorPrefab`, `Unity.Workflow.ConfigureExistingComponent`, and `Unity.Workflow.RunPlayModeVerification` when a higher-level authoring flow is useful. These wrappers still preserve discovery, preview/apply, dirty-state, and verification evidence.
+- Workflow wrappers: `Unity.Workflow.AuthorSceneObject`, `Unity.Workflow.AuthorPrefab`, `Unity.Workflow.ConfigureExistingComponent`, and `Unity.Workflow.RunPlayModeVerification` when a higher-level authoring flow is useful. `RunPlayModeVerification` can delegate bounded interaction steps through `interactionSmoke`. These wrappers still preserve discovery, preview/apply, dirty-state, and verification evidence.
 
 ## Quick Flow
 
@@ -137,10 +137,12 @@ Use the Phase 1-6 authoring surfaces as the first path for durable work:
    - `1.0s` post-idle settle
    `Unity_RunCommand` is the exception in healthy play mode: use the helper, let it prove direct Lens health plus compact play-state health, and allow it to bypass helper-side idle wait when safe.
 8. After external edits to compile-affecting files (`*.cs`, `*.asmdef`, `*.asmref`, `*.rsp`, package manifest changes), run `scripts/Sync-UnityScriptChanges.js` on macOS/Linux or `scripts/Sync-UnityScriptChanges.ps1` on Windows before the next Unity-side action.
-   - The helper calls `Unity.Editor.SyncScripts`; model-facing calls now wait through scheduled refresh/reload windows and should return `readyForFollowUp=true` only when the editor is safe for follow-up Unity actions.
+   - The helper calls `Unity.Editor.SyncScripts`; model-facing calls now wait through scheduled refresh/reload windows and should return `readyForFollowUp=true` only when the editor is safe, the bridge/tool registry is reacquired, no new console errors exist, assembly proof is not stale, and any `expectedTools` are present.
+   - After Lens package source edits, pass the changed repo paths and likely new tool names with `-ExpectedTools`; Lens maps local `file:` package paths into `Packages/<packageName>/...` for the target Unity project and reports registry proof.
+   - If new host tools still appear missing after package edits, prefer `C:\unity-mcp-lens\Tools~\Invoke-LensInstalledHostRefreshWorkflow.ps1 -ProjectPath <project> -WaitForHostExitSeconds 10` to prove stale/current state, refresh when no installed-host process is using the stable exe, and raw-probe the installed executable/version/tool registry. If it reports `blocked_running_host`, restart/reconnect the Codex MCP host or use Command Center, then rerun the workflow before trusting the current Codex MCP process. See `C:\unity-mcp-lens\docs\installed-host-refresh-proof.md`.
    - Empty `changedPaths` with no force should still be a fast no-op.
    - If normal sync returns `pending_refresh`, `source_newer_than_assembly`, `local_package_source_newer_than_assembly`, no compile observed, or stale assembly proof after the short wait, retry once with `-FocusNudgeOnStaleRefresh` on Windows. This focuses the project-matched Unity editor and performs a tiny safe title-bar/chrome click, then waits for compile/import/update and rechecks console plus assembly proof.
-   - Do not treat the click itself as proof. Success still requires Lens health, zero new console errors, editor idle, and updated/non-stale assembly proof.
+   - Do not treat the click itself as proof. Success still requires Lens health, zero new console errors, editor idle, updated/non-stale assembly proof, and current tool-registry proof.
    - Treat transient pack-restore or compact-state failures during an expected reload window as recoverable unless direct Lens health also fails.
    - Treat `newConsoleErrorsDetected=true` as the sync failure signal. Treat `staleConsoleErrorsPresent=true` as old console state unless new errors are also reported.
    - If compile/play behavior looks wrong after file edits, run `scripts/Test-UnitySourceFileIntegrity.ps1` on Windows to check for NUL-byte or invalid UTF-8 source corruption before interpreting bridge failures.
@@ -175,7 +177,7 @@ Use the Phase 1-6 authoring surfaces as the first path for durable work:
    - sprite import or serialized reference binding
    - motion or presentation retuning
    Do not mix both concerns in one broad probe unless you already know the ownership chain.
-   Prefer `Unity.Asset.PreviewImportSpriteSheetAndBind`, `Unity.Asset.ApplyImportSpriteSheetAndBind`, and `Unity.Asset.VerifySpriteArrayBinding` before importer scripts, YAML reads, or project-specific `Unity.RunCommand` binding probes.
+   Prefer `Unity.Asset.PreviewImportSpriteSheetAndBind`, `Unity.Asset.ApplyImportSpriteSheetAndBind`, `Unity.Asset.VerifySpriteArrayBinding`, and `Unity.Asset.VerifySpriteSlicesAndReferences` before importer scripts, YAML reads, or project-specific `Unity.RunCommand` binding probes.
 19. When authored scale, tint, sprite assignment, or motion does not stick, use the visual-ownership triage path before changing values again:
    - prefab local scale
    - child renderer local scale
@@ -187,13 +189,13 @@ Use the Phase 1-6 authoring surfaces as the first path for durable work:
    - bind serialized scene refs deterministically
    - save the scene through `Unity.Scene.Save` only when the user has accepted the durable edit or explicitly requested persistence
    - verify the subtree exists on disk before removing or disabling fallback creation
-21. For deterministic sprite importer and binding changes, prefer `Unity.Asset.PreviewImportSpriteSheetAndBind`, `Unity.Asset.ApplyImportSpriteSheetAndBind`, and `Unity.Asset.VerifySpriteArrayBinding`; use importer helper scripts only when the native tool surface is unavailable.
-22. For narrow prefab field verification after a sprite or property mutation, prefer `Unity.Prefab.VerifySerializedProperties`, `Unity.Prefab.Inspect`, `Unity.Prefab.GetOverrides`, and prefab serialized-property tools; use `scripts/Verify-UnityPrefabSerializedFields.ps1` as a helper fallback.
+21. For deterministic sprite importer and binding changes, prefer `Unity.Asset.PreviewImportSpriteSheetAndBind`, `Unity.Asset.ApplyImportSpriteSheetAndBind`, `Unity.Asset.VerifySpriteArrayBinding`, and read-only `Unity.Asset.VerifySpriteSlicesAndReferences`; use importer helper scripts only when the native tool surface is unavailable.
+22. For prefab reference hygiene, first use read-only `Unity.Prefab.AuditSerializedReferences` to sweep prefab assets for missing scripts, broken object references, unassigned UI/visual assets, runtime sprite/material/texture load patterns, and broken nested prefab instances. For UI prefab layout matrices, use `Unity.UI.VerifyPrefabLayoutMatrix` to load the prefab in an isolated preview canvas, toggle named states, and check bounds/text overflow across resolutions. Before applying or reverting prefab overrides, use `Unity.Prefab.ExplainOverrides` to confirm connection state, selected overrides, nested-prefab risk, and normalized next-step arguments. For narrow field verification after a sprite or property mutation, prefer `Unity.Prefab.VerifySerializedProperties`, `Unity.Prefab.Inspect`, `Unity.Prefab.GetOverrides`, and prefab serialized-property tools; use `scripts/Verify-UnityPrefabSerializedFields.ps1` as a helper fallback.
 23. For runtime visual ownership inspection, use `scripts/Get-UnityVisualOwnership.ps1`, which wraps `Unity.Runtime.GetVisualBoundsSnapshot` with ownership output enabled.
 24. For scene object-reference fields or arrays that should bind to authored scene objects, prefer `Unity.Scene.PreviewAssignObjectReferences` and `Unity.Scene.ApplyAssignObjectReferences`; use `scripts/Bind-UnitySceneSerializedReferences.ps1` only as a helper fallback.
 25. For persistent scene UI subtree repair or creation, prefer `Unity.UI.PreviewEnsureHierarchy` and `Unity.UI.ApplyEnsureHierarchy`; use `scripts/Ensure-UnityUiHierarchy.ps1` only as a helper fallback.
 26. For deterministic UI layout edits on authored scene objects, prefer `Unity.UI.PreviewLayoutProperties` and `Unity.UI.ApplyLayoutProperties`; use `scripts/Set-UnityUiLayout.ps1` only as a helper fallback.
-27. For measured HUD/layout assertions such as inside-screen, right-of, below, below-center, or ordered-stack checks, use `scripts/Verify-UnityUiScreenLayout.ps1` or `Unity.UI.VerifyScreenLayout`; when a layout matrix is required, use `Unity.UI.VerifyScreenLayoutMatrix`.
+27. For measured HUD/layout assertions such as inside-screen, right-of, below, below-center, or ordered-stack checks, use `scripts/Verify-UnityUiScreenLayout.ps1` or `Unity.UI.VerifyScreenLayout`; when a live scene/Game view layout matrix is required, use `Unity.UI.VerifyScreenLayoutMatrix`; when the target is a prefab asset, use `Unity.UI.VerifyPrefabLayoutMatrix`.
    - Keep strict `right_of`, `left_of`, `above`, and `below` for non-overlap rect semantics.
    - Use `right_of_center`, `left_of_center`, `above_center`, or `below_center` for “visually higher/lower within the same card” cases such as count labels inside HUD slots.
 28. For repeated smoke/workflow sequences, use `scripts/Invoke-UnityMcpBatch.js` or `scripts/Invoke-UnityMcpBatch.ps1` with an ordered JSON step list. Keep per-step outputs compact and read `detailRef` only when the passing summary is insufficient. On Windows, prefer `-StepsPath` for hand-written or multi-line JSON; `-StepsJson` is mainly for generated single-string payloads.
@@ -239,10 +241,10 @@ Prefer a scene-owned debugger component when a project needs fast UI or state it
 - Default Lens host tool surface: `static_all` (`foundation+full`); set `UNITY_MCP_LENS_TOOL_SURFACE_MODE=dynamic_packs` only for clients that explicitly need dynamic pack switching
 - Current `foundation` surface: `21` tools
 - Current `foundation` + `scene` surface: `58` tools
-- Current `foundation` + `ui` surface: `38` tools
+- Current `foundation` + `ui` surface: `39` tools
 - Current `foundation` + `runtime` surface: `32` tools
 - Current `foundation` + `project` surface: `43` tools
-- Current `foundation` + `assets` surface: `52` tools
+- Current `foundation` + `assets` surface: `55` tools
 - Prefer authoring-first discovery and reuse checks before generating scripts
 - Prefer split GameObject TSAM tools before legacy `Unity.ManageGameObject`
 - Prefer Phase 11 `project` tools for package/import/Input System diagnostics and active input handler changes
@@ -260,9 +262,10 @@ Prefer a scene-owned debugger component when a project needs fast UI or state it
 - Unity editor compile/import is the authority; do not run `dotnet build` as a Unity compile preflight
 - Editor idle gating before all Unity-facing work except helper-driven `Unity_RunCommand` in healthy play mode
 - Exact build-scene preflight before long custom builds when the intended scene list is known
-- External script edits should be synced through `Unity.Editor.SyncScripts` via `Sync-UnityScriptChanges.js` on macOS/Linux or `Sync-UnityScriptChanges.ps1` on Windows before follow-up Unity actions
-- Model-facing `Unity.Editor.SyncScripts` should return `readyForFollowUp=true` only after the host has waited through any scheduled refresh/reload window and verified no new console errors. If a raw/native `status=pending_refresh` appears, treat it as a lower-level scheduled state and wait for editor idle before parallel reads or mutations.
-- On Windows, if normal script sync remains stale (`pending_refresh`, `source_newer_than_assembly`, local package source newer than assembly, no compile observed, or assembly proof unchanged), use `Sync-UnityScriptChanges.ps1 -FocusNudgeOnStaleRefresh` before escalation. The helper's safe click is only a nudge; follow-up safety is proven by Lens health, console delta, idle state, and assembly proof.
+- External script edits should be synced through `Unity.Editor.SyncScripts` via `Sync-UnityScriptChanges.js` on macOS/Linux or `Sync-UnityScriptChanges.ps1` on Windows before follow-up Unity actions.
+- For Lens package edits, run script sync against the target Unity project with the repo changed paths and `-ExpectedTools` for newly added or changed tools. Trust Lens path-mapping, assembly proof, console delta, and tool-registry proof, not the focus click itself.
+- Model-facing `Unity.Editor.SyncScripts` should return `readyForFollowUp=true` only after the host has waited through any scheduled refresh/reload window, reacquired bridge/tool registry proof, verified expected tools when supplied, and verified no new console errors. If a raw/native `status=pending_refresh` appears, treat it as a lower-level scheduled state and wait for editor idle before parallel reads or mutations.
+- On Windows, if normal script sync remains stale (`pending_refresh`, `source_newer_than_assembly`, local package source newer than assembly, no compile observed, or assembly proof unchanged), use `Sync-UnityScriptChanges.ps1 -FocusNudgeOnStaleRefresh` before escalation. If the result is bridge-unavailable or non-ready, stop Unity-facing work and use only safe actions: `Unity.Editor.HealthCheckFast`, `Unity.Bridge.ListConnections`, Command Center status, or explicit recovery.
 - `Verify-UnityUiScreenLayout.ps1` requires JSON arrays, for example: `-TargetsJson '[{"key":"hud","target":"HUD Canvas","searchMethod":"by_name"}]' -AssertionsJson '[{"type":"inside_screen","targetKey":"hud","margin":0}]'`
 - Prefer `Unity.Bridge.ListConnections` for wrong-project or stale-status diagnosis before retrying project-wide reads
 - If `Unity.Bridge.ListConnections` shows stale duplicate status files, trust the selected fresh connection/project/PID first and keep stale candidates only as recovery evidence.

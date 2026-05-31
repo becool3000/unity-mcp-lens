@@ -1,8 +1,8 @@
 {
   "manifest_version": "0.3",
-  "name": "Lens Dev Plugin v0.1.7",
-  "version": "0.1.7",
-  "description": "Unity MCP Lens development workflow bundle for Codex. Plugin v0.1.7, aligned with Lens host 0.1.0-alpha.24+.",
+  "name": "Lens Dev Plugin v0.1.17",
+  "version": "0.1.17",
+  "description": "Unity MCP Lens development workflow bundle for Codex. Plugin v0.1.17, aligned with Lens host 0.1.0-alpha.24+.",
   "author": {
     "name": "kanaw",
     "email": "",
@@ -59,6 +59,10 @@
     {
       "name": "Unity_Asset_VerifySpriteArrayBinding",
       "description": "Verifies a ScriptableObject Sprite-array binding against expected count, texture name, texture GUID, or ordered sprite names without mutation."
+    },
+    {
+      "name": "Unity_Asset_VerifySpriteSlicesAndReferences",
+      "description": "Verifies sprite-sheet/importer slices and prefab Image/SpriteRenderer references to the expected atlas without importing, saving, or mutating assets."
     },
     {
       "name": "Unity_Authoring_SuggestReusePlan",
@@ -249,6 +253,10 @@
       "description": "Requests Play Mode entry and waits until the runtime probe is ready for runtime tools. When called through the Lens host, this workflow survives reconnect-prone domain reloads and reports request, editor-stability, runtime-advance, and console-delta evidence."
     },
     {
+      "name": "Unity_PlayMode_InteractionSmoke",
+      "description": "Runs a bounded manual-style Play Mode interaction smoke. The tool is verification equipment, not a test suite. It can enter Play Mode, invoke UI controls, queue pointer or keyboard input, wait bounded frames/milliseconds, read runtime snapshots, assert active state, capture Game view evidence, capture console deltas, and exit Play Mode by default."
+    },
+    {
       "name": "Unity_PlayMode_PointerInputSmoke",
       "description": "Runs a play-mode pointer input smoke check with UI and world hit evidence. The tool is intended for verification, not authoring. It can attempt to queue a synthetic Input System mouse state through reflection, then samples observed mouse state, UI raycast hits, and optional world raycast evidence."
     },
@@ -265,8 +273,16 @@
       "description": "Applies selected prefab instance property overrides to prefab assets. This persists prefab asset changes by explicit tool contract."
     },
     {
+      "name": "Unity_Prefab_AuditSerializedReferences",
+      "description": "Audits prefab assets for missing scripts, broken serialized references, unassigned UI/visual assets, runtime asset-load patterns, and broken nested prefab instances without saving or mutating assets."
+    },
+    {
       "name": "Unity_Prefab_CreateFromSceneObject",
       "description": "Creates a prefab asset from a scene object. This is an explicit prefab asset save by tool contract."
+    },
+    {
+      "name": "Unity_Prefab_ExplainOverrides",
+      "description": "Explains prefab instance connection state, override actionability, and why apply/revert is available or blocked without mutating scenes or assets."
     },
     {
       "name": "Unity_Prefab_GetOverrides",
@@ -595,6 +611,10 @@
     {
       "name": "Unity_UI_Toolkit",
       "description": "Canonical UI Toolkit helper for panel settings, UXML/USS validation, schema generation, and compact asset previews."
+    },
+    {
+      "name": "Unity_UI_VerifyPrefabLayoutMatrix",
+      "description": "Loads a UI prefab into an isolated preview canvas and verifies layout across named UI states and resolutions without saving or mutating assets."
     },
     {
       "name": "Unity_UI_VerifyRaycastAndLayout",

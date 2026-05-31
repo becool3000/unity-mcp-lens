@@ -1,6 +1,6 @@
 ---
 name: unity-mcp-lens-development
-description: Lens Dev Plugin v0.1.7. Develop, test, and improve Unity MCP Lens tools, packs, bridge behavior, Command Center UI, safe health substrate, stable Unity.Tools.List/Invoke/BatchInvoke fallback facades, StepVerifier/recovery workflows, package UI, and Unity editor automation workflows. Use when working on Lens itself, adding or debugging Lens MCP tools, changing tool packs, validating bridge behavior, or making Unity editor-authored persistent changes for Lens projects.
+description: Lens Dev Plugin v0.1.17. Develop, test, and improve Unity MCP Lens tools, packs, bridge behavior, Command Center UI, safe health substrate, stable Unity.Tools.List/Invoke/BatchInvoke fallback facades, script-sync registry proof, documented installed-host refresh and raw registry proof, StepVerifier/InteractionSmoke/recovery workflows, package UI, prefab layout matrices, prefab override explainers, sprite slice/reference verification, and Unity editor automation workflows. Use when working on Lens itself, adding or debugging Lens MCP tools, changing tool packs, validating bridge behavior, or making Unity editor-authored persistent changes for Lens projects.
 ---
 
 # Unity MCP Lens Development
@@ -17,7 +17,7 @@ Do not edit installed Codex cache copies or standalone `$CODEX_HOME/skills` copi
 
 ## Version Marker
 
-- Plugin guidance version: `Lens Dev Plugin v0.1.7`
+- Plugin guidance version: `Lens Dev Plugin v0.1.17`
 - Expected installed Lens host: `0.1.0-alpha.24` or newer
 - The plugin version and display name must be visible in `.codex-plugin/plugin.json` so Codex's plugin view makes stale installs obvious.
 - Host version and plugin version are intentionally separate. Host builds advance host metadata; plugin versions advance only when Codex guidance, plugin metadata, or plugin scripts change.
@@ -28,7 +28,7 @@ Do not edit installed Codex cache copies or standalone `$CODEX_HOME/skills` copi
 - Standard stop-contract fields are decision surfaces: `safeToContinue`, `agent_should_stop`, `user_action_required`, `recommendedNextAction`, `safe_next_actions`, `unsafe_next_actions`, and `reason`.
 - Session safety must block Unity-backed tools after watchdog/hung-command failures until a fresh non-busy editor and usable bridge are observed by `HealthCheckFast`.
 - `Unity.RunCommand` should use preflight/risk labels for risky snippets and a hard watchdog for execution.
-- `Unity.PlayMode.StepVerifier` is the default safe play-mode primitive. It should enter through the safe path, pause once runtime is observable, step exact counts, capture console deltas, and exit/restore state.
+- `Unity.PlayMode.StepVerifier` is the default safe frame-stepping primitive. `Unity.PlayMode.InteractionSmoke` is the default bounded non-test manual sanity probe for short UI/pointer/key/wait/snapshot/capture sequences before custom Play Mode `Unity.RunCommand` snippets.
 - `Unity.Workflow.SelectPackThroughMainMenu` is the preferred FallingSands Main Menu pack-selection path. It should enter paused Play Mode, invoke the pack button through runtime UI tools, then verify the active runtime pack without `Unity.RunCommand` or direct pack selectors.
 - `Unity.Editor.RecoverFromHang` starts in `diagnoseOnly=true`; destructive options require explicit user args. On Windows, `Recover-UnityEditorSession.ps1` is the helper path for diagnose, restart, and Lens reacquire orchestration.
 - Status readers are non-destructive by default. Stale malformed files stay visible in diagnostics but must not poison a fresh matching bridge/editor-health pair.
@@ -81,8 +81,8 @@ preset, package, and workflow authoring the default agent path.
 - Runtime temporary components are verification equipment only and must not save
   scenes, prefabs, or production assets.
 - Current metadata audit baselines are `foundation=21`, `foundation+scene=58`,
-  `foundation+ui=38`, `foundation+runtime=32`, `foundation+project=43`, and
-  `foundation+assets=52`.
+  `foundation+ui=39`, `foundation+runtime=33`, `foundation+project=43`, and
+  `foundation+assets=56`.
 
 ## Phase 8 Tool Truth
 
@@ -106,7 +106,7 @@ The current Phase 11 project surface includes package/import/Input System diagno
 - Prefer `Unity.InputSystem.Diagnostics` for one-call Input System package, assembly, device, `.inputactions`, define, compatibility, and editor-log signals.
 - Prefer `Unity.ProjectSettings.PreviewActiveInputHandler` before changing the active input backend.
 - Use `Unity.ProjectSettings.SetActiveInputHandler` for editor-authored active input backend changes; do not hand-edit `ProjectSettings.asset` as the first path.
-- `foundation` now targets `21` tools, `foundation + scene` now targets `58` tools, `foundation + ui` now targets `38`, `foundation + runtime` targets `32`, and `foundation + project` now targets `43` tools.
+- `foundation` now targets `21` tools, `foundation + scene` now targets `58` tools, `foundation + ui` now targets `39`, `foundation + runtime` targets `33`, and `foundation + project` now targets `43` tools.
 - Prefer `Unity.Project.DiagnoseImportSideEffects` for read-only importer/dependency side-effect checks before reimporting assets or grepping logs.
 
 ## Phase 12 UI And Scene Binding Truth
@@ -127,7 +127,7 @@ Phase 14 keeps the public tool surface stable and makes high-volume TSAM results
 - Compact default results are expected for `Unity.InputSystem.Diagnostics`, UI hierarchy preview/apply, scene serialized-reference binding preview/apply, and `Unity.UI.VerifyScreenLayout`.
 - Full bulky data should remain available through `detailRef` when the bridge detail store is available.
 - Use `Invoke-UnityMcpBatch` for focused smoke/workflow sequences that need multiple project/ui/scene/debug calls in one Lens session.
-- Pack baselines after the authoring-first workflow push: `foundation=21`, `foundation+scene=58`, `foundation+ui=38`, `foundation+runtime=32`, `foundation+project=43`, and `foundation+assets=52`.
+- Pack baselines after the authoring-first workflow push: `foundation=21`, `foundation+scene=58`, `foundation+ui=39`, `foundation+runtime=33`, `foundation+project=43`, and `foundation+assets=56`.
 - Current Phase 14 smoke baseline: `NoShapingRecorded=false`, `7` saving rows, `50,566` raw bytes -> `24,025` shaped bytes, `3` connections, `6` schema requests, and `4` pack transitions.
 
 ## Phase 15 RunCommand And Console Truth
@@ -164,13 +164,17 @@ Phase 17 addresses the highest TintPaint dogfood pain without widening `foundati
 - Prefer `Unity.UI.PreviewCreateCanvasPrefab` and `Unity.UI.ApplyCreateCanvasPrefab` before custom `Unity.RunCommand` prefab-authoring scripts.
 - Prefer `Unity.Scene.PreviewInstantiatePrefabAndBind` and `Unity.Scene.ApplyInstantiatePrefabAndBind` before custom scene instantiation/binding scripts.
 - Prefer `Unity.UI.VerifyRaycastAndLayout` for UI blocking and hit-test assertions before ad hoc hierarchy probes.
-- Prefer `Unity.UI.VerifyScreenLayoutMatrix` when responsive UI layout must be proven across Game view sizes; it restores the original selected Game view size by default.
+- Prefer `Unity.UI.VerifyScreenLayoutMatrix` when responsive live-scene UI layout must be proven across Game view sizes; it restores the original selected Game view size by default.
+- Prefer `Unity.UI.VerifyPrefabLayoutMatrix` when responsive prefab asset layout must be proven across review resolutions or named inactive-overlay states without saving or mutating the prefab.
 - Prefer `Unity.Scene.VerifySerializedReferences` when nested prefab instance references need read-only verification; it distinguishes inherited prefab refs, local overrides, local null overrides, actual nulls, and non-prefab instances.
 - Prefer `Unity.PlayMode.PointerInputSmoke` for pointer-path evidence in play mode; it reports observed Input System state, scroll state, UI/world hit evidence, and optional sampled gameplay state.
+- Prefer `Unity.PlayMode.InteractionSmoke` for bounded non-test manual sanity probes before custom Play Mode `Unity.RunCommand` snippets. It can enter Play Mode, run short UI/pointer/key/wait/snapshot/capture steps, report console deltas and active-state evidence, and exit cleanly by default.
 - Prefer `Unity.Editor.ExitPlayMode` or `Exit-UnityPlayMode.ps1` for play-mode cleanup; avoid custom `Unity.RunCommand` stop snippets.
 - `Unity.GetLensUsageReport` compact output should summarize large pack-transition lists and report TSAM coverage summary data.
-- Prefer `Unity.Workflow.SelectPackThroughMainMenu` for FallingSands Main Menu pack selection. For other play-mode UI state and interaction, prefer `Unity.UI.QueryRuntimeLayout` and `Unity.UI.InvokeControl` before writing custom `Unity.RunCommand` snippets.
+- Prefer `Unity.Workflow.SelectPackThroughMainMenu` for FallingSands Main Menu pack selection. For other play-mode UI state and interaction, prefer `Unity.PlayMode.InteractionSmoke`, `Unity.UI.QueryRuntimeLayout`, and `Unity.UI.InvokeControl` before writing custom `Unity.RunCommand` snippets.
 - Prefer `Unity.UI.CaptureGameView` for Game view screenshots; request exact `Width`/`Height` for review captures, use `TemporaryActivations` for inactive overlays, and require dimension proof when comparing HUD layouts. Its result should include readiness diagnostics, play/pause state, Game view size before/after restore, camera/canvas counts, console delta, overlay capability, and fallback evidence when requested.
+- Prefer `Unity.Prefab.AuditSerializedReferences` for read-only prefab reference hygiene sweeps before hand-inspecting YAML or writing custom probes. It reports missing scripts, broken serialized object references, likely-required null visual/asset refs, UI `Image` components without sprites, runtime sprite/material/texture load patterns, broken nested prefab instances, dirty evidence, and a no-save `saveState`.
+- Prefer `Unity.Prefab.ExplainOverrides` before applying or reverting prefab instance overrides. It reports source connection state, local/nested override counts, selected override actionability, block reasons, warnings, and normalized preview/apply or preview/revert arguments without dirtying scenes or saving assets.
 
 ## Phase 8 Dogfood Hardening Truth
 
@@ -178,6 +182,7 @@ Phase 8 hardens the authoring-first dogfood gaps from the LensTest scene.
 
 - Prefer `Unity.Preset.PreviewCreate` and `Unity.Preset.Create` when a reusable component preset is needed; do not fall back to `Unity.RunCommand` just to create a `.preset` asset.
 - `Unity.Prefab.ApplyOverrides` and `Unity.Prefab.RevertOverrides` resolve selected override properties against the scene prefab instance target before mutating, so selected apply/revert flows should no longer require serialized-property fallbacks.
+- `Unity.Prefab.ExplainOverrides` is the read-only first stop when Apply/Revert availability is unclear; use its normalized arguments for the preview/apply or preview/revert tools after reviewing nested-prefab and missing-reference warnings.
 - `Unity.Workflow.AuthorPrefab` normalizes structured or stringified vector payloads before optional scene instantiation.
 
 ## Phase 18 Asset Sprite Pipeline Truth
@@ -188,7 +193,8 @@ Phase 18 addresses the BeeSurvivors Roach BeeCool sprite-upgrade workflow.
 - Use `Unity.Asset.ApplyImportSpriteSheetAndBind` to persist importer metadata and ScriptableObject Sprite-array bindings after the preview plan is acceptable.
 - `Unity.Asset.ImportSpriteSheetAndBind` is a compatibility facade; it previews by default and applies only with `mode=apply` or `apply=true`.
 - Prefer `Unity.Asset.VerifySpriteArrayBinding` over custom `Unity.RunCommand` or YAML reads when verifying Sprite-array counts, names, texture names, or texture GUIDs.
-- The `assets` pack metadata-audit baseline is `foundation+assets=52`.
+- Prefer `Unity.Asset.VerifySpriteSlicesAndReferences` before hand-inspecting generated UI atlases, imported sprite slices, or prefab `Image`/`SpriteRenderer` bindings. It verifies importer settings, slice names/rects/alpha, and prefab references without reimporting, saving, or mutating assets.
+- The `assets` pack metadata-audit baseline is `foundation+assets=56`.
 - Phase 18 asset tools must keep pass/fail and changed-count data inline while storing full importer metadata, sprite rows, and serialized-field readback behind `detailRef`.
 
 ## BeeSurvivors Reliability Follow-Up Truth
@@ -200,9 +206,12 @@ This batch addresses the BeeSurvivors Lens dogfood findings from 2026-05-07.
 - Lens host binaries now default to `static_all` as the reliability path; set `UNITY_MCP_LENS_TOOL_SURFACE_MODE=dynamic_packs` only for clients that handle `tools/list_changed` correctly and explicitly want dynamic packs.
 - `Unity.Tools.Describe`, `Unity.Tools.List`, or `Unity.Tools.ActivateAndVerify` proving a tool exists does not prove the current Codex thread has indexed it as directly callable. If a described active-pack or `static_all` native tool is not callable, classify the issue as client dynamic-indexing drift, preserve the raw host evidence, and call the target through `Unity.Tools.Invoke` or `Unity.Tools.BatchInvoke`. Use helper scripts or `Invoke-UnityMcpBatch` only when the model-facing facade tools are unavailable or local helper orchestration is specifically useful.
 - `Unity.SetToolPacks` should report whether `notifications/tools/list_changed` was emitted. If Codex still cannot call the described tool after that notification, do not keep widening packs; collect the active packs, manifest/profile version, and missing callable tool name.
-- Prefer `Unity.Editor.SyncScripts` via `Sync-UnityScriptChanges` for deterministic script refresh/compile waits; model-facing calls should wait through scheduled refresh/reload windows and return `readyForFollowUp=true` only when follow-up Unity actions are safe. No changed paths plus no force must return quickly.
+- Prefer `Unity.Editor.SyncScripts` via `Sync-UnityScriptChanges` for deterministic script refresh/compile waits; model-facing calls should wait through scheduled refresh/reload windows and return `readyForFollowUp=true` only when follow-up Unity actions are safe, the target-project bridge/tool registry is reacquired, and any supplied `expectedTools` are present. No changed paths plus no force must return quickly.
 - For script sync, treat `newConsoleErrorCount` / `newConsoleErrorsDetected` as the failure signal. `staleConsoleErrorsPresent` means old console errors were present before the sync and should be reported without turning the sync into a hard failure by itself.
-- Script refresh reliability now includes an opt-in Windows focus nudge fallback: `Unity.Editor.SyncScripts` argument `focusNudgeOnStaleRefresh=true` or `Sync-UnityScriptChanges.ps1 -FocusNudgeOnStaleRefresh`. Use it only after normal refresh leaves `pending_refresh`, `source_newer_than_assembly`, local package source newer than assembly, no compile observed, or stale assembly proof. The implementation must focus the project-matched Unity editor, perform only a tiny safe title-bar/chrome click, skip busy/headless/unsupported states, and prove success with console delta, editor idle, and assembly proof rather than the click itself.
+- Script refresh reliability now includes target-project local-package path mapping and optional expected-tool registry proof: after Lens package source edits, run sync against the target Unity project with changed repo paths and `expectedTools` for tools that should exist after reload.
+- Local `file:` Lens package server refresh must be proven through installed host metadata, executable freshness, and a raw installed-host registry probe. Prefer `Tools~/Invoke-LensInstalledHostRefreshWorkflow.ps1 -ProjectPath <project> -WaitForHostExitSeconds 10` for the normal one-command path: it checks stale/current state, waits briefly for installed-host clients to disconnect when requested, refreshes only when safe, and runs raw installed-host version/`tools/list` proof. Use `Tools~/Refresh-LensInstalledHost.ps1` and `Tools~/Test-LensInstalledHostProof.ps1` separately only when debugging a specific stage. Keep `docs/installed-host-refresh-proof.md` as the short canonical guide for result states, proof requirements, and safe next actions. If the target project consumes `com.becool3000.unity-mcp-lens` from a repo path, Command Center/server refresh should resolve the real PackageInfo source path and `%USERPROFILE%\.unity\unity-mcp-lens\unity-mcp-lens.json` must match the repo host version before a refreshed Codex MCP process is trusted.
+- Script refresh reliability also includes an opt-in Windows focus nudge fallback: `Unity.Editor.SyncScripts` argument `focusNudgeOnStaleRefresh=true` or `Sync-UnityScriptChanges.ps1 -FocusNudgeOnStaleRefresh`. Use it only after normal refresh leaves `pending_refresh`, `source_newer_than_assembly`, local package source newer than assembly, no compile observed, or stale assembly proof. The implementation must focus the project-matched Unity editor, perform only a tiny safe title-bar/chrome click, skip busy/headless/unsupported states, and prove success with console delta, editor idle, assembly proof, and tool-registry proof rather than the click itself.
+- If script sync ends in bridge-unavailable/non-ready, `bridge_reacquire_pending`, `bridge_reacquire_timed_out`, stale registry proof, or missing `expectedTools`, stop Unity-facing work and use safe actions only: `Unity.Editor.HealthCheckFast`, `Unity.Bridge.ListConnections`, Command Center, or explicit recovery.
 - Prefer `Unity.Editor.SetPlayMode` for enter and exit workflows; it reports transition state, runtime-advance evidence, reconnect notes, and console-error counts.
 - Prefer `Unity.Bridge.ListConnections` when a bridge retry may have selected the wrong project or when stale status files are suspected.
 - Prefer `Unity.Asset.SetSerializedProperties` for ScriptableObject/data asset scalar and object-reference bindings before falling back to `Unity.RunCommand`.

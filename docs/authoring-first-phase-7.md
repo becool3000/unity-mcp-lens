@@ -25,12 +25,12 @@ for generated scripts.
 
 The current expected pack counts are:
 
-- `foundation`: `18` exported tools.
-- `foundation + scene`: `50` exported tools.
-- `foundation + ui`: `35` exported tools.
-- `foundation + runtime`: `29` exported tools.
-- `foundation + project`: `37` exported tools.
-- `foundation + assets`: `45` exported tools.
+- `foundation`: `21` exported tools.
+- `foundation + scene`: `58` exported tools.
+- `foundation + ui`: `39` exported tools.
+- `foundation + runtime`: `33` exported tools.
+- `foundation + project`: `43` exported tools.
+- `foundation + assets`: `56` exported tools.
 
 Any pack membership change must update the pack-switch metadata audit, required
 tool assertions, this document, and the Lens skills in the same change.
@@ -75,9 +75,17 @@ separately from prefab asset state.
 Instantiate with `Unity.Prefab.Instantiate`, modify instance fields with
 `Unity.Prefab.SetSerializedProperties` or scene property tools as appropriate,
 then call `Unity.Prefab.GetOverrides`. Use
-`Unity.Prefab.PreviewApplyOverrides` or `Unity.Prefab.PreviewRevertOverrides`
-before applying selected overrides. Broad apply/revert and nested prefab risks
-must be reported before mutation.
+`Unity.Prefab.ExplainOverrides`, `Unity.Prefab.PreviewApplyOverrides`, or
+`Unity.Prefab.PreviewRevertOverrides` before applying selected overrides. Broad
+apply/revert and nested prefab risks must be reported before mutation.
+
+### Sprite Atlases And UI Slices
+
+After importing or generating UI sprite sheets, prefer
+`Unity.Asset.VerifySpriteSlicesAndReferences` before hand-reading importer
+metadata or prefab YAML. It verifies importer settings, expected slice
+names/rects/alpha, and prefab `Image`/`SpriteRenderer` references without
+reimporting, saving, or mutating assets.
 
 ### Package-Backed Component
 

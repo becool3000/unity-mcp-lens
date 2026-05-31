@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 
+const fs = require("fs");
+const path = require("path");
 const common = require("../../unity-mcp-bridge/scripts/UnityMcpCommon");
 
 function getConsoleErrorCount(consoleResult) {
@@ -11,12 +13,26 @@ function getConsoleErrorCount(consoleResult) {
   return error + exception + assert;
 }
 
+function resolveScriptChangedPath(projectPath, entry) {
+  if (!entry) return null;
+  const text = String(entry);
+  if (!path.isAbsolute(text)) {
+    const cwdCandidate = path.resolve(text);
+    if (fs.existsSync(cwdCandidate)) {
+      return cwdCandidate.replace(/\\/g, "/");
+    }
+  }
+
+  return common.resolveUnityRelativePath(projectPath, text);
+}
+
 async function main() {
   const args = common.parseCliArgs(process.argv.slice(2));
   const projectPath = common.resolveProjectPath(common.getArgString(args, ["ProjectPath"], process.cwd()));
   const changedPaths = common.getArgArray(args, ["ChangedPaths"], []);
+  const expectedTools = common.getArgArray(args, ["ExpectedTools"], []);
   const normalizedChangedPaths = changedPaths
-    .map((entry) => common.resolveUnityRelativePath(projectPath, entry))
+    .map((entry) => resolveScriptChangedPath(projectPath, entry))
     .filter(Boolean)
     .filter((entry, index, entries) => entries.indexOf(entry) === index);
   const force = common.getArgBool(args, ["Force"], false);
@@ -33,6 +49,7 @@ async function main() {
     timeoutSeconds,
     pollIntervalMs,
     stablePollCount,
+    expectedTools,
     focusNudgeOnStaleRefresh,
     safeClickNudge,
   };
@@ -101,6 +118,13 @@ async function main() {
       refreshScheduledAfterResponse: data.refreshScheduledAfterResponse === true,
       focusNudgeOnStaleRefresh,
       safeClickNudge,
+      expectedTools: data.expectedTools || expectedTools,
+      toolRegistryProof: data.toolRegistryProof || null,
+      missingExpectedTools: data.missingExpectedTools || [],
+      syncTargetProjectRoot: data.syncTargetProjectRoot || projectPath,
+      syncTargetProjectSource: data.syncTargetProjectSource || null,
+      localPackageRefreshRequested: data.localPackageRefreshRequested === true,
+      localPackageRefreshMappings: data.localPackageRefreshMappings || [],
       focusNudge: data.focusNudge || null,
       focusNudgeAttempted: data.focusNudge?.attempted === true || data.focusNudge?.Attempted === true,
       focusNudgeOutcome: data.focusNudge?.outcome || data.focusNudge?.Outcome || null,
@@ -132,6 +156,7 @@ async function main() {
       message: `Unity.Editor.SyncScripts failed: ${error.message}`,
       projectPath,
       changedPaths: normalizedChangedPaths,
+      expectedTools,
       relevantChangedPaths: common.getUnityCompileAffectingChanges(projectPath, normalizedChangedPaths),
       relevantChangesDetected: force || common.getUnityCompileAffectingChanges(projectPath, normalizedChangedPaths).length > 0,
       noChangesDetected: false,

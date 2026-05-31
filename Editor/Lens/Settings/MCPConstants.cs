@@ -43,6 +43,12 @@ namespace Becool.UnityMcpLens.Editor.Settings
         /// </summary>
         public static string unityMcpLensAppPath = $"Packages/{packageName}/UnityMcpLensApp~";
 
+        public static string ResolvedUnityMcpLensPackagePath =>
+            ResolveUnityMcpLensPackagePath();
+
+        public static string ResolvedUnityMcpLensAppPath =>
+            Path.Combine(ResolvedUnityMcpLensPackagePath, "UnityMcpLensApp~");
+
         public static string commandCenterProjectName = "UnityMcpLens.CommandCenter";
 
         public static string ProjectSettingsPackageDirectory =>
@@ -188,13 +194,13 @@ namespace Becool.UnityMcpLens.Editor.Settings
         }
 
         internal static string BundledLensProjectFile =>
-            Path.Combine(Path.GetFullPath(unityMcpLensAppPath), "src", "UnityMcpLens", "UnityMcpLens.csproj");
+            Path.Combine(ResolvedUnityMcpLensAppPath, "src", "UnityMcpLens", "UnityMcpLens.csproj");
 
         internal static string BundledCommandCenterProjectFile =>
-            Path.Combine(Path.GetFullPath(unityMcpLensAppPath), "src", commandCenterProjectName, $"{commandCenterProjectName}.csproj");
+            Path.Combine(ResolvedUnityMcpLensAppPath, "src", commandCenterProjectName, $"{commandCenterProjectName}.csproj");
 
         internal static string BundledLensMetadataFile =>
-            Path.Combine(Path.GetFullPath(unityMcpLensAppPath), LensMetadataFileName);
+            Path.Combine(ResolvedUnityMcpLensAppPath, LensMetadataFileName);
 
 
         /// <summary>
@@ -230,6 +236,76 @@ namespace Becool.UnityMcpLens.Editor.Settings
                 var hash = sha.ComputeHash(bytes);
                 return BitConverter.ToString(hash).Replace("-", "").Substring(0, 16).ToLowerInvariant();
             }
+        }
+
+        static string ResolveUnityMcpLensPackagePath()
+        {
+            try
+            {
+                var package = UnityEditor.PackageManager.PackageInfo.GetAllRegisteredPackages()
+                    .FirstOrDefault(p => string.Equals(p.name, packageName, StringComparison.OrdinalIgnoreCase));
+
+                if (TryResolveExistingDirectory(ReadPackageStringProperty(package, "resolvedPath"), out string resolvedPath))
+                    return resolvedPath;
+
+                if (TryResolveExistingDirectory(package?.assetPath, out string assetPath))
+                    return assetPath;
+            }
+            catch
+            {
+                // PackageInfo can be temporarily unavailable during domain reload/import.
+            }
+
+            if (TryResolveExistingDirectory(Path.Combine("Packages", packageName), out string projectPackagePath))
+                return projectPackagePath;
+
+            return Path.GetFullPath(Path.Combine(ProjectRootPath(), "Packages", packageName));
+        }
+
+        static string ReadPackageStringProperty(UnityEditor.PackageManager.PackageInfo package, string propertyName)
+        {
+            if (package == null)
+                return null;
+
+            try
+            {
+                var property = package.GetType().GetProperty(propertyName);
+                return property?.GetValue(package) as string;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        static bool TryResolveExistingDirectory(string path, out string fullPath)
+        {
+            fullPath = null;
+            if (string.IsNullOrWhiteSpace(path))
+                return false;
+
+            try
+            {
+                string candidate = path.Replace('/', Path.DirectorySeparatorChar);
+                if (!Path.IsPathRooted(candidate))
+                    candidate = Path.Combine(ProjectRootPath(), candidate);
+
+                candidate = Path.GetFullPath(candidate);
+                if (!Directory.Exists(candidate))
+                    return false;
+
+                fullPath = candidate;
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        static string ProjectRootPath()
+        {
+            return Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
         }
     }
 }

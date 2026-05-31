@@ -75,7 +75,7 @@ namespace Becool.UnityMcpLens.Editor.Helpers
         {
             try
             {
-                string sourceDir = Path.GetFullPath(MCPConstants.unityMcpLensAppPath);
+                string sourceDir = Path.GetFullPath(MCPConstants.ResolvedUnityMcpLensAppPath);
                 if (!Directory.Exists(sourceDir))
                 {
                     McpLog.Warning($"Unity MCP Lens source directory not found at {sourceDir}");
@@ -151,7 +151,7 @@ namespace Becool.UnityMcpLens.Editor.Helpers
 
             try
             {
-                string sourceDir = Path.GetFullPath(MCPConstants.unityMcpLensAppPath);
+                string sourceDir = Path.GetFullPath(MCPConstants.ResolvedUnityMcpLensAppPath);
                 if (!Directory.Exists(sourceDir))
                 {
                     McpLog.Warning($"Unity MCP Lens source directory not found at {sourceDir}");
@@ -314,7 +314,7 @@ namespace Becool.UnityMcpLens.Editor.Helpers
         static void PublishOwnedServer(string stagingDirectory, bool preferSourcePublish)
         {
             string runtimeIdentifier = GetCurrentRuntimeIdentifier();
-            string prebuiltDirectory = Path.Combine(Path.GetFullPath(MCPConstants.unityMcpLensAppPath), "prebuilt", runtimeIdentifier);
+            string prebuiltDirectory = Path.Combine(Path.GetFullPath(MCPConstants.ResolvedUnityMcpLensAppPath), "prebuilt", runtimeIdentifier);
             if (!preferSourcePublish && Directory.Exists(prebuiltDirectory))
             {
                 CopyDirectoryContents(prebuiltDirectory, stagingDirectory);
@@ -366,7 +366,7 @@ namespace Becool.UnityMcpLens.Editor.Helpers
         {
             string runtimeIdentifier = GetCurrentRuntimeIdentifier();
             string commandCenterFileName = Path.GetFileName(MCPConstants.LensInstalledCommandCenterMainFile);
-            string prebuiltPath = Path.Combine(Path.GetFullPath(MCPConstants.unityMcpLensAppPath), "prebuilt", runtimeIdentifier, commandCenterFileName);
+            string prebuiltPath = Path.Combine(Path.GetFullPath(MCPConstants.ResolvedUnityMcpLensAppPath), "prebuilt", runtimeIdentifier, commandCenterFileName);
             if (!preferSourcePublish && File.Exists(prebuiltPath))
             {
                 Directory.CreateDirectory(stagingDirectory);

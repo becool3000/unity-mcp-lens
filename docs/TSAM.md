@@ -106,18 +106,18 @@ Pack-specific TSAM work is used to keep the MCP surface small:
 - `scene`: split GameObject tools, object-kind scene authoring templates, scene serialized-reference/object-reference assignment, explicit dirty/save tools, prefab instantiate/bind workflows, read-only serialized-reference verification, and scene component reuse discovery.
 - `project`: package/import diagnostics, component reuse discovery, package capability awareness, authoring workflow wrappers, Input System diagnostics, input-action asset inspection, and active input handler tools.
 - `ui`: uGUI hierarchy/layout preview/apply authoring, canvas prefab authoring, raycast/layout verification, runtime UI query/invoke tools, and screen-layout or resolution-matrix verification.
-- `runtime`: play-mode runtime probes, visual bounds snapshots, pointer/scroll input smoke verification, and explicit play-mode exit.
-- `assets`: asset/resource workflows, prefab authoring and override tools, preset application, copy-from-existing workflows, sprite-sheet import/slicing/binding preview/apply, and Sprite-array binding verification.
+- `runtime`: play-mode runtime probes, visual bounds snapshots, pointer/scroll input smoke verification, bounded manual-style interaction smoke, and explicit play-mode exit.
+- `assets`: asset/resource workflows, prefab authoring and override tools, preset application, copy-from-existing workflows, sprite-sheet import/slicing/binding preview/apply, Sprite-array binding verification, and sprite slice/reference verification.
 - `debug`: usage reports, payload analysis, and TSAM stage coverage inspection.
 
 Current metadata baselines are:
 
-- `foundation`: `18` exported tools.
-- `foundation + scene`: `50` exported tools.
-- `foundation + ui`: `35` exported tools.
-- `foundation + runtime`: `29` exported tools.
-- `foundation + project`: `37` exported tools.
-- `foundation + assets`: `45` exported tools.
+- `foundation`: `21` exported tools.
+- `foundation + scene`: `58` exported tools.
+- `foundation + ui`: `39` exported tools.
+- `foundation + runtime`: `33` exported tools.
+- `foundation + project`: `43` exported tools.
+- `foundation + assets`: `56` exported tools.
 - `debug`: `28` exported tools.
 
 Pack membership changes should update metadata audit expectations and workflow
@@ -141,7 +141,7 @@ component reuse discovery, package capability resolution, workflow wrappers, UI
 hierarchy preview/apply, scene serialized-reference binding preview/apply, UI
 screen-layout verification, prefab inspect/override summaries, preset/copy
 workflows, `Unity.RunCommand` log blocks, and `Unity.ReadConsole` summary reads,
-plus asset sprite-sheet import/bind and Sprite-array binding verification.
+plus asset sprite-sheet import/bind, Sprite-array binding verification, and sprite slice/reference verification.
 These inline results should contain enough data for pass/fail decisions while
 moving bulky device, binding, log, corner, schema, override, and readback rows
 behind `detailRef`.
@@ -198,7 +198,7 @@ Current TSAM-covered surfaces include:
 - Scene serialized-reference preview/apply binding.
 - Scene prefab instantiate/bind preview/apply tools.
 - Play-mode pointer-input smoke verification.
-- Asset sprite-sheet import/bind preview/apply tools and Sprite-array binding verification.
+- Asset sprite-sheet import/bind preview/apply tools, Sprite-array binding verification, and sprite slice/reference verification.
 - Compact `Unity.RunCommand` log summaries and `Unity.ReadConsole` summary reads.
 - Usage reporting for payload, bridge, pack transition, tool snapshot, detail-ref, and TSAM stage coverage analysis.
 

@@ -127,6 +127,7 @@ Workflow wrappers preserve partial results, run reuse discovery before mutation,
                     consoleCount = new { type = "integer", description = "Maximum grouped console rows to include before/after verification. Defaults to 20." },
                     componentSnapshots = new { type = "array", description = "Runtime component snapshots to collect.", items = new { type = "object" } },
                     pointerSmoke = new { type = "object", description = "Optional Unity.PlayMode.PointerInputSmoke arguments." },
+                    interactionSmoke = new { type = "object", description = "Optional Unity.PlayMode.InteractionSmoke arguments for bounded manual-style runtime interactions." },
                     captureGameView = new { type = "object", description = "Optional Unity.UI.CaptureGameView arguments." }
                 }
             };
@@ -500,6 +501,22 @@ Workflow wrappers preserve partial results, run reuse discovery before mutation,
             if (parameters["pointerSmoke"] is JObject pointerParams)
                 pointerSmoke = await CallToolAsync("Unity.PlayMode.PointerInputSmoke", "runtime_smoke", pointerParams, RuntimeDiagnosticsTools.PointerInputSmoke, steps, required: false, failurePointSetter: value => failurePoint = value);
 
+            object interactionSmoke = null;
+            if (parameters["interactionSmoke"] is JObject interactionParams)
+            {
+                JObject interactionPayload = (JObject)interactionParams.DeepClone();
+                if (GetToken(interactionPayload, "enterPlayMode", "EnterPlayMode") == null)
+                    interactionPayload["enterPlayMode"] = !EditorApplication.isPlaying;
+                if (GetToken(interactionPayload, "exitAfter", "ExitAfter") == null)
+                    interactionPayload["exitAfter"] = false;
+                if (GetToken(interactionPayload, "waitMs", "WaitMs") == null)
+                    interactionPayload["waitMs"] = GetInt(parameters, 10000, "waitMs", "WaitMs");
+
+                interactionSmoke = await CallToolAsync("Unity.PlayMode.InteractionSmoke", "runtime_interaction_smoke", interactionPayload, PlayModeInteractionSmokeTools.InteractionSmoke, steps, required: false, failurePointSetter: value => failurePoint = value);
+                if (InteractionSmokeReportedFailure(interactionSmoke))
+                    failurePoint ??= "Unity.PlayMode.InteractionSmoke";
+            }
+
             object capture = null;
             if (parameters["captureGameView"] is JObject captureParams)
             {
@@ -532,6 +549,7 @@ Workflow wrappers preserve partial results, run reuse discovery before mutation,
                     enterResult,
                     componentSnapshots = componentSnapshots.ToArray(),
                     pointerSmoke,
+                    interactionSmoke,
                     capture,
                     capturePaths = ExtractCapturePaths(capture),
                     consoleDelta,
@@ -844,6 +862,18 @@ Workflow wrappers preserve partial results, run reuse discovery before mutation,
             int omitted = rows.Count - maxItems;
             root[propertyName] = new JArray(rows.Take(maxItems).Select(row => row.DeepClone()));
             root[$"compactOmitted{char.ToUpperInvariant(propertyName[0])}{propertyName.Substring(1)}Count"] = omitted;
+        }
+
+        static bool InteractionSmokeReportedFailure(object result)
+        {
+            JObject root = SafeJObject(result);
+            if (!IsSuccess(root))
+                return true;
+
+            if (root["data"] is JObject data && data.TryGetValue("passed", StringComparison.OrdinalIgnoreCase, out JToken passed))
+                return passed.Type == JTokenType.Boolean && !passed.Value<bool>();
+
+            return false;
         }
 
         static string ResolveCreatedTarget(JObject parameters)

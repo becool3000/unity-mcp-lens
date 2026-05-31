@@ -46,6 +46,7 @@ sealed class UnityMcpLensHost
         "Unity_Preset_PreviewApplyToComponent",
         "Unity_Prefab_Inspect",
         "Unity_Prefab_GetOverrides",
+        "Unity_Prefab_ExplainOverrides",
         "Unity_Prefab_PreviewApplyOverrides",
         "Unity_Prefab_PreviewRevertOverrides",
         "Unity_Prefab_PreviewCopyComponentSerializedValues",
@@ -68,6 +69,7 @@ sealed class UnityMcpLensHost
         "Unity_UI_PreviewLayoutProperties",
         "Unity_UI_VerifyScreenLayout",
         "Unity_UI_VerifyScreenLayoutMatrix",
+        "Unity_UI_VerifyPrefabLayoutMatrix",
         "Unity_UI_PreviewCreateCanvasPrefab",
         "Unity_UI_VerifyRaycastAndLayout",
         "Unity_Scene_PreviewBindSerializedReferences",
@@ -81,6 +83,8 @@ sealed class UnityMcpLensHost
         "Unity_Asset_PreviewImportSpriteSheetAndBind",
         "Unity_Asset_VerifySpriteArrayBinding",
         "Unity_Asset_SpriteSheetVisualDiagnostics",
+        "Unity_Asset_VerifySpriteSlicesAndReferences",
+        "Unity_Prefab_AuditSerializedReferences",
         "Unity_Runtime_QueryObjects",
         "Unity_UI_Raycast",
         "Unity_Object_ResolveStablePath",
@@ -146,6 +150,7 @@ sealed class UnityMcpLensHost
         "Unity_Editor_SetPlayMode",
         "Unity_PlayMode_EnterReady",
         "Unity_PlayMode_StepVerifier",
+        "Unity_PlayMode_InteractionSmoke",
         "Unity_Editor_RecoverFromHang",
         "Unity_Workflow_RunGpuSimulationProbe",
         "Unity_Workflow_VerifyRuntimePackSelection",
@@ -459,6 +464,47 @@ sealed class UnityMcpLensHost
     {
         public required string Root { get; init; }
         public required string PackageName { get; init; }
+    }
+
+    sealed class LocalPackageRefreshMappingResult
+    {
+        public string ProjectRoot { get; init; } = string.Empty;
+        public string[] LocalPackageSourceRoots { get; init; } = [];
+        public string[] ChangedPaths { get; init; } = [];
+        public string[] LocalPackageRefreshPaths { get; init; } = [];
+        public object[] Mappings { get; init; } = [];
+        public bool LocalPackageRefreshRequested => LocalPackageRefreshPaths.Length > 0;
+    }
+
+    sealed class ToolRegistryProofSnapshot
+    {
+        public required string Phase { get; init; }
+        public int ExportedToolCount { get; init; }
+        public int InternalToolCount { get; init; }
+        public string ToolHash { get; init; } = string.Empty;
+        public long ManifestVersion { get; init; }
+        public string? BridgeSessionId { get; init; }
+        public string? ProfileCatalogVersion { get; init; }
+        public string[] ActiveToolPacks { get; init; } = [];
+        public string[] ExpectedTools { get; init; } = [];
+        public string[] MatchedExpectedTools { get; init; } = [];
+        public string[] MissingExpectedTools { get; init; } = [];
+        public string ReacquireStatus { get; init; } = "not_attempted";
+        public string? ReacquireError { get; init; }
+        public string? HealthState { get; init; }
+        public bool EditorBusy { get; init; }
+        public bool BridgeSelectable { get; init; }
+    }
+
+    sealed class ToolRegistryProofResult
+    {
+        public required string ProofStatus { get; init; }
+        public bool Current { get; init; }
+        public ToolRegistryProofSnapshot? Before { get; init; }
+        public ToolRegistryProofSnapshot? After { get; init; }
+        public string[] MissingExpectedTools { get; init; } = [];
+        public string? WarningKind { get; init; }
+        public string? WarningMessage { get; init; }
     }
 
     sealed class AssemblyReloadProofResult
@@ -4132,6 +4178,13 @@ sealed class UnityMcpLensHost
         bool captureConsoleDelta = ExtractBool(argumentsElement, true, "captureConsoleDelta", "CaptureConsoleDelta");
         bool focusNudgeOnStaleRefresh = ExtractBool(argumentsElement, false, "focusNudgeOnStaleRefresh", "FocusNudgeOnStaleRefresh");
         bool safeClickNudge = ExtractBool(argumentsElement, true, "safeClickNudge", "SafeClickNudge", "clickNudge", "ClickNudge");
+        string[] expectedTools = NormalizeToolNames(ExtractExpectedTools(argumentsElement));
+        string syncTargetProjectRoot = ResolveSyncTargetProjectRoot(argumentsElement, out string syncTargetProjectSource);
+        if (!string.IsNullOrWhiteSpace(syncTargetProjectRoot))
+        {
+            m_SelectedProjectPathHint = syncTargetProjectRoot;
+            m_SelectedProjectRequireFreshBridge = true;
+        }
 
         DateTime startedUtc = DateTime.UtcNow;
         DateTime deadlineUtc = startedUtc.AddMilliseconds(timeoutMs);
@@ -4140,9 +4193,10 @@ sealed class UnityMcpLensHost
         JsonElement syncRequest = default;
         HostSyncReadyResult? ready = null;
         bool hostWaitAttempted = false;
+        ToolRegistryProofSnapshot registryProofBefore = CaptureToolRegistryProofSnapshot(expectedTools, "before_sync", "not_attempted", null, null);
         AssemblyReloadProofSnapshot? assemblyProofBefore = CaptureAssemblyReloadProofSnapshot(argumentsElement);
         JsonElement nativeArgumentsElement = BuildSyncScriptsNativeArguments(argumentsElement, assemblyProofBefore);
-        bool localPackageRefreshRequested = assemblyProofBefore?.LocalPackageSourceNewerThanAssemblyAssetPaths.Length > 0;
+        bool localPackageRefreshRequested = ExtractBool(nativeArgumentsElement, false, "localPackageRefreshRequested", "LocalPackageRefreshRequested");
 
         try
         {
@@ -4273,6 +4327,14 @@ sealed class UnityMcpLensHost
                     nativeRefused);
             }
 
+            ToolRegistryProofSnapshot registryProofAfter = await CaptureToolRegistryProofAfterSyncAsync(
+                syncTargetProjectRoot,
+                expectedTools,
+                deadlineUtc,
+                cancellationToken).ConfigureAwait(false);
+            ToolRegistryProofResult toolRegistryProof = BuildToolRegistryProofResult(registryProofBefore, registryProofAfter);
+            bool toolRegistryCurrent = toolRegistryProof.Current;
+
             if (assemblyReloadProof.SourceNewerThanAssembly)
                 finalReadyForFollowUp = false;
             else if (focusNudge?.ReadyWait != null)
@@ -4281,6 +4343,8 @@ sealed class UnityMcpLensHost
                     !newConsoleErrorsDetected &&
                     !nativeRefused &&
                     !finalTimedOut;
+            if (!toolRegistryCurrent)
+                finalReadyForFollowUp = false;
 
             if (assemblyReloadProof.WarningKind != null)
             {
@@ -4292,6 +4356,16 @@ sealed class UnityMcpLensHost
                     focusNudgeAttempted = focusNudge?.Attempted == true
                 });
             }
+            if (toolRegistryProof.WarningKind != null)
+            {
+                warnings.Add(new
+                {
+                    kind = toolRegistryProof.WarningKind,
+                    message = toolRegistryProof.WarningMessage,
+                    proofStatus = toolRegistryProof.ProofStatus,
+                    missingExpectedTools = toolRegistryProof.MissingExpectedTools
+                });
+            }
 
             string finalStatus = finalReadyForFollowUp
                 ? "ready"
@@ -4299,6 +4373,8 @@ sealed class UnityMcpLensHost
                     ? "console_check_failed"
                     : newConsoleErrorsDetected
                         ? "console_errors"
+                        : !toolRegistryCurrent
+                            ? toolRegistryProof.ProofStatus
                         : assemblyReloadProof.SourceNewerThanAssembly
                             ? assemblyReloadProof.ProofStatus
                         : finalTimedOut
@@ -4354,7 +4430,12 @@ sealed class UnityMcpLensHost
                     changedPaths = CloneJsonProperty(nativeData, "changedPaths"),
                     relevantChangedPaths = CloneJsonProperty(nativeData, "relevantChangedPaths"),
                     localPackageRefreshRequested,
-                    localPackageRefreshPaths = assemblyProofBefore?.LocalPackageSourceNewerThanAssemblyAssetPaths ?? [],
+                    localPackageRefreshPaths = CloneJsonProperty(nativeArgumentsElement, "localPackageRefreshPaths") ??
+                        assemblyProofBefore?.LocalPackageSourceNewerThanAssemblyAssetPaths ??
+                        [],
+                    localPackageRefreshMappings = CloneJsonProperty(nativeArgumentsElement, "localPackageRefreshMappings"),
+                    syncTargetProjectRoot,
+                    syncTargetProjectSource,
                     packageResolveRequested = localPackageRefreshRequested || nativePackageResolveRequested,
                     nativePackageResolveRequested,
                     packageResolvePaths = CloneJsonProperty(nativeData, "packageResolvePaths") ??
@@ -4373,6 +4454,9 @@ sealed class UnityMcpLensHost
                     compileObserved,
                     nativeCompileObserved,
                     assemblyReloadProof,
+                    toolRegistryProof,
+                    expectedTools,
+                    missingExpectedTools = toolRegistryProof.MissingExpectedTools,
                     assemblyChanged = assemblyReloadProof.AssemblyChanged,
                     sourceNewerThanAssembly = assemblyReloadProof.SourceNewerThanAssembly,
                     localPackageSourceNewerThanAssembly = assemblyReloadProof.After?.LocalPackageSourceNewerThanAssembly == true,
@@ -4446,8 +4530,12 @@ sealed class UnityMcpLensHost
                     captureConsoleDelta,
                     focusNudgeOnStaleRefresh,
                     safeClickNudge,
+                    expectedTools,
+                    syncTargetProjectRoot,
+                    syncTargetProjectSource,
                     syncRequest,
                     nativeArguments = nativeArgumentsElement,
+                    registryProofBefore,
                     packActivation,
                     startingActivePacks,
                     activeToolPacks = m_ActiveToolPacks,
@@ -4820,33 +4908,146 @@ sealed class UnityMcpLensHost
     JsonElement BuildSyncScriptsNativeArguments(JsonElement argumentsElement, AssemblyReloadProofSnapshot? proofSnapshot)
     {
         string[] localPackageRefreshPaths = proofSnapshot?.LocalPackageSourceNewerThanAssemblyAssetPaths ?? [];
-        if (localPackageRefreshPaths.Length == 0)
+        LocalPackageRefreshMappingResult mapping = BuildLocalPackageRefreshMapping(argumentsElement, proofSnapshot, localPackageRefreshPaths);
+        if (!mapping.LocalPackageRefreshRequested)
             return argumentsElement;
 
         JsonObject argumentsObject = JsonNode.Parse(argumentsElement.GetRawText()) as JsonObject ?? new JsonObject();
-        var changedPaths = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (string path in GetJsonStringArray(argumentsElement, "changedPaths", "ChangedPaths"))
-        {
-            if (!string.IsNullOrWhiteSpace(path))
-                changedPaths.Add(path);
-        }
-
-        foreach (string path in localPackageRefreshPaths)
-        {
-            if (!string.IsNullOrWhiteSpace(path))
-                changedPaths.Add(path);
-        }
-
         var changedPathArray = new JsonArray();
-        foreach (string path in changedPaths)
+        foreach (string path in mapping.ChangedPaths)
             changedPathArray.Add(path);
 
         argumentsObject["changedPaths"] = changedPathArray;
         argumentsObject["localPackageRefreshRequested"] = true;
-        argumentsObject["localPackageRefreshPaths"] = JsonSerializer.SerializeToNode(localPackageRefreshPaths, m_JsonOptions);
-        argumentsObject["localPackageRefreshPathCount"] = localPackageRefreshPaths.Length;
+        argumentsObject["localPackageRefreshPaths"] = JsonSerializer.SerializeToNode(mapping.LocalPackageRefreshPaths, m_JsonOptions);
+        argumentsObject["localPackageRefreshPathCount"] = mapping.LocalPackageRefreshPaths.Length;
+        argumentsObject["localPackageRefreshMappings"] = JsonSerializer.SerializeToNode(mapping.Mappings, m_JsonOptions);
+        argumentsObject["localPackageSourceRoots"] = JsonSerializer.SerializeToNode(mapping.LocalPackageSourceRoots, m_JsonOptions);
+        argumentsObject["syncTargetProjectRoot"] = mapping.ProjectRoot;
         argumentsObject["resolvePackages"] = true;
         return JsonSerializer.SerializeToElement(argumentsObject, m_JsonOptions);
+    }
+
+    LocalPackageRefreshMappingResult BuildLocalPackageRefreshMapping(
+        JsonElement argumentsElement,
+        AssemblyReloadProofSnapshot? proofSnapshot,
+        string[] staleLocalPackageRefreshPaths)
+    {
+        string projectRoot = proofSnapshot?.ProjectRoot ?? ResolveSyncTargetProjectRoot(argumentsElement, out _);
+        LocalPackageSourceRoot[] roots = ResolveLocalPackageSourceRoots(projectRoot);
+        var changedPaths = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
+        var refreshPaths = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
+        var rows = new List<object>();
+
+        foreach (string path in GetJsonStringArray(argumentsElement, "changedPaths", "ChangedPaths"))
+        {
+            string normalized = NormalizeUnityChangedPath(projectRoot, path);
+            if (!string.IsNullOrWhiteSpace(normalized))
+                changedPaths.Add(normalized);
+
+            string? mapped = TryMapLocalPackageChangedPath(projectRoot, path, roots, out string normalizedFullPath, out string? packageName, out string? packageRoot);
+            if (!string.IsNullOrWhiteSpace(mapped))
+            {
+                changedPaths.Add(mapped);
+                refreshPaths.Add(mapped);
+            }
+
+            rows.Add(new
+            {
+                inputPath = path,
+                normalizedPath = normalized,
+                normalizedFullPath,
+                mappedPath = mapped,
+                packageName,
+                packageRoot,
+                matched = !string.IsNullOrWhiteSpace(mapped)
+            });
+        }
+
+        foreach (string path in staleLocalPackageRefreshPaths)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+                continue;
+
+            changedPaths.Add(path);
+            refreshPaths.Add(path);
+        }
+
+        return new LocalPackageRefreshMappingResult
+        {
+            ProjectRoot = projectRoot,
+            LocalPackageSourceRoots = roots.Select(root => root.Root).ToArray(),
+            ChangedPaths = changedPaths.ToArray(),
+            LocalPackageRefreshPaths = refreshPaths.ToArray(),
+            Mappings = rows.ToArray()
+        };
+    }
+
+    static string? TryMapLocalPackageChangedPath(
+        string projectRoot,
+        string inputPath,
+        LocalPackageSourceRoot[] roots,
+        out string normalizedFullPath,
+        out string? packageName,
+        out string? packageRoot)
+    {
+        normalizedFullPath = string.Empty;
+        packageName = null;
+        packageRoot = null;
+        if (string.IsNullOrWhiteSpace(inputPath) || roots.Length == 0)
+            return null;
+
+        string candidate = inputPath.Trim();
+        if (candidate.StartsWith("unity://path/", StringComparison.OrdinalIgnoreCase))
+            candidate = candidate["unity://path/".Length..];
+        if (candidate.StartsWith("file://", StringComparison.OrdinalIgnoreCase) &&
+            Uri.TryCreate(candidate, UriKind.Absolute, out Uri? uri) &&
+            uri.IsFile)
+        {
+            candidate = uri.LocalPath;
+        }
+
+        if (!Path.IsPathRooted(candidate))
+            candidate = Path.Combine(projectRoot, candidate);
+
+        try
+        {
+            normalizedFullPath = Path.GetFullPath(candidate);
+        }
+        catch
+        {
+            normalizedFullPath = candidate;
+            return null;
+        }
+
+        foreach (LocalPackageSourceRoot root in roots.OrderByDescending(root => root.Root.Length))
+        {
+            string normalizedRoot;
+            try
+            {
+                normalizedRoot = Path.GetFullPath(root.Root).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            }
+            catch
+            {
+                continue;
+            }
+
+            if (!normalizedFullPath.StartsWith(normalizedRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) &&
+                !normalizedFullPath.StartsWith(normalizedRoot + Path.AltDirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            string? mapped = ToPackageAssetPath(root, normalizedFullPath);
+            if (string.IsNullOrWhiteSpace(mapped))
+                continue;
+
+            packageName = root.PackageName;
+            packageRoot = root.Root;
+            return mapped;
+        }
+
+        return null;
     }
 
     async Task<object> EnsureScriptSyncPacksActiveAsync(CancellationToken cancellationToken)
@@ -4912,7 +5113,7 @@ sealed class UnityMcpLensHost
 
     AssemblyReloadProofSnapshot CaptureAssemblyReloadProofSnapshot(JsonElement argumentsElement)
     {
-        string projectRoot = ResolveProjectPathHint(out _);
+        string projectRoot = ResolveSyncTargetProjectRoot(argumentsElement, out _);
         string[] changedPaths = GetJsonStringArray(argumentsElement, "changedPaths", "ChangedPaths");
         string[] relevantChangedPaths = changedPaths
             .Select(path => NormalizeUnityChangedPath(projectRoot, path))
@@ -4965,6 +5166,185 @@ sealed class UnityMcpLensHost
             LocalPackageSourceNewerThanAssemblyAssetPaths = localPackageProbe.NewerThanAssemblyAssetPaths,
             AssemblyFingerprint = string.Join("|", assemblyFiles.Select(file =>
                 $"{file.Name}:{file.Length}:{file.LastWriteTimeUtc.Ticks}"))
+        };
+    }
+
+    string ResolveSyncTargetProjectRoot(JsonElement argumentsElement, out string source)
+    {
+        string? explicitProjectPath = ExtractString(argumentsElement, "projectPath", "ProjectPath");
+        if (!string.IsNullOrWhiteSpace(explicitProjectPath))
+        {
+            source = "argument";
+            return NormalizeProjectPathHint(explicitProjectPath);
+        }
+
+        if (!string.IsNullOrWhiteSpace(m_BridgeConnection?.ProjectRoot))
+        {
+            source = "current_bridge_connection";
+            return NormalizeProjectPathHint(m_BridgeConnection.ProjectRoot);
+        }
+
+        BridgeDiscoveryResult? selected = m_LastBridgeDiscoverySnapshot?.Selected;
+        if (!string.IsNullOrWhiteSpace(selected?.ProjectRoot))
+        {
+            source = "last_bridge_discovery";
+            return NormalizeProjectPathHint(selected.ProjectRoot);
+        }
+
+        BridgeDiscoveryResult? discovered = FindCurrentBridge();
+        if (!string.IsNullOrWhiteSpace(discovered?.ProjectRoot))
+        {
+            source = "bridge_discovery";
+            return NormalizeProjectPathHint(discovered.ProjectRoot);
+        }
+
+        source = "project_path_hint";
+        return ResolveProjectPathHint(out _);
+    }
+
+    ToolRegistryProofSnapshot CaptureToolRegistryProofSnapshot(
+        string[] expectedTools,
+        string phase,
+        string reacquireStatus,
+        string? reacquireError,
+        HostHealthEvaluation? health)
+    {
+        EnsureBootstrapToolsAvailable();
+        string[] toolRows = m_ToolCache.Values
+            .OrderBy(tool => tool.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(tool => $"{CanonicalizeToolName(tool.Name)}:{ResolveToolListSchemaHash(tool)}")
+            .ToArray();
+        string[] hostToolNames = m_ToolCache.Keys
+            .OrderBy(name => name, StringComparer.Ordinal)
+            .ToArray();
+        string[] matchedExpectedTools = expectedTools
+            .Where(expected => hostToolNames.Any(actual => ToolNamesMatch(actual, expected)))
+            .ToArray();
+        string[] missingExpectedTools = expectedTools
+            .Where(expected => !hostToolNames.Any(actual => ToolNamesMatch(actual, expected)))
+            .ToArray();
+
+        return new ToolRegistryProofSnapshot
+        {
+            Phase = phase,
+            ExportedToolCount = m_ToolCache.Count,
+            InternalToolCount = m_ToolCache.Count,
+            ToolHash = ComputeSha256Hex(string.Join("\n", toolRows)),
+            ManifestVersion = m_ManifestVersion,
+            BridgeSessionId = m_BridgeSessionId,
+            ProfileCatalogVersion = null,
+            ActiveToolPacks = m_ActiveToolPacks.ToArray(),
+            ExpectedTools = expectedTools,
+            MatchedExpectedTools = matchedExpectedTools,
+            MissingExpectedTools = missingExpectedTools,
+            ReacquireStatus = reacquireStatus,
+            ReacquireError = reacquireError,
+            HealthState = health?.Contract.State,
+            EditorBusy = health?.EditorBusy == true,
+            BridgeSelectable = health == null
+                ? m_BridgeConnection != null
+                : health.SelectedBridge?.IsFresh == true && health.Contract.SafeToContinue
+        };
+    }
+
+    async Task<ToolRegistryProofSnapshot> CaptureToolRegistryProofAfterSyncAsync(
+        string projectRoot,
+        string[] expectedTools,
+        DateTime deadlineUtc,
+        CancellationToken cancellationToken)
+    {
+        HostHealthEvaluation? health = null;
+        string status = "bridge_reacquire_pending";
+        string? error = null;
+
+        try
+        {
+            DateTime healthDeadlineUtc = DateTime.UtcNow.AddMilliseconds(Math.Max(
+                1000d,
+                Math.Min(10000d, (deadlineUtc - DateTime.UtcNow).TotalMilliseconds)));
+            while (DateTime.UtcNow < healthDeadlineUtc)
+            {
+                health = BuildHostHealthEvaluation(
+                    projectRoot,
+                    requireProjectMatch: true,
+                    GetActiveQuarantineIds(),
+                    Stopwatch.StartNew());
+                if (health.Contract.SafeToContinue && !health.EditorBusy && health.SelectedBridge?.IsFresh == true)
+                    break;
+
+                status = health.Contract.State is "bridge_unavailable" or "editor_reloading" or "bridge_alive_no_editor_heartbeat"
+                    ? "bridge_reacquire_pending"
+                    : health.Contract.State;
+
+                TimeSpan remainingHealthWait = healthDeadlineUtc - DateTime.UtcNow;
+                if (remainingHealthWait <= TimeSpan.Zero)
+                    break;
+
+                await Task.Delay(
+                    (int)Math.Min(s_BridgeDiscoveryReloadRetryPollInterval.TotalMilliseconds, Math.Max(1d, remainingHealthWait.TotalMilliseconds)),
+                    cancellationToken).ConfigureAwait(false);
+            }
+
+            if (health == null || !health.Contract.SafeToContinue || health.EditorBusy || health.SelectedBridge?.IsFresh != true)
+                return CaptureToolRegistryProofSnapshot(expectedTools, "after_sync", status, null, health);
+
+            int remainingMs = (int)Math.Max(1000d, Math.Min(10000d, (deadlineUtc - DateTime.UtcNow).TotalMilliseconds));
+            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            linkedCts.CancelAfter(remainingMs);
+            await EnsureBridgeReadyAsync(linkedCts.Token).ConfigureAwait(false);
+            status = "bridge_reacquired";
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            status = "bridge_reacquire_timed_out";
+            error = "Timed out while reacquiring the Lens bridge after script sync.";
+        }
+        catch (Exception ex)
+        {
+            status = IsBridgeTransportFailure(ex) ? "bridge_reacquire_timed_out" : "bridge_reacquire_failed";
+            error = ex.Message;
+        }
+
+        return CaptureToolRegistryProofSnapshot(expectedTools, "after_sync", status, error, health);
+    }
+
+    static ToolRegistryProofResult BuildToolRegistryProofResult(
+        ToolRegistryProofSnapshot? before,
+        ToolRegistryProofSnapshot after)
+    {
+        bool registryChanged = before != null &&
+            (!string.Equals(before.ToolHash, after.ToolHash, StringComparison.Ordinal) ||
+                before.ExportedToolCount != after.ExportedToolCount ||
+                before.ManifestVersion != after.ManifestVersion);
+        bool bridgeReady = string.Equals(after.ReacquireStatus, "bridge_reacquired", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(after.ReacquireStatus, "not_attempted", StringComparison.OrdinalIgnoreCase);
+        bool missingExpectedTools = after.MissingExpectedTools.Length > 0;
+        string proofStatus = missingExpectedTools
+            ? "stale"
+            : !bridgeReady
+                ? after.ReacquireStatus
+                : registryChanged
+                    ? "refreshed"
+                    : "unchanged";
+        bool current = bridgeReady && !missingExpectedTools;
+
+        return new ToolRegistryProofResult
+        {
+            ProofStatus = proofStatus,
+            Current = current,
+            Before = before,
+            After = after,
+            MissingExpectedTools = after.MissingExpectedTools,
+            WarningKind = current
+                ? null
+                : missingExpectedTools
+                    ? "tool_registry_missing_expected_tools"
+                    : after.ReacquireStatus,
+            WarningMessage = current
+                ? null
+                : missingExpectedTools
+                    ? "The Lens bridge/tool registry was reacquired, but one or more expected tools were still missing from the host-visible tool cache."
+                    : "Lens could not prove the bridge/tool registry was reacquired after script sync; stop Unity-facing work until HealthCheckFast and the bridge registry are ready."
         };
     }
 
